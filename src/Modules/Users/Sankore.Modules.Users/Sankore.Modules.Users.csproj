@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Modules.Users</RootNamespace>
+
+    <!--
+      InternalsVisibleTo is deliberately NOT declared for other modules here.
+      Only the Tests project (added separately, same solution) gets access
+      to internals via its own project reference + InternalsVisibleTo below.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Users.PublicApi\Sankore.Modules.Users.PublicApi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sankore.Modules.Users.Tests" />
+  </ItemGroup>
+
+</Project>

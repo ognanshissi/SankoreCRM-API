@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Modules.Users.PublicApi</RootNamespace>
+
+    <!--
+      This assembly is intentionally tiny: interfaces + DTOs only. It is the
+      ONLY project of the Users module that other modules may reference.
+      Never add EF Core, MediatR, or any internal type here.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+  </ItemGroup>
+
+</Project>

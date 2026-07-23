@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+    Picked up automatically by every .csproj under this directory.
+    Centralizes settings that must be consistent across the whole modular
+    monolith (nullable reference types, warnings-as-errors, code analysis)
+    so no module can silently opt out of the quality bar.
+  -->
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Fail the build on nullable warnings once the codebase is clean;
+         start as warnings during initial development. -->
+    <WarningsAsErrors>Nullable</WarningsAsErrors>
+
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>Recommended</AnalysisMode>
+
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>CS1591</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

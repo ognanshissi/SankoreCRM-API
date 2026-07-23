@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Shared.Kernel</RootNamespace>
+
+    <!--
+      The Kernel is intentionally the ONLY project every module is allowed
+      to reference in addition to its own PublicApi dependencies. It has
+      ZERO third-party dependencies on purpose: no EF Core, no MediatR, no
+      ASP.NET Core here. This keeps domain models fully portable and testable
+      without spinning up any infrastructure.
+    -->
+  </PropertyGroup>
+
+</Project>
