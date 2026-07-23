@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Sankore.Api</RootNamespace>
     <UserSecretsId>sankore-crm-api-local</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +25,12 @@
     <ProjectReference Include="..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Modules\Users\Sankore.Modules.Users\Sankore.Modules.Users.csproj" />
     <ProjectReference Include="..\..\Modules\Leads\Sankore.Modules.Leads\Sankore.Modules.Leads.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\..\.dockerignore">
+      <Link>.dockerignore</Link>
+    </Content>
   </ItemGroup>
 
 </Project>
