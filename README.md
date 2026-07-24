@@ -186,3 +186,18 @@ To add `F13.13 — Refus motivé d'un lead par un agent`:
 5. Write `RejectLeadHandlerTests.cs` next to the other tests.
 
 No other slice, no shared service, and no other module's code changes.
+
+
+# Docker 
+To start the project container execute the following code
+
+```console
+docker-compose up
+```
+
+## Postgres CLI
+
+```console
+docker compose exec postgres psql -U sankore_app -d sankore_crm
+```
+

@@ -2,10 +2,13 @@ using System.Text;
 using FluentValidation;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Sankore.Modules.Leads;
+using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Users;
+using Sankore.Modules.Users.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
@@ -125,7 +128,19 @@ builder.Services.AddLeadsModule(builder.Configuration);
 var app = builder.Build();
 
 // ---------------------------------------------------------------------
-// 3. HTTP pipeline
+// 3. Ensure database schemas exist (creates tables when no migrations are applied yet)
+// ---------------------------------------------------------------------
+
+using (var scope = app.Services.CreateScope())
+{
+    var leadsDb = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
+    var usersDb = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+    await leadsDb.Database.MigrateAsync();
+    await usersDb.Database.MigrateAsync();
+}
+
+// ---------------------------------------------------------------------
+// 4. HTTP pipeline
 // ---------------------------------------------------------------------
 
 if (app.Environment.IsDevelopment())
@@ -140,10 +155,11 @@ app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow }))
     .WithTags("Health")
+    .WithOpenApi()
     .AllowAnonymous();
 
 // ---------------------------------------------------------------------
-// 4. Module endpoint mapping — one line per module.
+// 5. Module endpoint mapping — one line per module.
 // ---------------------------------------------------------------------
 
 app.MapLeadsEndpoints();
