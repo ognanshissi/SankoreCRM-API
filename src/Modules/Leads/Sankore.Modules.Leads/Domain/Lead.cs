@@ -16,6 +16,11 @@ public sealed class Lead: AggregateRoot
     public Guid TenantId { get; private set; }
     public string FullName { get; private set; } = default!;
     public string PhoneNumber { get; private set; } = default!;
+    public string Website { get; private set; } = default!;
+    public string CompanyName { get; private set; } = default!;
+    public string CompanyEmail { get; private set; } = default!;
+    public string CompanyPhone { get; private set; } = default!;
+    public string CompanyAddress { get; private set; } = default!;
     public LeadStatus Status { get; private set; }
     public LeadSource Source { get; private set; }
     public string InterestedProduct { get; private set; } = default!;
