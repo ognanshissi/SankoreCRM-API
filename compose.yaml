@@ -8,7 +8,7 @@
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=sankore_crm;Username=sankore_app;Password=devpassword"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=sankore_crm;Username=sankore_app;Password=123456"
       Jwt__Issuer: "https://auth.sankore-crm.local"
       Jwt__Audience: "sankore-crm-api"
       Jwt__SigningKey: "dev-signing-key-change-in-production-must-be-long-enough"
@@ -26,7 +26,7 @@
     environment:
       POSTGRES_DB: sankore_crm
       POSTGRES_USER: sankore_app
-      POSTGRES_PASSWORD: devpassword
+      POSTGRES_PASSWORD: 123456
     ports:
       - "5432:5432"
     volumes:
@@ -37,6 +37,20 @@
       timeout: 5s
       retries: 10
     restart: unless-stopped
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=ambroise.bazie@outlook.com
+      - PGADMIN_DEFAULT_PASSWORD=postgres
+    ports:
+      - "5050:80"
+    restart: always
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
@@ -58,6 +72,7 @@
 volumes:
   postgres_data:
   rabbitmq_data:
+  pgadmin_data:
 
 
 

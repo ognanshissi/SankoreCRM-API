@@ -11,7 +11,14 @@ public sealed class UsersDbContext(DbContextOptions<UsersDbContext> options, ITe
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        optionsBuilder.EnableSensitiveDataLogging();
+    }
+
+protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Dedicated PostgreSQL schema: enforces the module boundary at the
         // database level, not just in code.

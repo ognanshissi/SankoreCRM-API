@@ -90,4 +90,12 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
         modelBuilder.Entity<DispatchingRule>()
             .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
     }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        
+        optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        optionsBuilder.EnableSensitiveDataLogging();
+    }
 }

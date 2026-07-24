@@ -3,6 +3,7 @@ using FluentValidation;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Sankore.Modules.Leads;
 using Sankore.Modules.Users;
 using Sankore.Shared.Infrastructure.Auth;
@@ -70,7 +71,45 @@ builder.Services.AddMassTransit(x =>
 });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+#region Swagger Generation
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("BearerToken", new ()
+    {
+        Name = "Authorization",
+        Description = "Token-based authentication using the Bearer scheme",
+        Type = SecuritySchemeType.Http,
+        In = ParameterLocation.Header,
+        Scheme = "Bearer"
+    });
+    
+    options.AddSecurityDefinition("TenancyHeader", new ()
+    {
+        Name = "Tenant Authorization",
+        Description = "Tenant-based authentication using the Tenant scheme",
+        Type = SecuritySchemeType.ApiKey,
+        In = ParameterLocation.Header,
+        Scheme = "TenantId"
+    });
+    
+    options.AddSecurityRequirement(new()
+    {
+        {
+            new ()
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "BearerToken"
+                },
+            },
+            new List<string>()
+        }
+    });
+});
+#endregion
+
 
 // ---------------------------------------------------------------------
 // 2. Module registration — one line per module, each module owns its own
