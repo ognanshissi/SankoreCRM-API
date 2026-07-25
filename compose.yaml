@@ -1,27 +1,31 @@
 ﻿services:
   sankore.api:
-    image: sankore.api
+    image: ${DOCKER_REGISTRY-}sankore.api
+    container_name: sankore.api
     build:
       context: .
       dockerfile: src/Bootstrapper/Sankore.Api/Dockerfile
     ports:
-      - "8080:8080"
+      - 5180:8080
+      - 5181:8081
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PW}"
+      ConnectionStrings__Database: "Host=sankore.database;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PW}"
       Jwt__Issuer: "https://auth.sankore-crm.local"
       Jwt__Audience: "sankore-crm-api"
       Jwt__SigningKey: "dev-signing-key-change-in-production-must-be-long-enough"
       Messaging__UseRabbitMq: "true"
-      Messaging__RabbitMqHost: "rabbitmq"
+      Messaging__RabbitMqHost: sankore.rabbitmq
     depends_on:
-      postgres:
+      sankore.database:
         condition: service_healthy
-      rabbitmq:
+      sankore.rabbitmq:
         condition: service_healthy
-    restart: unless-stopped
+    restart: always
+    networks:
+      - "default"
 
-  postgres:
+  sankore.database:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -30,49 +34,37 @@
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./.containers/sankore-database:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    networks:
+      - "default"
 
-  pgadmin:
-    container_name: pgadmin
-    image: dpage/pgadmin4:latest
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_MAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PW}
-    ports:
-      - "5050:80"
-    restart: always
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      - postgres
-
-  rabbitmq:
+  sankore.rabbitmq:
     image: rabbitmq:3.13-management-alpine
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - ./.containers/sankore-rabbitmq:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
       timeout: 10s
       retries: 10
     restart: unless-stopped
+    networks:
+      - "default"
 
-volumes:
-  postgres_data:
-  rabbitmq_data:
-  pgadmin_data:
-
+networks:
+  default:
+    driver: bridge
 
 

@@ -22,6 +22,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+builder.Services.AddOpenApi();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

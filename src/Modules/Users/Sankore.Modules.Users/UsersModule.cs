@@ -19,7 +19,7 @@ public static class UsersModule
     {
         services.AddDbContext<UsersDbContext>(opt =>
             opt.UseNpgsql(
-                config.GetConnectionString("Postgres"),
+                config.GetConnectionString("Database"),
                 npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "users")));
 
         services.AddScoped<IUsersModule, UsersModuleFacade>();

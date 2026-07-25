@@ -210,3 +210,6 @@ FakesAssemblies/
 *.sln.iml
 
 .idea/
+
+# Docker container storage
+.containers/

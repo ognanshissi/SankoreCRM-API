@@ -26,7 +26,7 @@ public static class LeadsModule
     {
         services.AddDbContext<LeadsDbContext>(opt =>
             opt.UseNpgsql(
-                config.GetConnectionString("Postgres"),
+                config.GetConnectionString("Database"),
                 npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "leads")));
 
         // MediatR handlers declared anywhere in this assembly (i.e. every
