@@ -1,5 +1,4 @@
 using System.Text;
-using FluentValidation;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +13,10 @@ using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
+
+// builder.AddSeqEndpoint("seq");
 
 // ---------------------------------------------------------------------
 // 1. Cross-cutting infrastructure (auth, MediatR pipeline, messaging bus)
@@ -127,6 +130,8 @@ builder.Services.AddLeadsModule(builder.Configuration);
 // builder.Services.AddLoansModule(builder.Configuration);       // M04 — same pattern
 
 var app = builder.Build();
+
+app.MapDefaultEndpoints();
 
 // ---------------------------------------------------------------------
 // 3. Ensure database schemas exist (creates tables when no migrations are applied yet)

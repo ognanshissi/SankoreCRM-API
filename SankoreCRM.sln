@@ -36,6 +36,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		compose.yaml = compose.yaml
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SankoreCRM.AppHost", "SankoreCRM.AppHost\SankoreCRM.AppHost.csproj", "{5E70C9B5-E0E5-49AA-8B12-C9CF523E54CB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SankoreCRM.ServiceDefaults", "SankoreCRM.ServiceDefaults\SankoreCRM.ServiceDefaults.csproj", "{3A3D0096-812A-4DF1-A568-054394472272}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +78,14 @@ Global
 		{B1F9E964-2B8B-4A3B-9290-88036EB1C448}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B1F9E964-2B8B-4A3B-9290-88036EB1C448}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B1F9E964-2B8B-4A3B-9290-88036EB1C448}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E70C9B5-E0E5-49AA-8B12-C9CF523E54CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E70C9B5-E0E5-49AA-8B12-C9CF523E54CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E70C9B5-E0E5-49AA-8B12-C9CF523E54CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E70C9B5-E0E5-49AA-8B12-C9CF523E54CB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A3D0096-812A-4DF1-A568-054394472272}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A3D0096-812A-4DF1-A568-054394472272}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A3D0096-812A-4DF1-A568-054394472272}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A3D0096-812A-4DF1-A568-054394472272}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
