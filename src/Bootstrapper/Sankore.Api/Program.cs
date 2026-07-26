@@ -16,6 +16,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+builder.Services.AddOpenApi();
+
+
 // builder.AddSeqEndpoint("seq");
 
 // ---------------------------------------------------------------------
@@ -25,7 +28,6 @@ builder.AddServiceDefaults();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
-builder.Services.AddOpenApi();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -149,11 +151,11 @@ using (var scope = app.Services.CreateScope())
 // 4. HTTP pipeline
 // ---------------------------------------------------------------------
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// if (app.Environment.IsDevelopment())
+// {
+//     app.UseSwagger();
+//     app.UseSwaggerUI();
+// }
 
 app.UseHttpsRedirection();
 app.UseAuthentication();

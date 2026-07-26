@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Identity;
+
 namespace Sankore.Modules.Users.Domain;
 
 using Sankore.Shared.Kernel;
@@ -17,13 +19,11 @@ public enum UserRole
 /// assembly — other modules only ever see the AgentSummary DTO exposed via
 /// Sankore.Modules.Users.PublicApi.IUsersModule.
 /// </summary>
-public sealed class AppUser : AggregateRoot
+public sealed class AppUser: IdentityUser<Guid>
 {
-    public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public Guid AgencyId { get; private set; }
     public string FullName { get; private set; } = default!;
-    public string Email { get; private set; } = default!;
     public UserRole Role { get; private set; }
     public bool IsAvailable { get; private set; } = true;
 
@@ -34,6 +34,8 @@ public sealed class AppUser : AggregateRoot
     public int ActiveLeadsCount { get; private set; }
     public int HotLeadsCount { get; private set; }
     public double ConversionRate30d { get; private set; }
+    
+    public bool EnableNotifications { get; private set; }
 
     private AppUser() { } // EF Core
 
@@ -46,7 +48,6 @@ public sealed class AppUser : AggregateRoot
 
         return new AppUser
         {
-            Id = Guid.NewGuid(),
             TenantId = tenantId,
             AgencyId = agencyId,
             FullName = fullName,

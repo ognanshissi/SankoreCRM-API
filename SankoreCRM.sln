@@ -34,6 +34,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 		.env = .env
 		compose.yaml = compose.yaml
+		CLAUDE.md = CLAUDE.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SankoreCRM.AppHost", "SankoreCRM.AppHost\SankoreCRM.AppHost.csproj", "{5E70C9B5-E0E5-49AA-8B12-C9CF523E54CB}"

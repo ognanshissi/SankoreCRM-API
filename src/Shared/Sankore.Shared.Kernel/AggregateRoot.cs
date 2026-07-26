@@ -6,7 +6,7 @@ namespace Sankore.Shared.Kernel;
 /// interceptor) can dispatch events after a successful commit, without any
 /// module needing to know about the messaging infrastructure.
 /// </summary>
-public abstract class AggregateRoot
+public abstract class AggregateRoot: ITenant
 {
     private readonly List<IDomainEvent> _domainEvents = new();
 
@@ -16,4 +16,5 @@ public abstract class AggregateRoot
     protected void RaiseDomainEvent(IDomainEvent domainEvent) => _domainEvents.Add(domainEvent);
 
     public void ClearDomainEvents() => _domainEvents.Clear();
+    public Guid TenantId { get; private set; }
 }

@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+
 namespace Sankore.Modules.Users.Infrastructure;
 
 using Microsoft.EntityFrameworkCore;
@@ -6,9 +9,8 @@ using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
 
 public sealed class UsersDbContext(DbContextOptions<UsersDbContext> options, ITenantContext tenant)
-    : DbContext(options)
+    : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
 {
-    public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -22,14 +24,14 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Dedicated PostgreSQL schema: enforces the module boundary at the
         // database level, not just in code.
-        modelBuilder.HasDefaultSchema("users");
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.HasDefaultSchema("identity");
 
         modelBuilder.Entity<AppUser>(b =>
         {
-            b.ToTable("app_users");
-            b.HasKey(u => u.Id);
             b.Property(u => u.FullName).HasMaxLength(200).IsRequired();
             b.Property(u => u.Email).HasMaxLength(200).IsRequired();
+            
 
             b.OwnsOne<GeoPoint>(u => u.LastKnownLocation, loc =>
             {

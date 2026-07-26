@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Identity;
+using Sankore.Modules.Users.Domain;
+
 namespace Sankore.Modules.Users;
 
 using Microsoft.EntityFrameworkCore;
@@ -20,9 +23,13 @@ public static class UsersModule
         services.AddDbContext<UsersDbContext>(opt =>
             opt.UseNpgsql(
                 config.GetConnectionString("Database"),
-                npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "users")));
+                npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "identity")));
 
+        services.AddIdentity<AppUser, IdentityRole<Guid>>()
+            .AddEntityFrameworkStores<UsersDbContext>();
+        
         services.AddScoped<IUsersModule, UsersModuleFacade>();
+        
 
         services.AddOutboxForModule<UsersDbContext>();
 
