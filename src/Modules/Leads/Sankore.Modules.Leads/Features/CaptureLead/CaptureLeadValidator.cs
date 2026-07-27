@@ -2,7 +2,7 @@ namespace Sankore.Modules.Leads.Features.CaptureLead;
 
 using FluentValidation;
 
-public sealed class CaptureLeadValidator : AbstractValidator<CaptureLeadCommand>
+public sealed class CaptureLeadValidator: AbstractValidator<CaptureLeadCommand>
 {
     public CaptureLeadValidator()
     {

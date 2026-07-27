@@ -1,12 +1,14 @@
 using System.Text;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Sankore.Modules.Leads;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Users;
+using Sankore.Modules.Users.Domain;
 using Sankore.Modules.Users.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
@@ -151,11 +153,13 @@ using (var scope = app.Services.CreateScope())
 // 4. HTTP pipeline
 // ---------------------------------------------------------------------
 
-// if (app.Environment.IsDevelopment())
-// {
-//     app.UseSwagger();
-//     app.UseSwaggerUI();
-// }
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+    
+    
+}
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
@@ -171,6 +175,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 // ---------------------------------------------------------------------
 
 app.MapLeadsEndpoints();
+app.MapIdentityModuleEndpoints();
 // app.MapCustomersEndpoints();
 // app.MapKycEndpoints();
 // app.MapLoansEndpoints();

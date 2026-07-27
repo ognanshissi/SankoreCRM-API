@@ -24,7 +24,7 @@ public static class CaptureLeadEndpoint
     private static async Task<IResult> Handle(
         CaptureLeadRequest req,
         ISender sender,
-        Microsoft.AspNetCore.Http.HttpContext http,
+        HttpContext http,
         CancellationToken ct)
     {
         var tenantId = http.User.GetTenantId();

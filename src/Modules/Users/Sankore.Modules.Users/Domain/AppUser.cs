@@ -24,13 +24,12 @@ public sealed class AppUser: IdentityUser<Guid>
     public Guid TenantId { get; private set; }
     public Guid AgencyId { get; private set; }
     public string FullName { get; private set; } = default!;
-    public UserRole Role { get; private set; }
     public bool IsAvailable { get; private set; } = true;
 
     public List<string> SpokenLanguages { get; private set; } = new();
     public List<string> Specialties { get; private set; } = new();
     public GeoPoint? LastKnownLocation { get; private set; }
-
+    
     public int ActiveLeadsCount { get; private set; }
     public int HotLeadsCount { get; private set; }
     public double ConversionRate30d { get; private set; }
@@ -38,6 +37,23 @@ public sealed class AppUser: IdentityUser<Guid>
     public bool EnableNotifications { get; private set; }
 
     private AppUser() { } // EF Core
+
+    public static AppUser Create(Guid tenantId, Guid agencyId, string fullName, string email)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+            throw new DomainException("User must have a name.");
+        
+        if (string.IsNullOrWhiteSpace(email)) 
+            throw new DomainException("User must have a email.");
+
+        return new AppUser
+        {
+            TenantId = tenantId,
+            AgencyId = agencyId,
+            UserName = email,
+            Email = email
+        };
+    }
 
     public static AppUser CreateAgent(
         Guid tenantId, Guid agencyId, string fullName, string email,
@@ -52,7 +68,6 @@ public sealed class AppUser: IdentityUser<Guid>
             AgencyId = agencyId,
             FullName = fullName,
             Email = email,
-            Role = UserRole.CommercialAgent,
             SpokenLanguages = languages.ToList(),
             Specialties = specialties.ToList(),
             IsAvailable = true

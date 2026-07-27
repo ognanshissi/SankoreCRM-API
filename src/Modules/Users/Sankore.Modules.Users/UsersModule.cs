@@ -1,5 +1,8 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Users.Domain;
+using Sankore.Modules.Users.Features.Register;
 
 namespace Sankore.Modules.Users;
 
@@ -35,4 +38,12 @@ public static class UsersModule
 
         return services;
     }
+
+    public static IEndpointRouteBuilder MapIdentityModuleEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapRegister();
+        return app;
+    }
 }
+
+
