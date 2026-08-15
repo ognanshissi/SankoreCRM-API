@@ -47,7 +47,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
             b.HasKey(a => a.Id);
             b.Property(a => a.Strategy).HasConversion<string>().HasMaxLength(30);
             b.HasIndex(a => a.LeadId);
-            b.HasIndex(a => a.AgentId);
+            b.HasIndex(a => a.AgentId); // no foreign key, the agency live inside UserModule
             b.HasIndex(a => new { a.SlaDeadline, a.FirstContactAt });
 
             b.HasOne<Lead>()

@@ -1,15 +1,12 @@
 using System.Text;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Sankore.Modules.Leads;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Users;
-using Sankore.Modules.Users.Domain;
-using Sankore.Modules.Users.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
@@ -143,10 +140,11 @@ app.MapDefaultEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
+    // Each module owns its own migration + initialization.
+    // UsersModule.InitializeAsync runs migrations AND seeds system roles.
     var leadsDb = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
-    var usersDb = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
     await leadsDb.Database.MigrateAsync();
-    await usersDb.Database.MigrateAsync();
+    await UsersModule.InitializeAsync(scope.ServiceProvider);
 }
 
 // ---------------------------------------------------------------------
@@ -157,8 +155,6 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    
-    
 }
 
 app.UseHttpsRedirection();
@@ -169,10 +165,6 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
     .WithTags("Health")
     .WithOpenApi()
     .AllowAnonymous();
-
-// ---------------------------------------------------------------------
-// 5. Module endpoint mapping — one line per module.
-// ---------------------------------------------------------------------
 
 app.MapLeadsEndpoints();
 app.MapIdentityModuleEndpoints();

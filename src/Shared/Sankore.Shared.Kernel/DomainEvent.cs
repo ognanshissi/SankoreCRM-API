@@ -24,7 +24,7 @@ public interface IIntegrationEvent
 /// <summary>
 /// Convenience base record for domain events; sets OccurredAt automatically.
 /// </summary>
-public abstract record DomainEventBase : IDomainEvent
+public abstract record DomainEventBase: IDomainEvent
 {
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
 }

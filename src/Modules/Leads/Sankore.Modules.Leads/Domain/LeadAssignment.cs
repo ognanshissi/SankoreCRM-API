@@ -15,8 +15,8 @@ public sealed class LeadAssignment
     public DispatchingStrategy Strategy { get; private set; }
     public double CompatibilityScore { get; private set; }
     public bool WasManualOverride { get; private set; }
-    public string? OverrideReason { get; private set; }
-    public DateTimeOffset CreatedAt { get; private set; }
+    public string? OverrideReason { get; private set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; private set; } // When the assignment has done
     public DateTimeOffset SlaDeadline { get; private set; }
     public DateTimeOffset? FirstContactAt { get; private set; }
 

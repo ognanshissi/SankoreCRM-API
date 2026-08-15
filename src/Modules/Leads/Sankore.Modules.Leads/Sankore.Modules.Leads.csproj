@@ -27,4 +27,8 @@
     <InternalsVisibleTo Include="Sankore.Modules.Leads.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Domain\Exceptions\" />
+  </ItemGroup>
+
 </Project>

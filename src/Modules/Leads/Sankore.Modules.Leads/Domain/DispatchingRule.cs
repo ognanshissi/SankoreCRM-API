@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel;
+
 namespace Sankore.Modules.Leads.Domain;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace Sankore.Modules.Leads.Domain;
 /// (F13.10). Each IMF can tune these via module M12 Administration without
 /// any code change or redeployment — this entity IS the configuration.
 /// </summary>
-public sealed class DispatchingRule
+public sealed class DispatchingRule: ITenant
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }

@@ -15,4 +15,11 @@
     -->
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="ValueObject\" />
+  </ItemGroup>
 </Project>

@@ -16,5 +16,5 @@ public abstract class AggregateRoot: ITenant
     protected void RaiseDomainEvent(IDomainEvent domainEvent) => _domainEvents.Add(domainEvent);
 
     public void ClearDomainEvents() => _domainEvents.Clear();
-    public Guid TenantId { get; private set; }
+    public Guid TenantId { get; protected set; }
 }

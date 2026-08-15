@@ -13,7 +13,6 @@ using Sankore.Shared.Kernel;
 public sealed class Lead: AggregateRoot
 {
     public Guid Id { get; private set; }
-    public Guid TenantId { get; private set; }
     public string FullName { get; private set; } = default!;
     public string PhoneNumber { get; private set; } = default!;
     public string Website { get; private set; } = default!;
@@ -27,6 +26,8 @@ public sealed class Lead: AggregateRoot
     public string PreferredLanguage { get; private set; } = default!;
     public GeoPoint? Location { get; private set; }
     public Guid? PreferredAgencyId { get; private set; }
+    public Guid? CurrentAssignedId { get; private set; }
+    public Guid? AgentCollectedLeadId { get; private set; } // only field lead capturing
     public int Score { get; private set; }
     public Guid? CurrentAssignmentId { get; private set; }
     public string? LossReason { get; private set; }

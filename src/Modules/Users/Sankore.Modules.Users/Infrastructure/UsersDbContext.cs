@@ -9,9 +9,13 @@ using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
 
 public sealed class UsersDbContext(DbContextOptions<UsersDbContext> options, ITenantContext tenant)
-    : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
+    : IdentityDbContext<AppUser, AppRole, Guid>(options)
 {
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<Agency> Agencies => Set<Agency>();
+    public DbSet<UserLoginLocation> UserLoginLocations => Set<UserLoginLocation>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -24,27 +28,37 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Dedicated PostgreSQL schema: enforces the module boundary at the
         // database level, not just in code.
-        base.OnModelCreating(modelBuilder);
         modelBuilder.HasDefaultSchema("identity");
 
-        modelBuilder.Entity<AppUser>(b =>
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(UsersDbContext).Assembly);
+        // AppRole — add IsSystem on top of standard Identity columns (keep AspNetRoles table name)
+        modelBuilder.Entity<AppRole>(b =>
         {
-            b.Property(u => u.FullName).HasMaxLength(200).IsRequired();
-            b.Property(u => u.Email).HasMaxLength(200).IsRequired();
-            
+            b.Property(r => r.IsSystem).HasDefaultValue(false);
+        });
 
-            b.OwnsOne<GeoPoint>(u => u.LastKnownLocation, loc =>
-            {
-                loc.Property(l => l.Latitude).HasColumnName("last_lat");
-                loc.Property(l => l.Longitude).HasColumnName("last_lng");
-            });
+        // Permissions
+        modelBuilder.Entity<Permission>(b =>
+        {
+            b.ToTable("permissions");
+            b.HasKey(r => r.Id);
+        });
 
-            b.Property(u => u.SpokenLanguages)
-                .HasColumnType("text[]");
-            b.Property(u => u.Specialties)
-                .HasColumnType("text[]");
-
-            b.HasIndex(u => new { u.TenantId, u.AgencyId });
+        // RolePermission — join between AppRole and Permission
+        modelBuilder.Entity<RolePermission>(b =>
+        {
+            b.ToTable("role_permissions");
+            b.HasKey(r => r.Id);
+            b.HasOne(r => r.Role)
+                .WithMany()
+                .HasForeignKey(r => r.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(r => r.Permission)
+                .WithMany()
+                .HasForeignKey(r => r.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(r => new { r.RoleId, r.PermissionId }).IsUnique();
         });
 
         modelBuilder.Entity<OutboxMessage>(b =>
@@ -58,5 +72,9 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         // ever leak rows across tenants, even if a handler forgets to filter.
         modelBuilder.Entity<AppUser>()
             .HasQueryFilter(u => u.TenantId == tenant.CurrentTenantId);
+        
+        modelBuilder.Entity<Agency>().HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
+        
+        modelBuilder.Entity<UserLoginLocation>().HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
     }
 }

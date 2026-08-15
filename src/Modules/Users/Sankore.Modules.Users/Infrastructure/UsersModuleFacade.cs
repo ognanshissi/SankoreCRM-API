@@ -49,6 +49,6 @@ internal sealed class UsersModuleFacade(UsersDbContext db, UserManager<AppUser> 
         CurrentLocation: u.LastKnownLocation,
         ActiveLeadsCount: u.ActiveLeadsCount,
         HotLeadsCount: u.HotLeadsCount,
-        ConversionRate30d: u.ConversionRate30d,
+        ConversionRate30d: u.ConversionRate30D,
         IsAvailable: u.IsAvailable);
 }

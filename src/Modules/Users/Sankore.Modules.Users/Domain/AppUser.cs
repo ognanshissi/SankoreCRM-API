@@ -4,16 +4,6 @@ namespace Sankore.Modules.Users.Domain;
 
 using Sankore.Shared.Kernel;
 
-public enum UserRole
-{
-    Cashier,
-    CommercialAgent,
-    BranchManager,
-    SalesManager,
-    ComplianceOfficer,
-    Administrator
-}
-
 /// <summary>
 /// Internal entity of the Users module. NEVER referenced outside this
 /// assembly — other modules only ever see the AgentSummary DTO exposed via
@@ -30,9 +20,11 @@ public sealed class AppUser: IdentityUser<Guid>
     public List<string> Specialties { get; private set; } = new();
     public GeoPoint? LastKnownLocation { get; private set; }
     
+    public Guid ReportToId { get; private set; }
+    
     public int ActiveLeadsCount { get; private set; }
     public int HotLeadsCount { get; private set; }
-    public double ConversionRate30d { get; private set; }
+    public double ConversionRate30D { get; private set; }
     
     public bool EnableNotifications { get; private set; }
 
@@ -50,6 +42,7 @@ public sealed class AppUser: IdentityUser<Guid>
         {
             TenantId = tenantId,
             AgencyId = agencyId,
+            FullName = fullName,
             UserName = email,
             Email = email
         };

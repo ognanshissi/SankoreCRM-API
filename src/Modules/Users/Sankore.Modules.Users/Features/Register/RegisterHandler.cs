@@ -6,30 +6,24 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Users.Features.Register;
 
-public class RegisterHandler(UsersDbContext db, UserManager<AppUser> userManager): IRequestHandler<RegisterCommand, Result<RegisterResult>>
+internal sealed class RegisterHandler(
+    UserManager<AppUser> userManager) : IRequestHandler<RegisterCommand, Result<RegisterResult>>
 {
     public async Task<Result<RegisterResult>> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
-        // Start transaction
-        var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        
         var user = AppUser.Create(
-            request.TenantId, 
+            request.TenantId,
             request.AgencyId,
             request.FullName,
             request.Email);
-        
-        IdentityResult identityResult = await userManager.CreateAsync(user, request.Password);
-        if (!identityResult.Succeeded)
-        {
-            return Result.Fail<RegisterResult>(identityResult.ToString());
-        }
-        
-        IdentityResult identityRoleResult = await userManager.AddToRoleAsync(user, Roles.Administrator);
-        if (!identityRoleResult.Succeeded)
-            return Result.Fail<RegisterResult>(identityRoleResult.Errors.First().ToString() ?? "");
-        
-        transaction.Commit();
+
+        var createResult = await userManager.CreateAsync(user, request.Password);
+        if (!createResult.Succeeded)
+            return Result.Fail<RegisterResult>(string.Join("; ", createResult.Errors.Select(e => e.Description)));
+
+        var roleResult = await userManager.AddToRoleAsync(user, Roles.Administrator);
+        if (!roleResult.Succeeded)
+            return Result.Fail<RegisterResult>(string.Join("; ", roleResult.Errors.Select(e => e.Description)));
 
         return Result.Ok(new RegisterResult(user.Id));
     }
