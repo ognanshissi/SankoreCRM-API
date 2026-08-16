@@ -16,6 +16,7 @@ public sealed class UsersDbContext(DbContextOptions<UsersDbContext> options, ITe
     public DbSet<UserLoginLocation> UserLoginLocations => Set<UserLoginLocation>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<PasswordHistory>  PasswordHistories => Set<PasswordHistory>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -74,6 +75,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
             .HasQueryFilter(u => u.TenantId == tenant.CurrentTenantId);
         
         modelBuilder.Entity<Agency>().HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<PasswordHistory>().HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
         
         modelBuilder.Entity<UserLoginLocation>().HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
     }

@@ -8,6 +8,8 @@ namespace Sankore.Modules.Users.Domain;
 /// </summary>
 public class AppRole : IdentityRole<Guid>
 {
+    public Guid? TenantId { get; private set; } // System role doesn't require tenantId
+    
     public bool IsSystem { get; private set; }
 
     private AppRole() { }
