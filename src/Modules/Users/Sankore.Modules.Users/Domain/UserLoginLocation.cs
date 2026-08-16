@@ -1,4 +1,5 @@
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Kernel.ValueObject;
 
 namespace Sankore.Modules.Users.Domain;
 

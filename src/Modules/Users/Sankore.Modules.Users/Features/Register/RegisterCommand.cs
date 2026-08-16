@@ -10,7 +10,9 @@ public sealed record RegisterCommand(
     string Email,
     string Password,
     string ConfirmPassword,
-    string FullName
+    string FirstName,
+    string LastName,
+    string Role
 ) : IRequest<Result<RegisterResult>>, ICommand;
 
 public sealed record RegisterResult(Guid UserId);

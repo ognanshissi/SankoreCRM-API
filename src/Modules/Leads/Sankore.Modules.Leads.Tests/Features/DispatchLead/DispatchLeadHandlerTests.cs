@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel.ValueObject;
+
 namespace Sankore.Modules.Leads.Tests.Features.DispatchLead;
 
 using FluentAssertions;

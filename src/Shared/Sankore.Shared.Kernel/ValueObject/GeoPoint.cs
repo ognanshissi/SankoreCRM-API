@@ -1,4 +1,4 @@
-namespace Sankore.Shared.Kernel;
+namespace Sankore.Shared.Kernel.ValueObject;
 
 /// <summary>
 /// Immutable geographic coordinate value object, shared across modules

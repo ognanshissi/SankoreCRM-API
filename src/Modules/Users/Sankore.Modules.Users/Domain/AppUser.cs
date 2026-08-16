@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Sankore.Shared.Kernel.ValueObject;
 
 namespace Sankore.Modules.Users.Domain;
 

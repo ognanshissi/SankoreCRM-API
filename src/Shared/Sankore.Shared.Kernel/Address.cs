@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel.ValueObject;
+
 namespace Sankore.Shared.Kernel;
 
 public class Address

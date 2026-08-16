@@ -15,12 +15,12 @@ internal static class PermissionSeeder
 
         foreach (var permission in Permissions.All)
         {
-            var existingPermission = await dbContext.Set<Permission>().FirstOrDefaultAsync(x => x.Code  == permission.Code);
+            var existingPermission = await dbContext.Permissions.FirstOrDefaultAsync(x => x.Code  == permission.Code);
             if (existingPermission is not null)
                 continue;
 
             var payload = Permission.Create(permission.Code, permission.Description, permission.Module, permission.Action);
-            await dbContext.Set<Permission>().AddAsync(payload, CancellationToken.None);
+            await dbContext.Permissions.AddAsync(payload, CancellationToken.None);
         }
 
         await dbContext.SaveChangesAsync();

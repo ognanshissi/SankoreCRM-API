@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel;
+
 namespace Sankore.Modules.Leads.Domain;
 
 /// <summary>

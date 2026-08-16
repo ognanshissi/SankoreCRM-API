@@ -15,45 +15,14 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(LeadsDbContext).Assembly);
+        
         modelBuilder.HasDefaultSchema("leads");
-
-        modelBuilder.Entity<Lead>(b =>
-        {
-            b.ToTable("leads");
-            b.HasKey(l => l.Id);
-            b.Property(l => l.FullName).HasMaxLength(200).IsRequired();
-            b.Property(l => l.PhoneNumber).HasMaxLength(30).IsRequired();
-            b.Property(l => l.InterestedProduct).HasMaxLength(100).IsRequired();
-            b.Property(l => l.PreferredLanguage).HasMaxLength(50).IsRequired();
-            b.Property(l => l.Status).HasConversion<string>().HasMaxLength(30);
-            b.Property(l => l.Source).HasConversion<string>().HasMaxLength(30);
-
-            b.OwnsOne(l => l.Location, loc =>
-            {
-                loc.Property(p => p.Latitude).HasColumnName("lat");
-                loc.Property(p => p.Longitude).HasColumnName("lng");
-            });
-
-            b.HasIndex(l => new { l.TenantId, l.Status });
-            b.HasIndex(l => l.PhoneNumber);
-
-            // Domain events are transient, never persisted as a column.
-            b.Ignore(l => l.DomainEvents);
-        });
 
         modelBuilder.Entity<LeadAssignment>(b =>
         {
-            b.ToTable("lead_assignments");
-            b.HasKey(a => a.Id);
-            b.Property(a => a.Strategy).HasConversion<string>().HasMaxLength(30);
-            b.HasIndex(a => a.LeadId);
-            b.HasIndex(a => a.AgentId); // no foreign key, the agency live inside UserModule
-            b.HasIndex(a => new { a.SlaDeadline, a.FirstContactAt });
-
-            b.HasOne<Lead>()
-                .WithMany()
-                .HasForeignKey(a => a.LeadId)
-                .OnDelete(DeleteBehavior.Cascade);
+            
         });
 
         modelBuilder.Entity<DispatchingRule>(b =>

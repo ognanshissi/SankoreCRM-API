@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Sankore.Modules.Users.Domain;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Kernel.ValueObject;
 
 namespace Sankore.Modules.Users.Infrastructure.Configurations;
 

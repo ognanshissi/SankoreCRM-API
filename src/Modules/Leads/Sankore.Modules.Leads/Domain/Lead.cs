@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel.ValueObject;
+
 namespace Sankore.Modules.Leads.Domain;
 
 using Sankore.Modules.Leads.Domain.Events;

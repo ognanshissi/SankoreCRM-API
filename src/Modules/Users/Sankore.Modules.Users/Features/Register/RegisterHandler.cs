@@ -1,7 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Sankore.Modules.Users.Domain;
-using Sankore.Modules.Users.Infrastructure;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Users.Features.Register;
@@ -14,14 +13,14 @@ internal sealed class RegisterHandler(
         var user = AppUser.Create(
             request.TenantId,
             request.AgencyId,
-            request.FullName,
+           $"{request.FirstName} {request.LastName}",
             request.Email);
 
         var createResult = await userManager.CreateAsync(user, request.Password);
         if (!createResult.Succeeded)
             return Result.Fail<RegisterResult>(string.Join("; ", createResult.Errors.Select(e => e.Description)));
 
-        var roleResult = await userManager.AddToRoleAsync(user, Roles.Administrator);
+        var roleResult = await userManager.AddToRoleAsync(user, request.Role);
         if (!roleResult.Succeeded)
             return Result.Fail<RegisterResult>(string.Join("; ", roleResult.Errors.Select(e => e.Description)));
 

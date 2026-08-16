@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel.ValueObject;
+
 namespace Sankore.Modules.Leads.Tests.TestSupport;
 
 using Sankore.Modules.Leads.Domain;

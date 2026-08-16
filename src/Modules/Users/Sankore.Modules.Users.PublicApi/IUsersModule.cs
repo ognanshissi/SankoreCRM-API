@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel.ValueObject;
+
 namespace Sankore.Modules.Users.PublicApi;
 
 using Sankore.Shared.Kernel;

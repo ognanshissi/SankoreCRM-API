@@ -22,7 +22,7 @@ public static class RegisterEndpoint
         RegisterRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(
-            new RegisterCommand(req.TenantId, req.AgencyId, req.Email, req.Password, req.ConfirmPassword, req.FullName),
+            new RegisterCommand(req.TenantId, req.AgencyId, req.Email, req.Password, req.ConfirmPassword, req.FirstName,  req.LastName, req.Role),
             ct);
 
         return result.IsSuccess
@@ -37,4 +37,6 @@ public sealed record RegisterRequest(
     string Email,
     string Password,
     string ConfirmPassword,
-    string FullName);
+    string FirstName,
+    string LastName,
+    string Role);
