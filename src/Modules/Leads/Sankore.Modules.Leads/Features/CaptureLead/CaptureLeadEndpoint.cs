@@ -10,13 +10,14 @@ public static class CaptureLeadEndpoint
 {
     public static IEndpointRouteBuilder MapCaptureLead(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/leads", Handle)
+        app.MapPost("leads", Handle)
             .WithName("CaptureLead")
             .WithTags("Leads")
             .RequireAuthorization("Leads.Capture")
             .Produces<CaptureLeadResult>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
-            .WithOpenApi();
+            .WithOpenApi()
+            .WithTenantHeader();
 
         return app;
     }

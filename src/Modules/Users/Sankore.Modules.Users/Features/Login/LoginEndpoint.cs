@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Shared.Infrastructure.Extensions;
 
 namespace Sankore.Modules.Users.Features.Login;
 
@@ -12,7 +13,8 @@ public static class LoginEndpoint
         app.MapPost("/auth/login", Handle)
             .WithTags("Identity")
             .WithName("Login")
-            .AllowAnonymous();
+            .AllowAnonymous()
+            .WithTenantHeader();
         return app;
     }
 

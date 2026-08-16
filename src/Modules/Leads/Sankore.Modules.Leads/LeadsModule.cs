@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Builder;
+
 namespace Sankore.Modules.Leads;
 
 using FluentValidation;
@@ -53,13 +55,14 @@ public static class LeadsModule
 
     public static IEndpointRouteBuilder MapLeadsEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapCaptureLead();
-        app.MapDispatchLead();
+        return app.MapGroup("api/")
+            .MapCaptureLead()
+            .MapDispatchLead();
         // Add one line per new slice, e.g.:
         // app.MapQualifyLead();
         // app.MapReassignLead();
         // app.MapConvertLeadToCustomer();
         // app.MapGetLeadPipeline();
-        return app;
+        
     }
 }

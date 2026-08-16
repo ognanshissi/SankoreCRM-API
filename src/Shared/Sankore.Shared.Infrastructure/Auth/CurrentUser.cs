@@ -38,12 +38,23 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICur
 /// Bridges ICurrentUser to the Kernel's ITenantContext abstraction so every
 /// module's DbContext can apply its multi-tenant global query filter without
 /// depending on ASP.NET Core at all.
+/// Resolves tenant in priority order:
+///   1. JWT claim "tenant_id"
+///   2. Request header "x-tenant-id"
 /// </summary>
 public sealed class HttpTenantContext(IHttpContextAccessor accessor) : ITenantContext
 {
-    public bool HasTenant => accessor.HttpContext?.User.FindFirst("tenant_id") is not null;
+    private string? Resolve()
+    {
+        var ctx = accessor.HttpContext;
+        if (ctx is null) return null;
+        return ctx.User.FindFirst("tenant_id")?.Value
+               ?? ctx.Request.Headers["x-tenant-id"].FirstOrDefault();
+    }
 
-    public Guid CurrentTenantId => HasTenant
-        ? Guid.Parse(accessor.HttpContext!.User.FindFirst("tenant_id")!.Value)
+    public bool HasTenant => Resolve() is not null;
+
+    public Guid CurrentTenantId => Resolve() is { } raw && Guid.TryParse(raw, out var id)
+        ? id
         : throw new InvalidOperationException("No tenant resolved for the current context.");
 }

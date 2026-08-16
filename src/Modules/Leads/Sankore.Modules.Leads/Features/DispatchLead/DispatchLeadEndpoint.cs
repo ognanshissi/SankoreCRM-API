@@ -17,7 +17,7 @@ public static class DispatchLeadEndpoint
 {
     public static IEndpointRouteBuilder MapDispatchLead(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/leads/{leadId:guid}/dispatch", Handle)
+        app.MapPost("leads/{leadId:guid}/dispatch", Handle)
             .WithName("DispatchLead")
             .WithTags("Leads")
             .RequireAuthorization("Leads.Dispatch")
@@ -26,7 +26,8 @@ public static class DispatchLeadEndpoint
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
-            .WithOpenApi();
+            .WithOpenApi()
+            .WithTenantHeader();
 
         return app;
     }

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Users.Features.Register;
@@ -13,7 +14,8 @@ public static class RegisterEndpoint
         app.MapPost("user/register", Handle)
             .WithTags("Identity")
             .WithName("Register")
-            .AllowAnonymous();
+            .AllowAnonymous()
+            .WithTenantHeader();
 
         return app;
     }

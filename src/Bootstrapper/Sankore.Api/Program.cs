@@ -83,6 +83,8 @@ builder.Services.AddEndpointsApiExplorer();
 #region Swagger Generation
 builder.Services.AddSwaggerGen(options =>
 {
+    options.OperationFilter<Sankore.Api.Infrastructure.TenantHeaderOperationFilter>();
+
     options.AddSecurityDefinition("BearerToken", new ()
     {
         Name = "Authorization",
@@ -92,25 +94,27 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer"
     });
     
-    options.AddSecurityDefinition("TenancyHeader", new ()
+    options.AddSecurityDefinition("TenantHeader", new()
     {
-        Name = "Tenant Authorization",
-        Description = "Tenant-based authentication using the Tenant scheme",
+        Name = "x-tenant-id",
+        Description = "Tenant identifier (UUID). Required when no JWT is present or to override the JWT tenant claim.",
         Type = SecuritySchemeType.ApiKey,
         In = ParameterLocation.Header,
-        Scheme = "TenantId"
     });
-    
+
     options.AddSecurityRequirement(new()
     {
         {
-            new ()
+            new()
             {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "BearerToken"
-                },
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "BearerToken" }
+            },
+            new List<string>()
+        },
+        {
+            new()
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "TenantHeader" }
             },
             new List<string>()
         }
