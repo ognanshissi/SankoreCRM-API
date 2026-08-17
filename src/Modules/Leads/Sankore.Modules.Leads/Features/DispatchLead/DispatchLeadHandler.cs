@@ -8,7 +8,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.DispatchLead.Events;
 using Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 using Sankore.Modules.Leads.Infrastructure;
-using Sankore.Modules.Users.PublicApi;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 
@@ -22,7 +22,7 @@ using Sankore.Shared.Kernel;
 /// </summary>
 internal sealed class DispatchLeadHandler(
     LeadsDbContext db,
-    IUsersModule usersModule,
+    IAdministrationModule usersModule,
     CompatibilityScorer scorer,
     DispatchingStrategyFactory strategyFactory,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,

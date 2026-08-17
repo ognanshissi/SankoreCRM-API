@@ -6,7 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Sankore.Modules.Leads;
 using Sankore.Modules.Leads.Infrastructure;
-using Sankore.Modules.Users;
+using Sankore.Modules.Administration;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Infrastructure.Tenants;
@@ -130,7 +130,7 @@ builder.Services.AddSwaggerGen(options =>
 //    DbContext, handlers, validators, and endpoints internally.
 // ---------------------------------------------------------------------
 
-builder.Services.AddUsersModule(builder.Configuration);
+builder.Services.AddAdministrationModule(builder.Configuration);
 builder.Services.AddLeadsModule(builder.Configuration);
 // builder.Services.AddCustomersModule(builder.Configuration);   // M01 — same pattern
 // builder.Services.AddKycModule(builder.Configuration);         // M02 — same pattern
@@ -147,10 +147,10 @@ app.MapDefaultEndpoints();
 using (var scope = app.Services.CreateScope())
 {
     // Each module owns its own migration + initialization.
-    // UsersModule.InitializeAsync runs migrations AND seeds system roles.
+    // AdministrationModule.InitializeAsync runs migrations AND seeds system roles.
     var leadsDb = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
     await leadsDb.Database.MigrateAsync();
-    await UsersModule.InitializeAsync(scope.ServiceProvider);
+    await AdministrationModule.InitializeAsync(scope.ServiceProvider);
 }
 
 // ---------------------------------------------------------------------
@@ -174,7 +174,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
     .AllowAnonymous();
 
 app.MapLeadsEndpoints();
-app.MapIdentityModuleEndpoints();
+app.MapAdministrationModuleEndpoints();
 // app.MapCustomersEndpoints();
 // app.MapKycEndpoints();
 // app.MapLoansEndpoints();

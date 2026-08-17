@@ -2,7 +2,7 @@ using Sankore.Shared.Kernel.ValueObject;
 
 namespace Sankore.Modules.Leads.Tests.TestSupport;
 
-using Sankore.Modules.Users.PublicApi;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Kernel;
 
 public sealed class AgentTestBuilder

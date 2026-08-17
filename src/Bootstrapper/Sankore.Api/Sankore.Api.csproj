@@ -25,7 +25,7 @@
     <ProjectReference Include="..\..\..\SankoreCRM.ServiceDefaults\SankoreCRM.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
     <ProjectReference Include="..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\Modules\Users\Sankore.Modules.Users\Sankore.Modules.Users.csproj" />
+    <ProjectReference Include="..\..\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj" />
     <ProjectReference Include="..\..\Modules\Leads\Sankore.Modules.Leads\Sankore.Modules.Leads.csproj" />
   </ItemGroup>
 

@@ -19,8 +19,8 @@
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
     <ProjectReference Include="..\Sankore.Modules.Leads.PublicApi\Sankore.Modules.Leads.PublicApi.csproj" />
-    <!-- Cross-module dependency: ONLY the Users PublicApi, never Sankore.Modules.Users itself -->
-    <ProjectReference Include="..\..\Users\Sankore.Modules.Users.PublicApi\Sankore.Modules.Users.PublicApi.csproj" />
+    <!-- Cross-module dependency: ONLY the Administration PublicApi, never Sankore.Modules.Users itself -->
+    <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
   </ItemGroup>
 
   <ItemGroup>

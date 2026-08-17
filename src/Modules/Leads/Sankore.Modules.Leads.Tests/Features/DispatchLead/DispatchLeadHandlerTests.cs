@@ -9,7 +9,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 using Sankore.Modules.Leads.Tests.TestSupport;
-using Sankore.Modules.Users.PublicApi;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 using Xunit;
@@ -18,7 +18,7 @@ using Xunit;
 /// These tests exercise DispatchLeadHandler against a real EF Core
 /// InMemory-provider LeadsDbContext (so multi-tenant query filters and
 /// EF mapping quirks are genuinely exercised) while faking the
-/// cross-module IUsersModule and the IEventPublisher — exactly the two
+/// cross-module IAdministrationModule and the IEventPublisher — exactly the two
 /// seams the slice was designed around.
 ///
 /// For a fully realistic run against actual PostgreSQL semantics (array
@@ -71,7 +71,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
             .WithConversionRate(0.55)
             .Build();
 
-        var usersModule = Substitute.For<IUsersModule>();
+        var usersModule = Substitute.For<IAdministrationModule>();
         usersModule.GetAvailableAgentsAsync(_tenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new List<AgentSummary> { awa, ibra });
 
@@ -107,7 +107,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
         db.Leads.Add(lead);
         await db.SaveChangesAsync();
 
-        var usersModule = Substitute.For<IUsersModule>();
+        var usersModule = Substitute.For<IAdministrationModule>();
         usersModule.GetAvailableAgentsAsync(_tenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new List<AgentSummary>());
 
@@ -145,7 +145,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
         db.Leads.Add(lead);
         await db.SaveChangesAsync();
 
-        var usersModule = Substitute.For<IUsersModule>();
+        var usersModule = Substitute.For<IAdministrationModule>();
         var publisher = Substitute.For<IEventPublisher>();
         var handler = BuildHandler(db, usersModule, publisher);
 
@@ -173,7 +173,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
             .WithHotLeads(5)
             .Build();
 
-        var usersModule = Substitute.For<IUsersModule>();
+        var usersModule = Substitute.For<IAdministrationModule>();
         usersModule.GetAvailableAgentsAsync(_tenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new List<AgentSummary> { overloadedAgent });
 
@@ -193,7 +193,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
 
     private static DispatchLeadHandler BuildHandler(
         Sankore.Modules.Leads.Infrastructure.LeadsDbContext db,
-        IUsersModule usersModule,
+        IAdministrationModule usersModule,
         IEventPublisher publisher)
     {
         // NOTE: [FromKeyedServices] on the handler's constructor parameter

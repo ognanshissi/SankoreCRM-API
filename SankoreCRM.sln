@@ -8,9 +8,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Shared.Kernel", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Shared.Infrastructure", "src\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj", "{B9460BA3-E380-4EBE-B62E-689B09AC35AA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Users.PublicApi", "src\Modules\Users\Sankore.Modules.Users.PublicApi\Sankore.Modules.Users.PublicApi.csproj", "{8763B3C8-C50C-4B9A-A329-51121D7CF2CA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Administration.PublicApi", "src\Modules\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj", "{8763B3C8-C50C-4B9A-A329-51121D7CF2CA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Users", "src\Modules\Users\Sankore.Modules.Users\Sankore.Modules.Users.csproj", "{A1F7054B-2C37-45C7-BD02-AB353749F747}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Administration", "src\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj", "{A1F7054B-2C37-45C7-BD02-AB353749F747}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Leads.PublicApi", "src\Modules\Leads\Sankore.Modules.Leads.PublicApi\Sankore.Modules.Leads.PublicApi.csproj", "{E3D0DC5A-0466-48E9-9612-77940AC94024}"
 EndProject
@@ -24,7 +24,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{111111
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Modules", "Modules", "{11111111-0000-0000-0000-000000000003}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Users", "Users", "{11111111-0000-0000-0000-000000000004}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Administration", "Administration", "{11111111-0000-0000-0000-000000000004}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Leads", "Leads", "{11111111-0000-0000-0000-000000000005}"
 EndProject

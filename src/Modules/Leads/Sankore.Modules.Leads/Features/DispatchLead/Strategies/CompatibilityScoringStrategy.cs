@@ -1,7 +1,7 @@
 namespace Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 
 using Sankore.Modules.Leads.Domain;
-using Sankore.Modules.Users.PublicApi;
+using Sankore.Modules.Administration.PublicApi;
 
 /// <summary>
 /// Default and recommended strategy (F13.10): scores every candidate via

@@ -1,7 +1,7 @@
 namespace Sankore.Modules.Leads.Features.DispatchLead;
 
 using Sankore.Modules.Leads.Domain;
-using Sankore.Modules.Users.PublicApi;
+using Sankore.Modules.Administration.PublicApi;
 
 /// <summary>
 /// Scores compatibility between a lead and a candidate agent (0-100),

@@ -1,7 +1,7 @@
 namespace Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 
 using Sankore.Modules.Leads.Domain;
-using Sankore.Modules.Users.PublicApi;
+using Sankore.Modules.Administration.PublicApi;
 
 /// <summary>
 /// A single scored candidate produced by a strategy. Higher CompatibilityScore
