@@ -11,12 +11,14 @@ public class AppRole : IdentityRole<Guid>
     public Guid? TenantId { get; private set; } // System role doesn't require tenantId
     
     public bool IsSystem { get; private set; }
+    public string Label { get; private set; } = string.Empty;
 
     private AppRole() { }
 
-    public static AppRole Create(string name, bool isSystem = false) => new()
+    public static AppRole Create(string name, string label, bool isSystem = false) => new()
     {
         Name = name,
+        Label = label,
         IsSystem = isSystem
     };
 }

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Shared.Infrastructure.Extensions;
 
-namespace Sankore.Modules.Administration.Features.Users.Login;
+namespace Sankore.Modules.Administration.Features.Authentication.Login;
 
 public static class LoginEndpoint
 {

@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
-using Sankore.Modules.Administration.Features.Users.Login;
+using Sankore.Modules.Administration.Features.Authentication.Login;
 using Sankore.Modules.Administration.Features.Users.Register;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;

@@ -21,7 +21,7 @@ internal static class RoleSeeder
             if (await roleManager.RoleExistsAsync(name))
                 continue;
 
-            var result = await roleManager.CreateAsync(AppRole.Create(name, isSystem: true));
+            var result = await roleManager.CreateAsync(AppRole.Create(name, string.Empty, isSystem: true));
             if (!result.Succeeded)
                 logger.LogWarning("Failed to seed role {Role}: {Errors}", name,
                     string.Join("; ", result.Errors.Select(e => e.Description)));

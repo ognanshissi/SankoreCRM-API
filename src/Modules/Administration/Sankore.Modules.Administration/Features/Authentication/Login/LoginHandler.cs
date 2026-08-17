@@ -6,7 +6,7 @@ using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Shared.Kernel;
 
-namespace Sankore.Modules.Administration.Features.Users.Login;
+namespace Sankore.Modules.Administration.Features.Authentication.Login;
 
 internal sealed class LoginHandler(
     UserManager<AppUser> userManager,
