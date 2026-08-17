@@ -4,14 +4,14 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Shared.Infrastructure.Extensions;
 
-namespace Sankore.Modules.Administration.Features.Login;
+namespace Sankore.Modules.Administration.Features.Users.Login;
 
 public static class LoginEndpoint
 {
     public static IEndpointRouteBuilder MapLogin(this IEndpointRouteBuilder app)
     {
         app.MapPost("/auth/login", Handle)
-            .WithTags("Identity")
+            .WithTags("Auth")
             .WithName("Login")
             .AllowAnonymous()
             .WithTenantHeader();

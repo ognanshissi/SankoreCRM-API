@@ -3,16 +3,15 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Shared.Infrastructure.Extensions;
-using Sankore.Shared.Kernel;
 
-namespace Sankore.Modules.Administration.Features.Register;
+namespace Sankore.Modules.Administration.Features.Users.Register;
 
 public static class RegisterEndpoint
 {
     public static IEndpointRouteBuilder MapRegister(this IEndpointRouteBuilder app)
     {
-        app.MapPost("user/register", Handle)
-            .WithTags("Identity")
+        app.MapPost("users", Handle)
+            .WithTags("Users")
             .WithName("Register")
             .AllowAnonymous()
             .WithTenantHeader();

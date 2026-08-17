@@ -2,7 +2,7 @@ using MediatR;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
-namespace Sankore.Modules.Administration.Features.Register;
+namespace Sankore.Modules.Administration.Features.Users.Register;
 
 public sealed record RegisterCommand(
     Guid TenantId,

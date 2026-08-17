@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Kernel;
 
-namespace Sankore.Modules.Administration.Features.Register;
+namespace Sankore.Modules.Administration.Features.Users.Register;
 
 internal sealed class RegisterHandler(
     UserManager<AppUser> userManager) : IRequestHandler<RegisterCommand, Result<RegisterResult>>
@@ -24,6 +24,8 @@ internal sealed class RegisterHandler(
         if (!roleResult.Succeeded)
             return Result.Fail<RegisterResult>(string.Join("; ", roleResult.Errors.Select(e => e.Description)));
 
+        // Create user profile
+        // Emit user-created event
         return Result.Ok(new RegisterResult(user.Id));
     }
 }

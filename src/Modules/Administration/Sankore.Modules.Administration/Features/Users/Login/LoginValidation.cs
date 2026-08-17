@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace Sankore.Modules.Administration.Features.Login;
+namespace Sankore.Modules.Administration.Features.Users.Login;
 
 public sealed class LoginValidation : AbstractValidator<LoginCommand>
 {

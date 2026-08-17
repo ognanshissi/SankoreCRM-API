@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <Folder Include="Domain\Exceptions\" />
+    <Folder Include="Features\Users\" />
     <Folder Include="Infrastructure\Migrations\" />
   </ItemGroup>
 

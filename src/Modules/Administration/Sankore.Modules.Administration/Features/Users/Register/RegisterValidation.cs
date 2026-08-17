@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace Sankore.Modules.Administration.Features.Register;
+namespace Sankore.Modules.Administration.Features.Users.Register;
 
 public sealed class RegisterValidation: AbstractValidator<RegisterCommand>
 {

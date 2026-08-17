@@ -2,7 +2,7 @@ using MediatR;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
-namespace Sankore.Modules.Administration.Features.Login;
+namespace Sankore.Modules.Administration.Features.Users.Login;
 
 /// <summary>
 /// TenantId is required because users share email space across tenants.
