@@ -17,7 +17,7 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
             .WithMany()
             .HasForeignKey(a => a.AgencyId)
             .OnDelete(DeleteBehavior.Cascade);
-
+        
         builder.OwnsOne<GeoPoint>(u => u.LastKnownLocation, loc =>
         {
             loc.Property(l => l.Latitude).HasColumnName("lat");

@@ -19,6 +19,9 @@ public class Agency: AggregateRoot
     public Guid? CreatedBy { get; set; }
     public bool IsDeleted { get; set; }
     public bool IsActive { get; set; }
+
+    private readonly List<AppUser> _users = new List<AppUser>();
+    public IReadOnlyCollection<AppUser> Users => _users.AsReadOnly();
     
     public AgencyType AgencyType { get; private set; } = AgencyType.HeadQuarter;
 

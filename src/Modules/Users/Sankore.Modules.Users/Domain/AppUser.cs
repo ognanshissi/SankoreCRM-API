@@ -14,6 +14,7 @@ public sealed class AppUser: IdentityUser<Guid>
 {
     public Guid TenantId { get; private set; }
     public Guid AgencyId { get; private set; }
+    public Agency? Agency { get; private set; } = null;
     public string FullName { get; private set; } = default!;
     public bool IsAvailable { get; private set; } = true;
 
@@ -28,6 +29,11 @@ public sealed class AppUser: IdentityUser<Guid>
     public double ConversionRate30D { get; private set; }
     
     public bool EnableNotifications { get; private set; }
+
+    private readonly List<UserRole> _userRoles = new();
+    public IReadOnlyCollection<UserRole> UserRoles => _userRoles.AsReadOnly();
+
+    public UserProfile? Profile { get; private set; } = null;
 
     private AppUser() { } // EF Core
 

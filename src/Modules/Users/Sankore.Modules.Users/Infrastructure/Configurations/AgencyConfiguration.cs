@@ -28,6 +28,13 @@ public class AgencyConfiguration: IEntityTypeConfiguration<Agency>
                 loc.Property(l => l.Longitude).HasColumnName("lng");
             });
         });
+        
+        builder.HasMany(a => a.Users)
+            .WithOne(a => a.Agency)
+            .HasForeignKey(a => a.AgencyId)
+            .OnDelete(DeleteBehavior.Restrict);
+        
+        // Indexes
         builder.HasIndex(x => new  { x.TenantId, x.Code }).IsUnique();
         
         builder.HasIndex(x => new { x.TenantId, x.ParentAgencyId});
