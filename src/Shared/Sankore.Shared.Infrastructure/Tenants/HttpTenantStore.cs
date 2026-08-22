@@ -15,7 +15,6 @@ internal sealed class HttpTenantStore(
     ILogger<HttpTenantStore> logger) : ITenantStore
 {
     private const string ClientName = "TenantStore";
-
     public async Task<bool> ExistsAsync(Guid tenantId, CancellationToken ct = default)
     {
         var client = httpClientFactory.CreateClient(ClientName);

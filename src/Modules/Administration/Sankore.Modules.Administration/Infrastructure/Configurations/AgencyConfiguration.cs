@@ -8,6 +8,7 @@ public class AgencyConfiguration: IEntityTypeConfiguration<Agency>
 {
     public void Configure(EntityTypeBuilder<Agency> builder)
     {
+        builder.ToTable("agencies");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.TenantId).IsRequired();
         builder.Property(x => x.AgencyType).HasConversion<string>().IsRequired();
@@ -16,18 +17,22 @@ public class AgencyConfiguration: IEntityTypeConfiguration<Agency>
         builder.Property(x => x.Description).HasMaxLength(500);
         builder.OwnsOne(x => x.Address, a =>
         {
-            a.Property(x => x.Street).HasColumnName("street");
-            a.Property(x => x.City).HasColumnName("city");
-            a.Property(x => x.State).HasColumnName("state");
-            a.Property(x => x.Country).HasColumnName("country");
-            a.Property(x => x.ZipCode).HasColumnName("zipcode");
+            a.Property(x => x.Street).HasColumnName("address_street");
+            a.Property(x => x.City).HasColumnName("address_city");
+            a.Property(x => x.State).HasColumnName("address_state");
+            a.Property(x => x.Country).HasColumnName("address_country");
+            a.Property(x => x.ZipCode).HasColumnName("address_zipcode");
             // GeoPoint is an owned type (no PostGIS required); stored as two double columns.
             a.OwnsOne(x => x.Location, loc =>
             {
-                loc.Property(l => l.Latitude).HasColumnName("lat");
-                loc.Property(l => l.Longitude).HasColumnName("lng");
+                loc.Property(l => l.Latitude).HasColumnName("address_location_lat");
+                loc.Property(l => l.Longitude).HasColumnName("address_location_lng");
             });
         });
+        
+        // builder.HasOne(a => a.ParentAgencyId)
+        //     .WithMany()
+        //     .HasForeignKey(a => a.ParentAgencyId);
         
         builder.HasMany(a => a.Users)
             .WithOne(a => a.Agency)

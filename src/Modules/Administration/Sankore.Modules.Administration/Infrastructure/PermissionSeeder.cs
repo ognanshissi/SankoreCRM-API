@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Infrastructure;
 

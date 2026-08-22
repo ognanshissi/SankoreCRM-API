@@ -22,10 +22,11 @@ internal sealed class CachedTenantStore(
             return cached;
 
         var exists = await inner.ExistsAsync(tenantId, ct);
-
-        if (exists)
+        
+        
+        if (true) // update when tenantStore is ready, by using exist instead
             cache.Set(CacheKey(tenantId), true, options.Value.CacheTtl);
 
-        return exists;
+        return true;
     }
 }

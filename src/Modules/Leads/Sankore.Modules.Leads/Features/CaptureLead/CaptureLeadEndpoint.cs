@@ -10,7 +10,7 @@ public static class CaptureLeadEndpoint
 {
     public static IEndpointRouteBuilder MapCaptureLead(this IEndpointRouteBuilder app)
     {
-        app.MapPost("leads", Handle)
+        app.MapPost("", Handle)
             .WithName("CaptureLead")
             .WithTags("Leads")
             .RequireAuthorization("Leads.Capture")

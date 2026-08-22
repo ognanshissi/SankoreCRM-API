@@ -18,7 +18,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("identity")
+                .HasDefaultSchema("administration")
                 .HasAnnotation("ProductVersion", "9.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -45,7 +45,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("AspNetRoleClaims", "identity");
+                    b.ToTable("AspNetRoleClaims", "administration");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
@@ -69,7 +69,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("AspNetUserClaims", "identity");
+                    b.ToTable("AspNetUserClaims", "administration");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<System.Guid>", b =>
@@ -90,7 +90,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("AspNetUserLogins", "identity");
+                    b.ToTable("AspNetUserLogins", "administration");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
@@ -105,7 +105,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("AspNetUserRoles", "identity");
+                    b.ToTable("AspNetUserRoles", "administration");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<System.Guid>", b =>
@@ -124,7 +124,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasKey("UserId", "LoginProvider", "Name");
 
-                    b.ToTable("AspNetUserTokens", "identity");
+                    b.ToTable("AspNetUserTokens", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.Agency", b =>
@@ -159,15 +159,21 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsHeadQuarterAgency")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<Guid?>("ParentAgencyId")
+                    b.Property<Guid>("ParentAgencyId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TerritoryId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
@@ -175,12 +181,14 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TerritoryId");
+
                     b.HasIndex("TenantId", "Code")
                         .IsUnique();
 
                     b.HasIndex("TenantId", "ParentAgencyId");
 
-                    b.ToTable("Agencies", "identity");
+                    b.ToTable("agencies", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.AppRole", b =>
@@ -196,7 +204,11 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<bool>("IsSystem")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(false);
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Name")
                         .HasMaxLength(256)
@@ -206,13 +218,16 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("NormalizedName")
                         .IsUnique()
                         .HasDatabaseName("RoleNameIndex");
 
-                    b.ToTable("AspNetRoles", "identity");
+                    b.ToTable("app_roles", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.AppUser", b =>
@@ -237,6 +252,9 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<double>("ConversionRate30D")
                         .HasColumnType("double precision");
 
+                    b.Property<DateTimeOffset?>("DeactivatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -246,6 +264,11 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.Property<bool>("EnableNotifications")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("FailedLoginAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -258,11 +281,19 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTimeOffset?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("MfaEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
@@ -271,6 +302,9 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<string>("NormalizedUserName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("PasswordExpiresAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
@@ -295,6 +329,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text[]");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -318,7 +356,40 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "AgencyId");
 
-                    b.ToTable("app_users", "identity");
+                    b.HasIndex("TenantId", "NormalizedEmail")
+                        .IsUnique();
+
+                    b.ToTable("app_users", "administration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.PasswordHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PasswordSalt")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("SetAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "SetAt");
+
+                    b.ToTable("password_histories", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.Permission", b =>
@@ -345,7 +416,83 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("permissions", "identity");
+                    b.ToTable("permissions", "administration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.PermissionAttribution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssignedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreateAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PermissionCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdateAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "EntityId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true");
+
+                    b.ToTable("permission_attribution", "administration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.ProductSpeciality", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("ProductSpecialities", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.RolePermission", b =>
@@ -370,7 +517,61 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.HasIndex("RoleId", "PermissionId")
                         .IsUnique();
 
-                    b.ToTable("role_permissions", "identity");
+                    b.ToTable("role_permissions", "administration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.Territory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.PrimitiveCollection<List<string>>("ProductSpecialities")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<double>("RayonKm")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "IsActive");
+
+                    b.ToTable("territories", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserLoginLocation", b =>
@@ -392,7 +593,66 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("user_login_locations", "identity");
+                    b.ToTable("user_login_locations", "administration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DefaultLanguage")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("user_profile", "administration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserRole", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AssignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AssignedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("UserId", "RoleId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true");
+
+                    b.ToTable("user_roles", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Shared.Infrastructure.Outbox.OutboxMessage", b =>
@@ -425,7 +685,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasIndex("ProcessedAt", "OccurredAt");
 
-                    b.ToTable("outbox_messages", "identity");
+                    b.ToTable("outbox_messages", "administration");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -481,6 +741,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.Agency", b =>
                 {
+                    b.HasOne("Sankore.Modules.Administration.Domain.Territory", null)
+                        .WithMany("Agencies")
+                        .HasForeignKey("TerritoryId");
+
                     b.OwnsOne("Sankore.Shared.Kernel.Address", "Address", b1 =>
                         {
                             b1.Property<Guid>("AgencyId")
@@ -489,31 +753,31 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                             b1.Property<string>("City")
                                 .IsRequired()
                                 .HasColumnType("text")
-                                .HasColumnName("city");
+                                .HasColumnName("address_city");
 
                             b1.Property<string>("Country")
                                 .IsRequired()
                                 .HasColumnType("text")
-                                .HasColumnName("country");
+                                .HasColumnName("address_country");
 
                             b1.Property<string>("State")
                                 .IsRequired()
                                 .HasColumnType("text")
-                                .HasColumnName("state");
+                                .HasColumnName("address_state");
 
                             b1.Property<string>("Street")
                                 .IsRequired()
                                 .HasColumnType("text")
-                                .HasColumnName("street");
+                                .HasColumnName("address_street");
 
                             b1.Property<string>("ZipCode")
                                 .IsRequired()
                                 .HasColumnType("text")
-                                .HasColumnName("zipcode");
+                                .HasColumnName("address_zipcode");
 
                             b1.HasKey("AgencyId");
 
-                            b1.ToTable("Agencies", "identity");
+                            b1.ToTable("agencies", "administration");
 
                             b1.WithOwner()
                                 .HasForeignKey("AgencyId");
@@ -525,15 +789,15 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                                     b2.Property<double>("Latitude")
                                         .HasColumnType("double precision")
-                                        .HasColumnName("lat");
+                                        .HasColumnName("address_location_lat");
 
                                     b2.Property<double>("Longitude")
                                         .HasColumnType("double precision")
-                                        .HasColumnName("lng");
+                                        .HasColumnName("address_location_lng");
 
                                     b2.HasKey("AddressAgencyId");
 
-                                    b2.ToTable("Agencies", "identity");
+                                    b2.ToTable("agencies", "administration");
 
                                     b2.WithOwner()
                                         .HasForeignKey("AddressAgencyId");
@@ -547,8 +811,8 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.AppUser", b =>
                 {
-                    b.HasOne("Sankore.Modules.Administration.Domain.Agency", null)
-                        .WithMany()
+                    b.HasOne("Sankore.Modules.Administration.Domain.Agency", "Agency")
+                        .WithMany("Users")
                         .HasForeignKey("AgencyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -568,13 +832,35 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                             b1.HasKey("AppUserId");
 
-                            b1.ToTable("app_users", "identity");
+                            b1.ToTable("app_users", "administration");
 
                             b1.WithOwner()
                                 .HasForeignKey("AppUserId");
                         });
 
+                    b.Navigation("Agency");
+
                     b.Navigation("LastKnownLocation");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.PasswordHistory", b =>
+                {
+                    b.HasOne("Sankore.Modules.Administration.Domain.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.PermissionAttribution", b =>
+                {
+                    b.HasOne("Sankore.Modules.Administration.Domain.AppUser", "User")
+                        .WithMany("PermissionAttributions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.RolePermission", b =>
@@ -594,6 +880,32 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Navigation("Permission");
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.Territory", b =>
+                {
+                    b.OwnsOne("Sankore.Shared.Kernel.ValueObject.GeoPoint", "Location", b1 =>
+                        {
+                            b1.Property<Guid>("TerritoryId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<double>("Latitude")
+                                .HasColumnType("double precision")
+                                .HasColumnName("location_lat");
+
+                            b1.Property<double>("Longitude")
+                                .HasColumnType("double precision")
+                                .HasColumnName("location_lng");
+
+                            b1.HasKey("TerritoryId");
+
+                            b1.ToTable("territories", "administration");
+
+                            b1.WithOwner()
+                                .HasForeignKey("TerritoryId");
+                        });
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserLoginLocation", b =>
@@ -619,13 +931,62 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                             b1.HasKey("UserLoginLocationId");
 
-                            b1.ToTable("user_login_locations", "identity");
+                            b1.ToTable("user_login_locations", "administration");
 
                             b1.WithOwner()
                                 .HasForeignKey("UserLoginLocationId");
                         });
 
                     b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserProfile", b =>
+                {
+                    b.HasOne("Sankore.Modules.Administration.Domain.AppUser", "User")
+                        .WithOne("Profile")
+                        .HasForeignKey("Sankore.Modules.Administration.Domain.UserProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserRole", b =>
+                {
+                    b.HasOne("Sankore.Modules.Administration.Domain.AppRole", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Sankore.Modules.Administration.Domain.AppUser", "User")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.Agency", b =>
+                {
+                    b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.AppUser", b =>
+                {
+                    b.Navigation("PermissionAttributions");
+
+                    b.Navigation("Profile");
+
+                    b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.Territory", b =>
+                {
+                    b.Navigation("Agencies");
                 });
 #pragma warning restore 612, 618
         }

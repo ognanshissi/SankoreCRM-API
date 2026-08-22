@@ -7,6 +7,7 @@ using Microsoft.OpenApi.Models;
 using Sankore.Modules.Leads;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Administration;
+using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Infrastructure.Tenants;
@@ -173,8 +174,13 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
     .WithOpenApi()
     .AllowAnonymous();
 
-app.MapLeadsEndpoints();
-app.MapAdministrationModuleEndpoints();
+// V1
+var appVersion1 = app.MapGroup("api/v1");
+
+appVersion1.MapAdministrationModuleEndpoints();
+
+appVersion1.MapLeadsEndpoints();
+
 // app.MapCustomersEndpoints();
 // app.MapKycEndpoints();
 // app.MapLoansEndpoints();

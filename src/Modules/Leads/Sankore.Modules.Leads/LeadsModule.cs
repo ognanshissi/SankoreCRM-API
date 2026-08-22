@@ -55,7 +55,7 @@ public static class LeadsModule
 
     public static IEndpointRouteBuilder MapLeadsEndpoints(this IEndpointRouteBuilder app)
     {
-        return app.MapGroup("api/")
+        return app.MapGroup("leads")
             .MapCaptureLead()
             .MapDispatchLead();
         // Add one line per new slice, e.g.:

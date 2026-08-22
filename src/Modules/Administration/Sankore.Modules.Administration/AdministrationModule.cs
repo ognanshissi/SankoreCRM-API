@@ -8,7 +8,17 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Authentication.Login;
+using Sankore.Modules.Administration.Features.Territories;
+using Sankore.Modules.Administration.Features.Territories.CreateTerritory;
+using Sankore.Modules.Administration.Features.Territories.DeleteTerritory;
+using Sankore.Modules.Administration.Features.Territories.GetTerritory;
+using Sankore.Modules.Administration.Features.Territories.ListTerritories;
+using Sankore.Modules.Administration.Features.Territories.UpdateTerritory;
+using Sankore.Modules.Administration.Features.Users;
+using Sankore.Modules.Administration.Features.Users.CreateUser;
+using Sankore.Modules.Administration.Features.Users.DeactivateUser;
 using Sankore.Modules.Administration.Features.Users.Register;
+using Sankore.Modules.Administration.Features.Users.ResetPassword;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Modules.Administration.PublicApi;
@@ -31,6 +41,7 @@ public static class AdministrationModule
                 o =>
                 {
                     o.MigrationsHistoryTable("__EFMigrationsHistory", "identity");
+                    
                 }));
 
         // AddIdentityCore does NOT register cookie auth schemes, so the JWT bearer
@@ -74,9 +85,10 @@ public static class AdministrationModule
 
     public static IEndpointRouteBuilder MapAdministrationModuleEndpoints(this IEndpointRouteBuilder app)
     {
-        return app.MapGroup("api/administration")
-            .MapRegister()
-            .MapLogin();
+        app.MapLogin();
+        app.MapUsersEndpoints();
+        app.MapTerritoriesEndpoints();
+        return app;
     }
 
 }

@@ -20,11 +20,11 @@ public class UserRoleConfiguration: IEntityTypeConfiguration<UserRole>
             .HasForeignKey(ur => ur.UserId)
             .OnDelete(DeleteBehavior.Restrict);
         
-        // Empêche deux attributions actives simultanées du même rôle au même user
+        builder.HasKey(x => x.Id);
+
+        // Prevents two simultaneous active assignments of the same role to the same user.
         builder.HasIndex(ur => new { ur.UserId, ur.RoleId })
             .IsUnique()
-            .HasFilter("\"Actif\" = true");
-        
-        builder.HasKey(x => new {x.UserId, x.RoleId});
+            .HasFilter("\"IsActive\" = true");
     }
 }

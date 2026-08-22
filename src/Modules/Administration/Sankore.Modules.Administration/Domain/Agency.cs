@@ -6,8 +6,9 @@ namespace Sankore.Modules.Administration.Domain;
 public class Agency: AggregateRoot
 {
     public Guid Id { get; private set; }
-    public Guid TenantId { get; private set; }
-    public Guid? ParentAgencyId { get; private set; }
+    public Guid ParentAgencyId { get; private set; }
+    
+    public bool IsHeadQuarterAgency { get; private set; }
 
     public string Code { get; private set; } = string.Empty;
     public string Name { get; private set; } = String.Empty;

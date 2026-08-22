@@ -17,7 +17,7 @@ public static class DispatchLeadEndpoint
 {
     public static IEndpointRouteBuilder MapDispatchLead(this IEndpointRouteBuilder app)
     {
-        app.MapPost("leads/{leadId:guid}/dispatch", Handle)
+        app.MapPost("{leadId:guid}/dispatch", Handle)
             .WithName("DispatchLead")
             .WithTags("Leads")
             .RequireAuthorization("Leads.Dispatch")

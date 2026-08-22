@@ -1,0 +1,46 @@
+namespace Sankore.Shared.Kernel;
+
+
+public record PermissionItem (string Code, string Description, string Module,  string Action);
+
+public static class Permissions
+{
+    public static readonly PermissionItem CanCreateLoan = new PermissionItem("loan:create","Create Loan",ApplicationModules.Loan,"create");
+    
+    public static readonly PermissionItem CanCreateUser =
+        new("user:create", "Create User", ApplicationModules.Administration, "create");
+
+    public static readonly PermissionItem CanReadUser =
+        new("user:read", "Read User", ApplicationModules.Administration, "read");
+
+    public static readonly PermissionItem CanDeactivateUser =
+        new("user:deactivate", "Deactivate User", ApplicationModules.Administration, "deactivate");
+
+    public static readonly PermissionItem CanResetPassword =
+        new("user:reset-password", "Reset User Password", ApplicationModules.Administration, "reset-password");
+
+    public static readonly PermissionItem CanCreateTerritory =
+        new("territory:create", "Create Territory", ApplicationModules.Administration, "create");
+
+    public static readonly PermissionItem CanReadTerritory =
+        new("territory:read", "Read Territory", ApplicationModules.Administration, "read");
+
+    public static readonly PermissionItem CanUpdateTerritory =
+        new("territory:update", "Update Territory", ApplicationModules.Administration, "update");
+
+    public static readonly PermissionItem CanDeleteTerritory =
+        new("territory:delete", "Delete Territory", ApplicationModules.Administration, "delete");
+
+    public static readonly PermissionItem[] All =
+    [
+        CanCreateLoan,
+        CanCreateUser,
+        CanReadUser,
+        CanDeactivateUser,
+        CanResetPassword,
+        CanCreateTerritory,
+        CanReadTerritory,
+        CanUpdateTerritory,
+        CanDeleteTerritory,
+    ];
+}

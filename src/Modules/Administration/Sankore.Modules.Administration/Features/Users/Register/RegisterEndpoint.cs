@@ -10,8 +10,7 @@ public static class RegisterEndpoint
 {
     public static IEndpointRouteBuilder MapRegister(this IEndpointRouteBuilder app)
     {
-        app.MapPost("users", Handle)
-            .WithTags("Users")
+        app.MapPost("", Handle)
             .WithName("Register")
             .AllowAnonymous()
             .WithTenantHeader();

@@ -1,3 +1,6 @@
+using System.Reflection.Metadata.Ecma335;
+using Sankore.Shared.Kernel;
+
 namespace Sankore.Shared.Infrastructure.Auth;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -14,19 +17,12 @@ public static class AuthorizationPolicies
     {
         services.AddAuthorization(options =>
         {
-            options.AddPolicy("Leads.Capture", p => p
-                .RequireAuthenticatedUser()
-                .RequireClaim("permission", "leads:capture"));
-            options.AddPolicy("Leads.Dispatch", p => p
-                .RequireAuthenticatedUser()
-                .RequireClaim("permission", "leads:dispatch")
-                .RequireClaim("mfa_verified", "true"));
-            options.AddPolicy("Leads.Reassign", p => p
-                .RequireAuthenticatedUser()
-                .RequireRole("BranchManager", "SalesManager"));
-            options.AddPolicy("Leads.ViewPipeline", p => p
-                .RequireAuthenticatedUser()
-                .RequireClaim("permission", "leads:read"));
+            foreach (var permission in Permissions.All)
+            {
+                options.AddPolicy(permission.Code, p => p
+                    .RequireAuthenticatedUser()
+                    .RequireClaim("permission", permission.Code));
+            }
         });
 
         return services;

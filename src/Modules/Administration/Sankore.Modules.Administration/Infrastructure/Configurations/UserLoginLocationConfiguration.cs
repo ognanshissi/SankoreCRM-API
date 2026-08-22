@@ -9,7 +9,10 @@ public class UserLoginLocationConfiguration: IEntityTypeConfiguration<UserLoginL
     public void Configure(EntityTypeBuilder<UserLoginLocation> builder)
     {
         builder.ToTable("user_login_locations");
-        builder.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId);
+        builder.HasOne<AppUser>()
+            .WithMany()
+            .HasForeignKey(x => x.UserId);
+        
         builder.OwnsOne(x => x.Location, loc =>
         {
             loc.Property(l => l.Latitude).HasColumnName("lat");
