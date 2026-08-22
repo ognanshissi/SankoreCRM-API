@@ -23,7 +23,7 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
         builder.HasOne(u => u.Agency)
             .WithMany(a => a.Users)
             .HasForeignKey(u => u.AgencyId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.OwnsOne<GeoPoint>(u => u.LastKnownLocation, loc =>
         {
@@ -34,6 +34,16 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
         builder.Property(u => u.SpokenLanguages).HasColumnType("text[]");
         builder.Property(u => u.Specialties).HasColumnType("text[]");
 
+        builder.HasCheckConstraint(
+            "CK_User_AgencyId_RequiredForStandard",
+            "(\"AccountType\" != 0) OR (\"AgencyId\" IS NOT NULL)"
+        );
+        
+        builder.HasCheckConstraint(
+            "CK_User_System_NoAgency",
+            "(\"AccountType\" != 1) OR (\"AgencyId\" IS NULL)"
+        );
+        
         builder.HasIndex(u => new { u.TenantId, u.AgencyId });
         builder.HasIndex(u => new { u.TenantId, u.NormalizedEmail }).IsUnique();
     }

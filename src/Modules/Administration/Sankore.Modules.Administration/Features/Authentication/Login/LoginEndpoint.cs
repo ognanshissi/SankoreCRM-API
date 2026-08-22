@@ -20,7 +20,7 @@ public static class LoginEndpoint
 
     public static async Task<IResult> Handle(LoginRequest req, ISender sender, CancellationToken ct)
     {
-        var result = await sender.Send(new LoginCommand(req.TenantId, req.Email, req.Password), ct);
+        var result = await sender.Send(new LoginCommand(req.Email, req.Password), ct);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)

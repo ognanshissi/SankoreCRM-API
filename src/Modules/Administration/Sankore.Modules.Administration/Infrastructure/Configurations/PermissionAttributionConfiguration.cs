@@ -15,7 +15,7 @@ public class PermissionAttributionConfiguration: IEntityTypeConfiguration<Permis
             .HasForeignKey(u => u.UserId)
             .OnDelete(DeleteBehavior.Cascade);
         
-        builder.HasIndex(a => new  { a.UserId, a.EntityId })
+        builder.HasIndex(a => a.UserId)
             .IsUnique()
             .HasFilter("\"IsActive\" = true");
     }

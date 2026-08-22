@@ -10,8 +10,8 @@ public static class RegisterEndpoint
 {
     public static IEndpointRouteBuilder MapRegister(this IEndpointRouteBuilder app)
     {
-        app.MapPost("", Handle)
-            .WithName("Register")
+        app.MapPost("create-root", Handle)
+            .WithName("Create Root")
             .AllowAnonymous()
             .WithTenantHeader();
 
@@ -22,21 +22,18 @@ public static class RegisterEndpoint
         RegisterRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(
-            new RegisterCommand(req.TenantId, req.AgencyId, req.Email, req.Password, req.ConfirmPassword, req.FirstName,  req.LastName, req.Role),
+            new RegisterCommand(req.Email, req.Password, req.ConfirmPassword, req.FirstName,  req.LastName),
             ct);
 
         return result.IsSuccess
-            ? Results.Created("", result.Value)
+            ? Results.Created($"/api/v1/users/{result.Value.UserId}", result.Value)
             : Results.Problem(result.Error, statusCode: 400);
     }
 }
 
 public sealed record RegisterRequest(
-    Guid TenantId,
-    Guid AgencyId,
     string Email,
     string Password,
     string ConfirmPassword,
     string FirstName,
-    string LastName,
-    string Role);
+    string LastName);

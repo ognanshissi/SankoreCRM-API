@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Infrastructure;
 
@@ -15,15 +16,16 @@ internal static class RoleSeeder
     {
         var roleManager = sp.GetRequiredService<RoleManager<AppRole>>();
         var logger = sp.GetRequiredService<ILogger<AdministrationDbContext>>();
+        var db = sp.GetRequiredService<AdministrationDbContext>();
 
-        foreach (var name in Roles.All)
+        foreach (RoleItem role in Roles.All)
         {
-            if (await roleManager.RoleExistsAsync(name))
+            if (await roleManager.RoleExistsAsync(role.Code))
                 continue;
 
-            var result = await roleManager.CreateAsync(AppRole.Create(name, string.Empty, isSystem: true));
+            var result = await roleManager.CreateAsync(AppRole.Create(role.Code, role.Name, isSystem: true));
             if (!result.Succeeded)
-                logger.LogWarning("Failed to seed role {Role}: {Errors}", name,
+                logger.LogWarning("Failed to seed role {Role}: {Errors}", role.Code,
                     string.Join("; ", result.Errors.Select(e => e.Description)));
         }
     }

@@ -24,6 +24,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     TenantId = table.Column<Guid>(type: "uuid", nullable: true),
                     IsSystem = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    IsAssignable = table.Column<bool>(type: "boolean", nullable: false),
                     Label = table.Column<string>(type: "text", nullable: false),
                     Name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -159,7 +160,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Agencies",
+                name: "agencies",
                 schema: "administration",
                 columns: table => new
                 {
@@ -187,9 +188,9 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Agencies", x => x.Id);
+                    table.PrimaryKey("PK_agencies", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Agencies_territories_TerritoryId",
+                        name: "FK_agencies_territories_TerritoryId",
                         column: x => x.TerritoryId,
                         principalSchema: "administration",
                         principalTable: "territories",
@@ -203,7 +204,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     TenantId = table.Column<Guid>(type: "uuid", nullable: false),
-                    AgencyId = table.Column<Guid>(type: "uuid", nullable: false),
+                    AgencyId = table.Column<Guid>(type: "uuid", nullable: true),
                     FullName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Status = table.Column<string>(type: "text", nullable: false),
                     MfaEnabled = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
@@ -211,6 +212,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     FailedLoginAttempts = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     LastLoginAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     DeactivatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    IsSuperUser = table.Column<bool>(type: "boolean", nullable: false),
                     IsAvailable = table.Column<bool>(type: "boolean", nullable: false),
                     SpokenLanguages = table.Column<List<string>>(type: "text[]", nullable: false),
                     Specialties = table.Column<List<string>>(type: "text[]", nullable: false),
@@ -221,6 +223,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     HotLeadsCount = table.Column<int>(type: "integer", nullable: false),
                     ConversionRate30D = table.Column<double>(type: "double precision", nullable: false),
                     EnableNotifications = table.Column<bool>(type: "boolean", nullable: false),
+                    AccountType = table.Column<int>(type: "integer", nullable: false),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -239,13 +242,15 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_app_users", x => x.Id);
+                    table.CheckConstraint("CK_User_AgencyId_RequiredForStandard", "(\"AccountType\" != 0) OR (\"AgencyId\" IS NOT NULL)");
+                    table.CheckConstraint("CK_User_System_NoAgency", "(\"AccountType\" != 1) OR (\"AgencyId\" IS NULL)");
                     table.ForeignKey(
-                        name: "FK_app_users_Agencies_AgencyId",
+                        name: "FK_app_users_agencies_AgencyId",
                         column: x => x.AgencyId,
                         principalSchema: "administration",
-                        principalTable: "Agencies",
+                        principalTable: "agencies",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -373,8 +378,8 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     TenantId = table.Column<Guid>(type: "uuid", nullable: false),
-                    EntityId = table.Column<Guid>(type: "uuid", nullable: false),
-                    EntityName = table.Column<string>(type: "text", nullable: false),
+                    ScopeId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ScopeType = table.Column<string>(type: "text", nullable: true),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     StartDate = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     EndDate = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
@@ -475,22 +480,22 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Agencies_TenantId_Code",
+                name: "IX_agencies_TenantId_Code",
                 schema: "administration",
-                table: "Agencies",
+                table: "agencies",
                 columns: new[] { "TenantId", "Code" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Agencies_TenantId_ParentAgencyId",
+                name: "IX_agencies_TenantId_ParentAgencyId",
                 schema: "administration",
-                table: "Agencies",
+                table: "agencies",
                 columns: new[] { "TenantId", "ParentAgencyId" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Agencies_TerritoryId",
+                name: "IX_agencies_TerritoryId",
                 schema: "administration",
-                table: "Agencies",
+                table: "agencies",
                 column: "TerritoryId");
 
             migrationBuilder.CreateIndex(
@@ -569,10 +574,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 columns: new[] { "UserId", "SetAt" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_permission_attribution_UserId_EntityId",
+                name: "IX_permission_attribution_UserId",
                 schema: "administration",
                 table: "permission_attribution",
-                columns: new[] { "UserId", "EntityId" },
+                column: "UserId",
                 unique: true,
                 filter: "\"IsActive\" = true");
 
@@ -705,7 +710,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 schema: "administration");
 
             migrationBuilder.DropTable(
-                name: "Agencies",
+                name: "agencies",
                 schema: "administration");
 
             migrationBuilder.DropTable(

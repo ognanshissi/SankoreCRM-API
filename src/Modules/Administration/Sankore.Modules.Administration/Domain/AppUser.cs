@@ -17,11 +17,9 @@ public sealed class AppUser: IdentityUser<Guid>
 
     // ── Identity & tenancy ────────────────────────────────────────────────
     public Guid TenantId { get; private set; }
-    public Guid AgencyId { get; private set; }
-    public Agency Agency { get; private set; } = null!;
+    public Guid? AgencyId { get; private set; }
+    public Agency? Agency { get; private set; } = null!;
     public string FullName { get; private set; } = null!;
-    
-    
 
     // ── M12 lifecycle (F12.1) ─────────────────────────────────────────────
     public UserStatus Status { get; private set; } = UserStatus.PendingActivation;
@@ -30,6 +28,8 @@ public sealed class AppUser: IdentityUser<Guid>
     public int FailedLoginAttempts { get; private set; }
     public DateTimeOffset? LastLoginAt { get; private set; }
     public DateTimeOffset? DeactivatedAt { get; private set; }
+    
+    public bool IsSuperUser { get; private set; }
 
     // ── Dispatching (M13) ─────────────────────────────────────────────────
     public bool IsAvailable { get; private set; } = true;
@@ -49,6 +49,8 @@ public sealed class AppUser: IdentityUser<Guid>
     private readonly List<UserRole> _userRoles = [];
     public IReadOnlyCollection<UserRole> UserRoles => _userRoles.AsReadOnly();
     public UserProfile? Profile { get; private set; }
+    
+    public UserAccountType  AccountType { get; private set; }
 
     private AppUser() { } // EF Core
 
@@ -73,6 +75,26 @@ public sealed class AppUser: IdentityUser<Guid>
             MfaEnabled = true,
             PasswordExpiresAt = DateTimeOffset.UtcNow.AddDays(PasswordExpiryDays),
             FailedLoginAttempts = 0,
+            IsSuperUser = false,
+            AccountType = UserAccountType.Standard,
+        };
+    }
+
+    public static AppUser CreateRoot(Guid tenantId, string fullName, string email)
+    {
+        return new AppUser
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            FullName = fullName,
+            UserName = email,
+            Email = email,
+            Status = UserStatus.PendingActivation,
+            MfaEnabled = true,
+            PasswordExpiresAt = DateTimeOffset.UtcNow.AddDays(PasswordExpiryDays),
+            FailedLoginAttempts = 0,
+            IsSuperUser = true,
+            AccountType = UserAccountType.System,
         };
     }
 
@@ -103,6 +125,9 @@ public sealed class AppUser: IdentityUser<Guid>
         if (Status == UserStatus.Disabled)
             throw new DomainException("User is already disabled.");
 
+        if (AccountType == UserAccountType.System) 
+            throw new DomainException("Le compte système ne peut pas être désactivé.");
+        
         Status = UserStatus.Disabled;
         DeactivatedAt = DateTimeOffset.UtcNow;
         IsAvailable = false;
@@ -113,6 +138,9 @@ public sealed class AppUser: IdentityUser<Guid>
     /// <summary>Locks the account (too many failed attempts).</summary>
     public void Lock()
     {
+        if (AccountType == UserAccountType.System) 
+            throw new DomainException("The system is cannot be locked.");
+        
         if (Status == UserStatus.Active || Status == UserStatus.PendingActivation)
             Status = UserStatus.Locked;
     }
@@ -154,4 +182,11 @@ public sealed class AppUser: IdentityUser<Guid>
         ActiveLeadsCount = Math.Max(0, ActiveLeadsCount + activeDelta);
         HotLeadsCount = Math.Max(0, HotLeadsCount + hotDelta);
     }
+}
+
+public enum UserAccountType
+{
+    Standard, // caissier, agent, superviseur
+    System, // compte technique, un seul par tenant
+    Service, // réservé si tu ajoutes plus tard des comptes API/intégration
 }

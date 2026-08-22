@@ -43,7 +43,7 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db, Use
     private static AgentSummary ToSummary(AppUser u) => new(
         Id: u.Id,
         FullName: u.FullName,
-        AgencyId: u.AgencyId,
+        AgencyId: u.AgencyId ?? Guid.Empty,
         SpokenLanguages: u.SpokenLanguages,
         Specialties: u.Specialties,
         CurrentLocation: u.LastKnownLocation,

@@ -11,6 +11,7 @@ namespace Sankore.Modules.Administration.Features.Authentication.Login;
 internal sealed class LoginHandler(
     UserManager<AppUser> userManager,
     AdministrationDbContext db,
+    ITenantContext tenant,
     IJwtTokenService jwtTokenService) : IRequestHandler<LoginCommand, Result<LoginResult>>
 {
     public async Task<Result<LoginResult>> Handle(LoginCommand request, CancellationToken ct)
@@ -20,7 +21,7 @@ internal sealed class LoginHandler(
         var normalizedEmail = request.Email.ToUpperInvariant();
         var user = await db.Users
             .IgnoreQueryFilters()
-            .Where(u => u.TenantId == request.TenantId && u.NormalizedEmail == normalizedEmail)
+            .Where(u => u.TenantId == tenant.CurrentTenantId && u.NormalizedEmail == normalizedEmail)
             .FirstOrDefaultAsync(ct);
 
         if (user is null || !await userManager.CheckPasswordAsync(user, request.Password))

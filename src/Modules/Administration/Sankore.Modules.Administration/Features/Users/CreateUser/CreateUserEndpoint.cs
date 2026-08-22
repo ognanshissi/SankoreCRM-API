@@ -49,7 +49,7 @@ public static class CreateUserEndpoint
             CallerUserId: callerId), ct);
 
         return result.IsSuccess
-            ? Results.Created($"/api/administration/users/{result.Value.UserId}", result.Value)
+            ? Results.Created($"/api/v1/users/{result.Value.UserId}", result.Value)
             : Results.Problem(result.Error, statusCode: StatusCodes.Status400BadRequest);
     }
 }
