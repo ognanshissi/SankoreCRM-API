@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Domain.Events;
@@ -17,6 +18,16 @@ internal sealed class RegisterHandler(
 {
     public async Task<Result<RegisterResult>> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
+        
+        // Make sure only one system user in the tenant
+        var tenantHasSystemUser = await db.Users
+            .IgnoreQueryFilters()
+            .AnyAsync(u => u.TenantId == tenant.CurrentTenantId
+                           && u.IsSuperUser == true && u.AccountType == UserAccountType.System, cancellationToken);
+
+        if (tenantHasSystemUser)
+            return Result.Fail<RegisterResult>("A tenant could not have more thant one system user.");
+        
         var user = AppUser.CreateRoot(
             tenant.CurrentTenantId,
            $"{request.FirstName} {request.LastName}",

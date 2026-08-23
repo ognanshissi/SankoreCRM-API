@@ -12,7 +12,7 @@ public static class ListTerritoriesEndpoint
 {
     public static IEndpointRouteBuilder MapListTerritories(this IEndpointRouteBuilder app)
     {
-        app.MapGet("territories", Handle)
+        app.MapGet(string.Empty, Handle)
             .WithName("ListTerritories")
             .WithSummary("List all territories for the current tenant")
             .WithDescription("Returns active territories by default. Pass includeInactive=true to include deactivated ones.")

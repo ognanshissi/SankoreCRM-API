@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.Domain;
@@ -18,6 +19,10 @@ internal static class RoleSeeder
         var logger = sp.GetRequiredService<ILogger<AdministrationDbContext>>();
         var db = sp.GetRequiredService<AdministrationDbContext>();
 
+        // Generate permissions
+        await PermissionSeeder.SeedAsync(sp);
+        
+        
         foreach (RoleItem role in Roles.All)
         {
             if (await roleManager.RoleExistsAsync(role.Code))
@@ -27,6 +32,28 @@ internal static class RoleSeeder
             if (!result.Succeeded)
                 logger.LogWarning("Failed to seed role {Role}: {Errors}", role.Code,
                     string.Join("; ", result.Errors.Select(e => e.Description)));
+
+            if (role.Code == Roles.System.Code)
+            {
+                // permissions
+                var permissions = await db.Permissions.AsQueryable().ToListAsync();
+                var createdRole = await db.Roles.FirstOrDefaultAsync(x => x.Name == role.Code);
+
+                if (permissions.Count != 0 && createdRole is not null)
+                {
+                    foreach (var permission in permissions)
+                    {
+                        var rolePermission = RolePermission.Grant(createdRole.Id, permission.Id);
+                        if (!await db.RolePermissions.AnyAsync(x =>
+                                x.RoleId == createdRole.Id && x.PermissionId == permission.Id))
+                        {
+                            await db.RolePermissions.AddAsync(rolePermission);
+                        }
+                    }
+                }
+            }
+            
+            await db.SaveChangesAsync();
         }
     }
 }

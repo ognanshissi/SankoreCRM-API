@@ -34,14 +34,19 @@ public class AgencyConfiguration: IEntityTypeConfiguration<Agency>
         //     .WithMany()
         //     .HasForeignKey(a => a.ParentAgencyId);
         
+        builder.Property(x => x.IsActive).HasDefaultValue(true);
+        builder.Property(x => x.IsDeleted).HasDefaultValue(false);
+        builder.Property(x => x.CreatedAt).IsRequired();
+
         builder.HasMany(a => a.Users)
             .WithOne(a => a.Agency)
             .HasForeignKey(a => a.AgencyId)
+            .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
-        
+
         // Indexes
-        builder.HasIndex(x => new  { x.TenantId, x.Code }).IsUnique();
-        
-        builder.HasIndex(x => new { x.TenantId, x.ParentAgencyId});
+        builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.ParentAgencyId });
+        builder.HasIndex(x => new { x.TenantId, x.IsDeleted });
     }
 }

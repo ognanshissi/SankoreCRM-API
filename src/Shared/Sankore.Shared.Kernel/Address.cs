@@ -17,4 +17,17 @@ public class Address
     public GeoPoint? Location { get; private set; }
 
     public Address() { }
+
+    public static Address Create(
+        string street, string city, string state, string country, string zipCode,
+        GeoPoint? location = null)
+        => new()
+        {
+            Street = street,
+            City = city,
+            State = state,
+            Country = country,
+            ZipCode = zipCode,
+            Location = location,
+        };
 }

@@ -3,48 +3,84 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Domain;
 
-public class Agency: AggregateRoot
+public sealed class Agency : AggregateRoot
 {
     public Guid Id { get; private set; }
-    public Guid ParentAgencyId { get; private set; }
-    
-    public bool IsHeadQuarterAgency { get; private set; }
-
+    public Guid? ParentAgencyId { get; private set; }
     public string Code { get; private set; } = string.Empty;
-    public string Name { get; private set; } = String.Empty;
-    public string Description { get; private set; } =  String.Empty;
-    public Address? Address { get; private set; }
-    public DateTimeOffset CreatedAt { get; set; }
-    public DateTimeOffset? UpdatedAt { get; set; }
-    public Guid? CreatedBy { get; set; }
-    public bool IsDeleted { get; set; }
-    public bool IsActive { get; set; }
-
-    private readonly List<AppUser> _users = new List<AppUser>();
-    public IReadOnlyCollection<AppUser> Users => _users.AsReadOnly();
-    
+    public string Name { get; private set; } = string.Empty;
+    public string Description { get; private set; } = string.Empty;
     public AgencyType AgencyType { get; private set; } = AgencyType.HeadQuarter;
+    public bool IsHeadQuarterAgency => AgencyType == AgencyType.HeadQuarter;
+    public Address? Address { get; private set; }
+    public bool IsActive { get; private set; } = true;
+    public bool IsDeleted { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+    public DateTimeOffset? UpdatedAt { get; private set; }
+    public Guid? CreatedBy { get; private set; }
+
+    private readonly List<AppUser> _users = [];
+    public IReadOnlyCollection<AppUser> Users => _users.AsReadOnly();
 
     private Agency() { }
 
-    public static Agency Create(Guid tenantId, string name, string description)
+    public static Agency Create(
+        Guid tenantId,
+        string name,
+        string description,
+        AgencyType agencyType,
+        Guid? parentAgencyId,
+        Guid? createdBy,
+        Address? address = null)
     {
-        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("The name of the agency is required");
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("Agency name is required.");
+        if (agencyType != AgencyType.HeadQuarter && parentAgencyId is null)
+            throw new DomainException("Non-headquarters agencies must have a parent agency.");
 
-        
-        return new Agency()
+        return new Agency
         {
-            Id =  Guid.NewGuid(),
-            Code = GenerateCode(name),
+            Id = Guid.NewGuid(),
             TenantId = tenantId,
-            Name = name,
-            Description = description
+            Code = GenerateCode(name),
+            Name = name.Trim(),
+            Description = description.Trim(),
+            AgencyType = agencyType,
+            ParentAgencyId = parentAgencyId,
+            Address = address,
+            IsActive = true,
+            IsDeleted = false,
+            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = createdBy,
         };
+    }
+
+    public void Update(string name, string description, AgencyType agencyType, Address? address)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("Agency name is required.");
+
+        Name = name.Trim();
+        Description = description.Trim();
+        AgencyType = agencyType;
+        Address = address;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void Deactivate()
+    {
+        if (IsDeleted)
+            throw new DomainException("Agency is already deleted.");
+
+        IsActive = false;
+        IsDeleted = true;
+        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     private static string GenerateCode(string name)
     {
-        return name;
+        var clean = new string(name.Where(char.IsLetterOrDigit).ToArray());
+        return (clean.Length <= 6 ? clean : clean[..6]).ToUpperInvariant();
     }
 }
 

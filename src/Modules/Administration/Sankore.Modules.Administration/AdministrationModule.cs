@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Modules.Administration.Features.Agencies;
+
 using Sankore.Modules.Administration.Features.Authentication.Login;
 using Sankore.Modules.Administration.Features.Territories;
 using Sankore.Modules.Administration.Features.Territories.CreateTerritory;
@@ -41,8 +43,8 @@ public static class AdministrationModule
                 o =>
                 {
                     o.MigrationsHistoryTable("__EFMigrationsHistory", "identity");
-                    
-                }));
+                })
+                );
 
         // AddIdentityCore does NOT register cookie auth schemes, so the JWT bearer
         // default set in Program.cs remains the single authentication scheme.
@@ -80,7 +82,6 @@ public static class AdministrationModule
         var db = sp.GetRequiredService<AdministrationDbContext>();
         await db.Database.MigrateAsync();
         await RoleSeeder.SeedAsync(sp);
-        await PermissionSeeder.SeedAsync(sp);
     }
 
     public static IEndpointRouteBuilder MapAdministrationModuleEndpoints(this IEndpointRouteBuilder app)
@@ -88,6 +89,7 @@ public static class AdministrationModule
         app.MapLogin();
         app.MapUsersEndpoints();
         app.MapTerritoriesEndpoints();
+        app.MapAgenciesEndpoints();
         return app;
     }
 

@@ -19,6 +19,18 @@ public static class Permissions
     public static readonly PermissionItem CanResetPassword =
         new("user:reset-password", "Reset User Password", ApplicationModules.Administration, "reset-password");
 
+    public static readonly PermissionItem CanCreateAgency =
+        new("agency:create", "Create Agency", ApplicationModules.Administration, "create");
+
+    public static readonly PermissionItem CanReadAgency =
+        new("agency:read", "Read Agency", ApplicationModules.Administration, "read");
+
+    public static readonly PermissionItem CanUpdateAgency =
+        new("agency:update", "Update Agency", ApplicationModules.Administration, "update");
+
+    public static readonly PermissionItem CanDeleteAgency =
+        new("agency:delete", "Delete Agency", ApplicationModules.Administration, "delete");
+
     public static readonly PermissionItem CanCreateTerritory =
         new("territory:create", "Create Territory", ApplicationModules.Administration, "create");
 
@@ -34,6 +46,10 @@ public static class Permissions
     public static readonly PermissionItem[] All =
     [
         CanCreateLoan,
+        CanCreateAgency,
+        CanReadAgency,
+        CanUpdateAgency,
+        CanDeleteAgency,
         CanCreateUser,
         CanReadUser,
         CanDeactivateUser,
