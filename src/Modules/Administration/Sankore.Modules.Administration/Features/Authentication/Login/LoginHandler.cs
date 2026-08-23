@@ -24,16 +24,32 @@ internal sealed class LoginHandler(
             .Where(u => u.TenantId == tenant.CurrentTenantId && u.NormalizedEmail == normalizedEmail)
             .FirstOrDefaultAsync(ct);
 
-        // Only activated user can login
-        if (user is null || user.Status  != UserStatus.Active) 
+        if (user is null)
+        {
             return Result.Fail<LoginResult>("Invalid login attempt.");
+        }
         
-        if (!await userManager.CheckPasswordAsync(user, request.Password))
-            return Result.Fail<LoginResult>("Invalid credentials.");
+        // Only activated user can login
+        if (user.Status != UserStatus.Active)
+        {
+            user.IncrementFailedLogin();
+            await db.SaveChangesAsync(ct);
+            return Result.Fail<LoginResult>("Invalid login attempt.");
+        }
 
+        if (!await userManager.CheckPasswordAsync(user, request.Password))
+        {
+            user.IncrementFailedLogin();
+            await db.SaveChangesAsync(ct);
+            return Result.Fail<LoginResult>("Invalid login attempt.");
+        }
+        
         if (await userManager.IsLockedOutAsync(user))
             return Result.Fail<LoginResult>("Account is locked. Try again later.");
 
+        user.RecordSuccessfulLogin();
+        await db.SaveChangesAsync(ct);
+        
         var roles = await userManager.GetRolesAsync(user);
 
         // Load permission codes assigned to this user's roles
@@ -48,7 +64,20 @@ internal sealed class LoginHandler(
             .Distinct()
             .ToListAsync(ct);
 
-        var jwtTokenResult = jwtTokenService.CreateToken(user, roles, permissionCodes);
+        // valid attributed permissions
+        var today = DateTime.UtcNow;
+        var scopedPermissionCodes =
+            await db.PermissionAttributions
+                .Where(pa => pa.UserId == user.Id && pa.StartDate <= today && pa.EndDate >= today)
+                .Select(pa => pa.PermissionCode)
+                .Distinct()
+                .ToListAsync(ct);
+
+        HashSet<string> permissions = new HashSet<string>();
+        permissions.UnionWith(permissionCodes);
+        permissions.UnionWith(scopedPermissionCodes);
+        
+        var jwtTokenResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray());
 
         return Result.Ok(new LoginResult(jwtTokenResult.Token, jwtTokenResult.ExpiresAt, user.Id, user.TenantId));
     }
