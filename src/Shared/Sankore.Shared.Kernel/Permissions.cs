@@ -64,6 +64,35 @@ public static class Permissions
     public static readonly PermissionItem CanRevokePermission =
         new("user:revoke-permission", "Revoke Scoped Permission from User", ApplicationModules.Administration, "revoke-permission");
 
+    // ── Workflow module ────────────────────────────────────────────────────
+
+    public static readonly PermissionItem CanCreateWorkflow =
+        new("workflow:create", "Create Workflow Template", ApplicationModules.Workflow, "create");
+
+    public static readonly PermissionItem CanReadWorkflow =
+        new("workflow:read", "Read Workflow Template", ApplicationModules.Workflow, "read");
+
+    public static readonly PermissionItem CanUpdateWorkflow =
+        new("workflow:update", "Update Workflow Template", ApplicationModules.Workflow, "update");
+
+    public static readonly PermissionItem CanDeleteWorkflow =
+        new("workflow:delete", "Deactivate Workflow Template", ApplicationModules.Workflow, "delete");
+
+    public static readonly PermissionItem CanActivateWorkflow =
+        new("workflow:activate", "Activate Workflow Template", ApplicationModules.Workflow, "activate");
+
+    public static readonly PermissionItem CanManageWorkflowSteps =
+        new("workflow:manage-steps", "Add/Remove Steps in Workflow Template", ApplicationModules.Workflow, "manage-steps");
+
+    public static readonly PermissionItem CanStartWorkflow =
+        new("workflow:start", "Start a Workflow Instance", ApplicationModules.Workflow, "start");
+
+    public static readonly PermissionItem CanApproveWorkflow =
+        new("workflow:approve", "Approve or Reject a Workflow Step", ApplicationModules.Workflow, "approve");
+
+    public static readonly PermissionItem CanCancelWorkflow =
+        new("workflow:cancel", "Cancel a Workflow Instance", ApplicationModules.Workflow, "cancel");
+
     public static readonly PermissionItem[] All =
     [
         CanCreateLoan,
@@ -86,5 +115,14 @@ public static class Permissions
         CanRevokeRole,
         CanAssignPermission,
         CanRevokePermission,
+        CanCreateWorkflow,
+        CanReadWorkflow,
+        CanUpdateWorkflow,
+        CanDeleteWorkflow,
+        CanActivateWorkflow,
+        CanManageWorkflowSteps,
+        CanStartWorkflow,
+        CanApproveWorkflow,
+        CanCancelWorkflow,
     ];
 }

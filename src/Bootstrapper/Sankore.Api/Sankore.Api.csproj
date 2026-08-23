@@ -31,6 +31,7 @@
     <ProjectReference Include="..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj" />
     <ProjectReference Include="..\..\Modules\Leads\Sankore.Modules.Leads\Sankore.Modules.Leads.csproj" />
+    <ProjectReference Include="..\..\Modules\Workflow\Sankore.Modules.Workflow\Sankore.Modules.Workflow.csproj" />
   </ItemGroup>
 
   <ItemGroup>

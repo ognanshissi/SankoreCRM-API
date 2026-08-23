@@ -11,6 +11,7 @@ using Sankore.Api.Infrastructure.Audit;
 using Sankore.Modules.Leads;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Administration;
+using Sankore.Modules.Workflow;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
@@ -149,6 +150,7 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddAdministrationModule(builder.Configuration);
 builder.Services.AddLeadsModule(builder.Configuration);
+builder.Services.AddWorkflowModule(builder.Configuration);
 // builder.Services.AddCustomersModule(builder.Configuration);   // M01 — same pattern
 // builder.Services.AddKycModule(builder.Configuration);         // M02 — same pattern
 // builder.Services.AddLoansModule(builder.Configuration);       // M04 — same pattern
@@ -172,6 +174,7 @@ using (var scope = app.Services.CreateScope())
     var leadsDb = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
     await leadsDb.Database.MigrateAsync();
     await AdministrationModule.InitializeAsync(scope.ServiceProvider);
+    await WorkflowModule.InitializeAsync(scope.ServiceProvider);
 }
 
 // ---------------------------------------------------------------------
@@ -198,8 +201,8 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 var appVersion1 = app.MapGroup("api/v1");
 
 appVersion1.MapAdministrationModuleEndpoints();
-
 appVersion1.MapLeadsEndpoints();
+appVersion1.MapWorkflowModuleEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 

@@ -12,6 +12,9 @@ public interface ICurrentUser
     Guid TenantId { get; }
     string DisplayName { get; }
     bool IsAuthenticated { get; }
+
+    /// <summary>Role names from the JWT ClaimTypes.Role claims.</summary>
+    IReadOnlyList<string> Roles { get; }
 }
 
 /// <summary>
@@ -34,6 +37,11 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICur
         : Guid.Empty;
 
     public string DisplayName => Principal?.FindFirst("name")?.Value ?? "anonymous";
+
+    public IReadOnlyList<string> Roles => Principal?
+        .FindAll(ClaimTypes.Role)
+        .Select(c => c.Value)
+        .ToList() ?? [];
 }
 
 /// <summary>
