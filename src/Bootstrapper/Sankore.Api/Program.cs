@@ -15,6 +15,7 @@ using Sankore.Modules.Workflow;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
+using Sankore.Shared.Infrastructure.Logging;
 using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
@@ -25,7 +26,15 @@ builder.AddServiceDefaults();
 builder.Services.AddOpenApi();
 
 
-// builder.AddSeqEndpoint("seq");
+builder.AddSeqEndpoint("seq");
+builder.Services.AddHttpLogging(o =>
+{
+    o.LoggingFields = Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestMethod
+                    | Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestPath
+                    | Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseStatusCode
+                    | Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration;
+    o.CombineLogs = true;
+});
 
 // ---------------------------------------------------------------------
 // 1. Cross-cutting infrastructure (auth, MediatR pipeline, messaging bus)
@@ -187,9 +196,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseHttpLogging();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseTenantResolution();   // extract + verify tenant against external store
+app.UseCorrelationId();      // push CorrelationId + TenantId + UserId into log scope
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow }))

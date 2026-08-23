@@ -53,6 +53,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Workflow", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Workflow.Tests", "src\Modules\Workflow\Sankore.Modules.Workflow.Tests\Sankore.Modules.Workflow.Tests.csproj", "{B9583949-2445-41E2-BC0B-7DFC0334DBCC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Shared.Infrastructure.Tests", "src\Shared\Sankore.Shared.Infrastructure.Tests\Sankore.Shared.Infrastructure.Tests.csproj", "{9AC4F896-C442-4A9F-B725-9C93C8F19009}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -231,6 +233,18 @@ Global
 		{B9583949-2445-41E2-BC0B-7DFC0334DBCC}.Release|x64.Build.0 = Release|Any CPU
 		{B9583949-2445-41E2-BC0B-7DFC0334DBCC}.Release|x86.ActiveCfg = Release|Any CPU
 		{B9583949-2445-41E2-BC0B-7DFC0334DBCC}.Release|x86.Build.0 = Release|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Debug|x64.Build.0 = Debug|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Debug|x86.Build.0 = Debug|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Release|x64.ActiveCfg = Release|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Release|x64.Build.0 = Release|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Release|x86.ActiveCfg = Release|Any CPU
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -251,5 +265,6 @@ Global
 		{12A0026D-E38F-46F9-B84E-184FB45B366F} = {F5C6F997-6F99-46F2-A461-BB3D2B9CAC6F}
 		{F1A30D6B-8111-4240-9A6D-6F98E836951E} = {F5C6F997-6F99-46F2-A461-BB3D2B9CAC6F}
 		{B9583949-2445-41E2-BC0B-7DFC0334DBCC} = {F5C6F997-6F99-46F2-A461-BB3D2B9CAC6F}
+		{9AC4F896-C442-4A9F-B725-9C93C8F19009} = {11111111-0000-0000-0000-000000000002}
 	EndGlobalSection
 EndGlobal
