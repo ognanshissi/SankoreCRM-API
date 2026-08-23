@@ -1,3 +1,5 @@
+using System.Security.Claims;
+
 namespace Sankore.Shared.Infrastructure.Auth;
 
 using Microsoft.AspNetCore.Http;
@@ -24,7 +26,7 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICur
     public bool IsAuthenticated => Principal?.Identity?.IsAuthenticated ?? false;
 
     public Guid Id => IsAuthenticated
-        ? Guid.Parse(Principal!.FindFirst("sub")!.Value)
+        ? Guid.Parse(Principal!.FindFirst(ClaimTypes.NameIdentifier)!.Value)
         : Guid.Empty;
 
     public Guid TenantId => IsAuthenticated
