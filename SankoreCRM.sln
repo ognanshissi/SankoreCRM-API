@@ -36,6 +36,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.env = .env
 		compose.yaml = compose.yaml
 		CLAUDE.md = CLAUDE.md
+		docs\postgres-recovery.md = docs\postgres-recovery.md
 		..\Module_M12_ModeleDeDonnees_UserStories.md = ..\Module_M12_ModeleDeDonnees_UserStories.md
 		..\User_Stories_Notifications_F12.9.md = ..\User_Stories_Notifications_F12.9.md
 	EndProjectSection

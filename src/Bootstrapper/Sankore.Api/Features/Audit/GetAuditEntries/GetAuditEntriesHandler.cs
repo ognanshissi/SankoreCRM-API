@@ -55,6 +55,7 @@ internal sealed class GetAuditEntriesHandler(
                 e.Action,
                 e.Outcome,
                 e.ErrorDetail,
+                e.PayloadJson,
                 e.ResourceType,
                 e.ResourceId,
                 e.IpAddress,

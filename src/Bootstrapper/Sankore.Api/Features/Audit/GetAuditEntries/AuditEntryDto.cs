@@ -8,6 +8,7 @@ public sealed record AuditEntryDto(
     string Action,
     string Outcome,
     string? ErrorDetail,
+    object? Payload,
     string? ResourceType,
     string? ResourceId,
     string? IpAddress,
