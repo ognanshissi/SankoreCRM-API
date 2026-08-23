@@ -22,5 +22,7 @@ internal sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<W
          .OnDelete(DeleteBehavior.Cascade);
 
         b.Navigation(i => i.Steps).UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        b.Ignore(i => i.DomainEvents);
     }
 }

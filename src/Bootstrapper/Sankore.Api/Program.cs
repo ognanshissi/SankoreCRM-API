@@ -12,6 +12,8 @@ using Sankore.Modules.Leads;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Administration;
 using Sankore.Modules.Workflow;
+using Sankore.Modules.Notifications;
+using Sankore.Modules.Notifications.Infrastructure.Consumers;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
@@ -92,6 +94,9 @@ builder.Services.AddScoped<IAuditWriter, SqlAuditWriter>();
 // touching module code (OutboxProcessor<T> only depends on IBus).
 builder.Services.AddMassTransit(x =>
 {
+    // Notification module consumers
+    x.AddConsumer<TenantNotificationSettingsChangedConsumer>();
+
     var useRabbitMq = builder.Configuration.GetValue<bool>("Messaging:UseRabbitMq");
 
     if (useRabbitMq)
@@ -106,6 +111,9 @@ builder.Services.AddMassTransit(x =>
         x.UsingInMemory((context, cfg) => cfg.ConfigureEndpoints(context));
     }
 });
+
+// Redis distributed cache — used by Notifications module for provider resolution
+builder.AddRedisDistributedCache("redis");
 
 builder.Services.AddEndpointsApiExplorer();
 
@@ -160,6 +168,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddAdministrationModule(builder.Configuration);
 builder.Services.AddLeadsModule(builder.Configuration);
 builder.Services.AddWorkflowModule(builder.Configuration);
+builder.Services.AddNotificationsModule(builder.Configuration);
 // builder.Services.AddCustomersModule(builder.Configuration);   // M01 — same pattern
 // builder.Services.AddKycModule(builder.Configuration);         // M02 — same pattern
 // builder.Services.AddLoansModule(builder.Configuration);       // M04 — same pattern
@@ -184,6 +193,7 @@ using (var scope = app.Services.CreateScope())
     await leadsDb.Database.MigrateAsync();
     await AdministrationModule.InitializeAsync(scope.ServiceProvider);
     await WorkflowModule.InitializeAsync(scope.ServiceProvider);
+    await NotificationsModule.InitializeAsync(scope.ServiceProvider);
 }
 
 // ---------------------------------------------------------------------
@@ -214,6 +224,7 @@ var appVersion1 = app.MapGroup("api/v1");
 appVersion1.MapAdministrationModuleEndpoints();
 appVersion1.MapLeadsEndpoints();
 appVersion1.MapWorkflowModuleEndpoints();
+appVersion1.MapNotificationsModuleEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 

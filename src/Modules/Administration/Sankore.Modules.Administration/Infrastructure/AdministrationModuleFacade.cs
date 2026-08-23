@@ -34,6 +34,24 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db, Use
         throw new NotImplementedException();
     }
 
+    public async Task<TenantNotificationConfigDto?> GetNotificationConfigAsync(
+        Guid tenantId, CancellationToken ct)
+    {
+        var s = await db.TenantNotificationSettings
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.TenantId == tenantId, ct);
+
+        return s is null ? null : new TenantNotificationConfigDto(
+            s.ProviderType,
+            s.UseDefaultPlatformProvider,
+            s.FromEmail,
+            s.FromName,
+            s.ReplyToEmail,
+            s.SendingDomain,
+            s.CredentialVaultPath,
+            s.MonthlyQuotaLimit);
+    }
+
     public async Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct)
     {
         var agent = await db.Users.SingleOrDefaultAsync(u => u.Id == agentId, ct);

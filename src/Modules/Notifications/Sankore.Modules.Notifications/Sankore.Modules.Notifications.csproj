@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Modules.Notifications</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scriban" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Notifications.PublicApi\Sankore.Modules.Notifications.PublicApi.csproj" />
+    <!-- Cross-module: only the Administration PublicApi contract, never the main assembly -->
+    <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sankore.Modules.Notifications.Tests" />
+    <InternalsVisibleTo Include="Sankore.Api" />
+    <!-- Required for NSubstitute to mock internal interfaces/classes in tests -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

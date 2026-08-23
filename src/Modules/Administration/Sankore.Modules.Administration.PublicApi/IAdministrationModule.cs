@@ -23,7 +23,30 @@ public interface IAdministrationModule
         CancellationToken ct);
 
     Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct);
+
+    /// <summary>
+    /// Returns the email provider configuration for a tenant so that the
+    /// Notifications module can resolve the correct provider at send time.
+    /// Returns null when no custom config exists (use platform default).
+    /// </summary>
+    Task<TenantNotificationConfigDto?> GetNotificationConfigAsync(
+        Guid tenantId, CancellationToken ct);
 }
+
+/// <summary>
+/// Read-only projection of tenant email provider settings exposed to
+/// the Notifications module. Credentials are never included — only the
+/// vault reference path.
+/// </summary>
+public sealed record TenantNotificationConfigDto(
+    string ProviderType,
+    bool UseDefaultPlatformProvider,
+    string? FromEmail,
+    string? FromName,
+    string? ReplyToEmail,
+    string? SendingDomain,
+    string? CredentialVaultPath,
+    int? MonthlyQuotaLimit);
 
 /// <summary>
 /// Read-only projection of an agent, safe to hand to other modules.

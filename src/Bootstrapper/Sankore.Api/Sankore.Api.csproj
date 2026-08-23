@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Seq" />
+    <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -32,6 +33,7 @@
     <ProjectReference Include="..\..\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj" />
     <ProjectReference Include="..\..\Modules\Leads\Sankore.Modules.Leads\Sankore.Modules.Leads.csproj" />
     <ProjectReference Include="..\..\Modules\Workflow\Sankore.Modules.Workflow\Sankore.Modules.Workflow.csproj" />
+    <ProjectReference Include="..\..\Modules\Notifications\Sankore.Modules.Notifications\Sankore.Modules.Notifications.csproj" />
   </ItemGroup>
 
   <ItemGroup>

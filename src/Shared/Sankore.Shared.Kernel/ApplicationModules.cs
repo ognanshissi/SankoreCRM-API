@@ -7,4 +7,5 @@ public abstract class ApplicationModules
     public const string Leads = "Leads Module";
     public const string Customer360 = "Customer360 Module";
     public const string Workflow = "Workflow Module";
+    public const string Notifications = "Notifications Module";
 }

@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies;
 using Sankore.Modules.Administration.Features.Authentication.Login;
+using Sankore.Modules.Administration.Features.NotificationSettings;
 using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;
 using Sankore.Modules.Administration.Features.Users;
@@ -78,6 +79,7 @@ public static class AdministrationModule
         app.MapTerritoriesEndpoints();
         app.MapAgenciesEndpoints();
         app.MapRolesEndpoints();
+        app.MapNotificationSettingsEndpoints();
         return app;
     }
 }

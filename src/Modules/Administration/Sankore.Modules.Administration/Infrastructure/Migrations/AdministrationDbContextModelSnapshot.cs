@@ -542,6 +542,69 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.ToTable("role_permissions", "administration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.TenantNotificationSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CredentialVaultPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("CurrentMonthStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentMonthUsageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FromEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("FromName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("MonthlyQuotaLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProviderType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ReplyToEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SendingDomain")
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("UseDefaultPlatformProvider")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("tenant_notification_settings", "administration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.Territory", b =>
                 {
                     b.Property<Guid>("Id")

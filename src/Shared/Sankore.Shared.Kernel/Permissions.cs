@@ -93,6 +93,34 @@ public static class Permissions
     public static readonly PermissionItem CanCancelWorkflow =
         new("workflow:cancel", "Cancel a Workflow Instance", ApplicationModules.Workflow, "cancel");
 
+    // ── Notification settings (Administration module) ─────────────────────
+
+    public static readonly PermissionItem CanReadNotificationSettings =
+        new("notification:settings:read", "Read Tenant Notification Settings", ApplicationModules.Administration, "read");
+
+    public static readonly PermissionItem CanManageNotificationSettings =
+        new("notification:settings:manage", "Configure Tenant Email Provider", ApplicationModules.Administration, "manage");
+
+    public static readonly PermissionItem CanManageEmailQuota =
+        new("notification:settings:quota", "Set Monthly Email Quota", ApplicationModules.Administration, "quota");
+
+    // ── Notifications module ───────────────────────────────────────────────
+
+    public static readonly PermissionItem CanReadEmailTemplates =
+        new("notification:template:read", "Read Email Templates", ApplicationModules.Notifications, "read");
+
+    public static readonly PermissionItem CanManageEmailTemplates =
+        new("notification:template:manage", "Create / Update Email Templates", ApplicationModules.Notifications, "manage");
+
+    public static readonly PermissionItem CanReadEmailOutbox =
+        new("notification:outbox:read", "Read Email Outbox", ApplicationModules.Notifications, "read");
+
+    public static readonly PermissionItem CanRetryEmailOutbox =
+        new("notification:outbox:retry", "Retry Dead-lettered Emails", ApplicationModules.Notifications, "retry");
+
+    public static readonly PermissionItem CanReadEmailDeliveryLogs =
+        new("notification:delivery-log:read", "Read Email Delivery Logs", ApplicationModules.Notifications, "read");
+
     public static readonly PermissionItem[] All =
     [
         CanCreateLoan,
@@ -124,5 +152,13 @@ public static class Permissions
         CanStartWorkflow,
         CanApproveWorkflow,
         CanCancelWorkflow,
+        CanReadEmailTemplates,
+        CanManageEmailTemplates,
+        CanReadEmailOutbox,
+        CanRetryEmailOutbox,
+        CanReadEmailDeliveryLogs,
+        CanReadNotificationSettings,
+        CanManageNotificationSettings,
+        CanManageEmailQuota,
     ];
 }
