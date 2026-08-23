@@ -31,11 +31,11 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
 
 protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
         // Dedicated PostgreSQL schema: enforces the module boundary at the
         // database level, not just in code.
         modelBuilder.HasDefaultSchema("administration");
 
-        base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AdministrationDbContext).Assembly);
         // AppRole — add IsSystem on top of standard Identity columns (keep AspNetRoles table name)
         modelBuilder.Entity<AppRole>(b =>

@@ -10,9 +10,7 @@ internal static class PermissionSeeder
 {
     internal static async Task SeedAsync(IServiceProvider sp)
     {
-
         var dbContext = sp.GetRequiredService<AdministrationDbContext>();
-        var logger = sp.GetRequiredService<ILogger<AdministrationDbContext>>();
 
         foreach (var permission in Permissions.All)
         {
