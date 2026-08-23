@@ -28,6 +28,7 @@ internal static class GetAuditEntriesEndpoint
         .WithName("GetAuditEntries")
         .WithTags("Audit")
         .WithOpenApi()
+        .Produces<PagedResult<AuditEntryDto>>(StatusCodes.Status200OK)
         .RequireAuthorization(Permissions.CanReadAudit.Code);
 
         return group;
