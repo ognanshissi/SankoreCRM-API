@@ -89,7 +89,7 @@ public sealed class AppUser: IdentityUser<Guid>
             FullName = fullName,
             UserName = email,
             Email = email,
-            Status = UserStatus.PendingActivation,
+            Status = UserStatus.Active,
             MfaEnabled = true,
             PasswordExpiresAt = DateTimeOffset.UtcNow.AddDays(PasswordExpiryDays),
             FailedLoginAttempts = 0,

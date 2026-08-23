@@ -171,7 +171,7 @@ public sealed class ResetPasswordHandlerTests : IDisposable
     public async Task Should_fail_when_user_is_disabled()
     {
         await using var seed = _factory.CreateContext();
-        var agency = Agency.Create(_tenantId, "Agence HQ", "");
+        var agency = Agency.Create(_tenantId, "Agence HQ", "", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Locked User", "locked@test.sn");
@@ -199,7 +199,7 @@ public sealed class ResetPasswordHandlerTests : IDisposable
         Infrastructure.AdministrationDbContext db,
         string? passwordHash = null)
     {
-        var agency = Agency.Create(_tenantId, "Agence Seed", "");
+        var agency = Agency.Create(_tenantId, "Agence Seed", "", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Seed User", "seed@test.sn");

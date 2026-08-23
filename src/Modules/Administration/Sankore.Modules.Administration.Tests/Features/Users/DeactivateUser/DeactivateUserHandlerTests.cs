@@ -33,7 +33,7 @@ public sealed class DeactivateUserHandlerTests : IDisposable
         // ARRANGE
         await using var seed = _factory.CreateContext();
 
-        var agency = Agency.Create(_tenantId, "Agence HQ", "");
+        var agency = Agency.Create(_tenantId, "Agence HQ", "", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Moussa Sow", "moussa@test.sn");
@@ -96,7 +96,7 @@ public sealed class DeactivateUserHandlerTests : IDisposable
         // ARRANGE — seed a user already in Disabled state
         await using var seed = _factory.CreateContext();
 
-        var agency = Agency.Create(_tenantId, "Agence Test", "");
+        var agency = Agency.Create(_tenantId, "Agence Test", "", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Fatou Ndiaye", "fatou@test.sn");

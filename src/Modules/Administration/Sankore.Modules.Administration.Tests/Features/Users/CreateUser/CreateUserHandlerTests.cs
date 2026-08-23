@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using NSubstitute;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Modules.Administration.Domain.Events;
 using Sankore.Modules.Administration.Features.Users.CreateUser;
 using Sankore.Modules.Administration.Tests.TestSupport;
@@ -36,7 +37,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         // ARRANGE
         await using var db = _factory.CreateContext();
 
-        var agency = Agency.Create(_tenantId, "Agence Dakar", "HQ");
+        var agency = Agency.Create(_tenantId, "Agence Dakar", "HQ", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(agency);
         await db.SaveChangesAsync();
 
@@ -46,8 +47,11 @@ public sealed class CreateUserHandlerTests : IDisposable
         var userManager = IdentityMockFactory.BuildUserManager();
         var roleManager = IdentityMockFactory.BuildRoleManager();
         var publisher = Substitute.For<IEventPublisher>();
+        var currentUser = Substitute.For<ICurrentUser>();
+        currentUser.TenantId.Returns(_tenantId);
+        currentUser.Id.Returns(callerUserId);
 
-        var role = AppRole.Create("Agent", isSystem: false);
+        var role = AppRole.Create("Agent", "Agent", isSystem: false);
         typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(role, roleId);
 
         roleManager.FindByIdAsync(roleId.ToString())
@@ -62,10 +66,9 @@ public sealed class CreateUserHandlerTests : IDisposable
         userManager.GeneratePasswordResetTokenAsync(Arg.Any<AppUser>())
             .Returns("activation-token");
 
-        var handler = new CreateUserHandler(db, userManager, roleManager, publisher);
+        var handler = new CreateUserHandler(db, userManager, roleManager, currentUser, publisher);
 
         var command = new CreateUserCommand(
-            TenantId: _tenantId,
             AgencyId: agency.Id,
             RoleId: roleId,
             FullName: "Aminata Diallo",
@@ -104,11 +107,12 @@ public sealed class CreateUserHandlerTests : IDisposable
         var userManager = IdentityMockFactory.BuildUserManager();
         var roleManager = IdentityMockFactory.BuildRoleManager();
         var publisher = Substitute.For<IEventPublisher>();
+        var currentUser = Substitute.For<ICurrentUser>();
+        currentUser.TenantId.Returns(_tenantId);
 
-        var handler = new CreateUserHandler(db, userManager, roleManager, publisher);
+        var handler = new CreateUserHandler(db, userManager, roleManager, currentUser, publisher);
 
         var command = new CreateUserCommand(
-            TenantId: _tenantId,
             AgencyId: Guid.NewGuid(), // no agency seeded
             RoleId: Guid.NewGuid(),
             FullName: "Test User",
@@ -133,7 +137,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         // ARRANGE — seed an agency and an existing user with the same email
         await using var db = _factory.CreateContext();
 
-        var agency = Agency.Create(_tenantId, "Agence Test", "");
+        var agency = Agency.Create(_tenantId, "Agence Test", "", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(agency);
 
         var existingUser = AppUser.Create(_tenantId, agency.Id, "Existing User", "taken@test.com");
@@ -146,14 +150,16 @@ public sealed class CreateUserHandlerTests : IDisposable
         var roleManager = IdentityMockFactory.BuildRoleManager();
         var publisher = Substitute.For<IEventPublisher>();
 
-        var role = AppRole.Create("Agent", isSystem: false);
+        var role = AppRole.Create("Agent", "Agent", isSystem: false);
         typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(role, roleId);
         roleManager.FindByIdAsync(roleId.ToString()).Returns(role);
 
-        var handler = new CreateUserHandler(db, userManager, roleManager, publisher);
+        var currentUser = Substitute.For<ICurrentUser>();
+        currentUser.TenantId.Returns(_tenantId);
+
+        var handler = new CreateUserHandler(db, userManager, roleManager, currentUser, publisher);
 
         var command = new CreateUserCommand(
-            TenantId: _tenantId,
             AgencyId: agency.Id,
             RoleId: roleId,
             FullName: "Duplicate User",

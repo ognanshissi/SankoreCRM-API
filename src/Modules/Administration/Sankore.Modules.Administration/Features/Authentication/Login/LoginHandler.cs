@@ -24,7 +24,11 @@ internal sealed class LoginHandler(
             .Where(u => u.TenantId == tenant.CurrentTenantId && u.NormalizedEmail == normalizedEmail)
             .FirstOrDefaultAsync(ct);
 
-        if (user is null || !await userManager.CheckPasswordAsync(user, request.Password))
+        // Only activated user can login
+        if (user is null || user.Status  != UserStatus.Active) 
+            return Result.Fail<LoginResult>("Invalid login attempt.");
+        
+        if (!await userManager.CheckPasswordAsync(user, request.Password))
             return Result.Fail<LoginResult>("Invalid credentials.");
 
         if (await userManager.IsLockedOutAsync(user))
