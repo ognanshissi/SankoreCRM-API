@@ -17,4 +17,8 @@ public sealed record UpdateAgencyCommand(
     string? AddressZipCode,
     double? Latitude,
     double? Longitude
-) : IRequest<Result>, ICommand;
+) : IRequest<Result>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Agency";
+    public string? ResourceId => AgencyId.ToString();
+}

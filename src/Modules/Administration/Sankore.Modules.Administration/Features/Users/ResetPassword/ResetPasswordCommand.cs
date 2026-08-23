@@ -11,5 +11,9 @@ namespace Sankore.Modules.Administration.Features.Users.ResetPassword;
 /// </summary>
 public sealed record ResetPasswordCommand(
     Guid UserId,
-    string NewPassword
-) : IRequest<Result>, ICommand;
+    [property: SensitiveData] string NewPassword
+) : IRequest<Result>, ICommand, IResourceCommand
+{
+    public string ResourceType => "User";
+    public string? ResourceId => UserId.ToString();
+}

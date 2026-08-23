@@ -10,7 +10,7 @@ namespace Sankore.Modules.Administration.Features.Authentication.Login;
 /// </summary>
 public sealed record LoginCommand(
     string Email,
-    string Password
+    [property: SensitiveData] string Password
 ) : IRequest<Result<LoginResult>>, ICommand;
 
 public sealed record LoginResult(

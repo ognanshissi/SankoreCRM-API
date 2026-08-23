@@ -49,6 +49,9 @@ public static class Permissions
     public static readonly PermissionItem CanDeleteTerritory =
         new("territory:delete", "Delete Territory", ApplicationModules.Administration, "delete");
 
+    public static readonly PermissionItem CanReadAudit =
+        new("audit:read", "Read Audit Trail", ApplicationModules.Administration, "read");
+
     public static readonly PermissionItem[] All =
     [
         CanCreateLoan,
@@ -66,5 +69,6 @@ public static class Permissions
         CanReadTerritory,
         CanUpdateTerritory,
         CanDeleteTerritory,
+        CanReadAudit,
     ];
 }

@@ -17,6 +17,10 @@ public sealed record CreateUserCommand(
     List<string> SpokenLanguages,
     List<string> Specialties,
     Guid CallerUserId
-) : IRequest<Result<CreateUserResult>>, ICommand;
+) : IRequest<Result<CreateUserResult>>, ICommand, IResourceCommand
+{
+    public string ResourceType => "User";
+    public string? ResourceId => null; // ID not yet assigned at dispatch time
+}
 
 public sealed record CreateUserResult(Guid UserId);

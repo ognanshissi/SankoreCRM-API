@@ -1,6 +1,5 @@
 namespace Sankore.Shared.Infrastructure.Behaviors;
 
-using System.Text.Json;
 using MediatR;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
@@ -10,9 +9,13 @@ using Sankore.Shared.Kernel;
 /// MediatR (queries are excluded via the ICommand marker to keep the audit
 /// table meaningful — reads are not audited by default, only mutations).
 ///
-/// This is what makes the BCEAO compliance requirement ("who did what,
-/// when, from where") automatic instead of something each developer must
-/// remember to implement per feature.
+/// Payload is serialized via <see cref="SanitizedJsonSerializer"/> so that
+/// properties marked with <see cref="SensitiveDataAttribute"/>
+/// (passwords, tokens, etc.) are replaced with "***" before being stored.
+///
+/// When the command also implements <see cref="IResourceCommand"/>, the
+/// <c>ResourceType</c> and <c>ResourceId</c> fields are populated so that
+/// the audit log can be filtered by affected entity.
 /// </summary>
 public interface ICommand
 {
@@ -33,11 +36,14 @@ public sealed record AuditEntry(
     string Action,
     string PayloadJson,
     string Outcome,
-    string? ErrorDetail);
+    string? ErrorDetail,
+    string? ResourceType,
+    string? ResourceId);
 
 public sealed class AuditBehavior<TRequest, TResponse>(
     IAuditWriter auditWriter,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    ITenantContext tenant)
     : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
@@ -46,7 +52,6 @@ public sealed class AuditBehavior<TRequest, TResponse>(
         RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
-        // Only audit commands (mutations), not queries.
         if (request is not ICommand)
             return await next();
 
@@ -56,17 +61,27 @@ public sealed class AuditBehavior<TRequest, TResponse>(
         {
             Result { IsSuccess: true } => ("SUCCESS", (string?)null),
             Result r => ("FAILURE", r.Error),
-            _ => ("SUCCESS", null) // non-Result responses are treated as success
+            _ => ("SUCCESS", null)
         };
+
+        string? resourceType = null;
+        string? resourceId = null;
+        if (request is IResourceCommand resourceCommand)
+        {
+            resourceType = resourceCommand.ResourceType;
+            resourceId = resourceCommand.ResourceId;
+        }
 
         await auditWriter.WriteAsync(new AuditEntry(
             Timestamp: DateTimeOffset.UtcNow,
             UserId: currentUser.Id,
-            TenantId: currentUser.TenantId,
+            TenantId: tenant.CurrentTenantId,
             Action: typeof(TRequest).Name,
-            PayloadJson: JsonSerializer.Serialize(request),
+            PayloadJson: SanitizedJsonSerializer.Serialize(request),
             Outcome: outcome,
-            ErrorDetail: error),
+            ErrorDetail: error,
+            ResourceType: resourceType,
+            ResourceId: resourceId),
             cancellationToken);
 
         return response;

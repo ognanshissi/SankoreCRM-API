@@ -20,6 +20,10 @@ public sealed record CaptureLeadCommand(
     double Latitude,
     double Longitude,
     Guid? PreferredAgencyId
-) : IRequest<Result<CaptureLeadResult>>, ICommand;
+) : IRequest<Result<CaptureLeadResult>>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Lead";
+    public string? ResourceId => null; // ID not yet assigned at dispatch time
+}
 
 public sealed record CaptureLeadResult(Guid LeadId, string Status);

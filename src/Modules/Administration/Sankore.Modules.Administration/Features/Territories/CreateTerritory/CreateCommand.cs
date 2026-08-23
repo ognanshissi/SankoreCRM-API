@@ -12,6 +12,10 @@ public sealed record CreateTerritoryCommand(
     double? Longitude,
     double RayonKm,
     List<string> ProductSpecialities
-) : IRequest<Result<CreateTerritoryResult>>, ICommand;
+) : IRequest<Result<CreateTerritoryResult>>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Territory";
+    public string? ResourceId => null; // ID not yet assigned at dispatch time
+}
 
 public sealed record CreateTerritoryResult(Guid TerritoryId);

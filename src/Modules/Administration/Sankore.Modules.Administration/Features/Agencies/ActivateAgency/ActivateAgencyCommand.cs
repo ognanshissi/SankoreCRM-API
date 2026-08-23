@@ -5,4 +5,9 @@ using Sankore.Shared.Kernel;
 namespace Sankore.Modules.Administration.Features.Agencies.ActivateAgency;
 
 /// <summary>Re-activates a soft-deleted agency (reverses Deactivate).</summary>
-public sealed record ActivateAgencyCommand(Guid AgencyId) : IRequest<Result>, ICommand;
+public sealed record ActivateAgencyCommand(Guid AgencyId)
+    : IRequest<Result>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Agency";
+    public string? ResourceId => AgencyId.ToString();
+}

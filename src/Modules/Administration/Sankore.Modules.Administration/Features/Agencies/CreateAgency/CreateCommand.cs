@@ -17,6 +17,10 @@ public sealed record CreateAgencyCommand(
     string? AddressZipCode,
     double? Latitude,
     double? Longitude
-) : IRequest<Result<CreateAgencyResult>>, ICommand;
+) : IRequest<Result<CreateAgencyResult>>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Agency";
+    public string? ResourceId => null; // ID not yet assigned at dispatch time
+}
 
 public sealed record CreateAgencyResult(Guid AgencyId, string Code);

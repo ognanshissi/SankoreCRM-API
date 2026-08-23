@@ -10,4 +10,9 @@ namespace Sankore.Modules.Administration.Features.Users.DeactivateUser;
 /// Publishes <c>UserDeactivatedEvent</c> so the Leads module can reassign
 /// the agent's active leads (US-M12-USER-001 Scenario 3).
 /// </summary>
-public sealed record DeactivateUserCommand(Guid UserId) : IRequest<Result>, ICommand;
+public sealed record DeactivateUserCommand(Guid UserId)
+    : IRequest<Result>, ICommand, IResourceCommand
+{
+    public string ResourceType => "User";
+    public string? ResourceId => UserId.ToString();
+}

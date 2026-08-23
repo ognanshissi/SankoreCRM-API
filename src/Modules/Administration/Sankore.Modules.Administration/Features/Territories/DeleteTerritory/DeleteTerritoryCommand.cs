@@ -5,4 +5,9 @@ using Sankore.Shared.Kernel;
 namespace Sankore.Modules.Administration.Features.Territories.DeleteTerritory;
 
 /// <summary>Soft-deletes a territory by setting IsActive = false.</summary>
-public sealed record DeleteTerritoryCommand(Guid TerritoryId) : IRequest<Result>, ICommand;
+public sealed record DeleteTerritoryCommand(Guid TerritoryId)
+    : IRequest<Result>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Territory";
+    public string? ResourceId => TerritoryId.ToString();
+}

@@ -12,4 +12,8 @@ public sealed record UpdateTerritoryCommand(
     double? Longitude,
     double RayonKm,
     List<string> ProductSpecialities
-) : IRequest<Result>, ICommand;
+) : IRequest<Result>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Territory";
+    public string? ResourceId => TerritoryId.ToString();
+}

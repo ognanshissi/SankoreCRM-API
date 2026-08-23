@@ -14,4 +14,8 @@ public sealed record DispatchLeadCommand(
     Guid LeadId,
     Guid TenantId,
     DispatchingStrategy Strategy = DispatchingStrategy.CompatibilityScoring
-) : IRequest<Result<DispatchLeadResult>>, ICommand;
+) : IRequest<Result<DispatchLeadResult>>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Lead";
+    public string? ResourceId => LeadId.ToString();
+}

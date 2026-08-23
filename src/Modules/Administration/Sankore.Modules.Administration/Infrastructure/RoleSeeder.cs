@@ -24,14 +24,18 @@ internal static class RoleSeeder
         
         foreach (RoleItem role in Roles.All)
         {
-            if (await roleManager.RoleExistsAsync(role.Code))
+            var roleExist = await roleManager.RoleExistsAsync(role.Code);
+            if (roleExist && role.Code != Roles.System.Code)
                 continue;
 
-            var result = await roleManager.CreateAsync(AppRole.Create(role.Code, role.Name, isSystem: true));
-            if (!result.Succeeded)
-                logger.LogWarning("Failed to seed role {Role}: {Errors}", role.Code,
-                    string.Join("; ", result.Errors.Select(e => e.Description)));
-
+            if (!roleExist)
+            {
+                var result = await roleManager.CreateAsync(AppRole.Create(role.Code, role.Name, isSystem: true));
+                if (!result.Succeeded)
+                    logger.LogWarning("Failed to seed role {Role}: {Errors}", role.Code,
+                        string.Join("; ", result.Errors.Select(e => e.Description)));
+            }
+            
             if (role.Code == Roles.System.Code)
             {
                 // permissions

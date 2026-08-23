@@ -1,9 +1,13 @@
 using System.Text;
 using MassTransit;
+using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Sankore.Api.Features.Audit.GetAuditEntries;
+using Sankore.Api.Infrastructure;
+using Sankore.Api.Infrastructure.Audit;
 using Sankore.Modules.Leads;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Administration;
@@ -50,16 +54,28 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddSankoreAuthorization(); // registers Leads.* policies (Shared.Infrastructure.Auth)
+builder.Services.AddSankoreAuthorization();
+
+// MediatR — register Bootstrapper's own handlers (audit query, etc.)
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
 // MediatR pipeline behaviors: order matters (outermost first).
 // Logging -> Validation -> Transaction -> Audit -> [Handler]
-builder.Services.AddScoped(typeof(MediatR.IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
-builder.Services.AddScoped(typeof(MediatR.IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
-builder.Services.AddScoped(typeof(MediatR.IPipelineBehavior<,>), typeof(TransactionBehavior<,>));
-builder.Services.AddScoped(typeof(MediatR.IPipelineBehavior<,>), typeof(AuditBehavior<,>));
+builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(TransactionBehavior<,>));
+builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(AuditBehavior<,>));
 
-builder.Services.AddScoped<IAuditWriter, Sankore.Api.Infrastructure.SqlAuditWriter>();
+// Audit — dedicated DbContext + real writer.
+// AddDbContextFactory registers both the factory (singleton) and a scoped
+// DbContext so that EF tooling and the migration startup code can resolve it.
+var connectionString = builder.Configuration.GetConnectionString("Database")!;
+builder.Services.AddDbContextFactory<AuditDbContext>(opts =>
+    opts.UseNpgsql(connectionString,
+        b => b.MigrationsHistoryTable("__EFMigrationsHistory", "audit")));
+
+builder.Services.AddScoped<IAuditWriter, SqlAuditWriter>();
 
 // Message bus (MassTransit). In-memory transport by default for local dev;
 // swap to RabbitMQ/Kafka via configuration for staging/production without
@@ -96,7 +112,7 @@ builder.Services.AddSwaggerGen(options =>
         In = ParameterLocation.Header,
         Scheme = "Bearer"
     });
-    
+
     options.AddSecurityDefinition("TenantHeader", new()
     {
         Name = "x-tenant-id",
@@ -147,6 +163,10 @@ app.MapDefaultEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
+    // Audit schema — independent of all module schemas.
+    var auditDb = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
+    await auditDb.Database.MigrateAsync();
+
     // Each module owns its own migration + initialization.
     // AdministrationModule.InitializeAsync runs migrations AND seeds system roles.
     var leadsDb = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
@@ -180,6 +200,8 @@ var appVersion1 = app.MapGroup("api/v1");
 appVersion1.MapAdministrationModuleEndpoints();
 
 appVersion1.MapLeadsEndpoints();
+
+appVersion1.MapGroup("audit").MapGetAuditEntries();
 
 // app.MapCustomersEndpoints();
 // app.MapKycEndpoints();

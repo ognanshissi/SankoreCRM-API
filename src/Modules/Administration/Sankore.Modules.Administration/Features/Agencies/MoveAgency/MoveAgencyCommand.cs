@@ -12,4 +12,8 @@ namespace Sankore.Modules.Administration.Features.Agencies.MoveAgency;
 public sealed record MoveAgencyCommand(
     Guid AgencyId,
     Guid? NewParentAgencyId
-) : IRequest<Result>, ICommand;
+) : IRequest<Result>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Agency";
+    public string? ResourceId => AgencyId.ToString();
+}
