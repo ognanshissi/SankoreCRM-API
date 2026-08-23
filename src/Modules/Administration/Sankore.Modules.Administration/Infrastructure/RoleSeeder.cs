@@ -22,7 +22,6 @@ internal static class RoleSeeder
         // Generate permissions
         await PermissionSeeder.SeedAsync(sp);
         
-        
         foreach (RoleItem role in Roles.All)
         {
             if (await roleManager.RoleExistsAsync(role.Code))

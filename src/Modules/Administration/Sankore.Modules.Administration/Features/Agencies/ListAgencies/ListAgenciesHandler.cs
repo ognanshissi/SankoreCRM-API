@@ -8,9 +8,9 @@ namespace Sankore.Modules.Administration.Features.Agencies.ListAgencies;
 
 internal sealed class ListAgenciesHandler(
     AdministrationDbContext db
-) : IRequestHandler<ListAgenciesQuery, Result<List<AgencyDto>>>
+) : IRequestHandler<ListAgenciesQuery, Result<PagedResult<AgencyDto>>>
 {
-    public async Task<Result<List<AgencyDto>>> Handle(ListAgenciesQuery request, CancellationToken ct)
+    public async Task<Result<PagedResult<AgencyDto>>> Handle(ListAgenciesQuery request, CancellationToken ct)
     {
         var query = db.Agencies.AsQueryable();
 
@@ -19,31 +19,50 @@ internal sealed class ListAgenciesHandler(
 
         if (request.ParentAgencyId.HasValue)
             query = request.ParentAgencyId == Guid.Empty
-                ? query.Where(a => a.ParentAgencyId == null)          // root-level only
+                ? query.Where(a => a.ParentAgencyId == null)
                 : query.Where(a => a.ParentAgencyId == request.ParentAgencyId);
 
-        var agencies = await query
-            .OrderBy(a => a.Name)
-            .Select(a => new AgencyDto(
-                a.Id,
-                a.Name,
-                a.Code,
-                a.Description,
-                a.AgencyType.ToString(),
-                a.ParentAgencyId,
-                a.IsHeadQuarterAgency,
-                a.IsActive,
-                a.Address != null ? a.Address.Street : null,
-                a.Address != null ? a.Address.City : null,
-                a.Address != null ? a.Address.State : null,
-                a.Address != null ? a.Address.Country : null,
-                a.Address != null ? a.Address.ZipCode : null,
-                a.Address != null && a.Address.Location != null ? a.Address.Location.Latitude : (double?)null,
-                a.Address != null && a.Address.Location != null ? a.Address.Location.Longitude : (double?)null,
-                a.CreatedAt,
-                a.UpdatedAt))
-            .ToListAsync(ct);
+        query = query.OrderBy(a => a.Name);
 
-        return Result.Ok(agencies);
+        var totalCount = await query.CountAsync(ct);
+
+        IQueryable<AgencyDto> projected = query.Select(a => new AgencyDto(
+            a.Id,
+            a.Name,
+            a.Code,
+            a.Description,
+            a.AgencyType.ToString(),
+            a.ParentAgencyId,
+            a.IsHeadQuarterAgency,
+            a.IsActive,
+            a.Address != null ? a.Address.Street : null,
+            a.Address != null ? a.Address.City : null,
+            a.Address != null ? a.Address.State : null,
+            a.Address != null ? a.Address.Country : null,
+            a.Address != null ? a.Address.ZipCode : null,
+            a.Address != null && a.Address.Location != null ? a.Address.Location.Latitude : (double?)null,
+            a.Address != null && a.Address.Location != null ? a.Address.Location.Longitude : (double?)null,
+            a.CreatedAt,
+            a.UpdatedAt));
+
+        List<AgencyDto> items;
+        int page = request.Page;
+        int pageSize = request.PageSize;
+
+        if (pageSize > 0)
+        {
+            items = await projected
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(ct);
+        }
+        else
+        {
+            items = await projected.ToListAsync(ct);
+            page = 1;
+            pageSize = totalCount == 0 ? 1 : totalCount;
+        }
+
+        return Result.Ok(new PagedResult<AgencyDto>(items, totalCount, page, pageSize));
     }
 }

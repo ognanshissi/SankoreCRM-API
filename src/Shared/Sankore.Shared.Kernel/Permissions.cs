@@ -6,7 +6,7 @@ public record PermissionItem (string Code, string Description, string Module,  s
 public static class Permissions
 {
     public static readonly PermissionItem CanCreateLoan = new PermissionItem("loan:create","Create Loan",ApplicationModules.Loan,"create");
-    
+
     public static readonly PermissionItem CanCreateUser =
         new("user:create", "Create User", ApplicationModules.Administration, "create");
 
@@ -31,6 +31,12 @@ public static class Permissions
     public static readonly PermissionItem CanDeleteAgency =
         new("agency:delete", "Delete Agency", ApplicationModules.Administration, "delete");
 
+    public static readonly PermissionItem CanActivateAgency =
+        new("agency:activate", "Activate Agency", ApplicationModules.Administration, "activate");
+
+    public static readonly PermissionItem CanMoveAgency =
+        new("agency:move", "Move Agency", ApplicationModules.Administration, "move");
+
     public static readonly PermissionItem CanCreateTerritory =
         new("territory:create", "Create Territory", ApplicationModules.Administration, "create");
 
@@ -50,6 +56,8 @@ public static class Permissions
         CanReadAgency,
         CanUpdateAgency,
         CanDeleteAgency,
+        CanActivateAgency,
+        CanMoveAgency,
         CanCreateUser,
         CanReadUser,
         CanDeactivateUser,

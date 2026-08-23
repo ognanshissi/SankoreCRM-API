@@ -16,12 +16,13 @@ public static class ListAgenciesEndpoint
             .WithName("ListAgencies")
             .WithSummary("List agencies for the current tenant")
             .WithDescription(
-                "Returns all non-deleted agencies. " +
+                "Returns a paginated list of agencies. " +
                 "Pass parentId=<guid> to filter children; parentId=00000000-0000-0000-0000-000000000000 returns root-level agencies. " +
                 "Pass includeDeleted=true to include soft-deleted entries. " +
+                "Pass page and pageSize for pagination (pageSize=0 returns all). " +
                 "Requires permission: agency:read.")
             .RequireAuthorization(Permissions.CanReadAgency.Code)
-            .Produces<List<AgencyDto>>(StatusCodes.Status200OK)
+            .Produces<PagedResult<AgencyDto>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .WithOpenApi()
@@ -34,9 +35,16 @@ public static class ListAgenciesEndpoint
         ISender sender,
         Guid? parentId,
         bool includeDeleted,
+        int page,
+        int pageSize,
         CancellationToken ct)
     {
-        var result = await sender.Send(new ListAgenciesQuery(parentId, includeDeleted), ct);
+        var effectivePage = page < 1 ? 1 : page;
+        var effectivePageSize = pageSize < 0 ? 20 : pageSize;
+
+        var result = await sender.Send(
+            new ListAgenciesQuery(parentId, includeDeleted, effectivePage, effectivePageSize), ct);
+
         return Results.Ok(result.Value);
     }
 }

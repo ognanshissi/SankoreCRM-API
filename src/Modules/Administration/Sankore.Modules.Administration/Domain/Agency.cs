@@ -77,6 +77,31 @@ public sealed class Agency : AggregateRoot
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    public void Activate()
+    {
+        if (!IsDeleted)
+            throw new DomainException("Agency is not deactivated.");
+
+        IsActive = true;
+        IsDeleted = false;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Moves this agency under a new parent.
+    /// Domain invariant only — circular-reference check must be done in the handler.
+    /// </summary>
+    public void MoveTo(Guid? newParentId)
+    {
+        if (AgencyType != AgencyType.HeadQuarter && newParentId is null)
+            throw new DomainException("Non-headquarters agencies must have a parent agency.");
+        if (newParentId == Id)
+            throw new DomainException("An agency cannot be its own parent.");
+
+        ParentAgencyId = newParentId;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     private static string GenerateCode(string name)
     {
         var clean = new string(name.Where(char.IsLetterOrDigit).ToArray());

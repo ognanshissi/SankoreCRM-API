@@ -19,6 +19,13 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
         builder.Property(u => u.FailedLoginAttempts).HasDefaultValue(0);
         builder.Property(u => u.LastLoginAt);
         builder.Property(u => u.DeactivatedAt);
+        
+        // User Manager ID, AddReportToIdFK
+        // builder.HasOne<AppUser>()
+        //     .WithMany()
+        //     .HasForeignKey(a => a.ReportToId)
+        //     .IsRequired(false)
+        //     .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(u => u.Agency)
             .WithMany(a => a.Users)

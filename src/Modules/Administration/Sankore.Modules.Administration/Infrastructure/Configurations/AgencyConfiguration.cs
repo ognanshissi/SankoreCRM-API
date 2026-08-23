@@ -30,10 +30,12 @@ public class AgencyConfiguration: IEntityTypeConfiguration<Agency>
             });
         });
         
-        // builder.HasOne(a => a.ParentAgencyId)
-        //     .WithMany()
-        //     .HasForeignKey(a => a.ParentAgencyId);
-        
+        builder.HasOne<Agency>()
+            .WithMany()
+            .HasForeignKey(a => a.ParentAgencyId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(x => x.IsActive).HasDefaultValue(true);
         builder.Property(x => x.IsDeleted).HasDefaultValue(false);
         builder.Property(x => x.CreatedAt).IsRequired();
