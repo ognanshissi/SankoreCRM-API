@@ -36,7 +36,7 @@ internal static class RoleSeeder
                         string.Join("; ", result.Errors.Select(e => e.Description)));
             }
             
-            if (role.Code == Roles.System.Code)
+            if (role.Code == Roles.System.Code || role.Code == Roles.Administrator.Code)
             {
                 // permissions
                 var permissions = await db.Permissions.AsQueryable().ToListAsync();
