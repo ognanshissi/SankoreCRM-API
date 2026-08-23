@@ -52,6 +52,18 @@ public static class Permissions
     public static readonly PermissionItem CanReadAudit =
         new("audit:read", "Read Audit Trail", ApplicationModules.Administration, "read");
 
+    public static readonly PermissionItem CanAssignRole =
+        new("user:assign-role", "Assign Role to User", ApplicationModules.Administration, "assign-role");
+
+    public static readonly PermissionItem CanRevokeRole =
+        new("user:revoke-role", "Revoke Role from User", ApplicationModules.Administration, "revoke-role");
+
+    public static readonly PermissionItem CanAssignPermission =
+        new("user:assign-permission", "Assign Scoped Permission to User", ApplicationModules.Administration, "assign-permission");
+
+    public static readonly PermissionItem CanRevokePermission =
+        new("user:revoke-permission", "Revoke Scoped Permission from User", ApplicationModules.Administration, "revoke-permission");
+
     public static readonly PermissionItem[] All =
     [
         CanCreateLoan,
@@ -70,5 +82,9 @@ public static class Permissions
         CanUpdateTerritory,
         CanDeleteTerritory,
         CanReadAudit,
+        CanAssignRole,
+        CanRevokeRole,
+        CanAssignPermission,
+        CanRevokePermission,
     ];
 }

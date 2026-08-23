@@ -7,6 +7,7 @@ using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 using Xunit;
+using ITenantCtx = Sankore.Shared.Kernel.ITenantContext;
 
 public sealed class AuditBehaviorTests
 {
@@ -45,10 +46,14 @@ public sealed class AuditBehaviorTests
               .Returns(Task.CompletedTask);
 
         var currentUser = Substitute.For<ICurrentUser>();
+        var tenantId = Guid.NewGuid();
         currentUser.Id.Returns(Guid.NewGuid());
-        currentUser.TenantId.Returns(Guid.NewGuid());
+        currentUser.TenantId.Returns(tenantId);
 
-        return (new AuditBehavior<TReq, TResp>(writer, currentUser), writer);
+        var tenant = Substitute.For<ITenantCtx>();
+        tenant.CurrentTenantId.Returns(tenantId);
+
+        return (new AuditBehavior<TReq, TResp>(writer, currentUser, tenant), writer);
     }
 
     private static RequestHandlerDelegate<Result> SuccessDelegate()
@@ -220,7 +225,9 @@ public sealed class AuditBehaviorTests
         currentUser.Id.Returns(userId);
         currentUser.TenantId.Returns(tenantId);
 
-        var behavior = new AuditBehavior<PlainCommand, Result>(writer, currentUser);
+        var tenant = Substitute.For<ITenantCtx>();
+        tenant.CurrentTenantId.Returns(tenantId);
+        var behavior = new AuditBehavior<PlainCommand, Result>(writer, currentUser, tenant);
         AuditEntry? captured = null;
         writer.WriteAsync(Arg.Do<AuditEntry>(e => captured = e), Arg.Any<CancellationToken>())
               .Returns(Task.CompletedTask);

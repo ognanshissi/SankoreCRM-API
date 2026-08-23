@@ -37,7 +37,7 @@ internal sealed class RegisterHandler(
         if (!createResult.Succeeded)
             return Result.Fail<RegisterResult>(string.Join("; ", createResult.Errors.Select(e => e.Description)));
 
-        var roleResult = await userManager.AddToRoleAsync(user, Roles.System.Code);
+        var roleResult = await userManager.AddToRoleAsync(user, global::Sankore.Shared.Kernel.Roles.System.Code);
         if (!roleResult.Succeeded)
             return Result.Fail<RegisterResult>(string.Join("; ", roleResult.Errors.Select(e => e.Description)));
         

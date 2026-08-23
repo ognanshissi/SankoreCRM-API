@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Users.DeactivateUser;
 
@@ -19,7 +20,7 @@ public static class DeactivateUserEndpoint
                 "The user record is never deleted. A UserDeactivatedEvent is published so the " +
                 "Leads module can automatically reassign the agent's active leads. " +
                 "Requires permission: user:deactivate.")
-            .RequireAuthorization("Users.Deactivate")
+            .RequireAuthorization(Permissions.CanDeactivateUser.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)

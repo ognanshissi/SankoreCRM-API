@@ -18,7 +18,7 @@ public static class CreateTerritoryEndpoint
                 "Creates a territory with a geographic center point and coverage radius. " +
                 "Code must be unique within the tenant. " +
                 "Requires permission: territory:create.")
-            // .RequireAuthorization(Permissions.CanCreateTerritory.Code)
+            .RequireAuthorization(Permissions.CanCreateTerritory.Code)
             .Produces<CreateTerritoryResult>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)

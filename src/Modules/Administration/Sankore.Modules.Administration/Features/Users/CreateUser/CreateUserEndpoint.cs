@@ -2,8 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Users.CreateUser;
 
@@ -19,7 +19,7 @@ public static class CreateUserEndpoint
                 "Creates a user account in PendingActivation status. " +
                 "An activation email is sent so the user can set their first password. " +
                 "Requires permission: user:create.")
-            .RequireAuthorization("Users.Create")
+            .RequireAuthorization(Permissions.CanCreateUser.Code)
             .Produces<CreateUserResult>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)

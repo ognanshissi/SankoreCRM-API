@@ -17,10 +17,11 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<PasswordHistory>  PasswordHistories => Set<PasswordHistory>();
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
-    public DbSet<PermissionAttribution>  AgencySupervisions => Set<PermissionAttribution>();
+    public DbSet<PermissionAttribution>  PermissionAttributions => Set<PermissionAttribution>();
     public DbSet<ProductSpeciality>  ProductSpecialities => Set<ProductSpeciality>();
     public DbSet<Territory>  Territories => Set<Territory>();
-    
+    public DbSet<UserRole>   UserRoles    => Set<UserRole>();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);

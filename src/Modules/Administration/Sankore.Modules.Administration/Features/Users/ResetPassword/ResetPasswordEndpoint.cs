@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Users.ResetPassword;
 
@@ -17,7 +18,7 @@ public static class ResetPasswordEndpoint
                 "Resets the user's password and extends the expiry by 90 days. " +
                 "Reuse of any of the last 12 passwords is rejected with PASSWORD_RECENTLY_USED. " +
                 "Requires permission: user:reset-password.")
-            .RequireAuthorization("Users.ResetPassword")
+            .RequireAuthorization(Permissions.CanResetPassword.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)

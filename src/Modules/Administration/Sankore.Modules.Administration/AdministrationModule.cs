@@ -8,19 +8,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies;
-
 using Sankore.Modules.Administration.Features.Authentication.Login;
+using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;
-using Sankore.Modules.Administration.Features.Territories.CreateTerritory;
-using Sankore.Modules.Administration.Features.Territories.DeleteTerritory;
-using Sankore.Modules.Administration.Features.Territories.GetTerritory;
-using Sankore.Modules.Administration.Features.Territories.ListTerritories;
-using Sankore.Modules.Administration.Features.Territories.UpdateTerritory;
 using Sankore.Modules.Administration.Features.Users;
-using Sankore.Modules.Administration.Features.Users.CreateUser;
-using Sankore.Modules.Administration.Features.Users.DeactivateUser;
-using Sankore.Modules.Administration.Features.Users.Register;
-using Sankore.Modules.Administration.Features.Users.ResetPassword;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Modules.Administration.PublicApi;
@@ -29,7 +20,7 @@ using Sankore.Shared.Infrastructure.Extensions;
 namespace Sankore.Modules.Administration;
 
 /// <summary>
-/// Composition root of the Users module. The ONE public static class the
+/// Composition root of the Administration module. The ONE public static class the
 /// Bootstrapper calls — everything else inside this assembly is internal.
 /// </summary>
 public static class AdministrationModule
@@ -40,11 +31,7 @@ public static class AdministrationModule
         services.AddDbContext<AdministrationDbContext>(opt =>
             opt.UseNpgsql(
                 config.GetConnectionString("Database"),
-                o =>
-                {
-                    o.MigrationsHistoryTable("__EFMigrationsHistory", "identity");
-                })
-                );
+                o => o.MigrationsHistoryTable("__EFMigrationsHistory", "administration")));
 
         // AddIdentityCore does NOT register cookie auth schemes, so the JWT bearer
         // default set in Program.cs remains the single authentication scheme.
@@ -90,7 +77,7 @@ public static class AdministrationModule
         app.MapUsersEndpoints();
         app.MapTerritoriesEndpoints();
         app.MapAgenciesEndpoints();
+        app.MapRolesEndpoints();
         return app;
     }
-
 }
