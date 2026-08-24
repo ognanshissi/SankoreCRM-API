@@ -8,7 +8,9 @@ using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Modules.Administration.Domain.Events;
 using Sankore.Modules.Administration.Features.Users.CreateUser;
 using Sankore.Modules.Administration.Tests.TestSupport;
+using Sankore.Modules.Notifications.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
+using Sankore.Shared.Kernel;
 using Xunit;
 
 /// <summary>
@@ -47,8 +49,9 @@ public sealed class CreateUserHandlerTests : IDisposable
         var userManager = IdentityMockFactory.BuildUserManager();
         var roleManager = IdentityMockFactory.BuildRoleManager();
         var publisher = Substitute.For<IEventPublisher>();
+        var tenantContext = Substitute.For<ITenantContext>();
         var currentUser = Substitute.For<ICurrentUser>();
-        currentUser.TenantId.Returns(_tenantId);
+        tenantContext.CurrentTenantId.Returns(_tenantId);
         currentUser.Id.Returns(callerUserId);
 
         var role = AppRole.Create("Agent", "Agent", isSystem: false);
@@ -66,7 +69,11 @@ public sealed class CreateUserHandlerTests : IDisposable
         userManager.GeneratePasswordResetTokenAsync(Arg.Any<AppUser>())
             .Returns("activation-token");
 
-        var handler = new CreateUserHandler(db, userManager, roleManager, currentUser, publisher);
+        var notifications = Substitute.For<INotificationsModule>();
+        notifications.QueueEmailAsync(Arg.Any<QueueEmailRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Result<Guid>.Ok(Guid.NewGuid()));
+
+        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: agency.Id,
@@ -107,10 +114,12 @@ public sealed class CreateUserHandlerTests : IDisposable
         var userManager = IdentityMockFactory.BuildUserManager();
         var roleManager = IdentityMockFactory.BuildRoleManager();
         var publisher = Substitute.For<IEventPublisher>();
+        var tenantContext = Substitute.For<ITenantContext>();
         var currentUser = Substitute.For<ICurrentUser>();
-        currentUser.TenantId.Returns(_tenantId);
+        tenantContext.CurrentTenantId.Returns(_tenantId);
 
-        var handler = new CreateUserHandler(db, userManager, roleManager, currentUser, publisher);
+        var notifications = Substitute.For<INotificationsModule>();
+        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: Guid.NewGuid(), // no agency seeded
@@ -154,10 +163,12 @@ public sealed class CreateUserHandlerTests : IDisposable
         typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(role, roleId);
         roleManager.FindByIdAsync(roleId.ToString()).Returns(role);
 
+        var tenantContext = Substitute.For<ITenantContext>();
         var currentUser = Substitute.For<ICurrentUser>();
-        currentUser.TenantId.Returns(_tenantId);
+        tenantContext.CurrentTenantId.Returns(_tenantId);
 
-        var handler = new CreateUserHandler(db, userManager, roleManager, currentUser, publisher);
+        var notifications = Substitute.For<INotificationsModule>();
+        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: agency.Id,

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Notifications.Features.DeliveryLogs;
 using Sankore.Modules.Notifications.Features.EmailTemplates;
 using Sankore.Modules.Notifications.Features.Webhooks;
@@ -64,11 +65,14 @@ public static class NotificationsModule
         return services;
     }
 
-    /// <summary>Runs EF migrations. Call once at startup inside a scoped block in Program.cs.</summary>
+    /// <summary>Runs EF migrations and seeds platform templates. Call once at startup inside a scoped block in Program.cs.</summary>
     public static async Task InitializeAsync(IServiceProvider sp)
     {
         var db = sp.GetRequiredService<NotificationsDbContext>();
         await db.Database.MigrateAsync();
+
+        var logger = sp.GetRequiredService<ILogger<NotificationsDbContext>>();
+        await NotificationsSeeder.SeedAsync(db, logger);
     }
 
     public static IEndpointRouteBuilder MapNotificationsModuleEndpoints(

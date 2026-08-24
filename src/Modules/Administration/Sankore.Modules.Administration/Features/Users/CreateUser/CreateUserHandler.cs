@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Domain.Events;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Notifications.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
@@ -15,8 +16,9 @@ internal sealed class CreateUserHandler(
     AdministrationDbContext db,
     UserManager<AppUser> userManager,
     RoleManager<AppRole> roleManager,
-    ICurrentUser currentUser,
-    [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher
+    ITenantContext tenantContext,
+    [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher,
+    INotificationsModule notifications
 ) : IRequestHandler<CreateUserCommand, Result<CreateUserResult>>
 {
     public async Task<Result<CreateUserResult>> Handle(
@@ -37,15 +39,15 @@ internal sealed class CreateUserHandler(
         // 3. Guard: email must be unique within tenant
         var emailTaken = await db.Users
             .IgnoreQueryFilters()
-            .AnyAsync(u => u.TenantId == currentUser.TenantId
+            .AnyAsync(u => u.TenantId == tenantContext.CurrentTenantId
                            && u.NormalizedEmail != null
-                           && u.NormalizedEmail.Equals(request.Email, StringComparison.OrdinalIgnoreCase), ct);
+                           && u.NormalizedEmail.Equals(request.Email), ct);
 
         if (emailTaken)
             return Result.Fail<CreateUserResult>("A user with this email already exists in this tenant.");
 
         // 4. Create the user aggregate (Status = PendingActivation, no password yet)
-        var user = AppUser.Create(currentUser.TenantId, request.AgencyId, request.FullName, request.Email);
+        var user = AppUser.Create(tenantContext.CurrentTenantId, request.AgencyId, request.FullName, request.Email);
 
         var identityResult = await userManager.CreateAsync(user);
         if (!identityResult.Succeeded)
@@ -59,11 +61,11 @@ internal sealed class CreateUserHandler(
                 string.Join("; ", roleResult.Errors.Select(e => e.Description)));
 
         // 6. Write UserRole with audit metadata (who assigned it, when)
-        var userRole = UserRole.Assign(currentUser.TenantId, user.Id, role.Id, request.CallerUserId);
+        var userRole = UserRole.Assign(tenantContext.CurrentTenantId, user.Id, role.Id, request.CallerUserId);
         await db.AddAsync(userRole, ct);
 
         // 7. Provision default profile
-        var profile = UserProfile.Create(currentUser.TenantId, user.Id, request.DefaultLanguage);
+        var profile = UserProfile.Create(tenantContext.CurrentTenantId, user.Id, request.DefaultLanguage);
         await db.AddAsync(profile, ct);
 
         await db.SaveChangesAsync(ct);
@@ -72,7 +74,24 @@ internal sealed class CreateUserHandler(
         var activationToken = await userManager.GeneratePasswordResetTokenAsync(user);
 
         await publisher.PublishAsync(
-            new UserCreatedEvent(currentUser.TenantId, user.Id, user.Email!, user.FullName), ct);
+            new UserCreatedEvent(tenantContext.CurrentTenantId, user.Id, user.Email!, user.FullName), ct);
+
+        // 9. Queue activation email — runs after SaveChangesAsync so the user row is committed
+        await notifications.QueueEmailAsync(new QueueEmailRequest(
+            TemplateKey:    "user.activation",
+            RecipientEmail: user.Email!,
+            RecipientName:  user.FullName,
+            Module:         "Administration",
+            Locale:         request.DefaultLanguage,
+            TemplateData: new Dictionary<string, object>
+            {
+                ["full_name"]        = user.FullName,
+                ["activation_token"] = activationToken,
+                ["tenant_id"]        = tenantContext.CurrentTenantId.ToString(),
+                ["user_id"]          = user.Id.ToString()
+            },
+            IdempotencyKey: $"user-activation-{user.Id}",
+            TenantId:       tenantContext.CurrentTenantId), ct);
 
         // AuditBehavior writes the AuditEntry automatically (ICommand marker).
         return Result.Ok(new CreateUserResult(user.Id));

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
@@ -33,11 +34,9 @@ public static class CreateUserEndpoint
     private static async Task<IResult> Handle(
         CreateUserRequest req,
         ISender sender,
-        HttpContext http,
+        ICurrentUser currentUser,
         CancellationToken ct)
     {
-        var callerId = http.User.GetUserId();
-
         var result = await sender.Send(new CreateUserCommand(
             AgencyId: req.AgencyId,
             RoleId: req.RoleId,
@@ -46,7 +45,7 @@ public static class CreateUserEndpoint
             DefaultLanguage: req.DefaultLanguage,
             SpokenLanguages: req.SpokenLanguages,
             Specialties: req.Specialties,
-            CallerUserId: callerId), ct);
+            CallerUserId: currentUser.Id), ct);
 
         return result.IsSuccess
             ? Results.Created($"/api/v1/users/{result.Value.UserId}", result.Value)
