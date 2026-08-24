@@ -12,7 +12,7 @@ internal sealed record ListDeliveryLogsQuery(
     DateTimeOffset? To = null,
     int Page = 1,
     int PageSize = 50)
-    : IRequest<Result<PagedDeliveryLogsResult>>;
+    : IRequest<Result<PagedResult<DeliveryLogDto>>>;
 
 internal sealed record DeliveryLogDto(
     Guid Id,
@@ -20,9 +20,3 @@ internal sealed record DeliveryLogDto(
     string EventType,
     string RecipientEmail,
     DateTimeOffset RecordedAt);
-
-internal sealed record PagedDeliveryLogsResult(
-    List<DeliveryLogDto> Items,
-    int TotalCount,
-    int Page,
-    int PageSize);

@@ -6,9 +6,9 @@ using Sankore.Modules.Notifications.Infrastructure;
 using Sankore.Shared.Kernel;
 
 internal sealed class ListDeliveryLogsHandler(NotificationsDbContext db)
-    : IRequestHandler<ListDeliveryLogsQuery, Result<PagedDeliveryLogsResult>>
+    : IRequestHandler<ListDeliveryLogsQuery, Result<PagedResult<DeliveryLogDto>>>
 {
-    public async Task<Result<PagedDeliveryLogsResult>> Handle(
+    public async Task<Result<PagedResult<DeliveryLogDto>>> Handle(
         ListDeliveryLogsQuery request, CancellationToken ct)
     {
         var pageSize = Math.Clamp(request.PageSize, 1, 200);
@@ -46,7 +46,7 @@ internal sealed class ListDeliveryLogsHandler(NotificationsDbContext db)
                 l.RecordedAt))
             .ToListAsync(ct);
 
-        return Result<PagedDeliveryLogsResult>.Ok(
-            new PagedDeliveryLogsResult(items, totalCount, page, pageSize));
+        return Result<PagedResult<DeliveryLogDto>>.Ok(
+            new PagedResult<DeliveryLogDto>(items, totalCount, page, pageSize));
     }
 }

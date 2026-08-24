@@ -15,6 +15,8 @@ internal static class WebhooksEndpoints
 
         // POST /webhooks/email/{tenantId}?provider=ses|postmark|sendgrid
         // Anonymous — called by external email providers, no JWT.
+        // ASP0020: Guid implements IParsable<Guid> in .NET 7+ — false positive with :guid constraint.
+#pragma warning disable ASP0020
         group.MapPost("email/{tenantId:guid}", async (
             Guid tenantId,
             string provider,
@@ -62,6 +64,7 @@ internal static class WebhooksEndpoints
         })
         .AllowAnonymous()
         .WithName("ReceiveEmailWebhook");
+#pragma warning restore ASP0020
 
         return app;
     }

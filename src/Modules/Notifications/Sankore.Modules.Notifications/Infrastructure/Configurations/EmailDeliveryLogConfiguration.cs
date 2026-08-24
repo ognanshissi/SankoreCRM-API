@@ -13,7 +13,11 @@ internal sealed class EmailDeliveryLogConfiguration
         b.HasKey(l => l.Id);
 
         b.Property(l => l.RecipientEmail).HasMaxLength(256).IsRequired();
-        b.Property(l => l.EventType).HasConversion<string>().HasMaxLength(20);
+        b.Property(l => l.EventType)
+            .HasConversion(
+                v => v.ToString(),
+                v => Enum.Parse<EmailDeliveryEventType>(v))
+            .HasMaxLength(20);
 
         b.HasIndex(l => new { l.TenantId, l.RecordedAt });
         b.HasIndex(l => l.OutboxMessageId);

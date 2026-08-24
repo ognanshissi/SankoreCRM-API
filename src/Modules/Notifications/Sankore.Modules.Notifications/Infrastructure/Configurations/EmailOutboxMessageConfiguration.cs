@@ -18,7 +18,11 @@ internal sealed class EmailOutboxMessageConfiguration
         b.Property(m => m.RecipientEmail).HasMaxLength(256).IsRequired();
         b.Property(m => m.RecipientName).HasMaxLength(200);
         b.Property(m => m.IdempotencyKey).HasMaxLength(256).IsRequired();
-        b.Property(m => m.Status).HasConversion<string>().HasMaxLength(20);
+        b.Property(m => m.Status)
+            .HasConversion(
+                v => v.ToString(),
+                v => Enum.Parse<EmailOutboxStatus>(v))
+            .HasMaxLength(20);
         b.Property(m => m.LastError).HasMaxLength(2000);
 
         b.HasIndex(m => m.IdempotencyKey).IsUnique();

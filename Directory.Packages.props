@@ -37,7 +37,7 @@
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
   </ItemGroup>
   <ItemGroup Label="Scriban">
-    <PackageVersion Include="Scriban" Version="5.12.0" />
+    <PackageVersion Include="Scriban" Version="7.2.6" />
   </ItemGroup>
   <ItemGroup Label="Extensions">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />

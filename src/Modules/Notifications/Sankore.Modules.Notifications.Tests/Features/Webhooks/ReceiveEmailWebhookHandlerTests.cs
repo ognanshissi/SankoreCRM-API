@@ -13,7 +13,7 @@ public sealed class ReceiveEmailWebhookHandlerTests
     private readonly Guid _tenantId = Guid.NewGuid();
 
     [Fact]
-    public async Task Creates_delivery_log_for_parsed_events()
+    public async void Creates_delivery_log_for_parsed_events()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
 
@@ -41,7 +41,7 @@ public sealed class ReceiveEmailWebhookHandlerTests
     }
 
     [Fact]
-    public async Task Returns_ok_when_no_parser_matches_provider()
+    public async void Returns_ok_when_no_parser_matches_provider()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         var handler = new ReceiveEmailWebhookHandler(
@@ -56,7 +56,7 @@ public sealed class ReceiveEmailWebhookHandlerTests
     }
 
     [Fact]
-    public async Task Returns_ok_and_persists_nothing_when_parser_returns_no_events()
+    public async void Returns_ok_and_persists_nothing_when_parser_returns_no_events()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
 
@@ -76,7 +76,7 @@ public sealed class ReceiveEmailWebhookHandlerTests
     }
 
     [Fact]
-    public async Task Creates_multiple_logs_for_multiple_events()
+    public async void Creates_multiple_logs_for_multiple_events()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
 

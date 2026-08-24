@@ -20,7 +20,7 @@ public sealed class CreateEmailTemplateHandlerTests
     }
 
     [Fact]
-    public async Task Creates_template_with_version_1_when_none_exist()
+    public async void Creates_template_with_version_1_when_none_exist()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         var handler = new CreateEmailTemplateHandler(db, _currentUser);
@@ -36,7 +36,7 @@ public sealed class CreateEmailTemplateHandlerTests
     }
 
     [Fact]
-    public async Task Auto_increments_version_when_existing_versions_present()
+    public async void Auto_increments_version_when_existing_versions_present()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         db.EmailTemplates.Add(EmailTemplate.Create(_tenantId, "welcome", "fr", 1, "v1", "<p>v1</p>"));
@@ -52,7 +52,7 @@ public sealed class CreateEmailTemplateHandlerTests
     }
 
     [Fact]
-    public async Task IsGlobal_true_sets_TenantId_to_null()
+    public async void IsGlobal_true_sets_TenantId_to_null()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         var handler = new CreateEmailTemplateHandler(db, _currentUser);
@@ -65,7 +65,7 @@ public sealed class CreateEmailTemplateHandlerTests
     }
 
     [Fact]
-    public async Task IsGlobal_false_sets_TenantId_from_current_user()
+    public async void IsGlobal_false_sets_TenantId_from_current_user()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         var handler = new CreateEmailTemplateHandler(db, _currentUser);

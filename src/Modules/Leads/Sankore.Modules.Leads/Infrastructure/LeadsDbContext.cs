@@ -29,7 +29,10 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
         {
             b.ToTable("dispatching_rules");
             b.HasKey(r => r.Id);
-            b.Property(r => r.Strategy).HasConversion<string>().HasMaxLength(30);
+            b.Property(r => r.Strategy).HasConversion(
+                v => v.ToString(),
+                v => Enum.Parse<DispatchingStrategy>(v))
+                .HasMaxLength(30);
             b.OwnsOne(r => r.Weights, w =>
             {
                 w.Property(x => x.Language).HasColumnName("weight_language");

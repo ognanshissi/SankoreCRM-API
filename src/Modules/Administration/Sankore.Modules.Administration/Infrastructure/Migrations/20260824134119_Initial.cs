@@ -85,6 +85,32 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "tenant_notification_settings",
+                schema: "administration",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    TenantId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProviderType = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    UseDefaultPlatformProvider = table.Column<bool>(type: "boolean", nullable: false),
+                    FromEmail = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    FromName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    ReplyToEmail = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    SendingDomain = table.Column<string>(type: "character varying(253)", maxLength: 253, nullable: true),
+                    CredentialVaultPath = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    MonthlyQuotaLimit = table.Column<int>(type: "integer", nullable: true),
+                    CurrentMonthUsageCount = table.Column<int>(type: "integer", nullable: false),
+                    CurrentMonthStartedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedBy = table.Column<Guid>(type: "uuid", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_tenant_notification_settings", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "territories",
                 schema: "administration",
                 columns: table => new
@@ -165,11 +191,11 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ParentAgencyId = table.Column<Guid>(type: "uuid", nullable: false),
-                    IsHeadQuarterAgency = table.Column<bool>(type: "boolean", nullable: false),
+                    ParentAgencyId = table.Column<Guid>(type: "uuid", nullable: true),
                     Code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    AgencyType = table.Column<string>(type: "text", nullable: false),
                     address_street = table.Column<string>(type: "text", nullable: true),
                     address_city = table.Column<string>(type: "text", nullable: true),
                     address_state = table.Column<string>(type: "text", nullable: true),
@@ -177,18 +203,24 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     address_zipcode = table.Column<string>(type: "text", nullable: true),
                     address_location_lat = table.Column<double>(type: "double precision", nullable: true),
                     address_location_lng = table.Column<double>(type: "double precision", nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     CreatedBy = table.Column<Guid>(type: "uuid", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
-                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    AgencyType = table.Column<string>(type: "text", nullable: false),
                     TerritoryId = table.Column<Guid>(type: "uuid", nullable: true),
                     TenantId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_agencies", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_agencies_agencies_ParentAgencyId",
+                        column: x => x.ParentAgencyId,
+                        principalSchema: "administration",
+                        principalTable: "agencies",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_agencies_territories_TerritoryId",
                         column: x => x.TerritoryId,
@@ -223,7 +255,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     HotLeadsCount = table.Column<int>(type: "integer", nullable: false),
                     ConversionRate30D = table.Column<double>(type: "double precision", nullable: false),
                     EnableNotifications = table.Column<bool>(type: "boolean", nullable: false),
-                    AccountType = table.Column<int>(type: "integer", nullable: false),
+                    AccountType = table.Column<string>(type: "text", nullable: false),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -242,8 +274,8 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_app_users", x => x.Id);
-                    table.CheckConstraint("CK_User_AgencyId_RequiredForStandard", "(\"AccountType\" != 0) OR (\"AgencyId\" IS NOT NULL)");
-                    table.CheckConstraint("CK_User_System_NoAgency", "(\"AccountType\" != 1) OR (\"AgencyId\" IS NULL)");
+                    table.CheckConstraint("CK_User_AgencyId_RequiredForStandard", "(\"AccountType\" != 'Standard') OR (\"AgencyId\" IS NOT NULL)");
+                    table.CheckConstraint("CK_User_System_NoAgency", "(\"AccountType\" != 'System') OR (\"AgencyId\" IS NULL)");
                     table.ForeignKey(
                         name: "FK_app_users_agencies_AgencyId",
                         column: x => x.AgencyId,
@@ -372,28 +404,28 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "permission_attribution",
+                name: "permission_attributions",
                 schema: "administration",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     TenantId = table.Column<Guid>(type: "uuid", nullable: false),
                     ScopeId = table.Column<Guid>(type: "uuid", nullable: true),
-                    ScopeType = table.Column<string>(type: "text", nullable: true),
+                    ScopeType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     StartDate = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     EndDate = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
                     AssignedByUserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    PermissionCode = table.Column<string>(type: "text", nullable: false),
-                    CreateAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    UpdateAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    PermissionCode = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_permission_attribution", x => x.Id);
+                    table.PrimaryKey("PK_permission_attributions", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_permission_attribution_app_users_UserId",
+                        name: "FK_permission_attributions_app_users_UserId",
                         column: x => x.UserId,
                         principalSchema: "administration",
                         principalTable: "app_users",
@@ -480,11 +512,23 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_agencies_ParentAgencyId",
+                schema: "administration",
+                table: "agencies",
+                column: "ParentAgencyId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_agencies_TenantId_Code",
                 schema: "administration",
                 table: "agencies",
                 columns: new[] { "TenantId", "Code" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_agencies_TenantId_IsDeleted",
+                schema: "administration",
+                table: "agencies",
+                columns: new[] { "TenantId", "IsDeleted" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_agencies_TenantId_ParentAgencyId",
@@ -574,10 +618,16 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 columns: new[] { "UserId", "SetAt" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_permission_attribution_UserId",
+                name: "IX_permission_attributions_TenantId_UserId",
                 schema: "administration",
-                table: "permission_attribution",
-                column: "UserId",
+                table: "permission_attributions",
+                columns: new[] { "TenantId", "UserId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_permission_attributions_UserId_PermissionCode_ScopeId",
+                schema: "administration",
+                table: "permission_attributions",
+                columns: new[] { "UserId", "PermissionCode", "ScopeId" },
                 unique: true,
                 filter: "\"IsActive\" = true");
 
@@ -599,6 +649,13 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 schema: "administration",
                 table: "role_permissions",
                 columns: new[] { "RoleId", "PermissionId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_tenant_notification_settings_TenantId",
+                schema: "administration",
+                table: "tenant_notification_settings",
+                column: "TenantId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -674,7 +731,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 schema: "administration");
 
             migrationBuilder.DropTable(
-                name: "permission_attribution",
+                name: "permission_attributions",
                 schema: "administration");
 
             migrationBuilder.DropTable(
@@ -683,6 +740,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "role_permissions",
+                schema: "administration");
+
+            migrationBuilder.DropTable(
+                name: "tenant_notification_settings",
                 schema: "administration");
 
             migrationBuilder.DropTable(

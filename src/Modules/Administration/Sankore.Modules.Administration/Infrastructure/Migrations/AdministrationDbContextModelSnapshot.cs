@@ -247,8 +247,9 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
-                    b.Property<int>("AccountType")
-                        .HasColumnType("integer");
+                    b.Property<string>("AccountType")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<int>("ActiveLeadsCount")
                         .HasColumnType("integer");
@@ -375,9 +376,9 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.ToTable("app_users", "administration", t =>
                         {
-                            t.HasCheckConstraint("CK_User_AgencyId_RequiredForStandard", "(\"AccountType\" != 0) OR (\"AgencyId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_User_AgencyId_RequiredForStandard", "(\"AccountType\" != 'Standard') OR (\"AgencyId\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_User_System_NoAgency", "(\"AccountType\" != 1) OR (\"AgencyId\" IS NULL)");
+                            t.HasCheckConstraint("CK_User_System_NoAgency", "(\"AccountType\" != 'System') OR (\"AgencyId\" IS NULL)");
                         });
                 });
 

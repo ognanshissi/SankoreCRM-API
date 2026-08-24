@@ -13,13 +13,21 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
         builder.Property(u => u.FullName).HasMaxLength(200).IsRequired();
 
         // M12 lifecycle columns
-        builder.Property(u => u.Status).HasConversion<string>().IsRequired();
+        builder.Property(u => u.Status)
+            .HasConversion(
+                v => v.ToString(),
+                v => Enum.Parse<UserStatus>(v))
+            .IsRequired();
         builder.Property(u => u.MfaEnabled).HasDefaultValue(true);
         builder.Property(u => u.PasswordExpiresAt).IsRequired();
         builder.Property(u => u.FailedLoginAttempts).HasDefaultValue(0);
         builder.Property(u => u.LastLoginAt);
         builder.Property(u => u.DeactivatedAt);
         
+        builder.Property(u => u.AccountType).HasConversion(
+            v => v.ToString(),
+            v => Enum.Parse<UserAccountType>(v))
+            .IsRequired();
         // User Manager ID, AddReportToIdFK
         // builder.HasOne<AppUser>()
         //     .WithMany()
@@ -43,12 +51,12 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
 
         builder.HasCheckConstraint(
             "CK_User_AgencyId_RequiredForStandard",
-            "(\"AccountType\" != 0) OR (\"AgencyId\" IS NOT NULL)"
+            "(\"AccountType\" != 'Standard') OR (\"AgencyId\" IS NOT NULL)"
         );
-        
+
         builder.HasCheckConstraint(
             "CK_User_System_NoAgency",
-            "(\"AccountType\" != 1) OR (\"AgencyId\" IS NULL)"
+            "(\"AccountType\" != 'System') OR (\"AgencyId\" IS NULL)"
         );
         
         builder.HasIndex(u => new { u.TenantId, u.AgencyId });

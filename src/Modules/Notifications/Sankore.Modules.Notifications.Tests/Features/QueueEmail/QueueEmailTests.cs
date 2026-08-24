@@ -21,7 +21,7 @@ public sealed class QueueEmailTests
         IdempotencyKey: idempotencyKey ?? $"idem-{Guid.NewGuid()}");
 
     [Fact]
-    public async Task QueueEmail_creates_pending_outbox_message()
+    public async void QueueEmail_creates_pending_outbox_message()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         var facade = new NotificationsModuleFacade(db);
@@ -41,7 +41,7 @@ public sealed class QueueEmailTests
     }
 
     [Fact]
-    public async Task QueueEmail_returns_failure_on_duplicate_idempotency_key()
+    public async void QueueEmail_returns_failure_on_duplicate_idempotency_key()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         var facade = new NotificationsModuleFacade(db);

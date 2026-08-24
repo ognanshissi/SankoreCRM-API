@@ -24,7 +24,7 @@ public sealed class UpdateEmailTemplateHandlerTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     [Fact]
-    public async Task Creates_new_version_and_deactivates_previous()
+    public async void Creates_new_version_and_deactivates_previous()
     {
         await using var db = _factory.CreateContext();
         var existing = EmailTemplate.Create(_tenantId, "welcome", "fr", 1, "v1 Subject", "<p>v1</p>");
@@ -46,7 +46,7 @@ public sealed class UpdateEmailTemplateHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Returns_failure_when_source_template_not_found()
+    public async void Returns_failure_when_source_template_not_found()
     {
         await using var db = _factory.CreateContext();
         var handler = new UpdateEmailTemplateHandler(db, _currentUser);
@@ -60,7 +60,7 @@ public sealed class UpdateEmailTemplateHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Cannot_update_another_tenants_template()
+    public async void Cannot_update_another_tenants_template()
     {
         var otherTenantId = Guid.NewGuid();
         var otherFactory = new SharedTestNotificationsDbContextFactory(otherTenantId);

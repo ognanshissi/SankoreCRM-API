@@ -36,6 +36,10 @@ internal sealed class LoginHandler(
             await db.SaveChangesAsync(ct);
             return Result.Fail<LoginResult>("Invalid login attempt.");
         }
+        
+        // Only UserAccountType (Standard / System) can authenticate
+        if (user.AccountType != UserAccountType.Service) 
+            return Result.Fail<LoginResult>("Invalid login attempt.");
 
         if (!await userManager.CheckPasswordAsync(user, request.Password))
         {

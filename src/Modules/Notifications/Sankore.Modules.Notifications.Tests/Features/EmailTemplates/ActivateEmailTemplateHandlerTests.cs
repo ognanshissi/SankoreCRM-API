@@ -24,7 +24,7 @@ public sealed class ActivateEmailTemplateHandlerTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     [Fact]
-    public async Task Activates_target_and_deactivates_siblings()
+    public async void Activates_target_and_deactivates_siblings()
     {
         await using var db = _factory.CreateContext();
         var v1 = EmailTemplate.Create(_tenantId, "welcome", "fr", 1, "v1", "<p>v1</p>");
@@ -44,7 +44,7 @@ public sealed class ActivateEmailTemplateHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Returns_failure_when_template_not_found()
+    public async void Returns_failure_when_template_not_found()
     {
         await using var db = _factory.CreateContext();
         var handler = new ActivateEmailTemplateHandler(db, _currentUser);
@@ -57,7 +57,7 @@ public sealed class ActivateEmailTemplateHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Platform_template_is_visible_and_activatable_by_any_tenant()
+    public async void Platform_template_is_visible_and_activatable_by_any_tenant()
     {
         await using var db = _factory.CreateContext();
         var platform = EmailTemplate.Create(null, "welcome", "fr", 1, "Platform", "<p>global</p>");

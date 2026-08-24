@@ -11,7 +11,11 @@ public class AgencyConfiguration: IEntityTypeConfiguration<Agency>
         builder.ToTable("agencies");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.TenantId).IsRequired();
-        builder.Property(x => x.AgencyType).HasConversion<string>().IsRequired();
+        builder.Property(x => x.AgencyType)
+            .HasConversion(
+                v => v.ToString(),
+                v => Enum.Parse<AgencyType>(v))
+            .IsRequired();
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(500);

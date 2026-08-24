@@ -21,7 +21,7 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task Returns_stub_fallback_when_no_template_exists()
+    public async void Returns_stub_fallback_when_no_template_exists()
     {
         var renderer = new ScribanTemplateRenderer(
             TestNotificationsDbContextFactory.Create(_tenantId),
@@ -34,7 +34,7 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task Uses_tenant_specific_template_over_platform()
+    public async void Uses_tenant_specific_template_over_platform()
     {
         var renderer = BuildRendererWithDb(db =>
         {
@@ -51,7 +51,7 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task Falls_back_to_platform_template_when_no_tenant_specific()
+    public async void Falls_back_to_platform_template_when_no_tenant_specific()
     {
         var renderer = BuildRendererWithDb(db =>
         {
@@ -66,7 +66,7 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task Falls_back_to_en_locale_when_requested_locale_not_found()
+    public async void Falls_back_to_en_locale_when_requested_locale_not_found()
     {
         var renderer = BuildRendererWithDb(db =>
         {
@@ -80,7 +80,7 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task Does_not_fall_back_to_en_when_en_is_requested_but_only_fr_exists()
+    public async void Does_not_fall_back_to_en_when_en_is_requested_but_only_fr_exists()
     {
         var renderer = BuildRendererWithDb(db =>
         {
@@ -96,7 +96,7 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task Renders_Scriban_variables_from_json_payload()
+    public async void Renders_Scriban_variables_from_json_payload()
     {
         var renderer = BuildRendererWithDb(db =>
         {
@@ -114,7 +114,7 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task Skips_inactive_templates_and_returns_stub_fallback()
+    public async void Skips_inactive_templates_and_returns_stub_fallback()
     {
         var renderer = BuildRendererWithDb(db =>
         {
@@ -130,7 +130,7 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async Task Does_not_throw_on_invalid_scriban_syntax()
+    public async void Does_not_throw_on_invalid_scriban_syntax()
     {
         var renderer = BuildRendererWithDb(db =>
         {

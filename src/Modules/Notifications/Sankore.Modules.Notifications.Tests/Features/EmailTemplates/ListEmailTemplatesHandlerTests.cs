@@ -20,7 +20,7 @@ public sealed class ListEmailTemplatesHandlerTests
     }
 
     [Fact]
-    public async Task Returns_tenant_and_platform_templates()
+    public async void Returns_tenant_and_platform_templates()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         db.EmailTemplates.Add(EmailTemplate.Create(_tenantId, "welcome", "fr", 1, "Tenant tpl", "<p></p>"));
@@ -37,7 +37,7 @@ public sealed class ListEmailTemplatesHandlerTests
     }
 
     [Fact]
-    public async Task Filters_by_template_key()
+    public async void Filters_by_template_key()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         db.EmailTemplates.Add(EmailTemplate.Create(_tenantId, "welcome", "fr", 1, "A", "<p></p>"));
@@ -52,7 +52,7 @@ public sealed class ListEmailTemplatesHandlerTests
     }
 
     [Fact]
-    public async Task Filters_by_is_active()
+    public async void Filters_by_is_active()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         var active = EmailTemplate.Create(_tenantId, "welcome", "fr", 1, "Active", "<p></p>");

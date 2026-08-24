@@ -14,7 +14,7 @@ public sealed class ListDeliveryLogsHandlerTests
         => EmailDeliveryLog.Record(_tenantId, null, type, email, "{}");
 
     [Fact]
-    public async Task Returns_only_current_tenant_logs()
+    public async void Returns_only_current_tenant_logs()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         db.EmailDeliveryLogs.Add(MakeLog("mine@x.com", EmailDeliveryEventType.Delivered));
@@ -34,7 +34,7 @@ public sealed class ListDeliveryLogsHandlerTests
     }
 
     [Fact]
-    public async Task Filters_by_recipient_email()
+    public async void Filters_by_recipient_email()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         db.EmailDeliveryLogs.AddRange(
@@ -50,7 +50,7 @@ public sealed class ListDeliveryLogsHandlerTests
     }
 
     [Fact]
-    public async Task Filters_by_event_type()
+    public async void Filters_by_event_type()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         db.EmailDeliveryLogs.AddRange(
@@ -68,7 +68,7 @@ public sealed class ListDeliveryLogsHandlerTests
     }
 
     [Fact]
-    public async Task Paginates_results()
+    public async void Paginates_results()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         for (var i = 0; i < 10; i++)
@@ -85,7 +85,7 @@ public sealed class ListDeliveryLogsHandlerTests
     }
 
     [Fact]
-    public async Task Returns_total_count_correctly()
+    public async void Returns_total_count_correctly()
     {
         var db = TestNotificationsDbContextFactory.Create(_tenantId);
         db.EmailDeliveryLogs.AddRange(
