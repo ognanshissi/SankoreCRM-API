@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Tests.Features.Authentication.AccountActivation;
 
@@ -14,10 +15,12 @@ public sealed class AccountActivationHandlerTests : IDisposable
 {
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly TestAdminDbContextFactory _factory;
+    private readonly ITenantContext _context;
 
     public AccountActivationHandlerTests()
     {
         _factory = new TestAdminDbContextFactory(_tenantId);
+        _context = Substitute.For<ITenantContext>();
     }
 
     public void Dispose() => _factory.Dispose();
@@ -52,7 +55,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
             .Returns(IdentityResult.Success);
 
         await using var db = _factory.CreateContext();
-        var handler = new AccountActivationHandler(db, userManager);
+        var handler = new AccountActivationHandler(db, userManager, _context);
 
         var result = await handler.Handle(ValidCommand(user.Id), CancellationToken.None);
 
@@ -72,7 +75,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
     {
         var userManager = IdentityMockFactory.BuildUserManager();
         await using var db = _factory.CreateContext();
-        var handler = new AccountActivationHandler(db, userManager);
+        var handler = new AccountActivationHandler(db, userManager,  _context);
 
         var cmd = new AccountActivationCommand("not-a-guid", "token", "Pass1!", "Pass1!");
         var result = await handler.Handle(cmd, CancellationToken.None);
@@ -88,7 +91,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
     {
         var userManager = IdentityMockFactory.BuildUserManager();
         await using var db = _factory.CreateContext();
-        var handler = new AccountActivationHandler(db, userManager);
+        var handler = new AccountActivationHandler(db, userManager,  _context);
 
         var result = await handler.Handle(ValidCommand(Guid.NewGuid()), CancellationToken.None);
 
@@ -113,7 +116,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
 
         var userManager = IdentityMockFactory.BuildUserManager();
         await using var db = _factory.CreateContext();
-        var handler = new AccountActivationHandler(db, userManager);
+        var handler = new AccountActivationHandler(db, userManager, _context);
 
         var result = await handler.Handle(ValidCommand(user.Id), CancellationToken.None);
 
@@ -135,7 +138,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
             .Returns(IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "Invalid token." }));
 
         await using var db = _factory.CreateContext();
-        var handler = new AccountActivationHandler(db, userManager);
+        var handler = new AccountActivationHandler(db, userManager,  _context);
 
         var result = await handler.Handle(
             ValidCommand(user.Id,  "bad-token"), CancellationToken.None);
