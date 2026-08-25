@@ -24,6 +24,8 @@ internal sealed class CreateUserHandler(
     public async Task<Result<CreateUserResult>> Handle(
         CreateUserCommand request, CancellationToken ct)
     {
+        var tenantId = tenantContext.CurrentTenantId;
+
         // 1. Guard: agency must exist within this tenant
         var agencyExists = await db.Agencies
             .AnyAsync(a => a.Id == request.AgencyId, ct);
@@ -37,17 +39,16 @@ internal sealed class CreateUserHandler(
             return Result.Fail<CreateUserResult>($"Role {request.RoleId} not found.");
 
         // 3. Guard: email must be unique within tenant
+        var normalizedEmail = request.Email.ToUpperInvariant();
         var emailTaken = await db.Users
             .IgnoreQueryFilters()
-            .AnyAsync(u => u.TenantId == tenantContext.CurrentTenantId
-                           && u.NormalizedEmail != null
-                           && u.NormalizedEmail.Equals(request.Email), ct);
+            .AnyAsync(u => u.TenantId == tenantId && u.NormalizedEmail == normalizedEmail, ct);
 
         if (emailTaken)
             return Result.Fail<CreateUserResult>("A user with this email already exists in this tenant.");
 
         // 4. Create the user aggregate (Status = PendingActivation, no password yet)
-        var user = AppUser.Create(tenantContext.CurrentTenantId, request.AgencyId, request.FullName, request.Email);
+        var user = AppUser.Create(tenantId, request.AgencyId, request.FullName, request.Email);
 
         var identityResult = await userManager.CreateAsync(user);
         if (!identityResult.Succeeded)
@@ -61,11 +62,11 @@ internal sealed class CreateUserHandler(
                 string.Join("; ", roleResult.Errors.Select(e => e.Description)));
 
         // 6. Write UserRole with audit metadata (who assigned it, when)
-        var userRole = UserRole.Assign(tenantContext.CurrentTenantId, user.Id, role.Id, request.CallerUserId);
+        var userRole = UserRole.Assign(tenantId, user.Id, role.Id, request.CallerUserId);
         await db.AddAsync(userRole, ct);
 
         // 7. Provision default profile
-        var profile = UserProfile.Create(tenantContext.CurrentTenantId, user.Id, request.DefaultLanguage);
+        var profile = UserProfile.Create(tenantId, user.Id, request.DefaultLanguage);
         await db.AddAsync(profile, ct);
 
         await db.SaveChangesAsync(ct);
@@ -74,7 +75,7 @@ internal sealed class CreateUserHandler(
         var activationToken = await userManager.GeneratePasswordResetTokenAsync(user);
 
         await publisher.PublishAsync(
-            new UserCreatedEvent(tenantContext.CurrentTenantId, user.Id, user.Email!, user.FullName), ct);
+            new UserCreatedEvent(tenantId, user.Id, user.Email!, user.FullName), ct);
 
         // 9. Queue activation email — runs after SaveChangesAsync so the user row is committed
         await notifications.QueueEmailAsync(new QueueEmailRequest(
@@ -87,11 +88,11 @@ internal sealed class CreateUserHandler(
             {
                 ["full_name"]        = user.FullName,
                 ["activation_token"] = activationToken,
-                ["tenant_id"]        = tenantContext.CurrentTenantId.ToString(),
+                ["tenant_id"]        = tenantId.ToString(),
                 ["user_id"]          = user.Id.ToString()
             },
             IdempotencyKey: $"user-activation-{user.Id}",
-            TenantId:       tenantContext.CurrentTenantId), ct);
+            TenantId:       tenantId), ct);
 
         // AuditBehavior writes the AuditEntry automatically (ICommand marker).
         return Result.Ok(new CreateUserResult(user.Id));
