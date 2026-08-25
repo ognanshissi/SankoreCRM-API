@@ -11,6 +11,7 @@ using Sankore.Modules.Administration.Features.Agencies;
 using Sankore.Modules.Administration.Features.Authentication.AccountActivation;
 using Sankore.Modules.Administration.Features.Authentication.ForgotPassword;
 using Sankore.Modules.Administration.Features.Authentication.Login;
+using Sankore.Modules.Administration.Features.Authentication.ResetPassword;
 using Sankore.Modules.Administration.Features.NotificationSettings;
 using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;

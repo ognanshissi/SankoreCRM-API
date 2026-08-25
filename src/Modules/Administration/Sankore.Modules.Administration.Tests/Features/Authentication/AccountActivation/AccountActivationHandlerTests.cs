@@ -35,6 +35,12 @@ public sealed class AccountActivationHandlerTests : IDisposable
 
         var user = AppUser.Create(_tenantId, agency.Id, "Aminata Diallo", email);
         user.NormalizedEmail = email.ToUpperInvariant();
+
+        // Set a non-null hash so PasswordHistory.Create succeeds in the handler
+        typeof(Microsoft.AspNetCore.Identity.IdentityUser<Guid>)
+            .GetProperty(nameof(user.PasswordHash))!
+            .SetValue(user, "placeholder-hash");
+
         seed.Users.Add(user);
         await seed.SaveChangesAsync();
         return user;
