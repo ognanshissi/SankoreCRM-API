@@ -18,7 +18,7 @@ internal static class RoleSeeder
         var roleManager = sp.GetRequiredService<RoleManager<AppRole>>();
         var logger = sp.GetRequiredService<ILogger<AdministrationDbContext>>();
         var db = sp.GetRequiredService<AdministrationDbContext>();
-
+        
         // Generate permissions
         await PermissionSeeder.SeedAsync(sp);
         

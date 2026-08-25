@@ -14,7 +14,8 @@ internal static class ResetPasswordEndpoint
             .WithTags("Auth")
             .WithName("ResetPassword")
             .AllowAnonymous()
-            .WithTenantHeader();
+            .WithTenantHeader()
+            .RequireRateLimiting("auth");
         return app;
     }
 

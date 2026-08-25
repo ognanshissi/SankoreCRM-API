@@ -1,6 +1,9 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using MassTransit;
 using MediatR;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -67,6 +70,38 @@ builder.Services
 
 builder.Services.AddAuthorization();
 builder.Services.AddSankoreAuthorization();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Strict limit for unauthenticated auth endpoints (login, forgot-password, etc.)
+    // 5 requests per minute per IP address — mitigates brute-force and enumeration attacks.
+    options.AddPolicy("auth", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 5,
+                QueueLimit = 0,
+            }));
+
+    // Standard limit for all authenticated API endpoints.
+    // 200 requests per minute keyed by user ID (JWT sub); falls back to IP for anonymous calls.
+    options.AddPolicy("api", ctx =>
+    {
+        var userId = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var key = userId ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon";
+        return RateLimitPartition.GetSlidingWindowLimiter(key, _ => new SlidingWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 6,
+            PermitLimit = 200,
+            QueueLimit = 0,
+        });
+    });
+});
 
 // MediatR — register Bootstrapper's own handlers (audit query, etc.)
 builder.Services.AddMediatR(cfg =>
@@ -209,6 +244,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpLogging();
 app.UseHttpsRedirection();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseTenantResolution();   // extract + verify tenant against external store
 app.UseCorrelationId();      // push CorrelationId + TenantId + UserId into log scope
 app.UseAuthorization();
@@ -219,7 +255,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
     .AllowAnonymous();
 
 // V1
-var appVersion1 = app.MapGroup("api/v1");
+var appVersion1 = app.MapGroup("api/v1").RequireRateLimiting("api");
 
 appVersion1.MapAdministrationModuleEndpoints();
 appVersion1.MapLeadsEndpoints();

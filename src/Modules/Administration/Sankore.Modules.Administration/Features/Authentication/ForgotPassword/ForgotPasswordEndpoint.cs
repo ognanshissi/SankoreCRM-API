@@ -14,7 +14,8 @@ internal static class ForgotPasswordEndpoint
             .WithTags("Auth")
             .WithName("ForgotPassword")
             .AllowAnonymous()
-            .WithTenantHeader();
+            .WithTenantHeader()
+            .RequireRateLimiting("auth");
         return app;
     }
 

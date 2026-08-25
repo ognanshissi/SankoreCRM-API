@@ -14,7 +14,8 @@ public static class LoginEndpoint
             .WithTags("Auth")
             .WithName("Login")
             .AllowAnonymous()
-            .WithTenantHeader();
+            .WithTenantHeader()
+            .RequireRateLimiting("auth");
         return app;
     }
 

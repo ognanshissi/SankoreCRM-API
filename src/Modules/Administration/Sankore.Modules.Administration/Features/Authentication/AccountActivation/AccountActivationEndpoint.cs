@@ -14,7 +14,8 @@ internal static class AccountActivationEndpoint
             .WithTags("Auth")
             .WithName("ActivateAccount")
             .AllowAnonymous()
-            .WithTenantHeader();
+            .WithTenantHeader()
+            .RequireRateLimiting("auth");
         return app;
     }
 

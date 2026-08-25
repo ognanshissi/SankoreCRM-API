@@ -21,6 +21,7 @@ internal sealed class LoginHandler(
         var normalizedEmail = request.Email.ToUpperInvariant();
         var user = await db.Users
             .IgnoreQueryFilters()
+            .AsNoTracking()
             .Where(u => u.TenantId == tenant.CurrentTenantId && u.NormalizedEmail == normalizedEmail)
             .FirstOrDefaultAsync(ct);
 

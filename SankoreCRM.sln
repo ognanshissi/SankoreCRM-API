@@ -65,6 +65,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Notificatio
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Modules.Notifications.Tests", "src\Modules\Notifications\Sankore.Modules.Notifications.Tests\Sankore.Modules.Notifications.Tests.csproj", "{D3E4F5A6-B7C8-4901-DEF0-123456789123}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sankore.Admin", "src\Bootstrapper\Sankore.Admin\Sankore.Admin.csproj", "{ED0807FE-3969-4A93-A275-B946C64F0545}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -291,6 +293,18 @@ Global
 		{D3E4F5A6-B7C8-4901-DEF0-123456789123}.Release|x64.Build.0 = Release|Any CPU
 		{D3E4F5A6-B7C8-4901-DEF0-123456789123}.Release|x86.ActiveCfg = Release|Any CPU
 		{D3E4F5A6-B7C8-4901-DEF0-123456789123}.Release|x86.Build.0 = Release|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Debug|x64.Build.0 = Debug|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Debug|x86.Build.0 = Debug|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Release|x64.ActiveCfg = Release|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Release|x64.Build.0 = Release|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Release|x86.ActiveCfg = Release|Any CPU
+		{ED0807FE-3969-4A93-A275-B946C64F0545}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -316,5 +330,6 @@ Global
 		{B1C2D3E4-F5A6-4789-BCDE-F01234567891} = {11111111-0000-0000-0000-000000000006}
 		{CC755210-77E5-46CE-8012-3429271CFB16} = {11111111-0000-0000-0000-000000000006}
 		{D3E4F5A6-B7C8-4901-DEF0-123456789123} = {11111111-0000-0000-0000-000000000006}
+		{ED0807FE-3969-4A93-A275-B946C64F0545} = {11111111-0000-0000-0000-000000000001}
 	EndGlobalSection
 EndGlobal
