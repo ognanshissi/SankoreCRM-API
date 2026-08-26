@@ -1,0 +1,88 @@
+# =============================================================================
+# docker-compose.backup.yml — SankoreCRM encrypted backup service
+#
+# This file is intentionally SEPARATE from the main compose stack.
+# It is activated only in environments where automated backups are required.
+#
+# Usage:
+#   # Start the backup scheduler alongside the main stack:
+#   docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d backup
+#
+#   # Trigger a manual backup immediately:
+#   docker compose -f docker-compose.backup.yml run --rm backup /scripts/backup.sh
+#
+#   # Trigger a manual restoration drill:
+#   docker compose -f docker-compose.backup.yml run --rm backup /scripts/restore.sh latest
+#
+# Secrets:
+#   PGPASSWORD and BACKUP_ENCRYPTION_PASSPHRASE must be provided via Docker
+#   secrets (production) or the .env.backup file (staging/dev only).
+#   Never hardcode credentials here.
+# =============================================================================
+
+services:
+  backup:
+    build:
+      context: ./scripts/backup
+      dockerfile: Dockerfile.backup
+    image: sankore-backup:latest
+    restart: unless-stopped
+    container_name: sankore-backup
+
+    # ── Secrets (production) ─────────────────────────────────────────────────
+    # Uncomment when deploying with Docker Swarm / secrets manager.
+    # secrets:
+    #   - pg_password
+    #   - backup_encryption_passphrase
+
+    environment:
+      # Database connection — must match the main postgres service
+      PGHOST: ${PGHOST:-postgres}
+      PGPORT: ${PGPORT:-5432}
+      PGDATABASE: ${PGDATABASE:-sankore_crm}
+      PGUSER: ${PGUSER:-sankore_app}
+      # PGPASSWORD and BACKUP_ENCRYPTION_PASSPHRASE come from .env.backup
+      # or Docker secrets — never hardcode here.
+      PGPASSWORD: ${PGPASSWORD}
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE}
+
+      # Storage — use s3://bucket/prefix for production, /mnt/backups for local
+      BACKUP_STORAGE_PATH: ${BACKUP_STORAGE_PATH:-/mnt/backups}
+
+      # S3-compatible endpoint (leave unset for AWS; set for MinIO / Scaleway)
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-eu-west-1}
+
+      # Drill tuning
+      RESTORE_PG_VERSION: ${RESTORE_PG_VERSION:-17-alpine}
+      RESTORE_PORT: ${RESTORE_PORT:-15432}
+
+    volumes:
+      # Local backup mount — used when BACKUP_STORAGE_PATH is a directory
+      - backup-data:/mnt/backups
+      # Docker socket — needed for the restoration drill container
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    networks:
+      - default
+
+    # ── Resource limits ──────────────────────────────────────────────────────
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+volumes:
+  backup-data:
+    driver: local
+
+# ── Swarm secrets definition (uncomment for production) ──────────────────────
+# secrets:
+#   pg_password:
+#     external: true
+#   backup_encryption_passphrase:
+#     external: true
