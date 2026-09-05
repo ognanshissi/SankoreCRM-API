@@ -33,6 +33,8 @@ public class UserProfile
             TenantId = tenantId,
             UserId = userId,
             DefaultLanguage = defaultLanguage,
-            Address = new Address()
+            Address = new Address(),
+            AdditionalEmail = string.Empty,
+            JobTitle = string.Empty
         };
 }

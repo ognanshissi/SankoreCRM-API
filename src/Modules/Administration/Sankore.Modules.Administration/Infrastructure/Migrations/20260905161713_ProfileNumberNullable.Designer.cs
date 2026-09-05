@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sankore.Modules.Administration.Infrastructure;
@@ -12,9 +13,11 @@ using Sankore.Modules.Administration.Infrastructure;
 namespace Sankore.Modules.Administration.Infrastructure.Migrations
 {
     [DbContext(typeof(AdministrationDbContext))]
-    partial class AdministrationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260905161713_ProfileNumberNullable")]
+    partial class ProfileNumberNullable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1353,9 +1356,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                                 .HasColumnName("home_number_contact");
 
                             b1.Property<bool>("IsPrimary")
-                                .ValueGeneratedOnAdd()
                                 .HasColumnType("boolean")
-                                .HasDefaultValue(false)
                                 .HasColumnName("home_number_is_primary");
 
                             b1.HasKey("UserProfileId");
@@ -1382,9 +1383,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                                 .HasColumnName("personal_number_contact");
 
                             b1.Property<bool>("IsPrimary")
-                                .ValueGeneratedOnAdd()
                                 .HasColumnType("boolean")
-                                .HasDefaultValue(false)
                                 .HasColumnName("personal_number_is_primary");
 
                             b1.HasKey("UserProfileId");
@@ -1411,9 +1410,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                                 .HasColumnName("work_number_contact");
 
                             b1.Property<bool>("IsPrimary")
-                                .ValueGeneratedOnAdd()
                                 .HasColumnType("boolean")
-                                .HasDefaultValue(false)
                                 .HasColumnName("work_number_is_primary");
 
                             b1.HasKey("UserProfileId");
