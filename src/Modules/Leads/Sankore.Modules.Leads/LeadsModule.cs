@@ -29,7 +29,8 @@ public static class LeadsModule
         services.AddDbContext<LeadsDbContext>(opt =>
             opt.UseNpgsql(
                 config.GetConnectionString("Database"),
-                npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "leads")));
+                npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "leads"))
+                .UseSnakeCaseNamingConvention());
 
         // MediatR handlers declared anywhere in this assembly (i.e. every
         // Features/* slice) get auto-registered — no per-slice DI wiring needed.

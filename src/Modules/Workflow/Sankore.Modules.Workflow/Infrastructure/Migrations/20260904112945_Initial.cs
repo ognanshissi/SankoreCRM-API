@@ -15,6 +15,24 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                 name: "workflow");
 
             migrationBuilder.CreateTable(
+                name: "outbox_messages",
+                schema: "workflow",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    EventType = table.Column<string>(type: "text", nullable: false),
+                    PayloadJson = table.Column<string>(type: "text", nullable: false),
+                    OccurredAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    ProcessedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    RetryCount = table.Column<int>(type: "integer", nullable: false),
+                    LastError = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_outbox_messages", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "workflow_instances",
                 schema: "workflow",
                 columns: table => new
@@ -111,6 +129,12 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_outbox_messages_ProcessedAt_OccurredAt",
+                schema: "workflow",
+                table: "outbox_messages",
+                columns: new[] { "ProcessedAt", "OccurredAt" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_workflow_instance_steps_InstanceId_Order",
                 schema: "workflow",
                 table: "workflow_instance_steps",
@@ -141,6 +165,10 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "outbox_messages",
+                schema: "workflow");
+
             migrationBuilder.DropTable(
                 name: "workflow_instance_steps",
                 schema: "workflow");

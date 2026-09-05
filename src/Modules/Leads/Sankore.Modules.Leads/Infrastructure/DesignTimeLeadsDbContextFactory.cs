@@ -19,6 +19,7 @@ internal sealed class DesignTimeLeadsDbContextFactory: IDesignTimeDbContextFacto
             .UseNpgsql(
                 config.GetConnectionString("Database"),
                 o => o.MigrationsHistoryTable("__EFMigrationsHistory", "leads"))
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         return new LeadsDbContext(opts, new FixedTenantContext(Guid.Empty));

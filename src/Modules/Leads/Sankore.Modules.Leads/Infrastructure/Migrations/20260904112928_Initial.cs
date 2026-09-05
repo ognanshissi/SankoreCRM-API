@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Sankore.Modules.Leads.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial: Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -44,7 +44,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    TenantId = table.Column<Guid>(type: "uuid", nullable: false),
                     FullName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     PhoneNumber = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
                     Website = table.Column<string>(type: "text", nullable: false),
@@ -59,11 +58,14 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     lat = table.Column<double>(type: "double precision", nullable: true),
                     lng = table.Column<double>(type: "double precision", nullable: true),
                     PreferredAgencyId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CurrentAssignedId = table.Column<Guid>(type: "uuid", nullable: true),
+                    AgentCollectedLeadId = table.Column<Guid>(type: "uuid", nullable: true),
                     Score = table.Column<int>(type: "integer", nullable: false),
                     CurrentAssignmentId = table.Column<Guid>(type: "uuid", nullable: true),
                     LossReason = table.Column<string>(type: "text", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    ExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    ExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    TenantId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -140,6 +142,12 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                 schema: "leads",
                 table: "lead_assignments",
                 columns: new[] { "SlaDeadline", "FirstContactAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_leads_FullName",
+                schema: "leads",
+                table: "leads",
+                column: "FullName");
 
             migrationBuilder.CreateIndex(
                 name: "IX_leads_PhoneNumber",

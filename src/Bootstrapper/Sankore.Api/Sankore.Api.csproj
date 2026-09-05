@@ -19,6 +19,7 @@
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="MassTransit" />
     <PackageReference Include="MassTransit.RabbitMQ" />
+    <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
   </ItemGroup>
 
@@ -27,7 +28,6 @@
          module's MAIN assembly (to call Add{Module}Module / Map{Module}Endpoints).
          It never reaches into a module's Domain/Infrastructure/Features
          namespaces directly. -->
-    <ProjectReference Include="..\..\..\SankoreCRM.ServiceDefaults\SankoreCRM.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
     <ProjectReference Include="..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj" />
@@ -40,6 +40,10 @@
     <Content Include="..\..\..\.dockerignore">
       <Link>.dockerignore</Link>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Infrastructure\Audit\Migrations\" />
   </ItemGroup>
 
 </Project>

@@ -2,23 +2,21 @@ namespace Sankore.Shared.Kernel;
 
 public class ContactInfo
 {
-    public Address Address { get; private set; } = new ();
+    public Address Address { get; private set; } = null!;
 
-    public PhoneNumbers Phones { get; private set; } = new PhoneNumbers();
+    public PhoneNumbers Phones { get; private set; } = null!;
     
-    public string Email { get; private set; } = string.Empty;
+    public string AdditionalEmail { get; private set; } = string.Empty;
     
     private ContactInfo() { }
 
-    public static ContactInfo Create(PhoneNumbers phones, string email)
+    public static ContactInfo Create(PhoneNumbers phones)
     {
         if (phones == null) throw new ArgumentNullException(nameof(phones), "At least one phone number is required.");
 
-        if (email == null) throw new ArgumentNullException(nameof(email), "Email is required.");
         return new ContactInfo
         {
             Phones = phones,
-            Email = email
         };
     }
 }

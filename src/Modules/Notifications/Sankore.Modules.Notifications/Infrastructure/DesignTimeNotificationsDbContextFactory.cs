@@ -20,6 +20,7 @@ internal sealed class DesignTimeNotificationsDbContextFactory
             .UseNpgsql(
                 config.GetConnectionString("Database"),
                 o => o.MigrationsHistoryTable("__EFMigrationsHistory", "notifications"))
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         return new NotificationsDbContext(opts, new FixedTenantContext(Guid.Empty));

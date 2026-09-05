@@ -26,7 +26,8 @@ public static class WorkflowModule
         services.AddDbContext<WorkflowDbContext>(opt =>
             opt.UseNpgsql(
                 config.GetConnectionString("Database"),
-                o => o.MigrationsHistoryTable("__EFMigrationsHistory", "workflow")));
+                o => o.MigrationsHistoryTable("__EFMigrationsHistory", "workflow"))
+                .UseSnakeCaseNamingConvention());
 
         services.AddScoped<IWorkflowModule, WorkflowModuleFacade>();
 

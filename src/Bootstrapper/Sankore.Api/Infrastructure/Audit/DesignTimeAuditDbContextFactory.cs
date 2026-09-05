@@ -25,6 +25,7 @@ internal sealed class DesignTimeAuditDbContextFactory: IDesignTimeDbContextFacto
             .UseNpgsql(
                 dbConnectionString,
                 b => b.MigrationsHistoryTable("__EFMigrationsHistory", "audit"))
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         return new AuditDbContext(opts);

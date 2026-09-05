@@ -12,7 +12,7 @@ using Sankore.Modules.Notifications.Infrastructure;
 namespace Sankore.Modules.Notifications.Infrastructure.Migrations
 {
     [DbContext(typeof(NotificationsDbContext))]
-    [Migration("20260823195353_Initial")]
+    [Migration("20260904113043_Initial")]
     partial class Initial
     {
         /// <inheritdoc />

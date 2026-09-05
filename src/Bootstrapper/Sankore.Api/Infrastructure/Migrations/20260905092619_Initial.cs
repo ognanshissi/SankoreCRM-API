@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Sankore.Api.Infrastructure.Audit.Migrations
+namespace Sankore.Api.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitAuditSchema : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -27,6 +27,8 @@ namespace Sankore.Api.Infrastructure.Audit.Migrations
                     PayloadJson = table.Column<string>(type: "text", nullable: false),
                     Outcome = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     ErrorDetail = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    ResourceType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    ResourceId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     IpAddress = table.Column<string>(type: "character varying(45)", maxLength: 45, nullable: true),
                     UserAgent = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     CorrelationId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true)
@@ -36,17 +38,17 @@ namespace Sankore.Api.Infrastructure.Audit.Migrations
                     table.PrimaryKey("PK_entries", x => x.Id);
                 });
 
-            // ── Immutability — run as DBA after applying this migration ──────
-            // REVOKE UPDATE, DELETE ON audit.entries FROM sankore_app;
-            // This enforces append-only at the database level, complementing
-            // the application-level init-only setters on AuditLogEntry.
-            // ─────────────────────────────────────────────────────────────────
-
             migrationBuilder.CreateIndex(
                 name: "IX_entries_TenantId_Action",
                 schema: "audit",
                 table: "entries",
                 columns: new[] { "TenantId", "Action" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_entries_TenantId_ResourceType_ResourceId",
+                schema: "audit",
+                table: "entries",
+                columns: new[] { "TenantId", "ResourceType", "ResourceId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_entries_TenantId_Timestamp",

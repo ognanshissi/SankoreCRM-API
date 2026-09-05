@@ -13,7 +13,7 @@ using Sankore.Modules.Administration.Infrastructure;
 namespace Sankore.Modules.Administration.Infrastructure.Migrations
 {
     [DbContext(typeof(AdministrationDbContext))]
-    [Migration("20260824134119_Initial")]
+    [Migration("20260904112909_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -379,9 +379,9 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.ToTable("app_users", "administration", t =>
                         {
-                            t.HasCheckConstraint("CK_User_AgencyId_RequiredForStandard", "(\"AccountType\" != 0) OR (\"AgencyId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_User_AgencyId_RequiredForStandard", "(\"AccountType\" != 'Standard') OR (\"AgencyId\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_User_System_NoAgency", "(\"AccountType\" != 1) OR (\"AgencyId\" IS NULL)");
+                            t.HasCheckConstraint("CK_User_System_NoAgency", "(\"AccountType\" != 'System') OR (\"AgencyId\" IS NULL)");
                         });
                 });
 
@@ -689,9 +689,22 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasMaxLength(100)
+                        .HasColumnType("uuid")
+                        .HasColumnName("additional_email");
+
+                    b.Property<string>("AdditionalEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("BirthDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("DefaultLanguage")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("JobTitle")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -1041,7 +1054,155 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.OwnsOne("Sankore.Shared.Kernel.Address", "Address", b1 =>
+                        {
+                            b1.Property<Guid>("UserProfileId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("City")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("address_city");
+
+                            b1.Property<string>("Country")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("address_country");
+
+                            b1.Property<string>("State")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("address_state");
+
+                            b1.Property<string>("Street")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("address_street");
+
+                            b1.Property<string>("ZipCode")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("address_zipcode");
+
+                            b1.HasKey("UserProfileId");
+
+                            b1.ToTable("user_profile", "administration");
+
+                            b1.WithOwner()
+                                .HasForeignKey("UserProfileId");
+
+                            b1.OwnsOne("Sankore.Shared.Kernel.ValueObject.GeoPoint", "Location", b2 =>
+                                {
+                                    b2.Property<Guid>("AddressUserProfileId")
+                                        .HasColumnType("uuid");
+
+                                    b2.Property<double>("Latitude")
+                                        .HasColumnType("double precision")
+                                        .HasColumnName("address_location_lat");
+
+                                    b2.Property<double>("Longitude")
+                                        .HasColumnType("double precision")
+                                        .HasColumnName("address_location_lng");
+
+                                    b2.HasKey("AddressUserProfileId");
+
+                                    b2.ToTable("user_profile", "administration");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("AddressUserProfileId");
+                                });
+
+                            b1.Navigation("Location");
+                        });
+
+                    b.OwnsOne("Sankore.Shared.Kernel.PhoneNumber", "HomeNumber", b1 =>
+                        {
+                            b1.Property<Guid>("UserProfileId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTimeOffset?>("ConfirmedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("home_number_confirmed_at");
+
+                            b1.Property<string>("Contact")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("home_number_contact");
+
+                            b1.Property<bool>("IsPrimary")
+                                .HasColumnType("boolean");
+
+                            b1.HasKey("UserProfileId");
+
+                            b1.ToTable("user_profile", "administration");
+
+                            b1.WithOwner()
+                                .HasForeignKey("UserProfileId");
+                        });
+
+                    b.OwnsOne("Sankore.Shared.Kernel.PhoneNumber", "PersonalNumber", b1 =>
+                        {
+                            b1.Property<Guid>("UserProfileId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTimeOffset?>("ConfirmedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("personal_number_confirmed_at");
+
+                            b1.Property<string>("Contact")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("personal_number_contact");
+
+                            b1.Property<bool>("IsPrimary")
+                                .HasColumnType("boolean");
+
+                            b1.HasKey("UserProfileId");
+
+                            b1.ToTable("user_profile", "administration");
+
+                            b1.WithOwner()
+                                .HasForeignKey("UserProfileId");
+                        });
+
+                    b.OwnsOne("Sankore.Shared.Kernel.PhoneNumber", "WorkNumber", b1 =>
+                        {
+                            b1.Property<Guid>("UserProfileId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTimeOffset?>("ConfirmedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("work_number_confirmed_at");
+
+                            b1.Property<string>("Contact")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("work_number_contact");
+
+                            b1.Property<bool>("IsPrimary")
+                                .HasColumnType("boolean");
+
+                            b1.HasKey("UserProfileId");
+
+                            b1.ToTable("user_profile", "administration");
+
+                            b1.WithOwner()
+                                .HasForeignKey("UserProfileId");
+                        });
+
+                    b.Navigation("Address")
+                        .IsRequired();
+
+                    b.Navigation("HomeNumber")
+                        .IsRequired();
+
+                    b.Navigation("PersonalNumber")
+                        .IsRequired();
+
                     b.Navigation("User");
+
+                    b.Navigation("WorkNumber")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserRole", b =>

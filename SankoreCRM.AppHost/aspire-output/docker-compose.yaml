@@ -10,7 +10,10 @@ services:
       - "aspire"
     restart: "always"
   postgres:
-    image: "docker.io/library/postgres:18.3"
+    image: "${POSTGRES_IMAGE-}"
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
     environment:
       POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
@@ -18,11 +21,6 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
     expose:
       - "5432"
-    volumes:
-      - type: "volume"
-        target: "/var/lib/postgresql"
-        source: "sankorecrm.apphost-25fc6f3f86-postgres-data"
-        read_only: false
     networks:
       - "aspire"
   rabbitmq:
@@ -102,6 +100,3 @@ services:
 networks:
   aspire:
     driver: "bridge"
-volumes:
-  sankorecrm.apphost-25fc6f3f86-postgres-data:
-    driver: "local"

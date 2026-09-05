@@ -27,35 +27,45 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
                     b.Property<int>("AntiMonopolyThreshold")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("anti_monopoly_threshold");
 
                     b.Property<TimeSpan>("FirstContactSla")
-                        .HasColumnType("interval");
+                        .HasColumnType("interval")
+                        .HasColumnName("first_contact_sla");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
 
                     b.Property<int>("MaxLeadsPerAgent")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("max_leads_per_agent");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<string>("Strategy")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("strategy");
 
                     b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_dispatching_rules");
 
-                    b.HasIndex("TenantId", "IsActive");
+                    b.HasIndex("TenantId", "IsActive")
+                        .HasDatabaseName("ix_dispatching_rules_tenant_id_is_active");
 
                     b.ToTable("dispatching_rules", "leads");
                 });
@@ -64,92 +74,117 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
                     b.Property<Guid?>("AgentCollectedLeadId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_collected_lead_id");
 
                     b.Property<string>("CompanyAddress")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("company_address");
 
                     b.Property<string>("CompanyEmail")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("company_email");
 
                     b.Property<string>("CompanyName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("company_name");
 
                     b.Property<string>("CompanyPhone")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("company_phone");
 
                     b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<Guid?>("CurrentAssignedId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_assigned_id");
 
                     b.Property<Guid?>("CurrentAssignmentId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_assignment_id");
 
                     b.Property<DateTimeOffset?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("full_name");
 
                     b.Property<string>("InterestedProduct")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("interested_product");
 
                     b.Property<string>("LossReason")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("loss_reason");
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("phone_number");
 
                     b.Property<Guid?>("PreferredAgencyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("preferred_agency_id");
 
                     b.Property<string>("PreferredLanguage")
                         .IsRequired()
                         .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("preferred_language");
 
                     b.Property<int>("Score")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("score");
 
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("source");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
 
                     b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Website")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("website");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_leads");
 
-                    b.HasIndex("FullName");
+                    b.HasIndex("FullName")
+                        .HasDatabaseName("ix_leads_full_name");
 
-                    b.HasIndex("PhoneNumber");
+                    b.HasIndex("PhoneNumber")
+                        .HasDatabaseName("ix_leads_phone_number");
 
-                    b.HasIndex("TenantId", "Status");
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_leads_tenant_id_status");
 
                     b.ToTable("leads", "leads");
                 });
@@ -158,47 +193,62 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
                     b.Property<Guid>("AgentId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_id");
 
                     b.Property<double>("CompatibilityScore")
-                        .HasColumnType("double precision");
+                        .HasColumnType("double precision")
+                        .HasColumnName("compatibility_score");
 
                     b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<DateTimeOffset?>("FirstContactAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_contact_at");
 
                     b.Property<Guid>("LeadId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("lead_id");
 
                     b.Property<string>("OverrideReason")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("override_reason");
 
                     b.Property<DateTimeOffset>("SlaDeadline")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sla_deadline");
 
                     b.Property<string>("Strategy")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("strategy");
 
                     b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
 
                     b.Property<bool>("WasManualOverride")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("was_manual_override");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_lead_assignments");
 
-                    b.HasIndex("AgentId");
+                    b.HasIndex("AgentId")
+                        .HasDatabaseName("ix_lead_assignments_agent_id");
 
-                    b.HasIndex("LeadId");
+                    b.HasIndex("LeadId")
+                        .HasDatabaseName("ix_lead_assignments_lead_id");
 
-                    b.HasIndex("SlaDeadline", "FirstContactAt");
+                    b.HasIndex("SlaDeadline", "FirstContactAt")
+                        .HasDatabaseName("ix_lead_assignments_sla_deadline_first_contact_at");
 
                     b.ToTable("lead_assignments", "leads");
                 });
@@ -207,31 +257,40 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
                     b.Property<string>("EventType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("event_type");
 
                     b.Property<string>("LastError")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
 
                     b.Property<DateTimeOffset>("OccurredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
 
                     b.Property<string>("PayloadJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("payload_json");
 
                     b.Property<DateTimeOffset?>("ProcessedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
 
                     b.Property<int>("RetryCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("retry_count");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_outbox_messages");
 
-                    b.HasIndex("ProcessedAt", "OccurredAt");
+                    b.HasIndex("ProcessedAt", "OccurredAt")
+                        .HasDatabaseName("ix_outbox_messages_processed_at_occurred_at");
 
                     b.ToTable("outbox_messages", "leads");
                 });
@@ -241,7 +300,8 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.OwnsOne("Sankore.Modules.Leads.Domain.ScoringWeights", "Weights", b1 =>
                         {
                             b1.Property<Guid>("DispatchingRuleId")
-                                .HasColumnType("uuid");
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
 
                             b1.Property<double>("Geography")
                                 .HasColumnType("double precision")
@@ -268,7 +328,8 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                             b1.ToTable("dispatching_rules", "leads");
 
                             b1.WithOwner()
-                                .HasForeignKey("DispatchingRuleId");
+                                .HasForeignKey("DispatchingRuleId")
+                                .HasConstraintName("fk_dispatching_rules_dispatching_rules_id");
                         });
 
                     b.Navigation("Weights")
@@ -280,7 +341,8 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.OwnsOne("Sankore.Shared.Kernel.ValueObject.GeoPoint", "Location", b1 =>
                         {
                             b1.Property<Guid>("LeadId")
-                                .HasColumnType("uuid");
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
 
                             b1.Property<double>("Latitude")
                                 .HasColumnType("double precision")
@@ -295,7 +357,8 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                             b1.ToTable("leads", "leads");
 
                             b1.WithOwner()
-                                .HasForeignKey("LeadId");
+                                .HasForeignKey("LeadId")
+                                .HasConstraintName("fk_leads_leads_id");
                         });
 
                     b.Navigation("Location");
@@ -307,7 +370,8 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("LeadId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_lead_assignments_leads_lead_id");
                 });
 #pragma warning restore 612, 618
         }

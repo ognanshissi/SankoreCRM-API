@@ -12,7 +12,7 @@ using Sankore.Modules.Workflow.Infrastructure;
 namespace Sankore.Modules.Workflow.Infrastructure.Migrations
 {
     [DbContext(typeof(WorkflowDbContext))]
-    [Migration("20260823142517_Initial")]
+    [Migration("20260904112945_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -200,6 +200,39 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasFilter("\"IsActive\" = true");
 
                     b.ToTable("workflow_templates", "workflow");
+                });
+
+            modelBuilder.Entity("Sankore.Shared.Infrastructure.Outbox.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessedAt", "OccurredAt");
+
+                    b.ToTable("outbox_messages", "workflow");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowInstanceStep", b =>

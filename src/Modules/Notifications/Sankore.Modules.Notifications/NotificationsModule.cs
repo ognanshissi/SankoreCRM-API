@@ -32,7 +32,8 @@ public static class NotificationsModule
         services.AddDbContext<NotificationsDbContext>(opt =>
             opt.UseNpgsql(
                 config.GetConnectionString("Database"),
-                o => o.MigrationsHistoryTable("__EFMigrationsHistory", "notifications")));
+                o => o.MigrationsHistoryTable("__EFMigrationsHistory", "notifications"))
+                .UseSnakeCaseNamingConvention());
 
         services.AddScoped<INotificationsModule, NotificationsModuleFacade>();
 

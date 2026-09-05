@@ -12,7 +12,7 @@ using Sankore.Modules.Leads.Infrastructure;
 namespace Sankore.Modules.Leads.Infrastructure.Migrations
 {
     [DbContext(typeof(LeadsDbContext))]
-    [Migration("20260724202344_Initial")]
+    [Migration("20260904112928_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -69,6 +69,9 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AgentCollectedLeadId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("CompanyAddress")
                         .IsRequired()
                         .HasColumnType("text");
@@ -87,6 +90,9 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CurrentAssignedId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("CurrentAssignmentId")
                         .HasColumnType("uuid");
@@ -141,6 +147,8 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("FullName");
 
                     b.HasIndex("PhoneNumber");
 
@@ -272,7 +280,7 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.Lead", b =>
                 {
-                    b.OwnsOne("Sankore.Shared.Kernel.GeoPoint", "Location", b1 =>
+                    b.OwnsOne("Sankore.Shared.Kernel.ValueObject.GeoPoint", "Location", b1 =>
                         {
                             b1.Property<Guid>("LeadId")
                                 .HasColumnType("uuid");

@@ -34,8 +34,9 @@ public static class AdministrationModule
     {
         services.AddDbContext<AdministrationDbContext>(opt =>
             opt.UseNpgsql(
-                config.GetConnectionString("Database"),
-                o => o.MigrationsHistoryTable("__EFMigrationsHistory", "administration")));
+                    config.GetConnectionString("Database"),
+                    o => o.MigrationsHistoryTable("__EFMigrationsHistory", "administration"))
+                .UseSnakeCaseNamingConvention());
 
         // AddIdentityCore does NOT register cookie auth schemes, so the JWT bearer
         // default set in Program.cs remains the single authentication scheme.

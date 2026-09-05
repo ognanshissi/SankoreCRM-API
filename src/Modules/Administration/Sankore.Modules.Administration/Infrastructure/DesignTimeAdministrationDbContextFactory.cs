@@ -25,6 +25,7 @@ internal sealed class DesignTimeAdministrationDbContextFactory
             .UseNpgsql(
                 config.GetConnectionString("Database"),
                 o => o.MigrationsHistoryTable("__EFMigrationsHistory", "administration"))
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         return new AdministrationDbContext(opts, new FixedTenantContext(Guid.Empty));

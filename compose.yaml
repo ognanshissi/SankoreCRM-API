@@ -26,7 +26,10 @@
       - "default"
 
   sankore.database:
-    image: postgres:16-alpine
+    image: ${DOCKER_REGISTRY:-sankore.database}
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

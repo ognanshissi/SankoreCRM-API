@@ -3,7 +3,12 @@ var builder = DistributedApplication.CreateBuilder(args);
 // Docker compose for deployment
 builder.AddDockerComposeEnvironment("env");
 
-var postgres = builder.AddPostgres("postgres")
+var pgPassword = builder.AddParameter("postgres-password", secret: true);
+
+var postgres = builder.AddPostgres("postgres", password: pgPassword)
+    .WithDockerfile("..", "postgres.Dockerfile")
+    .WithHostPort(5432)
+    .WithPgAdmin()
     .WithDataVolume()
     .WithLifetime(ContainerLifetime.Persistent);
 var db = postgres.AddDatabase("Database");
@@ -26,4 +31,5 @@ builder.AddProject<Projects.Sankore_Api>("sankore-api")
     .WaitFor(rmq)
     .WaitFor(db)
     .WaitFor(redis);
+
 builder.Build().Run();

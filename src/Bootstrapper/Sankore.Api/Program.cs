@@ -120,7 +120,8 @@ builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(AuditBehavior<,>
 var connectionString = builder.Configuration.GetConnectionString("Database")!;
 builder.Services.AddDbContextFactory<AuditDbContext>(opts =>
     opts.UseNpgsql(connectionString,
-        b => b.MigrationsHistoryTable("__EFMigrationsHistory", "audit")));
+        b => b.MigrationsHistoryTable("__EFMigrationsHistory", "audit"))
+        .UseSnakeCaseNamingConvention());
 
 builder.Services.AddScoped<IAuditWriter, SqlAuditWriter>();
 

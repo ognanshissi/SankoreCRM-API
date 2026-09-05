@@ -24,6 +24,7 @@ internal sealed class DesignTimeWorkflowDbContextFactory : IDesignTimeDbContextF
             .UseNpgsql(
                 config.GetConnectionString("Database"),
                 o => o.MigrationsHistoryTable("__EFMigrationsHistory", "workflow"))
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         return new WorkflowDbContext(opts, new FixedTenantContext(Guid.Empty));

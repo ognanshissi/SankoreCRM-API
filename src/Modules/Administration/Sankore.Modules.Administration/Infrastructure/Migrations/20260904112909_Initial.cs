@@ -462,14 +462,33 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 schema: "administration",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    additional_email = table.Column<Guid>(type: "uuid", maxLength: 100, nullable: false),
                     TenantId = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    DefaultLanguage = table.Column<string>(type: "text", nullable: false)
+                    DefaultLanguage = table.Column<string>(type: "text", nullable: false),
+                    address_street = table.Column<string>(type: "text", nullable: false),
+                    address_city = table.Column<string>(type: "text", nullable: false),
+                    address_state = table.Column<string>(type: "text", nullable: false),
+                    address_country = table.Column<string>(type: "text", nullable: false),
+                    address_zipcode = table.Column<string>(type: "text", nullable: false),
+                    address_location_lat = table.Column<double>(type: "double precision", nullable: true),
+                    address_location_lng = table.Column<double>(type: "double precision", nullable: true),
+                    work_number_contact = table.Column<string>(type: "text", nullable: false),
+                    WorkNumber_IsPrimary = table.Column<bool>(type: "boolean", nullable: false),
+                    work_number_confirmed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    home_number_contact = table.Column<string>(type: "text", nullable: false),
+                    HomeNumber_IsPrimary = table.Column<bool>(type: "boolean", nullable: false),
+                    home_number_confirmed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    personal_number_contact = table.Column<string>(type: "text", nullable: false),
+                    PersonalNumber_IsPrimary = table.Column<bool>(type: "boolean", nullable: false),
+                    personal_number_confirmed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    JobTitle = table.Column<string>(type: "text", nullable: false),
+                    BirthDate = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    AdditionalEmail = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_user_profile", x => x.Id);
+                    table.PrimaryKey("PK_user_profile", x => x.additional_email);
                     table.ForeignKey(
                         name: "FK_user_profile_app_users_UserId",
                         column: x => x.UserId,
