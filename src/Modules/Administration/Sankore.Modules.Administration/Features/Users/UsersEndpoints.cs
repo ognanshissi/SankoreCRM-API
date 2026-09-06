@@ -5,11 +5,15 @@ using Sankore.Modules.Administration.Features.Users.AssignRole;
 using Sankore.Modules.Administration.Features.Users.AssignScopedPermission;
 using Sankore.Modules.Administration.Features.Users.CreateUser;
 using Sankore.Modules.Administration.Features.Users.DeactivateUser;
+using Sankore.Modules.Administration.Features.Users.GetUser;
 using Sankore.Modules.Administration.Features.Users.GetUserPermissions;
+using Sankore.Modules.Administration.Features.Users.ListUsers;
+using Sankore.Modules.Administration.Features.Users.ReactivateUser;
 using Sankore.Modules.Administration.Features.Users.Register;
 using Sankore.Modules.Administration.Features.Users.ResetPassword;
 using Sankore.Modules.Administration.Features.Users.RevokeRole;
 using Sankore.Modules.Administration.Features.Users.RevokeScopedPermission;
+using Sankore.Modules.Administration.Features.Users.UpdateUser;
 
 namespace Sankore.Modules.Administration.Features.Users;
 
@@ -20,9 +24,13 @@ public static class UsersEndpoints
         var group = app.MapGroup("users").WithTags("Users");
 
         return group
+            .MapListUsers()
             .MapCreateUser()
+            .MapGetUser()
+            .MapUpdateUser()
             .MapRegister()
             .MapDeactivateUser()
+            .MapReactivateUser()
             .MapResetPassword()
             .MapAssignRole()
             .MapRevokeRole()

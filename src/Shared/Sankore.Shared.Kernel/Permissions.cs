@@ -52,6 +52,12 @@ public static class Permissions
     public static readonly PermissionItem CanReadAudit =
         new("audit:read", "Read Audit Trail", ApplicationModules.Administration, "read");
 
+    public static readonly PermissionItem CanUpdateUser =
+        new("user:update", "Update User", ApplicationModules.Administration, "update");
+
+    public static readonly PermissionItem CanReactivateUser =
+        new("user:reactivate", "Reactivate User", ApplicationModules.Administration, "reactivate");
+
     public static readonly PermissionItem CanAssignRole =
         new("user:assign-role", "Assign Role to User", ApplicationModules.Administration, "assign-role");
 
@@ -132,7 +138,9 @@ public static class Permissions
         CanMoveAgency,
         CanCreateUser,
         CanReadUser,
+        CanUpdateUser,
         CanDeactivateUser,
+        CanReactivateUser,
         CanResetPassword,
         CanCreateTerritory,
         CanReadTerritory,

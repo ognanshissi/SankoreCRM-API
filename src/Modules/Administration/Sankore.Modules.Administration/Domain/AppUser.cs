@@ -171,6 +171,39 @@ public sealed class AppUser: IdentityUser<Guid>
     public void ExtendPasswordExpiry(int days = PasswordExpiryDays)
         => PasswordExpiresAt = DateTimeOffset.UtcNow.AddDays(days);
 
+    /// <summary>Updates mutable user details. Only non-null parameters are applied.</summary>
+    public void UpdateDetails(
+        string? fullName,
+        Guid? agencyId,
+        List<string>? spokenLanguages,
+        List<string>? specialties,
+        bool? enableNotifications)
+    {
+        if (fullName is not null)
+        {
+            if (string.IsNullOrWhiteSpace(fullName))
+                throw new DomainException("Full name cannot be blank.");
+            FullName = fullName;
+        }
+        if (agencyId is not null) AgencyId = agencyId;
+        if (spokenLanguages is not null) SpokenLanguages = spokenLanguages;
+        if (specialties is not null) Specialties = specialties;
+        if (enableNotifications is not null) EnableNotifications = enableNotifications.Value;
+    }
+
+    /// <summary>Re-enables a previously disabled user.</summary>
+    public void Reactivate()
+    {
+        if (Status != UserStatus.Disabled)
+            throw new DomainException("Only disabled users can be reactivated.");
+        if (AccountType == UserAccountType.System)
+            throw new DomainException("System account cannot be reactivated.");
+
+        Status = UserStatus.Active;
+        DeactivatedAt = null;
+        IsAvailable = true;
+    }
+
     // ── Dispatching helpers (M13) ─────────────────────────────────────────
 
     public void UpdateLocation(GeoPoint location) => LastKnownLocation = location;
