@@ -16,15 +16,15 @@ internal sealed class CreateAgencyHandler(
     public async Task<Result<CreateAgencyResult>> Handle(
         CreateAgencyCommand request, CancellationToken ct)
     {
-        // Guard: non-HQ agencies must reference an existing parent
+        // Guard: non-HQ agencies must reference an existing, non-deleted parent
         if (request.ParentAgencyId.HasValue)
         {
             var parentExists = await db.Agencies
-                .AnyAsync(a => a.Id == request.ParentAgencyId.Value, ct);
+                .AnyAsync(a => a.Id == request.ParentAgencyId.Value && !a.IsDeleted, ct);
 
             if (!parentExists)
                 return Result.Fail<CreateAgencyResult>(
-                    $"Parent agency {request.ParentAgencyId} not found.");
+                    $"Parent agency {request.ParentAgencyId} not found or is inactive.");
         }
 
         Address? address = null;
