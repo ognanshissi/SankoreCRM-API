@@ -70,6 +70,23 @@ public static class Permissions
     public static readonly PermissionItem CanRevokePermission =
         new("user:revoke-permission", "Revoke Scoped Permission from User", ApplicationModules.Administration, "revoke-permission");
 
+    // ── Role management (F12.2 RBAC) ──────────────────────────────────────
+
+    public static readonly PermissionItem CanCreateRole =
+        new("role:create", "Create Custom Role", ApplicationModules.Administration, "create");
+
+    public static readonly PermissionItem CanReadRole =
+        new("role:read", "Read Role Details", ApplicationModules.Administration, "read");
+
+    public static readonly PermissionItem CanUpdateRole =
+        new("role:update", "Update Custom Role", ApplicationModules.Administration, "update");
+
+    public static readonly PermissionItem CanDeleteRole =
+        new("role:delete", "Delete Custom Role", ApplicationModules.Administration, "delete");
+
+    public static readonly PermissionItem CanManageRolePermissions =
+        new("role:manage-permissions", "Assign/Revoke Permissions on a Role", ApplicationModules.Administration, "manage-permissions");
+
     // ── Workflow module ────────────────────────────────────────────────────
 
     public static readonly PermissionItem CanCreateWorkflow =
@@ -151,6 +168,11 @@ public static class Permissions
         CanRevokeRole,
         CanAssignPermission,
         CanRevokePermission,
+        CanCreateRole,
+        CanReadRole,
+        CanUpdateRole,
+        CanDeleteRole,
+        CanManageRolePermissions,
         CanCreateWorkflow,
         CanReadWorkflow,
         CanUpdateWorkflow,

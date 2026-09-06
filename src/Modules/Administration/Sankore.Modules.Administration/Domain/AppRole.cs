@@ -33,5 +33,15 @@ public class AppRole: IdentityRole<Guid>
         }
         return role;
     }
-    
+
+    public static AppRole CreateCustom(Guid tenantId, string name, string label) => new()
+    {
+        TenantId = tenantId,
+        Name = name,
+        Label = label,
+        IsSystem = false,
+        IsAssignable = true
+    };
+
+    public void UpdateLabel(string label) => Label = label;
 }
