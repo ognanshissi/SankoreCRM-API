@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Scrape the sankore-api /metrics endpoint exposed by the Prometheus OTel exporter.
+  # The API is pinned to port 5000 via ASPNETCORE_HTTP_PORTS in AppHost.cs.
+  # host.docker.internal resolves to the Docker host (macOS/Windows native; Linux needs --add-host).
+  - job_name: sankore-api
+    static_configs:
+      - targets: ['host.docker.internal:5000']
+    metrics_path: /metrics

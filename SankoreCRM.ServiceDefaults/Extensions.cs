@@ -5,6 +5,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using OpenTelemetry;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
@@ -57,7 +58,9 @@ public static class Extensions
             {
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                    .AddRuntimeInstrumentation()
+                    // Expose /metrics endpoint for Prometheus scraping (US-M12-LOGS-001).
+                    .AddPrometheusExporter();
             })
             .WithTracing(tracing =>
             {
@@ -72,6 +75,18 @@ public static class Extensions
                     //.AddGrpcClientInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddNpgsql();
+
+                // Send traces to Tempo in addition to the Aspire Dashboard (US-M12-LOGS-001).
+                // SANKORE_TEMPO_OTLP_ENDPOINT is injected by AppHost when Aspire is running.
+                var tempoEndpoint = builder.Configuration["SANKORE_TEMPO_OTLP_ENDPOINT"];
+                if (!string.IsNullOrWhiteSpace(tempoEndpoint))
+                {
+                    tracing.AddOtlpExporter(o =>
+                    {
+                        o.Endpoint = new Uri(tempoEndpoint);
+                        o.Protocol = OtlpExportProtocol.Grpc;
+                    });
+                }
             });
 
         builder.AddOpenTelemetryExporters();
@@ -122,6 +137,10 @@ public static class Extensions
                 Predicate = r => r.Tags.Contains("live")
             });
         }
+
+        // Prometheus scraping endpoint — /metrics (US-M12-LOGS-001).
+        // Scraped by the Prometheus container defined in AppHost.cs.
+        app.MapPrometheusScrapingEndpoint();
 
         return app;
     }

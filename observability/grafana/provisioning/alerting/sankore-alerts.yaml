@@ -1,0 +1,117 @@
+apiVersion: 1
+
+# Grafana unified alerting — provisioned alert rules (IaC).
+# Changes here are applied on Grafana restart. UI edits are disallowed
+# for provisioned rules (allowUiUpdates: false).
+
+groups:
+  - orgId: 1
+    name: sankore-crm-api
+    folder: Sankore
+    interval: 1m
+    rules:
+
+      # US-M12-LOGS-001 Scenario 2 — alert on overall 5xx spike.
+      - uid: sankore-api-error-rate
+        title: "API 5xx Error Rate > 5%"
+        condition: threshold
+        data:
+          - refId: raw
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: >-
+                100 * sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m]))
+                / sum(rate(http_server_request_duration_seconds_count[5m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: raw
+          - refId: threshold
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              refId: threshold
+              expression: raw
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [5]
+                  operator:
+                    type: and
+                  query:
+                    params: [raw]
+                  reducer:
+                    type: last
+                    params: []
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        isPaused: false
+        annotations:
+          summary: "API 5xx error rate exceeded 5 %"
+          description: >-
+            The HTTP 5xx error rate on sankore-api has been above 5 % for at
+            least 2 minutes. Check application logs in Seq and traces in Grafana Tempo.
+          runbook_url: ""
+        labels:
+          severity: critical
+          team: backend
+
+      # US-M12-LOGS-001 Scenario 2 — alert specifically on DispatchLeadCommand failures.
+      - uid: sankore-dispatch-lead-error-rate
+        title: "DispatchLeadCommand Error Rate > 10%"
+        condition: threshold
+        data:
+          - refId: raw
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: >-
+                100 * sum(rate(http_server_request_duration_seconds_count{http_route=~".*leads.*dispatch.*", http_response_status_code=~"[45].."}[5m]))
+                / clamp_min(sum(rate(http_server_request_duration_seconds_count{http_route=~".*leads.*dispatch.*"}[5m])), 1)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: raw
+          - refId: threshold
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              refId: threshold
+              expression: raw
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [10]
+                  operator:
+                    type: and
+                  query:
+                    params: [raw]
+                  reducer:
+                    type: last
+                    params: []
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        isPaused: false
+        annotations:
+          summary: "DispatchLeadCommand failure rate exceeded 10 %"
+          description: >-
+            The DispatchLeadCommand (POST /api/v1/leads/*/dispatch) error rate has been
+            above 10 % for at least 1 minute. Correlate with Seq logs using the
+            X-Correlation-Id header for the failing requests.
+          runbook_url: ""
+        labels:
+          severity: warning
+          team: backend
