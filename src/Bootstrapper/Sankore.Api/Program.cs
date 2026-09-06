@@ -30,6 +30,14 @@ builder.AddServiceDefaults();
 
 builder.Services.AddOpenApi();
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.WithOrigins("http://localhost:4222")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials());
+});
 
 builder.AddSeqEndpoint("seq");
 builder.Services.AddHttpLogging(o =>
@@ -244,6 +252,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpLogging();
 app.UseHttpsRedirection();
+app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseTenantResolution();   // extract + verify tenant against external store
