@@ -43,8 +43,11 @@ internal sealed class GetAuditEntriesHandler(
 
         var totalCount = await query.CountAsync(cancellationToken);
 
-        var items = await query
-            .OrderByDescending(e => e.Timestamp)
+        var ordered = request.SortAscending
+            ? query.OrderBy(e => e.Timestamp)
+            : query.OrderByDescending(e => e.Timestamp);
+
+        var items = await ordered
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .Select(e => new AuditEntryDto(

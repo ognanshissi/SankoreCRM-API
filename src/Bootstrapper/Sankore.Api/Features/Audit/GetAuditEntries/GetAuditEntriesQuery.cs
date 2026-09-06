@@ -12,5 +12,6 @@ public sealed record GetAuditEntriesQuery(
     DateTimeOffset? From,
     DateTimeOffset? To,
     int Page = 1,
-    int PageSize = 20
+    int PageSize = 20,
+    bool SortAscending = false   // true = chronological (oldest first), for entity timeline views
 ) : IRequest<Result<PagedResult<AuditEntryDto>>>;

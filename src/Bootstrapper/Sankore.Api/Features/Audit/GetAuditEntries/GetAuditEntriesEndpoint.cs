@@ -18,11 +18,13 @@ internal static class GetAuditEntriesEndpoint
                 [FromQuery] DateTimeOffset? to,
                 [FromQuery] int page = 1,
                 [FromQuery] int pageSize = 20,
+                [FromQuery] bool sortAscending = false,
                 ISender sender = default!,
                 CancellationToken ct = default) =>
             {
-                var query = new GetAuditEntriesQuery(userId, action, resourceType, resourceId, outcome, from, to, page,
-                    pageSize);
+                var query = new GetAuditEntriesQuery(
+                    userId, action, resourceType, resourceId, outcome,
+                    from, to, page, pageSize, sortAscending);
                 var result = await sender.Send(query, ct);
                 return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error);
             })
