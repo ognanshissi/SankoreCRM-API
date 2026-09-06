@@ -13,6 +13,7 @@ public static class LoginEndpoint
         app.MapPost("/auth/login", Handle)
             .WithTags("Auth")
             .WithName("Login")
+            .Produces<LoginResult>(StatusCodes.Status200OK)
             .AllowAnonymous()
             .WithTenantHeader()
             .RequireRateLimiting("auth");

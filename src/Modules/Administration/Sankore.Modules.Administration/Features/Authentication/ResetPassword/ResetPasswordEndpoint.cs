@@ -13,6 +13,7 @@ internal static class ResetPasswordEndpoint
         app.MapPost("/auth/reset-password", Handle)
             .WithTags("Auth")
             .WithName("ResetPassword")
+            .Produces<ResetPasswordResult>(StatusCodes.Status200OK)
             .AllowAnonymous()
             .WithTenantHeader()
             .RequireRateLimiting("auth");

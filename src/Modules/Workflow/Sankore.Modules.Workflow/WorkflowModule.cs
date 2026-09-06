@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Workflow.Features.Instances;
 using Sankore.Modules.Workflow.Features.Templates;
 using Sankore.Modules.Workflow.Infrastructure;
+using Sankore.Modules.Workflow.Infrastructure.Jobs;
 using Sankore.Modules.Workflow.PublicApi;
 
 namespace Sankore.Modules.Workflow;
@@ -35,6 +36,9 @@ public static class WorkflowModule
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(typeof(WorkflowModule).Assembly));
         services.AddValidatorsFromAssembly(typeof(WorkflowModule).Assembly);
+
+        // SLA deadline checker — runs every minute, times out overdue steps.
+        services.AddHostedService<SlaCheckerJob>();
 
         return services;
     }

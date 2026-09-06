@@ -11,5 +11,7 @@ public enum WorkflowStatus
     /// <summary>A step was rejected — workflow stopped.</summary>
     Rejected,
     /// <summary>Manually cancelled before completion.</summary>
-    Cancelled
+    Cancelled,
+    /// <summary>A step exceeded its SLA deadline — workflow stopped.</summary>
+    TimedOut
 }

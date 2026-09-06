@@ -105,6 +105,20 @@ public sealed class WorkflowInstance : AggregateRoot
         RaiseDomainEvent(new WorkflowRejectedEvent(Id, TenantId, EntityType, EntityId));
     }
 
+    /// <summary>
+    /// Called by the SLA checker job when the current step's DueAt has passed.
+    /// Marks the step as timed out and stops the workflow.
+    /// </summary>
+    public void TimeoutCurrentStep()
+    {
+        var current = CurrentStep()
+            ?? throw new DomainException("No active step to time out.");
+
+        current.MarkTimedOut();
+        Status = WorkflowStatus.TimedOut;
+        CompletedAt = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>Manually cancels the workflow (admin action).</summary>
     public void Cancel()
     {

@@ -11,5 +11,7 @@ public enum StepStatus
     /// <summary>Approver rejected this step.</summary>
     Rejected,
     /// <summary>Step bypassed (e.g. no approver configured).</summary>
-    Skipped
+    Skipped,
+    /// <summary>Step exceeded its SLA deadline without a decision.</summary>
+    TimedOut
 }

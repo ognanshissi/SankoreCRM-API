@@ -108,6 +108,10 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTimeOffset?>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
                     b.Property<Guid>("InstanceId")
                         .HasColumnType("uuid")
                         .HasColumnName("instance_id");
@@ -121,6 +125,10 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                     b.Property<int>("Order")
                         .HasColumnType("integer")
                         .HasColumnName("order");
+
+                    b.Property<int?>("SlaHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("sla_hours");
 
                     b.Property<string>("Status")
                         .IsRequired()

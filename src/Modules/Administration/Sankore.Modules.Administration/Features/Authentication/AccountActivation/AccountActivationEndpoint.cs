@@ -13,6 +13,7 @@ internal static class AccountActivationEndpoint
         app.MapPost("/auth/activate", Handle)
             .WithTags("Auth")
             .WithName("ActivateAccount")
+            .Produces<AccountActivationResult>(StatusCodes.Status200OK)
             .AllowAnonymous()
             .WithTenantHeader()
             .RequireRateLimiting("auth");

@@ -13,6 +13,7 @@ internal static class ForgotPasswordEndpoint
         app.MapPost("/auth/forgot-password", Handle)
             .WithTags("Auth")
             .WithName("ForgotPassword")
+            .Produces<ForgotPasswordResult>(StatusCodes.Status200OK)
             .AllowAnonymous()
             .WithTenantHeader()
             .RequireRateLimiting("auth");

@@ -18,6 +18,12 @@ public sealed class WorkflowInstanceStep
     /// <summary>Role code required to act on this step (copied from the definition).</summary>
     public string? ApproverRoleCode { get; private set; }
 
+    /// <summary>SLA timeout copied from the step definition. Null means no deadline.</summary>
+    public int? SlaHours { get; private set; }
+
+    /// <summary>Absolute deadline computed when the step enters AwaitingApproval. Null when no SLA.</summary>
+    public DateTimeOffset? DueAt { get; private set; }
+
     public StepStatus Status { get; private set; }
     public Guid? ActedByUserId { get; private set; }
     public string? Comment { get; private set; }
@@ -40,6 +46,7 @@ public sealed class WorkflowInstanceStep
             Order = definition.Order,
             Name = definition.Name,
             ApproverRoleCode = definition.ApproverRoleCode,
+            SlaHours = definition.TimeoutHours,
             Status = StepStatus.Pending,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -50,6 +57,16 @@ public sealed class WorkflowInstanceStep
         if (Status != StepStatus.Pending)
             throw new DomainException("Step is not in Pending state.");
         Status = StepStatus.AwaitingApproval;
+        if (SlaHours.HasValue)
+            DueAt = DateTimeOffset.UtcNow.AddHours(SlaHours.Value);
+    }
+
+    public void MarkTimedOut()
+    {
+        if (Status != StepStatus.AwaitingApproval)
+            throw new DomainException("Only an active step can time out.");
+        Status = StepStatus.TimedOut;
+        CompletedAt = DateTimeOffset.UtcNow;
     }
 
     public void Approve(Guid actedByUserId, string? comment = null)

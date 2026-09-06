@@ -15,6 +15,8 @@ internal sealed class WorkflowInstanceStepConfiguration : IEntityTypeConfigurati
         b.Property(s => s.ApproverRoleCode).HasMaxLength(100);
         b.Property(s => s.Comment).HasMaxLength(2000);
         b.Property(s => s.Status).HasConversion<string>().HasMaxLength(50);
+        b.Property(s => s.SlaHours);
+        b.Property(s => s.DueAt);
 
         b.HasIndex(s => new { s.InstanceId, s.Order });
     }
