@@ -116,6 +116,20 @@ public static class Permissions
     public static readonly PermissionItem CanCancelWorkflow =
         new("workflow:cancel", "Cancel a Workflow Instance", ApplicationModules.Workflow, "cancel");
 
+    // ── Product catalogue (F12.4) ─────────────────────────────────────────
+
+    public static readonly PermissionItem CanCreateProduct =
+        new("product:create", "Create Product Speciality", ApplicationModules.Administration, "create");
+
+    public static readonly PermissionItem CanReadProduct =
+        new("product:read", "Read Product Speciality", ApplicationModules.Administration, "read");
+
+    public static readonly PermissionItem CanUpdateProduct =
+        new("product:update", "Update Product Speciality", ApplicationModules.Administration, "update");
+
+    public static readonly PermissionItem CanDeleteProduct =
+        new("product:delete", "Delete Product Speciality", ApplicationModules.Administration, "delete");
+
     // ── Notification settings (Administration module) ─────────────────────
 
     public static readonly PermissionItem CanReadNotificationSettings =
@@ -173,6 +187,10 @@ public static class Permissions
         CanUpdateRole,
         CanDeleteRole,
         CanManageRolePermissions,
+        CanCreateProduct,
+        CanReadProduct,
+        CanUpdateProduct,
+        CanDeleteProduct,
         CanCreateWorkflow,
         CanReadWorkflow,
         CanUpdateWorkflow,

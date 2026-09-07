@@ -27,6 +27,7 @@ public sealed class AppUser: IdentityUser<Guid>
     public DateTimeOffset PasswordExpiresAt { get; private set; }
     public int FailedLoginAttempts { get; private set; }
     public DateTimeOffset? LastLoginAt { get; private set; }
+    public DateTimeOffset? LastLogoutAt { get; private set; }
     public DateTimeOffset? DeactivatedAt { get; private set; }
     
     public bool IsSuperUser { get; private set; }
@@ -144,6 +145,9 @@ public sealed class AppUser: IdentityUser<Guid>
         if (Status == UserStatus.Active || Status == UserStatus.PendingActivation)
             Status = UserStatus.Locked;
     }
+
+    /// <summary>Records the logout timestamp for audit purposes.</summary>
+    public void RecordLogout() => LastLogoutAt = DateTimeOffset.UtcNow;
 
     /// <summary>Records a successful login: resets failure counter and updates timestamp.</summary>
     public void RecordSuccessfulLogin()

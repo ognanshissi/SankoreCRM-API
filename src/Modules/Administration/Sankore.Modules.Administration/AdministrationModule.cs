@@ -11,8 +11,10 @@ using Sankore.Modules.Administration.Features.Agencies;
 using Sankore.Modules.Administration.Features.Authentication.AccountActivation;
 using Sankore.Modules.Administration.Features.Authentication.ForgotPassword;
 using Sankore.Modules.Administration.Features.Authentication.Login;
+using Sankore.Modules.Administration.Features.Authentication.Logout;
 using Sankore.Modules.Administration.Features.Authentication.ResetPassword;
 using Sankore.Modules.Administration.Features.NotificationSettings;
+using Sankore.Modules.Administration.Features.Products;
 using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;
 using Sankore.Modules.Administration.Features.Users;
@@ -79,12 +81,14 @@ public static class AdministrationModule
     public static IEndpointRouteBuilder MapAdministrationModuleEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapLogin();
+        app.MapLogout();
         app.MapForgotPassword();
         app.MapAccountActivation();
         app.MapUsersEndpoints();
         app.MapTerritoriesEndpoints();
         app.MapAgenciesEndpoints();
         app.MapRolesEndpoints();
+        app.MapProductsEndpoints();
         app.MapNotificationSettingsEndpoints();
         return app;
     }

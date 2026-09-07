@@ -9,9 +9,11 @@ public class ProductSpecialityConfiguration: IEntityTypeConfiguration<ProductSpe
     public void Configure(EntityTypeBuilder<ProductSpeciality> builder)
     {
         builder.HasKey(x => x.Id);
-        
+
         builder.Property(x => x.Name).HasMaxLength(150).IsRequired();
-        
+        builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(500);
+
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
     }
 }
