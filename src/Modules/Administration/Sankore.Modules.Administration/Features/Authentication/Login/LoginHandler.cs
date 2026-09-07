@@ -21,7 +21,6 @@ internal sealed class LoginHandler(
         var normalizedEmail = request.Email.ToUpperInvariant();
         var user = await db.Users
             .IgnoreQueryFilters()
-            .AsNoTracking()
             .Where(u => u.TenantId == tenant.CurrentTenantId && u.NormalizedEmail == normalizedEmail)
             .FirstOrDefaultAsync(ct);
 
@@ -73,7 +72,7 @@ internal sealed class LoginHandler(
         var today = DateTime.UtcNow;
         var scopedPermissionCodes =
             await db.PermissionAttributions
-                .Where(pa => pa.UserId == user.Id && pa.StartDate <= today && pa.EndDate >= today)
+                .Where(pa => pa.UserId == user.Id && pa.IsActive)
                 .Select(pa => pa.PermissionCode)
                 .Distinct()
                 .ToListAsync(ct);

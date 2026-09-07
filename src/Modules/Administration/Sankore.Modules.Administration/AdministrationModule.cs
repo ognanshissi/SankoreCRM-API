@@ -13,6 +13,7 @@ using Sankore.Modules.Administration.Features.Authentication.ForgotPassword;
 using Sankore.Modules.Administration.Features.Authentication.Login;
 using Sankore.Modules.Administration.Features.Authentication.Logout;
 using Sankore.Modules.Administration.Features.Authentication.ResetPassword;
+using Sankore.Modules.Administration.Features.Authentication.VerifyToken;
 using Sankore.Modules.Administration.Features.NotificationSettings;
 using Sankore.Modules.Administration.Features.Products;
 using Sankore.Modules.Administration.Features.Roles;
@@ -82,6 +83,7 @@ public static class AdministrationModule
     {
         app.MapLogin();
         app.MapLogout();
+        app.MapVerifyToken();
         app.MapForgotPassword();
         app.MapAccountActivation();
         app.MapUsersEndpoints();

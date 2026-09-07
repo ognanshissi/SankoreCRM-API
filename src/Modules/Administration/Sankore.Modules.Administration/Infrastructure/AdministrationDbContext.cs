@@ -15,12 +15,12 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<UserLoginLocation> UserLoginLocations => Set<UserLoginLocation>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
-    public DbSet<PasswordHistory>  PasswordHistories => Set<PasswordHistory>();
+    public DbSet<PasswordHistory> PasswordHistories => Set<PasswordHistory>();
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
-    public DbSet<PermissionAttribution>  PermissionAttributions => Set<PermissionAttribution>();
-    public DbSet<ProductSpeciality>  ProductSpecialities => Set<ProductSpeciality>();
-    public DbSet<Territory>  Territories => Set<Territory>();
-    public DbSet<UserRole>   UserRoles    => Set<UserRole>();
+    public DbSet<PermissionAttribution> PermissionAttributions => Set<PermissionAttribution>();
+    public DbSet<ProductSpeciality> ProductSpecialities => Set<ProductSpeciality>();
+    public DbSet<Territory> Territories => Set<Territory>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<TenantNotificationSettings> TenantNotificationSettings => Set<TenantNotificationSettings>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
