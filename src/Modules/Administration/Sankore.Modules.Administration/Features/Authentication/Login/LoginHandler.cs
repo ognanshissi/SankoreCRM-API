@@ -5,6 +5,7 @@ using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Kernel.ValueObject;
 
 namespace Sankore.Modules.Administration.Features.Authentication.Login;
 
@@ -21,6 +22,7 @@ internal sealed class LoginHandler(
         var normalizedEmail = request.Email.ToUpperInvariant();
         var user = await db.Users
             .IgnoreQueryFilters()
+            .AsTracking()
             .Where(u => u.TenantId == tenant.CurrentTenantId && u.NormalizedEmail == normalizedEmail)
             .FirstOrDefaultAsync(ct);
 
@@ -33,6 +35,7 @@ internal sealed class LoginHandler(
         if (user.Status != UserStatus.Active)
         {
             user.IncrementFailedLogin();
+            db.Users.Update(user);
             await db.SaveChangesAsync(ct);
             return Result.Fail<LoginResult>("Invalid login attempt.");
         }
@@ -44,6 +47,7 @@ internal sealed class LoginHandler(
         if (!await userManager.CheckPasswordAsync(user, request.Password))
         {
             user.IncrementFailedLogin();
+            db.Users.Update(user);
             await db.SaveChangesAsync(ct);
             return Result.Fail<LoginResult>("Invalid login attempt.");
         }
@@ -52,6 +56,12 @@ internal sealed class LoginHandler(
             return Result.Fail<LoginResult>("Account is locked. Try again later.");
 
         user.RecordSuccessfulLogin();
+        db.Users.Update(user);
+        
+        // LoginHistory
+        var userLogin = UserLoginLocation.Create(tenant.CurrentTenantId, user.Id, new GeoPoint(0, 0));
+        db.UserLoginLocations.Add(userLogin);
+        
         await db.SaveChangesAsync(ct);
         
         var roles = await userManager.GetRolesAsync(user);
@@ -69,7 +79,6 @@ internal sealed class LoginHandler(
             .ToListAsync(ct);
 
         // valid attributed permissions
-        var today = DateTime.UtcNow;
         var scopedPermissionCodes =
             await db.PermissionAttributions
                 .Where(pa => pa.UserId == user.Id && pa.IsActive)
