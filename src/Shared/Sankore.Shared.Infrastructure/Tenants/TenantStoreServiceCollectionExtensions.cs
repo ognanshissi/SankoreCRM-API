@@ -19,8 +19,6 @@ public static class TenantStoreServiceCollectionExtensions
     {
         services.Configure<TenantStoreOptions>(config.GetSection(TenantStoreOptions.Section));
 
-        services.AddMemoryCache();
-
         services.AddHttpClient("TenantStore", (sp, client) =>
         {
             var opts = config.GetSection(TenantStoreOptions.Section).Get<TenantStoreOptions>()!;
@@ -32,7 +30,7 @@ public static class TenantStoreServiceCollectionExtensions
         services.AddSingleton<ITenantStore, CachedTenantStore>(sp =>
             new CachedTenantStore(
                 sp.GetRequiredService<HttpTenantStore>(),
-                sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+                sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>(),
                 sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<TenantStoreOptions>>()));
 
         return services;

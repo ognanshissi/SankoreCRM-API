@@ -14,13 +14,16 @@ var postgres = builder.AddPostgres("postgres", password: pgPassword)
 var db = postgres.AddDatabase("Database");
 
 // Rabbitmq
-var rmq = builder.AddRabbitMQ("rabbitmq");
+var rmq = builder.AddRabbitMQ("rabbitmq")
+    .WithLifetime(ContainerLifetime.Persistent)
+    .WithManagementPlugin();
 
 // Seq
 var seq = builder.AddSeq("seq");
 
 // Redis — provider-resolution cache for Notifications module
 var redis = builder.AddRedis("redis")
+    .WithRedisInsight()
     .WithLifetime(ContainerLifetime.Persistent);
 
 // ── Observability stack (US-M12-LOGS-001) ─────────────────────────────────
