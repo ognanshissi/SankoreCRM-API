@@ -31,7 +31,8 @@ public class Tenant
             IsActive = true,
             TrialExpiresAt = trialExpiresAt,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            BlockedReason = string.Empty
         };
     }
 

@@ -63,9 +63,9 @@ app.MapDefaultEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
-// Audit schema — independent of all module schemas.
     var adminDbContext = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
     await adminDbContext.Database.MigrateAsync();
+    await TenantSeeder.SeedAsync(adminDbContext);
 }
 
 if (app.Environment.IsDevelopment())
