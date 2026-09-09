@@ -5,7 +5,6 @@
   <ItemGroup Label="Testing">
     <PackageVersion Include="FluentAssertions" Version="6.12.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-    <PackageVersion Include="Npgsql.OpenTelemetry" Version="10.0.3" />
     <PackageVersion Include="NSubstitute" Version="5.1.0" />
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
@@ -30,10 +29,11 @@
   <ItemGroup Label="EntityFrameworkCore">
     <PackageVersion Include="EFCore.NamingConventions" Version="9.0.0" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" Version="9.0.2" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
+    <PackageVersion Include="Npgsql.OpenTelemetry" Version="9.0.2" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
   </ItemGroup>
   <ItemGroup Label="Scriban">
     <PackageVersion Include="Scriban" Version="7.2.6" />
@@ -53,7 +53,6 @@
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.8.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.8.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />

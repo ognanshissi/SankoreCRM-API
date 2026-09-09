@@ -1,9 +1,21 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
+var pgPassword = builder.AddParameter("postgres-password", secret: true);
+
+var adminPostgres = builder.AddPostgres("admin-postgres", password: pgPassword)
+    .WithHostPort(5432)
+    .WithPgAdmin()
+    .WithDataVolume()
+    .WithLifetime(ContainerLifetime.Persistent);
+
+var adminDb = adminPostgres.AddDatabase("AdminDatabase");
+
+builder.AddProject<Projects.Sankore_Admin>("sankore-admin")
+    .WithReference(adminDb)
+    .WaitFor(adminDb);
+
 // Docker compose for deployment
 builder.AddDockerComposeEnvironment("env");
-
-var pgPassword = builder.AddParameter("postgres-password", secret: true);
 
 var postgres = builder.AddPostgres("postgres", password: pgPassword)
     .WithDockerfile("..", "postgres.Dockerfile")

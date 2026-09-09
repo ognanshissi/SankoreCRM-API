@@ -9,6 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\src\Bootstrapper\Sankore.Admin\Sankore.Admin.csproj" />
       <ProjectReference Include="..\src\Bootstrapper\Sankore.Api\Sankore.Api.csproj" />
     </ItemGroup>
 

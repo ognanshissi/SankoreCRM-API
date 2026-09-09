@@ -58,16 +58,14 @@ public static class Extensions
             {
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation()
-                    // Expose /metrics endpoint for Prometheus scraping (US-M12-LOGS-001).
-                    .AddPrometheusExporter();
+                    .AddRuntimeInstrumentation();
             })
             .WithTracing(tracing =>
             {
                 tracing.AddSource(builder.Environment.ApplicationName)
-                    .AddAspNetCoreInstrumentation(tracing =>
+                    .AddAspNetCoreInstrumentation(opts =>
                         // Exclude health check requests from tracing
-                        tracing.Filter = context =>
+                        opts.Filter = context =>
                             !context.Request.Path.StartsWithSegments(HealthEndpointPath)
                             && !context.Request.Path.StartsWithSegments(AlivenessEndpointPath)
                     )
@@ -89,7 +87,7 @@ public static class Extensions
                 }
             });
 
-        builder.AddOpenTelemetryExporters();
+        _ = builder.AddOpenTelemetryExporters();
 
         return builder;
     }
@@ -138,9 +136,7 @@ public static class Extensions
             });
         }
 
-        // Prometheus scraping endpoint — /metrics (US-M12-LOGS-001).
-        // Scraped by the Prometheus container defined in AppHost.cs.
-        app.MapPrometheusScrapingEndpoint();
+        // Metrics are exported to Prometheus via OTLP (configured in AddOpenTelemetryExporters).
 
         return app;
     }

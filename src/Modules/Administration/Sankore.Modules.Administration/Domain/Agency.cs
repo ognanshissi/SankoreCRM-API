@@ -22,6 +22,8 @@ public sealed class Agency : AggregateRoot
     private readonly List<AppUser> _users = [];
     public IReadOnlyCollection<AppUser> Users => _users.AsReadOnly();
 
+    public string? ConcurrencyStamp { get; private set; } = Guid.NewGuid().ToString();
+
     private Agency() { }
 
     public static Agency Create(
