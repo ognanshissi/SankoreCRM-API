@@ -13,6 +13,7 @@ using Sankore.Modules.Administration.Features.Authentication.ForgotPassword;
 using Sankore.Modules.Administration.Features.Authentication.Login;
 using Sankore.Modules.Administration.Features.Authentication.Logout;
 using Sankore.Modules.Administration.Features.Authentication.ResetPassword;
+using Sankore.Modules.Administration.Features.Authentication.RefreshToken;
 using Sankore.Modules.Administration.Features.Authentication.VerifyToken;
 using Sankore.Modules.Administration.Features.NotificationSettings;
 using Sankore.Modules.Administration.Features.Products;
@@ -82,6 +83,7 @@ public static class AdministrationModule
     public static IEndpointRouteBuilder MapAdministrationModuleEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapLogin();
+        app.MapRefreshToken();
         app.MapLogout();
         app.MapVerifyToken();
         app.MapForgotPassword();

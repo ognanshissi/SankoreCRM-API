@@ -21,7 +21,7 @@ internal sealed class HttpTenantStore(
 
         try
         {
-            var response = await client.GetAsync($"tenants/{tenantId}", ct);
+            var response = await client.GetAsync($"api/v1/tenants/{tenantId}", ct);
 
             if (response.IsSuccessStatusCode) return true;
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return false;

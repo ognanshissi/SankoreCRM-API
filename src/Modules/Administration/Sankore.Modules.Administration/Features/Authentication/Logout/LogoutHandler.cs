@@ -15,6 +15,15 @@ internal sealed class LogoutHandler(AdministrationDbContext db)
             return Result.Fail("User not found.");
 
         user.RecordLogout();
+
+        var activeTokens = await db.RefreshTokens
+            .AsTracking()
+            .Where(r => r.UserId == request.UserId && r.RevokedAt == null)
+            .ToListAsync(ct);
+
+        foreach (var token in activeTokens)
+            token.Revoke();
+
         await db.SaveChangesAsync(ct);
 
         return Result.Ok();

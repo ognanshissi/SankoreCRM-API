@@ -22,6 +22,7 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<Territory> Territories => Set<Territory>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<TenantNotificationSettings> TenantNotificationSettings => Set<TenantNotificationSettings>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -89,5 +90,6 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<Territory>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ProductSpeciality>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TenantNotificationSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
     }
 }

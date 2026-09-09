@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
-using Sankore.Modules.Administration.Domain.Events;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 

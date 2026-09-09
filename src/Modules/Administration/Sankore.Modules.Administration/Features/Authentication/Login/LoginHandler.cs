@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
@@ -13,7 +14,8 @@ internal sealed class LoginHandler(
     UserManager<AppUser> userManager,
     AdministrationDbContext db,
     ITenantContext tenant,
-    IJwtTokenService jwtTokenService) : IRequestHandler<LoginCommand, Result<LoginResult>>
+    IJwtTokenService jwtTokenService,
+    IOptions<JwtOptions> jwtOptions) : IRequestHandler<LoginCommand, Result<LoginResult>>
 {
     public async Task<Result<LoginResult>> Handle(LoginCommand request, CancellationToken ct)
     {
@@ -57,11 +59,16 @@ internal sealed class LoginHandler(
 
         user.RecordSuccessfulLogin();
         db.Users.Update(user);
-        
+
         // LoginHistory
         var userLogin = UserLoginLocation.Create(tenant.CurrentTenantId, user.Id, new GeoPoint(0, 0));
         db.UserLoginLocations.Add(userLogin);
-        
+
+        var refreshToken = Domain.RefreshToken.Create(
+            user.TenantId, user.Id,
+            TimeSpan.FromDays(jwtOptions.Value.RefreshTokenTtlDays));
+        db.RefreshTokens.Add(refreshToken);
+
         await db.SaveChangesAsync(ct);
         
         var roles = await userManager.GetRolesAsync(user);
@@ -92,6 +99,11 @@ internal sealed class LoginHandler(
         
         var jwtTokenResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray());
 
-        return Result.Ok(new LoginResult(jwtTokenResult.Token, jwtTokenResult.ExpiresAt, user.Id, user.TenantId));
+        return Result.Ok(new LoginResult(
+            jwtTokenResult.Token,
+            jwtTokenResult.ExpiresAt,
+            refreshToken.Token,
+            refreshToken.ExpiresAt,
+            user.Id));
     }
 }

@@ -16,5 +16,6 @@ public sealed record LoginCommand(
 public sealed record LoginResult(
     string AccessToken,
     DateTimeOffset ExpiresAt,
-    Guid UserId,
-    Guid TenantId);
+    string RefreshToken,
+    DateTimeOffset RefreshTokenExpiresAt,
+    Guid UserId);

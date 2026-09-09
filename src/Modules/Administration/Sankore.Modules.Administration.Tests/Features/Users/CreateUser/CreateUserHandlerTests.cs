@@ -1,3 +1,5 @@
+using Sankore.Modules.Administration.PublicApi;
+
 namespace Sankore.Modules.Administration.Tests.Features.Users.CreateUser;
 
 using FluentAssertions;
