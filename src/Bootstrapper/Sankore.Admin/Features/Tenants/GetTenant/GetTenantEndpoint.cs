@@ -14,6 +14,7 @@ public static class GetTenantEndpoint
             .WithName("GetTenant")
             .WithSummary("Get a tenant by ID")
             .Produces<TenantResponse>()
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
     }
 }

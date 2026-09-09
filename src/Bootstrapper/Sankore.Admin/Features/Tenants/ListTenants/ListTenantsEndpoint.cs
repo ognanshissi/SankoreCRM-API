@@ -14,6 +14,7 @@ public static class ListTenantsEndpoint
             })
             .WithName("ListTenants")
             .WithSummary("List all tenants")
-            .Produces<List<TenantResponse>>();
+            .Produces<List<TenantResponse>>()
+            .WithOpenApi();
     }
 }

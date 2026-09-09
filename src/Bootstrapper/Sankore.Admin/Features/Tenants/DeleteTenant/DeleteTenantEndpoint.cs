@@ -14,6 +14,7 @@ public static class DeleteTenantEndpoint
             .WithName("DeleteTenant")
             .WithSummary("Delete a tenant")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
     }
 }

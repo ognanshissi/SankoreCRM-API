@@ -14,9 +14,12 @@ builder.Services.AddDbContext<AdminDbContext>(opts =>
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
+builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    options.CustomSchemaIds(type => type.FullName);
+
     options.SwaggerDoc("v1", new()
     {
         Title = "Sankore Admin API",

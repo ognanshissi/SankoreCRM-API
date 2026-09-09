@@ -17,6 +17,7 @@ public static class UpdateTenantEndpoint
             .WithName("UpdateTenant")
             .WithSummary("Update a tenant")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
     }
 }
