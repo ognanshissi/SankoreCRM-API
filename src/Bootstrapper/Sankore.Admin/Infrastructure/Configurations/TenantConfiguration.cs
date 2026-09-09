@@ -12,7 +12,7 @@ public class TenantConfiguration: IEntityTypeConfiguration<Tenant>
         builder.HasKey(p => p.Id);
         builder.Property(p => p.Fqdn).IsRequired();
 
-        builder.HasIndex(x => x.Fqdn);
+        builder.HasIndex(x => x.Fqdn).IsUnique();
         builder.HasIndex(p => p.Id);
     }
 }

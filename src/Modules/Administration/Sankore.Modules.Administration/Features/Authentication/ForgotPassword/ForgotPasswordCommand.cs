@@ -1,10 +1,11 @@
 using MediatR;
 using Microsoft.AspNetCore.Http;
+using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Authentication.ForgotPassword;
 
-public sealed record ForgotPasswordCommand(string Email) : IRequest<Result<ForgotPasswordResult>>, IResourceCommand
+public sealed record ForgotPasswordCommand(string Email) : IRequest<Result<ForgotPasswordResult>>, ICommand, IResourceCommand
 {
     public string ResourceType  => "User";
     public string? ResourceId  => null;

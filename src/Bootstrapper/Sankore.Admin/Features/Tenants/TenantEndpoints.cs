@@ -1,6 +1,7 @@
 using Sankore.Admin.Features.Tenants.CreateTenant;
 using Sankore.Admin.Features.Tenants.DeleteTenant;
 using Sankore.Admin.Features.Tenants.GetTenant;
+using Sankore.Admin.Features.Tenants.GetTenantByFqdn;
 using Sankore.Admin.Features.Tenants.ListTenants;
 using Sankore.Admin.Features.Tenants.UpdateTenant;
 
@@ -15,6 +16,7 @@ public static class TenantEndpoints
 
         ListTenantsEndpoint.Map(group);
         GetTenantEndpoint.Map(group);
+        GetTenantByFqdnEndpoint.Map(group);
         CreateTenantEndpoint.Map(group);
         UpdateTenantEndpoint.Map(group);
         DeleteTenantEndpoint.Map(group);
