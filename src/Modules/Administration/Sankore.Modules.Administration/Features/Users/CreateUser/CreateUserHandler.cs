@@ -87,7 +87,7 @@ internal sealed class CreateUserHandler(
             TemplateData: new Dictionary<string, object>
             {
                 ["full_name"]        = user.FullName,
-                ["activation_token"] = activationToken,
+                ["activation_url"] = $"http://localhost:4222/auth/account-activation?token={activationToken}",
                 ["tenant_id"]        = tenantId.ToString(),
                 ["user_id"]          = user.Id.ToString()
             },

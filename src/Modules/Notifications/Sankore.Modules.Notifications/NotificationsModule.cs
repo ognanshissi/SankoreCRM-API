@@ -17,6 +17,7 @@ using Sankore.Modules.Notifications.Infrastructure.Processor;
 using Sankore.Modules.Notifications.Infrastructure.Providers;
 using Sankore.Modules.Notifications.Infrastructure.Rendering;
 using Sankore.Modules.Notifications.Infrastructure.Senders;
+using Sankore.Modules.Notifications.Infrastructure.Senders.Smtp;
 using Sankore.Modules.Notifications.PublicApi;
 
 /// <summary>
@@ -43,8 +44,13 @@ public static class NotificationsModule
         // Template rendering: Scriban-based with DB lookup (tenant → platform → en fallback)
         services.AddScoped<ITemplateRenderer, ScribanTemplateRenderer>();
 
-        // Email transport: stub logs intent; replaced by real adapters (SES/Postmark/SendGrid) later
-        services.AddSingleton<IEmailSender, StubEmailSender>();
+        // Email transport: keyed senders per provider type, routed by CompositeEmailSender
+        services.AddKeyedSingleton<IEmailSender, StubEmailSender>("stub");
+        services.AddKeyedSingleton<IEmailSender, SmtpEmailSender>("smtp");
+        services.AddSingleton<IEmailSender, CompositeEmailSender>();
+
+        // SMTP options — bind from Notifications:Smtp in appsettings / user-secrets
+        services.Configure<SmtpOptions>(config.GetSection(SmtpOptions.SectionName));
 
         // Outbox processor options + background service
         services.Configure<EmailOutboxProcessorOptions>(

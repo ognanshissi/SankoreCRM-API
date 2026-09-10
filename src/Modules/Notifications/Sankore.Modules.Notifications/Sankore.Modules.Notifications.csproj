@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />

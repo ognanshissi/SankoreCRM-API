@@ -33,6 +33,12 @@ var rmq = builder.AddRabbitMQ("rabbitmq")
 // Seq
 var seq = builder.AddSeq("seq");
 
+// MailDev — local SMTP catch-all (web UI on port 1080, SMTP on 1025)
+var maildev = builder.AddContainer("maildev", "maildev/maildev")
+    .WithEndpoint(port: 1025, targetPort: 1025, name: "smtp")
+    .WithEndpoint(port: 1080, targetPort: 1080, scheme: "http", name: "web")
+    .WithLifetime(ContainerLifetime.Persistent);
+
 // Redis — provider-resolution cache for Notifications module
 var redis = builder.AddRedis("redis")
     .WithRedisInsight()
@@ -76,6 +82,8 @@ builder.AddContainer("grafana", "grafana/grafana", "11.1.0")
     .WithLifetime(ContainerLifetime.Persistent);
 // ─────────────────────────────────────────────────────────────────────────
 
+var smtpEndpoint = maildev.GetEndpoint("smtp");
+
 builder.AddProject<Projects.Sankore_Api>("sankore-api")
     .WithReference(db)
     .WithReference(rmq)
@@ -85,6 +93,11 @@ builder.AddProject<Projects.Sankore_Api>("sankore-api")
     .WithEnvironment("ASPNETCORE_HTTP_PORTS", "5000")
     // Send traces also to Tempo so they appear in Grafana (alongside Aspire Dashboard).
     .WithEnvironment("SANKORE_TEMPO_OTLP_ENDPOINT", tempo.GetEndpoint("tempo-otlp-grpc"))
+    // MailDev SMTP — plain, no TLS
+    .WithEnvironment("Notifications__Smtp__Host", smtpEndpoint.Property(EndpointProperty.Host))
+    .WithEnvironment("Notifications__Smtp__Port", smtpEndpoint.Property(EndpointProperty.Port))
+    .WithEnvironment("Notifications__Smtp__UseSsl", "false")
+    .WithEnvironment("Notifications__Smtp__UseStartTls", "false")
     .WaitFor(rmq)
     .WaitFor(db)
     .WaitFor(redis);

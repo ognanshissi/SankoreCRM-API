@@ -11,10 +11,10 @@ public sealed class TenantNotificationSettings
     public Guid TenantId { get; private set; }
 
     /// <summary>
-    /// Active provider: "Default" | "Ses" | "Postmark" | "SendGrid".
+    /// Active provider: "Smtp" | "Ses" | "Postmark" | "SendGrid".
     /// "Default" means the platform-wide SES account is used.
     /// </summary>
-    public string ProviderType { get; private set; } = "Default";
+    public string ProviderType { get; private set; } = "Smtp";
 
     public bool UseDefaultPlatformProvider { get; private set; } = true;
 

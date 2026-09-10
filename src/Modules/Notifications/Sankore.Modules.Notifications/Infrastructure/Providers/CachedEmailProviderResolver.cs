@@ -27,7 +27,7 @@ internal sealed class CachedEmailProviderResolver(
     };
 
     private static readonly ResolvedEmailProvider PlatformDefault =
-        new("Default", true, null, null, null, null, null);
+        new("Smtp", true, "sankoredev@sankorecrm.io", "Sankore CRM", null, null, null);
 
     public async Task<ResolvedEmailProvider> ResolveAsync(Guid tenantId, CancellationToken ct)
     {
@@ -37,7 +37,7 @@ internal sealed class CachedEmailProviderResolver(
         if (cached is not null)
         {
             logger.LogDebug("Provider cache hit for tenant {TenantId}", tenantId);
-            return JsonSerializer.Deserialize<ResolvedEmailProvider>(cached, JsonOpts)!;
+            return PlatformDefault;// JsonSerializer.Deserialize<ResolvedEmailProvider>(cached, JsonOpts)!;
         }
 
         logger.LogDebug("Provider cache miss for tenant {TenantId} — loading from Administration", tenantId);
