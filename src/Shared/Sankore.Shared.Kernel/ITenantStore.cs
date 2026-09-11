@@ -1,12 +1,17 @@
 namespace Sankore.Shared.Kernel;
 
 /// <summary>
-/// Port for verifying whether a tenant identifier refers to a real, active
-/// tenant. Implemented by infrastructure (HTTP call to an external tenant
-/// registry) so the Kernel stays free of any I/O dependency.
+/// Port for retrieving tenant data from the external tenant registry.
+/// Implemented by infrastructure (HTTP call to Sankore.Admin) so the Kernel
+/// stays free of any I/O dependency.
 /// </summary>
 public interface ITenantStore
 {
-    /// <summary>Returns <c>true</c> if the tenant is known and active.</summary>
-    Task<bool> ExistsAsync(Guid tenantId, CancellationToken ct = default);
+    /// <summary>
+    /// Returns the full tenant record, or <c>null</c> if the tenant is unknown.
+    /// Callers should treat an inactive or maintenance tenant as appropriate.
+    /// </summary>
+    Task<TenantInfo?> GetAsync(Guid tenantId, CancellationToken ct = default);
+    
+    Task<TenantInfo?> GetByFqdnAsync(string fqdn, CancellationToken ct = default);
 }

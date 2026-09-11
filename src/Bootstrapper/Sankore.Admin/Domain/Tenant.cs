@@ -20,7 +20,7 @@ public class Tenant
 
     private Tenant() { }
 
-    public static Tenant Create(string name, string rootUserEmail, string fqdn, DateTimeOffset? trialExpiresAt = null)
+    public static Tenant Create(string name, string rootUserEmail, string fqdn, string applicationUrl,  DateTimeOffset? trialExpiresAt = null)
     {
         return new Tenant
         {

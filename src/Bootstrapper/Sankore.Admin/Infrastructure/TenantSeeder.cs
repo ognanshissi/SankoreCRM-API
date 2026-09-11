@@ -19,6 +19,7 @@ internal static class TenantSeeder
         var devTenant = Tenant.Create(
             name: "Sankore Dev",
             rootUserEmail: "admin@sankore.dev",
+            applicationUrl: "http://localhost:4222",
             fqdn: "sankore.dev");
 
         // Fix the ID to a stable well-known value so other services can reference it.

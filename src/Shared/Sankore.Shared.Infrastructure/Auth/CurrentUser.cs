@@ -62,7 +62,15 @@ public sealed class HttpTenantContext(IHttpContextAccessor accessor) : ITenantCo
                ?? ctx.Request.Headers["x-tenant-id"].FirstOrDefault();
     }
 
+    private string? ResolveFqdn()
+    {
+        var ctx = accessor.HttpContext;
+        if (ctx is null) return null;
+        return ctx.Request.Headers["x-fqdn"].FirstOrDefault();
+    }
+
     public bool HasTenant => Resolve() is not null;
+    public string Fqdn => ResolveFqdn() ?? throw new InvalidOperationException("No Tenant Fqdn resolved for the current context.");
 
     public Guid CurrentTenantId => Resolve() is { } raw && Guid.TryParse(raw, out var id)
         ? id

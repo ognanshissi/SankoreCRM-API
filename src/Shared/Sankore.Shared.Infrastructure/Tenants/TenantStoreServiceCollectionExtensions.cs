@@ -33,6 +33,7 @@ public static class TenantStoreServiceCollectionExtensions
                 sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>(),
                 sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<TenantStoreOptions>>()));
 
+
         return services;
     }
 

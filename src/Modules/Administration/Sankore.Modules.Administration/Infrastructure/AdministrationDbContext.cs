@@ -23,6 +23,7 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<TenantNotificationSettings> TenantNotificationSettings => Set<TenantNotificationSettings>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<CompanyInfo> CompanyInfos => Set<CompanyInfo>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -91,5 +92,11 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<ProductSpeciality>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TenantNotificationSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        
+        // Sequence creation
+        modelBuilder.HasSequence<string>("GeneratedIncrementalNo", schema: "shared")
+            .StartsAt(0000000000)
+            .IncrementsBy(5);
     }
 }

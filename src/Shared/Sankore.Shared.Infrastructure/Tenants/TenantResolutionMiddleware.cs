@@ -43,17 +43,28 @@ public sealed class TenantResolutionMiddleware(
         }
 
         var tenantId = tenantContext.CurrentTenantId;
-        var exists = await tenantStore.ExistsAsync(tenantId, ctx.RequestAborted);
+        var tenant = await tenantStore.GetAsync(tenantId, ctx.RequestAborted);
 
-        if (!exists)
+        if (tenant is null)
         {
             logger.LogWarning("Request rejected: tenant {TenantId} not found in tenant store", tenantId);
-
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await ctx.Response.WriteAsJsonAsync(new
-            {
-                error = $"Tenant {tenantId} is not recognized."
-            });
+            await ctx.Response.WriteAsJsonAsync(new { error = $"Tenant {tenantId} is not recognized." });
+            return;
+        }
+
+        if (!tenant.IsActive)
+        {
+            logger.LogWarning("Request rejected: tenant {TenantId} is inactive", tenantId);
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await ctx.Response.WriteAsJsonAsync(new { error = "Tenant account is inactive." });
+            return;
+        }
+
+        if (tenant.IsMaintenance)
+        {
+            ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await ctx.Response.WriteAsJsonAsync(new { error = "The platform is under maintenance. Please try again later." });
             return;
         }
 

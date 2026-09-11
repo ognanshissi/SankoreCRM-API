@@ -46,7 +46,7 @@ internal static class NotificationsSeeder
                       <h2>Bienvenue, {{ full_name }} !</h2>
                       <p>Votre compte Sankore a été créé. Cliquez sur le bouton ci-dessous pour définir votre mot de passe et activer votre compte.</p>
                       <p style="margin:32px 0">
-                        <a href="{{ activation_url }}"
+                        <a href="{{ activation_url }}" target="_blank"
                            style="background:#1a56db;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
                           Activer mon compte
                         </a>
@@ -81,7 +81,7 @@ internal static class NotificationsSeeder
                       <h2>Welcome, {{ full_name }}!</h2>
                       <p>Your Sankore account has been created. Click the button below to set your password and activate your account.</p>
                       <p style="margin:32px 0">
-                        <a href="{{ activation_url }}"
+                        <a href="{{ activation_url }}" target="_blank"
                            style="background:#1a56db;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
                           Activate my account
                         </a>
@@ -132,7 +132,7 @@ internal static class NotificationsSeeder
                       <p>Nous avons reçu une demande de réinitialisation du mot de passe associé à votre compte Sankore.
                          Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.</p>
                       <p style="margin:32px 0">
-                        <a href="{{ reset_url }}"
+                        <a href="{{ reset_url }}" target="_blank"
                            style="background:#1a56db;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
                           Réinitialiser mon mot de passe
                         </a>
