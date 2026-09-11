@@ -11,7 +11,6 @@ public interface ITenantContext
 {
     Guid CurrentTenantId { get; }
     bool HasTenant { get; }
-    string Fqdn { get; }
 }
 
 /// <summary>
@@ -22,6 +21,4 @@ public sealed class FixedTenantContext(Guid tenantId) : ITenantContext
 {
     public Guid CurrentTenantId { get; } = tenantId;
     public bool HasTenant => true;
-    
-    public string Fqdn { get; } = string.Empty;
 }

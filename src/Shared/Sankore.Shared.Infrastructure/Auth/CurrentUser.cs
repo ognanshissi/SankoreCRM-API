@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Sankore.Shared.Kernel.Models;
 
 namespace Sankore.Shared.Infrastructure.Auth;
 
@@ -48,31 +49,37 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICur
 /// Bridges ICurrentUser to the Kernel's ITenantContext abstraction so every
 /// module's DbContext can apply its multi-tenant global query filter without
 /// depending on ASP.NET Core at all.
-/// Resolves tenant in priority order:
-///   1. JWT claim "tenant_id"
-///   2. Request header "x-tenant-id"
+///
+/// Resolution order (mirrors TenantResolutionMiddleware):
+///   1. JWT claim "tenant_id"        — signed, authoritative.
+///   2. HttpContext.Items key         — set by TenantResolutionMiddleware after
+///                                      FQDN lookup; avoids a second store call.
+///
+/// x-tenant-id header is intentionally NOT read here. It is rejected upstream
+/// by TenantResolutionMiddleware before this context is ever consulted.
 /// </summary>
 public sealed class HttpTenantContext(IHttpContextAccessor accessor) : ITenantContext
 {
-    private string? Resolve()
+    private Guid? Resolve()
     {
         var ctx = accessor.HttpContext;
         if (ctx is null) return null;
-        return ctx.User.FindFirst("tenant_id")?.Value
-               ?? ctx.Request.Headers["x-tenant-id"].FirstOrDefault();
-    }
 
-    private string? ResolveFqdn()
-    {
-        var ctx = accessor.HttpContext;
-        if (ctx is null) return null;
-        return ctx.Request.Headers["x-fqdn"].FirstOrDefault();
+        // 1. JWT claim
+        var claim = ctx.User.FindFirst("tenant_id")?.Value;
+        if (claim is not null && Guid.TryParse(claim, out var fromJwt))
+            return fromJwt;
+
+        // 2. Middleware-resolved via FQDN / X-Tenant-Id (stored in Items by TenantResolutionMiddleware)
+        if (ctx.Items.TryGetValue(TenantKey.ResolvedTenantKey, out var item)
+            && item is Guid fromItems)
+            return fromItems;
+
+        return null;
     }
 
     public bool HasTenant => Resolve() is not null;
-    public string Fqdn => ResolveFqdn() ?? throw new InvalidOperationException("No Tenant Fqdn resolved for the current context.");
 
-    public Guid CurrentTenantId => Resolve() is { } raw && Guid.TryParse(raw, out var id)
-        ? id
-        : throw new InvalidOperationException("No tenant resolved for the current context.");
+    public Guid CurrentTenantId => Resolve()
+        ?? throw new InvalidOperationException("No tenant resolved for the current context.");
 }

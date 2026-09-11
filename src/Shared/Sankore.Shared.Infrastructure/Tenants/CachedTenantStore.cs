@@ -20,17 +20,22 @@ internal sealed class CachedTenantStore(
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    private static string CacheKey(string key) => $"tenant:{key}";
+    private static string IdKey(Guid tenantId)   => $"tenant:id:{tenantId}";
+    private static string FqdnKey(string fqdn)    => $"tenant:fqdn:{fqdn}";
 
     public Task<TenantInfo?> GetAsync(Guid tenantId, CancellationToken ct = default)
-        => GetOrCache(tenantId.ToString(), () => inner.GetAsync(tenantId, ct), ct);
+        => GetOrCache(IdKey(tenantId), options.Value.CacheTtl, () => inner.GetAsync(tenantId, ct), ct);
 
     public Task<TenantInfo?> GetByFqdnAsync(string fqdn, CancellationToken ct = default)
-        => GetOrCache($"fqdn:{fqdn}", () => inner.GetByFqdnAsync(fqdn, ct), ct);
+        => GetOrCache(FqdnKey(fqdn), options.Value.FqdnCacheTtl, () => inner.GetByFqdnAsync(fqdn, ct), ct);
 
-    private async Task<TenantInfo?> GetOrCache(string cacheId, Func<Task<TenantInfo?>> fetch, CancellationToken ct = default)
+    private async Task<TenantInfo?> GetOrCache(
+        string cacheKey,
+        TimeSpan ttl,
+        Func<Task<TenantInfo?>> fetch,
+        CancellationToken ct = default)
     {
-        var cached = await cache.GetStringAsync(CacheKey(cacheId), ct);
+        var cached = await cache.GetStringAsync(cacheKey, ct);
         if (cached is not null)
             return JsonSerializer.Deserialize<TenantInfo>(cached, JsonOpts);
 
@@ -38,12 +43,10 @@ internal sealed class CachedTenantStore(
 
         if (tenant is not null)
             await cache.SetStringAsync(
-                CacheKey(cacheId),
+                cacheKey,
                 JsonSerializer.Serialize(tenant, JsonOpts),
-                new DistributedCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = options.Value.CacheTtl
-                }, ct);
+                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl },
+                ct);
 
         return tenant;
     }

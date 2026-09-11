@@ -4,12 +4,13 @@ using Sankore.Admin.Domain;
 namespace Sankore.Admin.Infrastructure;
 
 /// <summary>
-/// Seeds a default dev tenant on first startup. Idempotent — skips seeding
-/// if any tenant already exists in the database.
+/// Seeds a default dev tenant and its primary domain on first startup.
+/// Idempotent — skips seeding if any tenant already exists.
 /// </summary>
 internal static class TenantSeeder
 {
     private static readonly Guid DevTenantId = new("2fae736d-9c5c-456e-8d3c-5e4e9b0674ce");
+    private const string DevFqdn = "http://localhost:4222";
 
     public static async Task SeedAsync(AdminDbContext db, CancellationToken ct = default)
     {
@@ -20,9 +21,8 @@ internal static class TenantSeeder
             name: "Sankore Dev",
             rootUserEmail: "admin@sankore.dev",
             applicationUrl: "http://localhost:4222",
-            fqdn: "sankore.dev");
+            fqdn: DevFqdn);
 
-        // Fix the ID to a stable well-known value so other services can reference it.
         SetId(devTenant, DevTenantId);
 
         devTenant.ApplicationModulesList.AddRange([
@@ -31,11 +31,18 @@ internal static class TenantSeeder
             ApplicationModules.Loan
         ]);
 
+        var primaryDomain = TenantDomain.Create(
+            tenantId: DevTenantId,
+            fqdn: DevFqdn,
+            isPrimary: true);
+
         db.Tenants.Add(devTenant);
+        db.TenantDomains.Add(primaryDomain);
+
         await db.SaveChangesAsync(ct);
     }
 
-    // Sets the private Id field via reflection — used only here to pin the seed tenant ID.
+    // Sets the private Id property via reflection — used only here to pin the seed tenant ID.
     private static void SetId(Tenant tenant, Guid id)
     {
         var prop = typeof(Tenant).GetProperty(nameof(Tenant.Id))!;

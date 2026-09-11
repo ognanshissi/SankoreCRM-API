@@ -95,8 +95,8 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         
         // Sequence creation
-        modelBuilder.HasSequence<string>("GeneratedIncrementalNo", schema: "shared")
-            .StartsAt(0000000000)
+        modelBuilder.HasSequence<int>("GeneratedIncrementalNo", schema: "shared")
+            .StartsAt(1000)
             .IncrementsBy(5);
     }
 }

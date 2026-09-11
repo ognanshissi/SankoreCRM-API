@@ -12,7 +12,7 @@ public class CompanyInfoConfiguration: IEntityTypeConfiguration<CompanyInfo>
         builder.ToTable("company_info");
 
         builder.Property(b => b.Name).HasMaxLength(150).IsRequired();
-        builder.Property(a => a.RefCode).HasDefaultValueSql("NEXT VALUE FOR GeneratedIncrementalNo").IsRequired();
+        builder.Property(a => a.RefCode).HasDefaultValueSql("nextval('\\\"GeneratedIncrementalNo\\\"')").IsRequired();
         builder.Property(b => b.Description).HasMaxLength(200);
 
         builder.Property(x => x.DefaultLanguage)

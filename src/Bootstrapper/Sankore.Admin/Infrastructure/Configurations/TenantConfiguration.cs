@@ -8,9 +8,11 @@ public class TenantConfiguration: IEntityTypeConfiguration<Tenant>
 {
     public void Configure(EntityTypeBuilder<Tenant> builder)
     {
-        // je t'aime ambroise 
         builder.HasKey(p => p.Id);
-        builder.Property(p => p.Fqdn).IsRequired();
+        builder.Property(p => p.Fqdn)
+            .HasMaxLength(253)
+            .HasColumnType("citext")
+            .IsRequired();
 
         builder.HasIndex(x => x.Fqdn).IsUnique();
         builder.HasIndex(p => p.Id);

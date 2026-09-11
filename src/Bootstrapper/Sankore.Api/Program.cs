@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Sankore.Api.Features.Audit.GetAuditEntries;
+using Sankore.Api.Features.Bootstrap;
 using Sankore.Api.Infrastructure;
 using Sankore.Api.Infrastructure.Audit;
 using Sankore.Modules.Leads;
@@ -162,8 +163,6 @@ builder.Services.AddEndpointsApiExplorer();
 #region Swagger Generation
 builder.Services.AddSwaggerGen(options =>
 {
-    options.OperationFilter<Sankore.Api.Infrastructure.TenantHeaderOperationFilter>();
-
     options.AddSecurityDefinition("BearerToken", new ()
     {
         Name = "Authorization",
@@ -173,27 +172,12 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer"
     });
 
-    options.AddSecurityDefinition("TenantHeader", new()
-    {
-        Name = "x-tenant-id",
-        Description = "Tenant identifier (UUID). Required when no JWT is present or to override the JWT tenant claim.",
-        Type = SecuritySchemeType.ApiKey,
-        In = ParameterLocation.Header,
-    });
-
     options.AddSecurityRequirement(new()
     {
         {
             new()
             {
                 Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "BearerToken" }
-            },
-            new List<string>()
-        },
-        {
-            new()
-            {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "TenantHeader" }
             },
             new List<string>()
         }
@@ -271,6 +255,8 @@ appVersion1.MapWorkflowModuleEndpoints();
 appVersion1.MapNotificationsModuleEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
+
+app.MapBootstrapEndpoints();
 
 // app.MapCustomersEndpoints();
 // app.MapKycEndpoints();

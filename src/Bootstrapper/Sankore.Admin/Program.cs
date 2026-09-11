@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using Sankore.Admin.Features.TenantDomains;
 using Sankore.Admin.Features.Tenants;
 using Sankore.Admin.Infrastructure;
 
@@ -81,5 +82,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapTenantEndpoints();
+app.MapTenantDomainEndpoints();
 
 app.Run();

@@ -2,7 +2,6 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Sankore.Shared.Infrastructure.Extensions;
 
 namespace Sankore.Modules.Administration.Features.Authentication.Login;
 
@@ -15,7 +14,6 @@ public static class LoginEndpoint
             .WithName("Login")
             .Produces<LoginResult>(StatusCodes.Status200OK)
             .AllowAnonymous()
-            .WithTenantHeader()
             .RequireRateLimiting("auth");
         return app;
     }
@@ -30,4 +28,4 @@ public static class LoginEndpoint
     }
 }
 
-public sealed record LoginRequest(Guid TenantId, string Email, string Password);
+public sealed record LoginRequest(string Email, string Password);
