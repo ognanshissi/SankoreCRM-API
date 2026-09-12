@@ -14,6 +14,7 @@ internal sealed class RegisterHandler(
     UserManager<AppUser> userManager,
     AdministrationDbContext db,
     ITenantContext tenant,
+    ITenantStore tenantStore,
     [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher) : IRequestHandler<RegisterCommand, Result<RegisterResult>>
 {
     public async Task<Result<RegisterResult>> Handle(RegisterCommand request, CancellationToken cancellationToken)
@@ -27,6 +28,14 @@ internal sealed class RegisterHandler(
 
         if (tenantHasSystemUser)
             return Result.Fail<RegisterResult>("A tenant could not have more thant one system user.");
+        
+        
+        var tenantInfo = await tenantStore.GetAsync(tenant.CurrentTenantId, cancellationToken);
+
+        if (tenantInfo == null)
+        {
+            return Result.Fail<RegisterResult>("A tenant could not be found.");
+        }
         
         var user = AppUser.CreateRoot(
             tenant.CurrentTenantId,
@@ -44,6 +53,10 @@ internal sealed class RegisterHandler(
         // Provision default profile
         var profile = UserProfile.Create(tenant.CurrentTenantId, user.Id);
         await db.AddAsync(profile, cancellationToken);
+
+        // Provision company info for the tenant
+        var companyInfo = Domain.CompanyInfo.Create(tenant.CurrentTenantId, tenantInfo.Name, description: "");
+        await db.AddAsync(companyInfo, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         

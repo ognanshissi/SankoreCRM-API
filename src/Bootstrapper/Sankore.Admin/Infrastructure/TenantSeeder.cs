@@ -20,14 +20,13 @@ internal static class TenantSeeder
         var devTenant = Tenant.Create(
             name: "Sankore Dev",
             rootUserEmail: "admin@sankore.dev",
-            applicationUrl: "http://localhost:4222",
             fqdn: DevFqdn);
 
         SetId(devTenant, DevTenantId);
 
         devTenant.ApplicationModulesList.AddRange([
             ApplicationModules.Lead,
-            ApplicationModules.Customer,
+            ApplicationModules.Customer360,
             ApplicationModules.Loan
         ]);
 

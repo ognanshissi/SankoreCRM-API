@@ -17,6 +17,7 @@ internal sealed class CreateUserHandler(
     UserManager<AppUser> userManager,
     RoleManager<AppRole> roleManager,
     ITenantContext tenantContext,
+    ITenantStore tenantStore,
     [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher,
     INotificationsModule notifications
 ) : IRequestHandler<CreateUserCommand, Result<CreateUserResult>>
@@ -77,6 +78,8 @@ internal sealed class CreateUserHandler(
         await publisher.PublishAsync(
             new UserCreatedEvent(tenantId, user.Id, user.Email!, user.FullName), ct);
 
+        var tenantInfo = await tenantStore.GetAsync(tenantContext.CurrentTenantId, ct);
+
         // 9. Queue activation email — runs after SaveChangesAsync so the user row is committed
         await notifications.QueueEmailAsync(new QueueEmailRequest(
             TemplateKey:    "user.activation",
@@ -87,7 +90,8 @@ internal sealed class CreateUserHandler(
             TemplateData: new Dictionary<string, object>
             {
                 ["full_name"]        = user.FullName,
-                ["activation_url"] = $"http://localhost:4222/auth/account-activation?token={activationToken}&userId={user.Id}",
+                ["activation_url"] = $"{tenantInfo?.Fqdn}/auth/account-activation?token={activationToken}&userId={user.Id}",
+                ["company_name"]     = tenantInfo?.Name ?? "",
                 ["tenant_id"]        = tenantId.ToString(),
                 ["user_id"]          = user.Id.ToString()
             },

@@ -155,7 +155,7 @@ public sealed class SanitizedJsonSerializerTests
     public void RegisterCommand_both_passwords_are_redacted()
     {
         var cmd = new Sankore.Modules.Administration.Features.Users.Register.RegisterCommand(
-            "newuser@sankore.sn", "Pass1!", "Pass1!", "Fatou", "Diallo");
+            "newuser@sankore.sn", "Pass1!", "Pass1!", "Fatou", "Diallo", Guid.NewGuid());
 
         var json = SanitizedJsonSerializer.Serialize(cmd);
         var doc = JsonDocument.Parse(json);

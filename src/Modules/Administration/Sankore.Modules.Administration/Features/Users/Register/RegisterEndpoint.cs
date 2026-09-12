@@ -2,7 +2,6 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Sankore.Shared.Infrastructure.Extensions;
 
 namespace Sankore.Modules.Administration.Features.Users.Register;
 
@@ -12,8 +11,7 @@ public static class RegisterEndpoint
     {
         app.MapPost("create-root", Handle)
             .WithName("Create Root")
-            .AllowAnonymous()
-            .WithTenantHeader();
+            .AllowAnonymous();
 
         return app;
     }
@@ -22,7 +20,7 @@ public static class RegisterEndpoint
         RegisterRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(
-            new RegisterCommand(req.Email, req.Password, req.ConfirmPassword, req.FirstName,  req.LastName),
+            new RegisterCommand(req.Email, req.Password, req.ConfirmPassword, req.FirstName, req.LastName, req.TenantId),
             ct);
 
         return result.IsSuccess
@@ -36,4 +34,5 @@ public sealed record RegisterRequest(
     string Password,
     string ConfirmPassword,
     string FirstName,
-    string LastName);
+    string LastName,
+    Guid TenantId);

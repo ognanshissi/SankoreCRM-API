@@ -38,15 +38,15 @@ internal static class NotificationsSeeder
                 templateKey: key,
                 locale: "fr",
                 version: 1,
-                subject: "Activez votre compte Sankore",
+                subject: "Activez votre compte {{ company_name }}",
                 htmlBody: """
                     <!DOCTYPE html>
                     <html lang="fr">
                     <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
                       <h2>Bienvenue, {{ full_name }} !</h2>
-                      <p>Votre compte Sankore a été créé. Cliquez sur le bouton ci-dessous pour définir votre mot de passe et activer votre compte.</p>
+                      <p>Votre compte sur {{ company_name }} a été créé. Cliquez sur le bouton ci-dessous pour définir votre mot de passe et activer votre compte.</p>
                       <p style="margin:32px 0">
-                        <a href="{{ activation_url }}" target="_blank"
+                        <a href="{{ activation_url }}"
                            style="background:#1a56db;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
                           Activer mon compte
                         </a>
@@ -73,15 +73,15 @@ internal static class NotificationsSeeder
                 templateKey: key,
                 locale: "en",
                 version: 1,
-                subject: "Activate your Sankore account",
+                subject: "Activate your {{ company_name }} account",
                 htmlBody: """
                     <!DOCTYPE html> 
                     <html lang="en">
                     <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
                       <h2>Welcome, {{ full_name }}!</h2>
-                      <p>Your Sankore account has been created. Click the button below to set your password and activate your account.</p>
+                      <p>Your {{ company_name }} account has been created. Click the button below to set your password and activate your account.</p>
                       <p style="margin:32px 0">
-                        <a href="{{ activation_url }}" target="_blank"
+                        <a href="{{ activation_url }}" 
                            style="background:#1a56db;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
                           Activate my account
                         </a>
@@ -122,17 +122,17 @@ internal static class NotificationsSeeder
                 templateKey: key,
                 locale: "fr",
                 version: 1,
-                subject: "Réinitialisation de votre mot de passe Sankore",
+                subject: "Réinitialisation de votre mot de passe {{ company_name }}",
                 htmlBody: """
                     <!DOCTYPE html>
                     <html lang="fr">
                     <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
                       <h2>Réinitialisation du mot de passe</h2>
                       <p>Bonjour {{ full_name }},</p>
-                      <p>Nous avons reçu une demande de réinitialisation du mot de passe associé à votre compte Sankore.
+                      <p>Nous avons reçu une demande de réinitialisation du mot de passe associé à votre compte {{ company_name }}.
                          Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.</p>
                       <p style="margin:32px 0">
-                        <a href="{{ reset_url }}" target="_blank"
+                        <a href="{{ reset_url }}"
                            style="background:#1a56db;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
                           Réinitialiser mon mot de passe
                         </a>
@@ -160,14 +160,14 @@ internal static class NotificationsSeeder
                 templateKey: key,
                 locale: "en",
                 version: 1,
-                subject: "Reset your Sankore password",
+                subject: "Reset your {{ company_name }} password",
                 htmlBody: """
                     <!DOCTYPE html>
                     <html lang="en">
                     <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
                       <h2>Password reset request</h2>
                       <p>Hello {{ full_name }},</p>
-                      <p>We received a request to reset the password for your Sankore account.
+                      <p>We received a request to reset the password for your {{ company_name }} account.
                          Click the button below to choose a new password.</p>
                       <p style="margin:32px 0">
                         <a href="{{ reset_url }}"

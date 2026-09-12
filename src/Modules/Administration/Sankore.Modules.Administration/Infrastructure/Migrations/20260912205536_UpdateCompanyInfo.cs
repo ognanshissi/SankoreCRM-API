@@ -5,7 +5,7 @@
 namespace Sankore.Modules.Administration.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddCompanyInfo : Migration
+    public partial class UpdateCompanyInfo : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

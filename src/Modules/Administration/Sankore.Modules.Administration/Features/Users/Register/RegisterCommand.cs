@@ -9,7 +9,8 @@ public sealed record RegisterCommand(
     [property: SensitiveData] string Password,
     [property: SensitiveData] string ConfirmPassword,
     string FirstName,
-    string LastName
+    string LastName,
+    Guid TenantId
 ) : IRequest<Result<RegisterResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "User";

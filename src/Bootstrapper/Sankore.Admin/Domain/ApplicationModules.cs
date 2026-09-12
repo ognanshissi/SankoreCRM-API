@@ -1,8 +1,8 @@
 namespace Sankore.Admin.Domain;
 
-public enum ApplicationModules
+public static class ApplicationModules
 {
-    Lead,
-    Customer,
-    Loan,
+    public static string Lead => "Lead";
+    public static string Customer360 => "Customer360";
+    public static string Loan => "Loan";
 }

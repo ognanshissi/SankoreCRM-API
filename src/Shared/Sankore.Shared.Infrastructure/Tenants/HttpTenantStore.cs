@@ -29,7 +29,7 @@ internal sealed class HttpTenantStore(
 
     public Task<TenantInfo?> GetByFqdnAsync(string fqdn, CancellationToken ct = default)
         => FetchAsync(
-            c => c.GetAsync($"api/v1/tenants/by-fqdn/{fqdn}", ct),
+            c => c.GetAsync($"api/v1/tenants/by-fqdn?domain={fqdn}", ct),
             $"fqdn {fqdn}",
             ct);
 

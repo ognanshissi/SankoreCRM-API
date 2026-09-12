@@ -13,8 +13,8 @@ using Sankore.Modules.Administration.Infrastructure;
 namespace Sankore.Modules.Administration.Infrastructure.Migrations
 {
     [DbContext(typeof(AdministrationDbContext))]
-    [Migration("20260911142039_AddCompanyInfo")]
-    partial class AddCompanyInfo
+    [Migration("20260912205536_UpdateCompanyInfo")]
+    partial class UpdateCompanyInfo
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -497,6 +497,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
                     b.Property<string>("DefaultLanguage")
                         .IsRequired()
                         .HasColumnType("text")
@@ -529,13 +533,6 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("primary_color");
 
-                    b.Property<string>("RefCode")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasColumnName("ref_code")
-                        .HasDefaultValueSql("nextval('\\\"GeneratedIncrementalNo\\\"')");
-
                     b.Property<string>("SecondaryColor")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -546,11 +543,19 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
                     b.HasKey("Id")
                         .HasName("pk_company_info");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_company_info_tenant_id");
+
+                    b.HasIndex("TenantId", "Id")
+                        .IsUnique()
+                        .HasDatabaseName("ix_company_info_tenant_id_id");
 
                     b.ToTable("company_info", "administration");
                 });

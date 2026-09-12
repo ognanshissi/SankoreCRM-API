@@ -53,6 +53,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         var publisher = Substitute.For<IEventPublisher>();
         var tenantContext = Substitute.For<ITenantContext>();
         var currentUser = Substitute.For<ICurrentUser>();
+        var tenantStore = Substitute.For<ITenantStore>();
         tenantContext.CurrentTenantId.Returns(_tenantId);
         currentUser.Id.Returns(callerUserId);
 
@@ -75,7 +76,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         notifications.QueueEmailAsync(Arg.Any<QueueEmailRequest>(), Arg.Any<CancellationToken>())
             .Returns(Result<Guid>.Ok(Guid.NewGuid()));
 
-        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, publisher, notifications);
+        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: agency.Id,
@@ -117,11 +118,11 @@ public sealed class CreateUserHandlerTests : IDisposable
         var roleManager = IdentityMockFactory.BuildRoleManager();
         var publisher = Substitute.For<IEventPublisher>();
         var tenantContext = Substitute.For<ITenantContext>();
-        var currentUser = Substitute.For<ICurrentUser>();
+        var tenantStore  = Substitute.For<ITenantStore>();
         tenantContext.CurrentTenantId.Returns(_tenantId);
 
         var notifications = Substitute.For<INotificationsModule>();
-        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, publisher, notifications);
+        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: Guid.NewGuid(), // no agency seeded
@@ -166,11 +167,11 @@ public sealed class CreateUserHandlerTests : IDisposable
         roleManager.FindByIdAsync(roleId.ToString()).Returns(role);
 
         var tenantContext = Substitute.For<ITenantContext>();
-        var currentUser = Substitute.For<ICurrentUser>();
+        var tenantStore = Substitute.For<ITenantStore>();
         tenantContext.CurrentTenantId.Returns(_tenantId);
 
         var notifications = Substitute.For<INotificationsModule>();
-        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, publisher, notifications);
+        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: agency.Id,

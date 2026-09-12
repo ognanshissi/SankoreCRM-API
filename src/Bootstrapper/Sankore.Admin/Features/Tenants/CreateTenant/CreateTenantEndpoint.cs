@@ -11,7 +11,7 @@ public static class CreateTenantEndpoint
         group.MapPost("/", async (Request req, IMediator mediator, CancellationToken ct) =>
             {
                 var id = await mediator.Send(
-                    new CreateTenantCommand(req.Name, req.RootUserEmail, req.Fqdn, req.ApplicationUrl,  req.TrialExpiresAt), ct);
+                    new CreateTenantCommand(req.Name, req.RootUserEmail, req.Fqdn,  req.TrialExpiresAt), ct);
                 return Results.Created($"/api/v1/tenants/{id}", new { id });
             })
             .WithName("CreateTenant")

@@ -130,6 +130,14 @@ public static class Permissions
     public static readonly PermissionItem CanDeleteProduct =
         new("product:delete", "Delete Product Speciality", ApplicationModules.Administration, "delete");
 
+    // ── Company info (Administration module) ──────────────────────────────
+
+    public static readonly PermissionItem CanReadCompanyInfo =
+        new("company:read", "Read Company Info", ApplicationModules.Administration, "read");
+
+    public static readonly PermissionItem CanUpdateCompanyInfo =
+        new("company:update", "Update Company Info", ApplicationModules.Administration, "update");
+
     // ── Notification settings (Administration module) ─────────────────────
 
     public static readonly PermissionItem CanReadNotificationSettings =
@@ -208,5 +216,7 @@ public static class Permissions
         CanReadNotificationSettings,
         CanManageNotificationSettings,
         CanManageEmailQuota,
+        CanReadCompanyInfo,
+        CanUpdateCompanyInfo,
     ];
 }

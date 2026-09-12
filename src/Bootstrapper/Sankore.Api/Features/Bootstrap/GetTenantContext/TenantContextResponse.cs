@@ -10,4 +10,11 @@ public record TenantContextResponse(
     string Name,
     bool IsActive,
     bool IsMaintenance,
-    DateTimeOffset? TrialExpiresAt);
+    DateTimeOffset? TrialExpiresAt,
+    // Branding — null when the root user has not yet completed registration.
+    string? CompanyName,
+    string? Description,
+    string? LogoUrl,
+    string? PrimaryColor,
+    string? SecondaryColor,
+    string? DefaultLanguage);

@@ -4,8 +4,8 @@ namespace Sankore.Modules.Administration.Domain;
 
 public class CompanyInfo
 {
-    private const string DefaultPrimaryColor = "";
-    private const string DefaultSecondaryColor = "";
+    private const string DefaultPrimaryColor = "#1A4D4DFF";
+    private const string DefaultSecondaryColor = "#103456FF";
     
     public Guid Id { get;  private set; }
     public Guid TenantId { get;  private set; }
@@ -15,12 +15,14 @@ public class CompanyInfo
     public bool IsMaintenance { get; private set; }
     public string PrimaryColor { get; private set; } = DefaultPrimaryColor;
     public string SecondaryColor { get; private set; } = DefaultSecondaryColor;
-    public string RefCode { get; private set; } = string.Empty;
     public Languages DefaultLanguage { get; private set; } = Languages.Fr;
+
+    public DateTimeOffset CreatedAt { get; private set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAt { get; private set; } = DateTimeOffset.UtcNow;
 
     private CompanyInfo() { }
 
-    public static CompanyInfo Create(Guid tenantId, string name, string description, string logoUrl)
+    public static CompanyInfo Create(Guid tenantId, string name, string description)
     {
         return new CompanyInfo
         {
@@ -28,9 +30,24 @@ public class CompanyInfo
             TenantId = tenantId,
             Name = name,
             Description = description,
-            LogoUrl = logoUrl,
-            RefCode = ""
+            LogoUrl = "default.png",
         };
     }
-    
+
+    public void Update(
+        string name,
+        string description,
+        string logoUrl,
+        string primaryColor,
+        string secondaryColor,
+        Languages defaultLanguage)
+    {
+        Name = name;
+        Description = description;
+        LogoUrl = logoUrl;
+        PrimaryColor = primaryColor;
+        SecondaryColor = secondaryColor;
+        DefaultLanguage = defaultLanguage;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
 }

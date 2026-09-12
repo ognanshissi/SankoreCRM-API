@@ -8,19 +8,24 @@ public class Tenant
     public string Fqdn { get; private set; } = null!;
     public bool IsActive { get; private set; }
 
-    public List<ApplicationModules> ApplicationModulesList = [];
+    public List<string> ApplicationModulesList = []; // use ApplicationL
     
     public DateTimeOffset? TrialExpiresAt { get; private set; }
     public bool IsMaintenance { get; private set; }
     public DateTimeOffset? BlockedAt { get; private set; }
-
+    
     public string BlockedReason { get; private set; } = null!;
+    
+    public SubscriptionState  SubscriptionState { get; set; } = SubscriptionState.Active;
+    
+    public SubscriptionStateInfo? SubscriptionStateInfo { get; set; }
+    
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
 
     private Tenant() { }
 
-    public static Tenant Create(string name, string rootUserEmail, string fqdn, string applicationUrl,  DateTimeOffset? trialExpiresAt = null)
+    public static Tenant Create(string name, string rootUserEmail, string fqdn,  DateTimeOffset? trialExpiresAt = null)
     {
         return new Tenant
         {
@@ -32,7 +37,9 @@ public class Tenant
             TrialExpiresAt = trialExpiresAt,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-            BlockedReason = string.Empty
+            BlockedReason = string.Empty,
+            SubscriptionState = SubscriptionState.Active,
+            SubscriptionStateInfo = new SubscriptionStateInfo(DateTimeOffset.UtcNow.AddYears(1), RenewalPeriod.Yearly)
         };
     }
 

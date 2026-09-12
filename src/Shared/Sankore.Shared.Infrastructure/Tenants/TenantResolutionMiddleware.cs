@@ -33,7 +33,7 @@ public sealed class TenantResolutionMiddleware(
         "/health",
         "/alive",
         "/swagger",
-        "/public",
+        "/api/v1/public",
     ];
 
     public async Task InvokeAsync(HttpContext ctx)
@@ -72,9 +72,7 @@ public sealed class TenantResolutionMiddleware(
         // Primary: Host header (same-domain deployment, validated by reverse proxy).
         // Fallback: X-Tenant-Fqdn (cross-domain API with explicit header).
         Guid? fqdnTenantId = null;
-        var fqdn = ctx.Request.Host.Host;
-        if (string.IsNullOrWhiteSpace(fqdn))
-            fqdn = ctx.Request.Headers["X-Tenant-Fqdn"].FirstOrDefault();
+        var fqdn = ctx.Request.Headers["X-Tenant-Fqdn"].FirstOrDefault();
 
         if (!string.IsNullOrWhiteSpace(fqdn))
         {

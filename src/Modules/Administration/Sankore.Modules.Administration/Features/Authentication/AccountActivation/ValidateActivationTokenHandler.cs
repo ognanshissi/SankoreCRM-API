@@ -9,6 +9,7 @@ namespace Sankore.Modules.Administration.Features.Authentication.AccountActivati
 
 internal sealed class ValidateActivationTokenHandler(
     AdministrationDbContext db,
+    ITenantContext tenantContext,
     UserManager<AppUser> userManager)
     : IRequestHandler<ValidateActivationTokenQuery, Result>
 {
@@ -19,7 +20,7 @@ internal sealed class ValidateActivationTokenHandler(
 
         var user = await db.Users
             .IgnoreQueryFilters()
-            .Where(u => u.Id == userId)
+            .Where(u => u.Id == userId && u.TenantId == tenantContext.CurrentTenantId)
             .FirstOrDefaultAsync(ct);
 
         if (user is null)
