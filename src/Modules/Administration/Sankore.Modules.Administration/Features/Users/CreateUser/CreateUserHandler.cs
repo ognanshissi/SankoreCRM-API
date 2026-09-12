@@ -90,7 +90,7 @@ internal sealed class CreateUserHandler(
             TemplateData: new Dictionary<string, object>
             {
                 ["full_name"]        = user.FullName,
-                ["activation_url"] = $"{tenantInfo?.Fqdn}/auth/account-activation?token={activationToken}&userId={user.Id}",
+                ["activation_url"] = $"{tenantInfo?.Fqdn}/auth/account-activation?token={activationToken}&userId={user.Id}&RequestType=AccountActivation",
                 ["company_name"]     = tenantInfo?.Name ?? "",
                 ["tenant_id"]        = tenantId.ToString(),
                 ["user_id"]          = user.Id.ToString()

@@ -12,6 +12,7 @@ internal sealed class ForgotPasswordHandler(
     AdministrationDbContext db,
     UserManager<AppUser> userManager,
     ITenantContext tenantContext,
+    ITenantStore tenantStore,
     INotificationsModule notifications
 ) : IRequestHandler<ForgotPasswordCommand, Result<ForgotPasswordResult>>
 {
@@ -42,6 +43,8 @@ internal sealed class ForgotPasswordHandler(
             .Where(p => p.UserId == user.Id)
             .Select(p => p.DefaultLanguage)
             .FirstOrDefaultAsync(ct) ?? "fr";
+
+        var tenantInfo = await tenantStore.GetAsync(tenantId, ct);
         
         // Idempotency: one reset email per user per calendar day (prevents spam)
         var idempotencyKey = $"password-reset-{user.Id}-{DateTimeOffset.UtcNow:yyyyMMdd}";
@@ -54,10 +57,11 @@ internal sealed class ForgotPasswordHandler(
             Locale:         locale,
             TemplateData: new Dictionary<string, object>
             {
-                ["full_name"]   = user.FullName,
-                ["reset_token"] = resetToken,
-                ["tenant_id"]   = tenantId.ToString(),
-                ["user_id"]     = user.Id.ToString()
+                ["full_name"]    = user.FullName,
+                ["company_name"] = tenantInfo?.Name ?? "",
+                ["reset_url"]    = $"{tenantInfo?.Fqdn}/auth/account-activation?userId={user.Id.ToString()}&token={resetToken}&RequestType=ForgotPassword",
+                ["tenant_id"]    = tenantId.ToString(),
+                ["user_id"]      = user.Id.ToString()
             },
             IdempotencyKey: idempotencyKey,
             TenantId:       tenantId), ct);
