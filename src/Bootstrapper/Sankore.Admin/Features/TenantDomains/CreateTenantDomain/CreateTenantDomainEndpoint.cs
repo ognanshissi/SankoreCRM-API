@@ -22,7 +22,7 @@ public static class CreateTenantDomainEndpoint
             })
             .WithName("CreateTenantDomain")
             .WithSummary("Assign a new FQDN to a tenant")
-            .Produces<object>(StatusCodes.Status201Created)
+            .Produces<CreateTenantDomainResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
             .WithOpenApi();
     }

@@ -4,21 +4,23 @@ using Sankore.Admin.Infrastructure;
 
 namespace Sankore.Admin.Features.TenantDomains.DeactivateTenantDomain;
 
-public record DeactivateTenantDomainCommand(Guid Id) : IRequest<bool>;
+public record DeactivateTenantDomainCommand(Guid Id) : IRequest<DeactivateTenantDomainResponse>;
+
+public record DeactivateTenantDomainResponse(bool Success);
 
 internal sealed class DeactivateTenantDomainHandler(AdminDbContext db)
-    : IRequestHandler<DeactivateTenantDomainCommand, bool>
+    : IRequestHandler<DeactivateTenantDomainCommand, DeactivateTenantDomainResponse>
 {
-    public async Task<bool> Handle(DeactivateTenantDomainCommand request, CancellationToken ct)
+    public async Task<DeactivateTenantDomainResponse> Handle(DeactivateTenantDomainCommand request, CancellationToken ct)
     {
         var domain = await db.TenantDomains
             .FirstOrDefaultAsync(d => d.Id == request.Id, ct);
 
-        if (domain is null) return false;
+        if (domain is null) return new DeactivateTenantDomainResponse(false);
 
         domain.Deactivate();
         await db.SaveChangesAsync(ct);
 
-        return true;
+        return new DeactivateTenantDomainResponse(true);
     }
 }

@@ -10,12 +10,15 @@ public record CreateTenantDomainCommand(
     string Fqdn,
     bool IsPrimary,
     DateTimeOffset? ValidFrom,
-    DateTimeOffset? ValidTo) : IRequest<Guid>;
+    DateTimeOffset? ValidTo) : IRequest<CreateTenantDomainResponse>;
+
+
+public record CreateTenantDomainResponse(Guid Id);
 
 internal sealed class CreateTenantDomainHandler(AdminDbContext db)
-    : IRequestHandler<CreateTenantDomainCommand, Guid>
+    : IRequestHandler<CreateTenantDomainCommand, CreateTenantDomainResponse>
 {
-    public async Task<Guid> Handle(CreateTenantDomainCommand request, CancellationToken ct)
+    public async Task<CreateTenantDomainResponse> Handle(CreateTenantDomainCommand request, CancellationToken ct)
     {
         var tenantExists = await db.Tenants.AnyAsync(t => t.Id == request.TenantId, ct);
         if (!tenantExists)
@@ -44,6 +47,6 @@ internal sealed class CreateTenantDomainHandler(AdminDbContext db)
         db.TenantDomains.Add(domain);
         await db.SaveChangesAsync(ct);
 
-        return domain.Id;
+        return  new CreateTenantDomainResponse(domain.Id);
     }
 }

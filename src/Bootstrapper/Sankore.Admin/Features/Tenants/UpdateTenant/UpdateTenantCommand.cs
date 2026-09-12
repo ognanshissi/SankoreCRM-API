@@ -11,6 +11,7 @@ public record UpdateTenantCommand(
     bool IsActive,
     bool IsMaintenance) : IRequest<bool>;
 
+
 internal sealed class UpdateTenantHandler(AdminDbContext db) : IRequestHandler<UpdateTenantCommand, bool>
 {
     public async Task<bool> Handle(UpdateTenantCommand request, CancellationToken ct)

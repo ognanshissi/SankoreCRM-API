@@ -1,4 +1,5 @@
 using MediatR;
+using OpenTelemetry.Trace;
 
 namespace Sankore.Admin.Features.Tenants.GetTenant;
 
@@ -13,7 +14,7 @@ public static class GetTenantEndpoint
             })
             .WithName("GetTenant")
             .WithSummary("Get a tenant by ID")
-            .Produces<TenantResponse>()
+            .Produces<TenantResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
     }

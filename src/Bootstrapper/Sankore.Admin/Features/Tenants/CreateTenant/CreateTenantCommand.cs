@@ -9,11 +9,14 @@ public record CreateTenantCommand(
     string Name,
     string RootUserEmail,
     string Fqdn,
-    DateTimeOffset? TrialExpiresAt) : IRequest<Guid>;
+    DateTimeOffset? TrialExpiresAt) : IRequest<CreateTenantResponse>;
 
-internal sealed class CreateTenantHandler(AdminDbContext db) : IRequestHandler<CreateTenantCommand, Guid>
+
+public record CreateTenantResponse(Guid Id);
+
+internal sealed class CreateTenantHandler(AdminDbContext db) : IRequestHandler<CreateTenantCommand, CreateTenantResponse>
 {
-    public async Task<Guid> Handle(CreateTenantCommand request, CancellationToken ct)
+    public async Task<CreateTenantResponse> Handle(CreateTenantCommand request, CancellationToken ct)
     {
         var existing = await db.Tenants
             .AnyAsync(t => t.Fqdn == request.Fqdn, ct);
@@ -24,6 +27,6 @@ internal sealed class CreateTenantHandler(AdminDbContext db) : IRequestHandler<C
         var tenant = Tenant.Create(request.Name, request.RootUserEmail, request.Fqdn, request.TrialExpiresAt);
         db.Tenants.Add(tenant);
         await db.SaveChangesAsync(ct);
-        return tenant.Id;
+        return new CreateTenantResponse(tenant.Id);
     }
 }

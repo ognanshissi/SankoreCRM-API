@@ -15,7 +15,7 @@ public static class ListTenantDomainsByTenantEndpoint
             })
             .WithName("ListTenantDomainsByTenant")
             .WithSummary("List all domains assigned to a tenant")
-            .Produces<List<TenantDomainResponse>>()
+            .Produces<List<TenantDomainResponse>>(StatusCodes.Status200OK)
             .WithOpenApi();
     }
 }
