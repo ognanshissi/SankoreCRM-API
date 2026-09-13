@@ -21,11 +21,11 @@ public sealed class TenantHeaderOperationFilter : IOperationFilter
 
         operation.Parameters.Add(new OpenApiParameter
         {
-            Name = "x-tenant-id",
+            Name = "x-tenant-fqdn",
             In = ParameterLocation.Header,
             Required = false,
             Schema = new OpenApiSchema { Type = "string", Format = "uuid" },
-            Description = "Tenant identifier (UUID). Overrides the tenant_id JWT claim when present."
+            Description = "Tenant Fqdn used to identify the tenant for some requests."
         });
     }
 }

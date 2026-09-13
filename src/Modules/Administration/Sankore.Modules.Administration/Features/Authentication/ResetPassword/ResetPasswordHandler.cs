@@ -9,9 +9,12 @@ namespace Sankore.Modules.Administration.Features.Authentication.ResetPassword;
 
 internal sealed class ResetPasswordHandler(
     AdministrationDbContext db,
-    UserManager<AppUser> userManager
+    UserManager<AppUser> userManager,
+    IPasswordHasher<AppUser> passwordHasher
 ) : IRequestHandler<ResetPasswordCommand, Result<ResetPasswordResult>>
 {
+    private const int PasswordHistoryDepth = 12;
+    
     public async Task<Result<ResetPasswordResult>> Handle(
         ResetPasswordCommand request, CancellationToken ct)
     {
@@ -35,6 +38,30 @@ internal sealed class ResetPasswordHandler(
         if (user.Status != UserStatus.Active)
             return Result.Fail<ResetPasswordResult>(
                 "Password reset is not available for this account. Contact your administrator.");
+        
+        if (user.Status == UserStatus.Disabled)
+            return Result.Fail<ResetPasswordResult>("Cannot reset password for a disabled user.");
+
+        
+        // 2. Fetch the last N hashes — ordered newest-first to bail out early on recent reuse.
+        var recentHashes = await db.PasswordHistories
+            .Where(p => p.UserId == user.Id)
+            .OrderByDescending(p => p.SetAt)
+            .Take(PasswordHistoryDepth)
+            .Select(p => p.PasswordHash)
+            .ToListAsync(ct);
+
+        // 3. Check each historic hash against the proposed new password.
+        //    VerifyHashedPassword returns Failed / Success / SuccessRehashNeeded.
+        //    Any non-Failed result means the password was recently used.
+        foreach (var historicHash in recentHashes)
+        {
+            var verificationResult = passwordHasher.VerifyHashedPassword(
+                user, historicHash, request.NewPassword);
+
+            if (verificationResult != PasswordVerificationResult.Failed)
+                return Result.Fail<ResetPasswordResult>("PASSWORD_RECENTLY_USED");
+        }
 
         // 4. Validate token + set the new password via Identity
         var resetResult = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);

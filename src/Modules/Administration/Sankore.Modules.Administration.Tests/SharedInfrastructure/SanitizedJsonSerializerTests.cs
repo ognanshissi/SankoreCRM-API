@@ -138,20 +138,6 @@ public sealed class SanitizedJsonSerializerTests
     }
 
     [Fact]
-    public void ResetPasswordCommand_new_password_is_redacted()
-    {
-        var userId = Guid.NewGuid();
-        var cmd = new Sankore.Modules.Administration.Features.Users.ResetPassword.ResetPasswordCommand(
-            userId, "NewPass456!");
-
-        var json = SanitizedJsonSerializer.Serialize(cmd);
-        var doc = JsonDocument.Parse(json);
-
-        doc.RootElement.GetProperty("NewPassword").GetString().Should().Be("***");
-        doc.RootElement.GetProperty("UserId").GetString().Should().Be(userId.ToString());
-    }
-
-    [Fact]
     public void RegisterCommand_both_passwords_are_redacted()
     {
         var cmd = new Sankore.Modules.Administration.Features.Users.Register.RegisterCommand(

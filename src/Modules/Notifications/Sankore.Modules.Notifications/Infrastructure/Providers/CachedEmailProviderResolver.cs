@@ -37,7 +37,7 @@ internal sealed class CachedEmailProviderResolver(
         if (cached is not null)
         {
             logger.LogDebug("Provider cache hit for tenant {TenantId}", tenantId);
-            return PlatformDefault;// JsonSerializer.Deserialize<ResolvedEmailProvider>(cached, JsonOpts)!;
+            return JsonSerializer.Deserialize<ResolvedEmailProvider>(cached, JsonOpts)!;
         }
 
         logger.LogDebug("Provider cache miss for tenant {TenantId} — loading from Administration", tenantId);

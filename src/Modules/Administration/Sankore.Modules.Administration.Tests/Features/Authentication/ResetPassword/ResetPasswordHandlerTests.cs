@@ -60,7 +60,8 @@ public sealed class ResetPasswordHandlerTests : IDisposable
             .Returns(IdentityResult.Success);
 
         await using var db = _factory.CreateContext();
-        var handler = new ResetPasswordHandler(db, userManager);
+        var passwordHasher = Substitute.For<IPasswordHasher<AppUser>>();
+        var handler = new ResetPasswordHandler(db, userManager, passwordHasher);
 
         var result = await handler.Handle(ValidCommand(user.Id.ToString()), CancellationToken.None);
 
@@ -86,7 +87,8 @@ public sealed class ResetPasswordHandlerTests : IDisposable
     {
         var userManager = IdentityMockFactory.BuildUserManager();
         await using var db = _factory.CreateContext();
-        var handler = new ResetPasswordHandler(db, userManager);
+        var passwordHasher = Substitute.For<IPasswordHasher<AppUser>>();
+        var handler = new ResetPasswordHandler(db, userManager, passwordHasher);
 
         var cmd = new ResetPasswordCommand("not-a-guid", "token", "Pass1!", "Pass1!");
         var result = await handler.Handle(cmd, CancellationToken.None);
@@ -102,7 +104,8 @@ public sealed class ResetPasswordHandlerTests : IDisposable
     {
         var userManager = IdentityMockFactory.BuildUserManager();
         await using var db = _factory.CreateContext();
-        var handler = new ResetPasswordHandler(db, userManager);
+        var passwordHasher = Substitute.For<IPasswordHasher<AppUser>>();
+        var handler = new ResetPasswordHandler(db, userManager, passwordHasher);
 
         var result = await handler.Handle(ValidCommand(Guid.NewGuid().ToString()), CancellationToken.None);
 
@@ -127,7 +130,8 @@ public sealed class ResetPasswordHandlerTests : IDisposable
 
         var userManager = IdentityMockFactory.BuildUserManager();
         await using var db = _factory.CreateContext();
-        var handler = new ResetPasswordHandler(db, userManager);
+        var passwordHasher = Substitute.For<IPasswordHasher<AppUser>>();
+        var handler = new ResetPasswordHandler(db, userManager, passwordHasher);
 
         var result = await handler.Handle(ValidCommand(user.Id.ToString()), CancellationToken.None);
 
@@ -154,7 +158,8 @@ public sealed class ResetPasswordHandlerTests : IDisposable
 
         var userManager = IdentityMockFactory.BuildUserManager();
         await using var db = _factory.CreateContext();
-        var handler = new ResetPasswordHandler(db, userManager);
+        var passwordHasher = Substitute.For<IPasswordHasher<AppUser>>();
+        var handler = new ResetPasswordHandler(db, userManager, passwordHasher);
 
         var result = await handler.Handle(ValidCommand(user.Id.ToString()), CancellationToken.None);
 
@@ -175,7 +180,8 @@ public sealed class ResetPasswordHandlerTests : IDisposable
             .Returns(IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "Invalid token." }));
 
         await using var db = _factory.CreateContext();
-        var handler = new ResetPasswordHandler(db, userManager);
+        var passwordHasher = Substitute.For<IPasswordHasher<AppUser>>();
+        var handler = new ResetPasswordHandler(db, userManager, passwordHasher);
 
         var result = await handler.Handle(ValidCommand(user.Id.ToString(), "bad-token"), CancellationToken.None);
 

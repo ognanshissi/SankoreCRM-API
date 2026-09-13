@@ -10,7 +10,6 @@ using Sankore.Modules.Administration.Features.Users.GetUserPermissions;
 using Sankore.Modules.Administration.Features.Users.ListUsers;
 using Sankore.Modules.Administration.Features.Users.ReactivateUser;
 using Sankore.Modules.Administration.Features.Users.Register;
-using Sankore.Modules.Administration.Features.Users.ResetPassword;
 using Sankore.Modules.Administration.Features.Users.RevokeRole;
 using Sankore.Modules.Administration.Features.Users.RevokeScopedPermission;
 using Sankore.Modules.Administration.Features.Users.UpdateUser;
@@ -31,7 +30,6 @@ public static class UsersEndpoints
             .MapRegister()
             .MapDeactivateUser()
             .MapReactivateUser()
-            .MapResetPassword()
             .MapAssignRole()
             .MapRevokeRole()
             .MapGetUserPermissions()

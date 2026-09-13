@@ -8,7 +8,7 @@ public sealed class TenantHeaderMetadata;
 public static class EndpointBuilderExtensions
 {
     /// <summary>
-    /// Marks the endpoint so that the <c>x-tenant-id</c> header appears in Swagger.
+    /// Marks the endpoint so that the <c>x-tenant-fqdn</c> header appears in Swagger.
     /// The Bootstrapper's <c>TenantHeaderOperationFilter</c> converts this marker
     /// into an OpenAPI parameter — keeping OpenAPI types out of Shared.Infrastructure.
     /// </summary>

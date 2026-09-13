@@ -86,6 +86,7 @@ public static class AdministrationModule
         app.MapLogin();
         app.MapRefreshToken();
         app.MapLogout();
+        app.MapResetPassword();
         app.MapVerifyToken();
         app.MapForgotPassword();
         app.MapAccountActivation();

@@ -15,6 +15,7 @@ internal static class ResetPasswordEndpoint
             .WithName("ResetPassword")
             .Produces<ResetPasswordResult>(StatusCodes.Status200OK)
             .AllowAnonymous()
+            .WithOpenApi()
             .WithTenantHeader()
             .RequireRateLimiting("auth");
         return app;
