@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- ── Agency ── -->
+  <data name="Agency.Name.Required" xml:space="preserve">
+    <value>Agency name is required.</value>
+  </data>
+  <data name="Agency.NonHq.RequiresParent" xml:space="preserve">
+    <value>Non-headquarters agencies must have a parent agency.</value>
+  </data>
+  <data name="Agency.AlreadyDeleted" xml:space="preserve">
+    <value>Agency is already deleted.</value>
+  </data>
+  <data name="Agency.NotDeactivated" xml:space="preserve">
+    <value>Agency is not deactivated.</value>
+  </data>
+  <data name="Agency.SelfParent" xml:space="preserve">
+    <value>An agency cannot be its own parent.</value>
+  </data>
+
+  <!-- ── Territory ── -->
+  <data name="Territory.Name.Required" xml:space="preserve">
+    <value>Territory name is required.</value>
+  </data>
+  <data name="Territory.Code.Required" xml:space="preserve">
+    <value>Territory code is required.</value>
+  </data>
+
+  <!-- ── User ── -->
+  <data name="User.Name.Required" xml:space="preserve">
+    <value>User must have a name.</value>
+  </data>
+  <data name="User.Email.Required" xml:space="preserve">
+    <value>User must have an email.</value>
+  </data>
+  <data name="User.FullName.Blank" xml:space="preserve">
+    <value>Full name cannot be blank.</value>
+  </data>
+  <data name="User.Disabled.CannotActivate" xml:space="preserve">
+    <value>Cannot activate a disabled user.</value>
+  </data>
+  <data name="User.AlreadyDisabled" xml:space="preserve">
+    <value>User is already disabled.</value>
+  </data>
+  <data name="User.System.CannotDisable" xml:space="preserve">
+    <value>The system account cannot be disabled.</value>
+  </data>
+  <data name="User.System.CannotLock" xml:space="preserve">
+    <value>The system account cannot be locked.</value>
+  </data>
+  <data name="User.OnlyDisabled.CanReactivate" xml:space="preserve">
+    <value>Only disabled users can be reactivated.</value>
+  </data>
+  <data name="User.System.CannotReactivate" xml:space="preserve">
+    <value>System account cannot be reactivated.</value>
+  </data>
+</root>

@@ -11,4 +11,9 @@ public sealed record TenantInfo(
     bool IsActive,
     bool IsMaintenance,
     DateTimeOffset? TrialExpiresAt,
-    DateTimeOffset? BlockedAt);
+    DateTimeOffset? BlockedAt,
+    /// <summary>
+    /// BCP-47 language tag used when a user has no personal preference (e.g. "fr", "en").
+    /// Defaults to "fr". Missing in older cached records falls back to "fr" via the default value.
+    /// </summary>
+    string DefaultLanguage = "fr");

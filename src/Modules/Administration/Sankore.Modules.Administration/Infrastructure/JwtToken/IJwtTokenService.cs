@@ -5,7 +5,9 @@ namespace Sankore.Modules.Administration.Infrastructure.JwtToken;
 
 internal interface IJwtTokenService
 {
-    JwtTokenResult CreateToken(AppUser user,
+    JwtTokenResult CreateToken(
+        AppUser user,
         IList<string> roles,
-        IList<string> permissionCodes);
+        IList<string> permissionCodes,
+        string language);
 }

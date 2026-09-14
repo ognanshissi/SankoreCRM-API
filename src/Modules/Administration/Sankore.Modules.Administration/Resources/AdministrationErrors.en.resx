@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- ── Authentication ── -->
+  <data name="Auth.Email.Required" xml:space="preserve">
+    <value>Email is required.</value>
+  </data>
+  <data name="Auth.UserId.Required" xml:space="preserve">
+    <value>UserId is required.</value>
+  </data>
+  <data name="Auth.UserId.InvalidGuid" xml:space="preserve">
+    <value>UserId must be a valid GUID.</value>
+  </data>
+  <data name="Auth.Password.Required" xml:space="preserve">
+    <value>Password is required.</value>
+  </data>
+  <data name="Auth.Password.MinLength" xml:space="preserve">
+    <value>Password must be at least 8 characters.</value>
+  </data>
+  <data name="Auth.Password.Digit" xml:space="preserve">
+    <value>Password must contain at least one digit.</value>
+  </data>
+  <data name="Auth.Passwords.Mismatch" xml:space="preserve">
+    <value>Passwords do not match.</value>
+  </data>
+  <data name="Auth.ActivationToken.Required" xml:space="preserve">
+    <value>Activation token is required.</value>
+  </data>
+  <data name="Auth.ResetToken.Required" xml:space="preserve">
+    <value>Reset token is required.</value>
+  </data>
+
+  <!-- ── Registration ── -->
+  <data name="Register.Email.Required" xml:space="preserve">
+    <value>Email is required.</value>
+  </data>
+  <data name="Register.Password.Required" xml:space="preserve">
+    <value>Password is required.</value>
+  </data>
+  <data name="Register.ConfirmPassword.Required" xml:space="preserve">
+    <value>Confirm password is required.</value>
+  </data>
+  <data name="Register.TenantId.Required" xml:space="preserve">
+    <value>Tenant Id is required.</value>
+  </data>
+
+  <!-- ── Agency ── -->
+  <data name="Agency.Name.Required" xml:space="preserve">
+    <value>Agency name is required.</value>
+  </data>
+  <data name="Agency.ParentAgencyId.Required" xml:space="preserve">
+    <value>ParentAgencyId is required for non-headquarters agencies.</value>
+  </data>
+  <data name="Agency.NonHq.RequiresParent" xml:space="preserve">
+    <value>Non-headquarters agencies must have a parent agency.</value>
+  </data>
+  <data name="Agency.SelfParent" xml:space="preserve">
+    <value>An agency cannot be its own parent.</value>
+  </data>
+  <data name="Agency.AlreadyDeleted" xml:space="preserve">
+    <value>Agency is already deleted.</value>
+  </data>
+  <data name="Agency.NotDeactivated" xml:space="preserve">
+    <value>Agency is not deactivated.</value>
+  </data>
+
+  <!-- ── Territory ── -->
+  <data name="Territory.Name.Required" xml:space="preserve">
+    <value>Territory name is required.</value>
+  </data>
+  <data name="Territory.Code.Required" xml:space="preserve">
+    <value>Territory code is required.</value>
+  </data>
+  <data name="Territory.Code.Format" xml:space="preserve">
+    <value>Code must contain only letters, digits, hyphens, or underscores.</value>
+  </data>
+  <data name="Territory.Latitude.Required" xml:space="preserve">
+    <value>Latitude is required when Longitude is provided.</value>
+  </data>
+  <data name="Territory.Longitude.Required" xml:space="preserve">
+    <value>Longitude is required when Latitude is provided.</value>
+  </data>
+
+  <!-- ── User ── -->
+  <data name="User.Name.Required" xml:space="preserve">
+    <value>User must have a name.</value>
+  </data>
+  <data name="User.Email.Required" xml:space="preserve">
+    <value>User must have an email.</value>
+  </data>
+  <data name="User.FullName.Blank" xml:space="preserve">
+    <value>Full name cannot be blank.</value>
+  </data>
+  <data name="User.Disabled.CannotActivate" xml:space="preserve">
+    <value>Cannot activate a disabled user.</value>
+  </data>
+  <data name="User.AlreadyDisabled" xml:space="preserve">
+    <value>User is already disabled.</value>
+  </data>
+  <data name="User.System.CannotDisable" xml:space="preserve">
+    <value>The system account cannot be disabled.</value>
+  </data>
+  <data name="User.System.CannotLock" xml:space="preserve">
+    <value>The system account cannot be locked.</value>
+  </data>
+  <data name="User.System.CannotReactivate" xml:space="preserve">
+    <value>System account cannot be reactivated.</value>
+  </data>
+  <data name="User.OnlyDisabled.CanReactivate" xml:space="preserve">
+    <value>Only disabled users can be reactivated.</value>
+  </data>
+
+  <!-- ── Role ── -->
+  <data name="Role.Name.Format" xml:space="preserve">
+    <value>Role name must start with a letter and contain only letters, digits, or underscores.</value>
+  </data>
+
+  <!-- ── Product ── -->
+  <data name="Product.Code.Format" xml:space="preserve">
+    <value>Code must contain only letters, digits, hyphens, or underscores.</value>
+  </data>
+
+  <!-- ── Permission ── -->
+  <data name="Permission.EndDate.AfterStartDate" xml:space="preserve">
+    <value>EndDate must be after StartDate.</value>
+  </data>
+  <data name="Permission.ScopeType.Invalid" xml:space="preserve">
+    <value>ScopeType must be Agency, Territory, Tenant, or null.</value>
+  </data>
+  <data name="Permission.ScopeId.Required" xml:space="preserve">
+    <value>ScopeId is required when ScopeType is specified.</value>
+  </data>
+
+  <!-- ── Notification Settings ── -->
+  <data name="NotificationSettings.ProviderType.Invalid" xml:space="preserve">
+    <value>ProviderType is invalid.</value>
+  </data>
+  <data name="NotificationSettings.FromEmail.Required" xml:space="preserve">
+    <value>FromEmail is required and must be a valid email address for non-default providers.</value>
+  </data>
+  <data name="NotificationSettings.SendingDomain.Required" xml:space="preserve">
+    <value>SendingDomain is required for Postmark.</value>
+  </data>
+  <data name="NotificationSettings.ReplyToEmail.Invalid" xml:space="preserve">
+    <value>ReplyToEmail must be a valid email address.</value>
+  </data>
+  <data name="NotificationSettings.Quota.Invalid" xml:space="preserve">
+    <value>MonthlyQuotaLimit must be a positive integer or null (unlimited).</value>
+  </data>
+</root>

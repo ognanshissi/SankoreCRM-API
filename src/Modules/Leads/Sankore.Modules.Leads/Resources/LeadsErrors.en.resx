@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- ── Lead ── -->
+  <data name="Lead.FullName.Required" xml:space="preserve">
+    <value>Full name is required.</value>
+  </data>
+  <data name="Lead.Phone.Required" xml:space="preserve">
+    <value>Phone number is required.</value>
+  </data>
+  <data name="Lead.Phone.Format" xml:space="preserve">
+    <value>Phone number format is invalid.</value>
+  </data>
+  <data name="Lead.LeadId.Required" xml:space="preserve">
+    <value>LeadId is required.</value>
+  </data>
+  <data name="Lead.TenantId.Required" xml:space="preserve">
+    <value>TenantId is required for multi-tenant isolation.</value>
+  </data>
+  <data name="Lead.Strategy.Unknown" xml:space="preserve">
+    <value>Unknown dispatching strategy.</value>
+  </data>
+</root>

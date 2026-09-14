@@ -17,7 +17,8 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> option): IJwtTokenSer
     public JwtTokenResult CreateToken(
         AppUser user,
         IList<string> roles,
-        IList<string> permissionCodes)
+        IList<string> permissionCodes,
+        string language)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(option.Value.SigningKey!));
         var expiresAt = DateTimeOffset.UtcNow.AddHours(8);
@@ -29,6 +30,7 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> option): IJwtTokenSer
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // user session id
             new("name", user.FullName),
             new("tenant_id", user.TenantId.ToString()),
+            new("lang", language),
             new("mfa_verified", "false"),
         };
 

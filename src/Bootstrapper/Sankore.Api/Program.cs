@@ -20,6 +20,7 @@ using Sankore.Modules.Notifications.Infrastructure.Consumers;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Infrastructure.Logging;
+using Sankore.Shared.Infrastructure.Localization;
 using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
@@ -29,6 +30,7 @@ builder.AddServiceDefaults();
 
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 
 builder.Services.AddCors(options =>
@@ -58,6 +60,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddTenantStore(builder.Configuration);
+builder.Services.AddLanguageResolution();
+builder.Services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -241,6 +245,14 @@ app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseTenantResolution();   // extract + verify tenant against external store
+app.UseRequestLocalization(opts =>
+{
+    opts.SupportedCultures = [new("fr"), new("en")];
+    opts.SupportedUICultures = [new("fr"), new("en")];
+    opts.DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture("fr");
+    opts.ApplyCurrentCultureToResponseHeaders = true;
+});
+app.UseLanguageResolution(); // resolve active language (JWT claim → Accept-Language → default fr) and set CurrentUICulture
 app.UseCorrelationId();      // push CorrelationId + TenantId + UserId into log scope
 app.UseAuthorization();
 

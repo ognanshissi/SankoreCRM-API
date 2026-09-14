@@ -6,6 +6,7 @@ using Sankore.Modules.Administration.Features.Agencies.CreateAgency;
 using Sankore.Modules.Administration.Features.Agencies.DeleteAgency;
 using Sankore.Modules.Administration.Features.Agencies.GetAgency;
 using Sankore.Modules.Administration.Features.Agencies.GetAgencyTree;
+using Sankore.Modules.Administration.Features.Agencies.GetParentAgencies;
 using Sankore.Modules.Administration.Features.Agencies.ListAgencies;
 using Sankore.Modules.Administration.Features.Agencies.MoveAgency;
 using Sankore.Modules.Administration.Features.Agencies.UpdateAgency;
@@ -21,6 +22,7 @@ public static class AgenciesEndpoints
         return group
             .MapCreateAgency()
             .MapListAgencies()
+            .MapGetParentAgencies()
             .MapGetAgencyTree()
             .MapGetAgency()
             .MapUpdateAgency()

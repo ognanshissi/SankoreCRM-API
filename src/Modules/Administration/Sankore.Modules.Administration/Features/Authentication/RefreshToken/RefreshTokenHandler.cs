@@ -13,6 +13,7 @@ namespace Sankore.Modules.Administration.Features.Authentication.RefreshToken;
 internal sealed class RefreshTokenHandler(
     AdministrationDbContext db,
     UserManager<AppUser> userManager,
+    ITenantStore tenantStore,
     IJwtTokenService jwtTokenService,
     IOptions<JwtOptions> jwtOptions) : IRequestHandler<RefreshTokenCommand, Result<LoginResult>>
 {
@@ -70,7 +71,10 @@ internal sealed class RefreshTokenHandler(
         var permissions = new HashSet<string>(permissionCodes);
         permissions.UnionWith(scopedPermissionCodes);
 
-        var jwtResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray());
+        var tenantInfo = await tenantStore.GetAsync(user.TenantId, ct);
+        var language = user.PreferredLanguage ?? tenantInfo?.DefaultLanguage ?? "fr";
+
+        var jwtResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray(), language);
 
         return Result.Ok(new LoginResult(
             jwtResult.Token,

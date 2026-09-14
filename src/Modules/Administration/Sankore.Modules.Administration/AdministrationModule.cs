@@ -66,6 +66,7 @@ public static class AdministrationModule
         services.AddValidatorsFromAssembly(typeof(AdministrationModule).Assembly);
 
         services.AddOutboxForModule<AdministrationDbContext>();
+        services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
         return services;
     }

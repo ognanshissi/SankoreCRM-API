@@ -1,38 +1,38 @@
 using FluentValidation;
+using Microsoft.Extensions.Localization;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Modules.Administration.Resources;
 
 namespace Sankore.Modules.Administration.Features.NotificationSettings.UpdateNotificationSettings;
 
 internal sealed class UpdateNotificationSettingsValidator
     : AbstractValidator<UpdateNotificationSettingsCommand>
 {
-    public UpdateNotificationSettingsValidator()
+    public UpdateNotificationSettingsValidator(IStringLocalizer<AdministrationErrors> localizer)
     {
         RuleFor(x => x.ProviderType)
             .NotEmpty()
             .Must(p => TenantNotificationSettings.AllowedProviders.Contains(p))
-            .WithMessage($"ProviderType must be one of: {string.Join(", ", TenantNotificationSettings.AllowedProviders)}");
+            .WithMessage(_ => localizer["NotificationSettings.ProviderType.Invalid"]);
 
-        // Non-Default providers require a From address
         When(x => x.ProviderType != "Default", () =>
         {
             RuleFor(x => x.FromEmail)
                 .NotEmpty()
                 .EmailAddress()
-                .WithMessage("FromEmail is required and must be a valid email address for non-default providers.");
+                .WithMessage(_ => localizer["NotificationSettings.FromEmail.Required"]);
 
-            // Postmark requires a dedicated sending domain
             When(x => x.ProviderType == "Postmark", () =>
             {
                 RuleFor(x => x.SendingDomain)
                     .NotEmpty()
-                    .WithMessage("SendingDomain is required for Postmark.");
+                    .WithMessage(_ => localizer["NotificationSettings.SendingDomain.Required"]);
             });
         });
 
         RuleFor(x => x.ReplyToEmail)
             .EmailAddress()
             .When(x => !string.IsNullOrEmpty(x.ReplyToEmail))
-            .WithMessage("ReplyToEmail must be a valid email address.");
+            .WithMessage(_ => localizer["NotificationSettings.ReplyToEmail.Invalid"]);
     }
 }

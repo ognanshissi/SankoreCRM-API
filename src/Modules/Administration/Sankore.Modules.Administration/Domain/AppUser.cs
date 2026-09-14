@@ -29,7 +29,7 @@ public sealed class AppUser: IdentityUser<Guid>
     public DateTimeOffset? LastLoginAt { get; private set; }
     public DateTimeOffset? LastLogoutAt { get; private set; }
     public DateTimeOffset? DeactivatedAt { get; private set; }
-    
+
     public bool IsSuperUser { get; private set; }
 
     // ── Dispatching (M13) ─────────────────────────────────────────────────
@@ -46,12 +46,22 @@ public sealed class AppUser: IdentityUser<Guid>
     // ── Relations ─────────────────────────────────────────────────────────
     private readonly List<PermissionAttribution> _attributions = [];
     public IReadOnlyCollection<PermissionAttribution> PermissionAttributions => _attributions.AsReadOnly();
-    
+
     private readonly List<UserRole> _userRoles = [];
     public IReadOnlyCollection<UserRole> UserRoles => _userRoles.AsReadOnly();
     public UserProfile? Profile { get; private set; }
-    
-    public UserAccountType  AccountType { get; private set; }
+
+    public UserAccountType AccountType { get; private set; }
+
+    /// <summary>
+    /// User's preferred UI language (BCP-47 tag, e.g. "fr", "en").
+    /// Null means fall back to the tenant's DefaultLanguage.
+    /// Emitted as the "lang" JWT claim so LanguageResolutionMiddleware
+    /// picks it up at priority 1 on every subsequent request.
+    /// </summary>
+    public string? PreferredLanguage { get; private set; }
+
+    public void SetPreferredLanguage(string? language) => PreferredLanguage = language;
 
     private AppUser() { } // EF Core
 
@@ -60,9 +70,9 @@ public sealed class AppUser: IdentityUser<Guid>
     public static AppUser Create(Guid tenantId, Guid agencyId, string fullName, string email)
     {
         if (string.IsNullOrWhiteSpace(fullName))
-            throw new DomainException("User must have a name.");
+            throw new DomainException("User must have a name.", "User.Name.Required");
         if (string.IsNullOrWhiteSpace(email))
-            throw new DomainException("User must have an email.");
+            throw new DomainException("User must have an email.", "User.Email.Required");
 
         return new AppUser
         {
@@ -116,7 +126,7 @@ public sealed class AppUser: IdentityUser<Guid>
     public void Activate()
     {
         if (Status == UserStatus.Disabled)
-            throw new DomainException("Cannot activate a disabled user.");
+            throw new DomainException("Cannot activate a disabled user.", "User.Disabled.CannotActivate");
         Status = UserStatus.Active;
     }
 
@@ -124,11 +134,11 @@ public sealed class AppUser: IdentityUser<Guid>
     public UserDeactivatedEvent Deactivate()
     {
         if (Status == UserStatus.Disabled)
-            throw new DomainException("User is already disabled.");
+            throw new DomainException("User is already disabled.", "User.AlreadyDisabled");
 
-        if (AccountType == UserAccountType.System) 
-            throw new DomainException("Le compte système ne peut pas être désactivé.");
-        
+        if (AccountType == UserAccountType.System)
+            throw new DomainException("The system account cannot be disabled.", "User.System.CannotDisable");
+
         Status = UserStatus.Disabled;
         DeactivatedAt = DateTimeOffset.UtcNow;
         IsAvailable = false;
@@ -139,9 +149,9 @@ public sealed class AppUser: IdentityUser<Guid>
     /// <summary>Locks the account (too many failed attempts).</summary>
     public void Lock()
     {
-        if (AccountType == UserAccountType.System) 
-            throw new DomainException("The system is cannot be locked.");
-        
+        if (AccountType == UserAccountType.System)
+            throw new DomainException("The system account cannot be locked.", "User.System.CannotLock");
+
         if (Status == UserStatus.Active || Status == UserStatus.PendingActivation)
             Status = UserStatus.Locked;
     }
@@ -186,7 +196,7 @@ public sealed class AppUser: IdentityUser<Guid>
         if (fullName is not null)
         {
             if (string.IsNullOrWhiteSpace(fullName))
-                throw new DomainException("Full name cannot be blank.");
+                throw new DomainException("Full name cannot be blank.", "User.FullName.Blank");
             FullName = fullName;
         }
         if (agencyId is not null) AgencyId = agencyId;
@@ -199,9 +209,9 @@ public sealed class AppUser: IdentityUser<Guid>
     public void Reactivate()
     {
         if (Status != UserStatus.Disabled)
-            throw new DomainException("Only disabled users can be reactivated.");
+            throw new DomainException("Only disabled users can be reactivated.", "User.OnlyDisabled.CanReactivate");
         if (AccountType == UserAccountType.System)
-            throw new DomainException("System account cannot be reactivated.");
+            throw new DomainException("System account cannot be reactivated.", "User.System.CannotReactivate");
 
         Status = UserStatus.Active;
         DeactivatedAt = null;

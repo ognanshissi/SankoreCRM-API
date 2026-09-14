@@ -36,9 +36,9 @@ public sealed class Agency : AggregateRoot
         Address? address = null)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new DomainException("Agency name is required.");
+            throw new DomainException("Agency name is required.", "Agency.Name.Required");
         if (agencyType != AgencyType.HeadQuarter && parentAgencyId is null)
-            throw new DomainException("Non-headquarters agencies must have a parent agency.");
+            throw new DomainException("Non-headquarters agencies must have a parent agency.", "Agency.NonHq.RequiresParent");
 
         return new Agency
         {
@@ -60,7 +60,7 @@ public sealed class Agency : AggregateRoot
     public void Update(string name, string description, AgencyType agencyType, Address? address)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new DomainException("Agency name is required.");
+            throw new DomainException("Agency name is required.", "Agency.Name.Required");
 
         Name = name.Trim();
         Description = description.Trim();
@@ -72,7 +72,7 @@ public sealed class Agency : AggregateRoot
     public void Deactivate()
     {
         if (IsDeleted)
-            throw new DomainException("Agency is already deleted.");
+            throw new DomainException("Agency is already deleted.", "Agency.AlreadyDeleted");
 
         IsActive = false;
         IsDeleted = true;
@@ -82,7 +82,7 @@ public sealed class Agency : AggregateRoot
     public void Activate()
     {
         if (!IsDeleted)
-            throw new DomainException("Agency is not deactivated.");
+            throw new DomainException("Agency is not deactivated.", "Agency.NotDeactivated");
 
         IsActive = true;
         IsDeleted = false;
@@ -96,9 +96,9 @@ public sealed class Agency : AggregateRoot
     public void MoveTo(Guid? newParentId)
     {
         if (AgencyType != AgencyType.HeadQuarter && newParentId is null)
-            throw new DomainException("Non-headquarters agencies must have a parent agency.");
+            throw new DomainException("Non-headquarters agencies must have a parent agency.", "Agency.NonHq.RequiresParent");
         if (newParentId == Id)
-            throw new DomainException("An agency cannot be its own parent.");
+            throw new DomainException("An agency cannot be its own parent.", "Agency.SelfParent");
 
         ParentAgencyId = newParentId;
         UpdatedAt = DateTimeOffset.UtcNow;

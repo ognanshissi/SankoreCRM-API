@@ -37,9 +37,9 @@ public sealed class Territory
         List<string> productSpecialities)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new DomainException("Territory name is required.");
+            throw new DomainException("Territory name is required.", "Territory.Name.Required");
         if (string.IsNullOrWhiteSpace(code))
-            throw new DomainException("Territory code is required.");
+            throw new DomainException("Territory code is required.", "Territory.Code.Required");
 
         return new Territory
         {
@@ -64,7 +64,7 @@ public sealed class Territory
         List<string> productSpecialities)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new DomainException("Territory name is required.");
+            throw new DomainException("Territory name is required.", "Territory.Name.Required");
 
         Name = name.Trim();
         Description = description.Trim();

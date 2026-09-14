@@ -50,6 +50,7 @@ public static class LeadsModule
         services.AddScoped<DispatchingStrategyFactory>();
 
         services.AddOutboxForModule<LeadsDbContext>();
+        services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
         return services;
     }

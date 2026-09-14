@@ -14,7 +14,7 @@ using Sankore.Modules.Notifications.Infrastructure;
 /// Resolution order (first match wins):
 ///   1. Tenant-specific, requested locale, IsActive = true
 ///   2. Platform default (TenantId = null), requested locale, IsActive = true
-///   3. Platform default, locale = "en", IsActive = true  (fallback)
+///   3. Platform default, locale = "fr", IsActive = true  (system default fallback)
 ///   4. Soft fallback: returns stub output and logs a warning (never throws).
 ///
 /// Template variables are injected from the JSON payload as top-level Scriban globals.
@@ -87,13 +87,13 @@ internal sealed class ScribanTemplateRenderer(
 
         if (found is not null) return found;
 
-        // 3. Platform default + "en" fallback
-        if (!string.Equals(locale, "en", StringComparison.OrdinalIgnoreCase))
+        // 3. Platform default + "fr" fallback (system default locale)
+        if (!string.Equals(locale, "fr", StringComparison.OrdinalIgnoreCase))
         {
             found = await db.EmailTemplates
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(
-                    t => t.TenantId == null && t.TemplateKey == key && t.Locale == "en" && t.IsActive,
+                    t => t.TenantId == null && t.TemplateKey == key && t.Locale == "fr" && t.IsActive,
                     ct);
         }
 

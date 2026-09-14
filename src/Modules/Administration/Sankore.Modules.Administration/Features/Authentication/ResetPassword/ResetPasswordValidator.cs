@@ -1,24 +1,26 @@
 using FluentValidation;
+using Microsoft.Extensions.Localization;
+using Sankore.Modules.Administration.Resources;
 
 namespace Sankore.Modules.Administration.Features.Authentication.ResetPassword;
 
 internal sealed class ResetPasswordValidator : AbstractValidator<ResetPasswordCommand>
 {
-    public ResetPasswordValidator()
+    public ResetPasswordValidator(IStringLocalizer<AdministrationErrors> localizer)
     {
         RuleFor(x => x.UserId)
-            .NotEmpty().WithMessage("UserId is required.")
-            .Must(id => Guid.TryParse(id, out _)).WithMessage("UserId must be a valid GUID.");
+            .NotEmpty().WithMessage(_ => localizer["Auth.UserId.Required"])
+            .Must(id => Guid.TryParse(id, out _)).WithMessage(_ => localizer["Auth.UserId.InvalidGuid"]);
 
         RuleFor(x => x.Token)
-            .NotEmpty().WithMessage("Reset token is required.");
+            .NotEmpty().WithMessage(_ => localizer["Auth.ResetToken.Required"]);
 
         RuleFor(x => x.NewPassword)
-            .NotEmpty().WithMessage("Password is required.")
-            .MinimumLength(8).WithMessage("Password must be at least 8 characters.")
-            .Matches(@"\d").WithMessage("Password must contain at least one digit.");
+            .NotEmpty().WithMessage(_ => localizer["Auth.Password.Required"])
+            .MinimumLength(8).WithMessage(_ => localizer["Auth.Password.MinLength"])
+            .Matches(@"\d").WithMessage(_ => localizer["Auth.Password.Digit"]);
 
         RuleFor(x => x.ConfirmPassword)
-            .Equal(x => x.NewPassword).WithMessage("Passwords do not match.");
+            .Equal(x => x.NewPassword).WithMessage(_ => localizer["Auth.Passwords.Mismatch"]);
     }
 }

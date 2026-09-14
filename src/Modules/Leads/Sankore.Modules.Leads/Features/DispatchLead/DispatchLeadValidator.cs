@@ -1,6 +1,8 @@
-namespace Sankore.Modules.Leads.Features.DispatchLead;
-
 using FluentValidation;
+using Microsoft.Extensions.Localization;
+using Sankore.Modules.Leads.Resources;
+
+namespace Sankore.Modules.Leads.Features.DispatchLead;
 
 /// <summary>
 /// Runs automatically before DispatchLeadHandler via ValidationBehavior
@@ -9,18 +11,18 @@ using FluentValidation;
 /// </summary>
 public sealed class DispatchLeadValidator : AbstractValidator<DispatchLeadCommand>
 {
-    public DispatchLeadValidator()
+    public DispatchLeadValidator(IStringLocalizer<LeadsErrors> localizer)
     {
         RuleFor(x => x.LeadId)
             .NotEmpty()
-            .WithMessage("LeadId is required.");
+            .WithMessage(_ => localizer["Lead.LeadId.Required"]);
 
         RuleFor(x => x.TenantId)
             .NotEmpty()
-            .WithMessage("TenantId is required for multi-tenant isolation.");
+            .WithMessage(_ => localizer["Lead.TenantId.Required"]);
 
         RuleFor(x => x.Strategy)
             .IsInEnum()
-            .WithMessage("Unknown dispatching strategy.");
+            .WithMessage(_ => localizer["Lead.Strategy.Unknown"]);
     }
 }

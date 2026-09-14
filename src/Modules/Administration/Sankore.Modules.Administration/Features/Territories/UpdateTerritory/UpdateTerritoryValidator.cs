@@ -1,10 +1,12 @@
 using FluentValidation;
+using Microsoft.Extensions.Localization;
+using Sankore.Modules.Administration.Resources;
 
 namespace Sankore.Modules.Administration.Features.Territories.UpdateTerritory;
 
 public sealed class UpdateTerritoryValidator : AbstractValidator<UpdateTerritoryCommand>
 {
-    public UpdateTerritoryValidator()
+    public UpdateTerritoryValidator(IStringLocalizer<AdministrationErrors> localizer)
     {
         RuleFor(x => x.TerritoryId).NotEmpty();
         RuleFor(x => x.Name).NotEmpty().MaximumLength(150);
@@ -14,10 +16,10 @@ public sealed class UpdateTerritoryValidator : AbstractValidator<UpdateTerritory
         When(x => x.Latitude.HasValue || x.Longitude.HasValue, () =>
         {
             RuleFor(x => x.Latitude)
-                .NotNull().WithMessage("Latitude is required when Longitude is provided.")
+                .NotNull().WithMessage(_ => localizer["Territory.Latitude.Required"])
                 .InclusiveBetween(-90, 90);
             RuleFor(x => x.Longitude)
-                .NotNull().WithMessage("Longitude is required when Latitude is provided.")
+                .NotNull().WithMessage(_ => localizer["Territory.Longitude.Required"])
                 .InclusiveBetween(-180, 180);
         });
     }

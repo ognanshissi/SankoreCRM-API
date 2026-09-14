@@ -37,14 +37,10 @@ internal sealed class ForgotPasswordHandler(
 
         var resetToken = await userManager.GeneratePasswordResetTokenAsync(user);
 
-        // Resolve locale from user profile; fall back to "fr"
-        var locale = await db.UserProfiles
-            .IgnoreQueryFilters()
-            .Where(p => p.UserId == user.Id)
-            .Select(p => p.DefaultLanguage)
-            .FirstOrDefaultAsync(ct) ?? "fr";
-
         var tenantInfo = await tenantStore.GetAsync(tenantId, ct);
+
+        // Resolve locale: user preference → tenant default → system default
+        var locale = user.PreferredLanguage ?? tenantInfo?.DefaultLanguage ?? "fr";
         
         // Idempotency: one reset email per user per calendar day (prevents spam)
         var idempotencyKey = $"password-reset-{user.Id}-{DateTimeOffset.UtcNow:yyyyMMdd}";

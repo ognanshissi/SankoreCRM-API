@@ -1,20 +1,22 @@
+using FluentValidation;
+using Microsoft.Extensions.Localization;
+using Sankore.Modules.Leads.Resources;
+
 namespace Sankore.Modules.Leads.Features.CaptureLead;
 
-using FluentValidation;
-
-public sealed class CaptureLeadValidator: AbstractValidator<CaptureLeadCommand>
+public sealed class CaptureLeadValidator : AbstractValidator<CaptureLeadCommand>
 {
-    public CaptureLeadValidator()
+    public CaptureLeadValidator(IStringLocalizer<LeadsErrors> localizer)
     {
         RuleFor(x => x.TenantId).NotEmpty();
 
         RuleFor(x => x.FullName)
-            .NotEmpty().WithMessage("Full name is required.")
+            .NotEmpty().WithMessage(_ => localizer["Lead.FullName.Required"])
             .MaximumLength(200);
 
         RuleFor(x => x.PhoneNumber)
-            .NotEmpty().WithMessage("Phone number is required.")
-            .Matches(@"^\+?[0-9\s\-]{8,20}$").WithMessage("Phone number format is invalid.");
+            .NotEmpty().WithMessage(_ => localizer["Lead.Phone.Required"])
+            .Matches(@"^\+?[0-9\s\-]{8,20}$").WithMessage(_ => localizer["Lead.Phone.Format"]);
 
         RuleFor(x => x.InterestedProduct).NotEmpty();
         RuleFor(x => x.PreferredLanguage).NotEmpty();

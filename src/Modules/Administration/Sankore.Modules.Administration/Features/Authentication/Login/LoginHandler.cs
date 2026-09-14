@@ -14,6 +14,7 @@ internal sealed class LoginHandler(
     UserManager<AppUser> userManager,
     AdministrationDbContext db,
     ITenantContext tenant,
+    ITenantStore tenantStore,
     IJwtTokenService jwtTokenService,
     IOptions<JwtOptions> jwtOptions) : IRequestHandler<LoginCommand, Result<LoginResult>>
 {
@@ -97,7 +98,10 @@ internal sealed class LoginHandler(
         permissions.UnionWith(permissionCodes);
         permissions.UnionWith(scopedPermissionCodes);
         
-        var jwtTokenResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray());
+        var tenantInfo = await tenantStore.GetAsync(tenant.CurrentTenantId, ct);
+        var language = user.PreferredLanguage ?? tenantInfo?.DefaultLanguage ?? "fr";
+
+        var jwtTokenResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray(), language);
 
         return Result.Ok(new LoginResult(
             jwtTokenResult.Token,

@@ -1,21 +1,22 @@
 using FluentValidation;
+using Microsoft.Extensions.Localization;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Modules.Administration.Resources;
 
 namespace Sankore.Modules.Administration.Features.Agencies.CreateAgency;
 
-public sealed class CreateAgencyValidator: AbstractValidator<CreateAgencyCommand>
+public sealed class CreateAgencyValidator : AbstractValidator<CreateAgencyCommand>
 {
-    public CreateAgencyValidator()
+    public CreateAgencyValidator(IStringLocalizer<AdministrationErrors> localizer)
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Description).MaximumLength(500);
         RuleFor(x => x.AgencyType).IsInEnum();
 
-        // Non-HQ agencies require a parent
         When(x => x.AgencyType != AgencyType.HeadQuarter, () =>
             RuleFor(x => x.ParentAgencyId)
                 .NotEmpty()
-                .WithMessage("ParentAgencyId is required for non-headquarters agencies."));
+                .WithMessage(_ => localizer["Agency.ParentAgencyId.Required"]));
 
         When(x => x.Latitude.HasValue || x.Longitude.HasValue, () =>
         {
