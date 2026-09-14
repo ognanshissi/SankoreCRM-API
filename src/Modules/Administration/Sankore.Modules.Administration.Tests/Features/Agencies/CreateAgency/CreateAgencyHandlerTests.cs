@@ -86,7 +86,7 @@ public sealed class CreateAgencyHandlerTests : IDisposable
     {
         // Seed parent HQ first
         await using var db = _factory.CreateContext();
-        var hq = Agency.Create(_tenantId, "Siège", "", AgencyType.HeadQuarter, null, null);
+        var hq = Agency.Create(_tenantId, "HQ0001", "Siège", "", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(hq);
         await db.SaveChangesAsync();
 

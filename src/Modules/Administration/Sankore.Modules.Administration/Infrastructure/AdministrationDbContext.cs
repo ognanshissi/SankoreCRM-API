@@ -98,5 +98,9 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.HasSequence<int>("GeneratedIncrementalNo", schema: "shared")
             .StartsAt(1000)
             .IncrementsBy(5);
+
+        modelBuilder.HasSequence<long>("agency_code_seq", schema: "administration")
+            .StartsAt(1)
+            .IncrementsBy(1);
     }
 }

@@ -44,8 +44,14 @@ internal sealed class CreateAgencyHandler(
                 location);
         }
 
+        var seqVal = await db.Database
+            .SqlQuery<long>($"""SELECT nextval('administration.agency_code_seq') AS "Value" """)
+            .SingleAsync(ct);
+        var code = $"AG{seqVal:D6}";
+
         var agency = Agency.Create(
             tenantId: currentUser.TenantId,
+            code: code,
             name: request.Name,
             description: request.Description,
             agencyType: request.AgencyType,

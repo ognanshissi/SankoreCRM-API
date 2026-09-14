@@ -29,7 +29,7 @@ public sealed class UpdateAgencyHandlerTests : IDisposable
     private async Task<Agency> SeedHq(string name = "Siège")
     {
         await using var db = _factory.CreateContext();
-        var hq = Agency.Create(_tenantId, name, "Desc", AgencyType.HeadQuarter, null, null);
+        var hq = Agency.Create(_tenantId, "AG0001", name, "Desc", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(hq);
         await db.SaveChangesAsync();
         return hq;

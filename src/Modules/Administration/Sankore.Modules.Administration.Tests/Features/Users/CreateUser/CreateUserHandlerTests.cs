@@ -41,7 +41,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         // ARRANGE
         await using var db = _factory.CreateContext();
 
-        var agency = Agency.Create(_tenantId, "Agence Dakar", "HQ", AgencyType.HeadQuarter, null, null);
+        var agency = Agency.Create(_tenantId, "AG0001", "Agence Dakar", "HQ", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(agency);
         await db.SaveChangesAsync();
 
@@ -149,7 +149,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         // ARRANGE — seed an agency and an existing user with the same email
         await using var db = _factory.CreateContext();
 
-        var agency = Agency.Create(_tenantId, "Agence Test", "", AgencyType.HeadQuarter, null, null);
+        var agency = Agency.Create(_tenantId, "AG0001", "Agence Test", "", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(agency);
 
         var existingUser = AppUser.Create(_tenantId, agency.Id, "Existing User", "taken@test.com");

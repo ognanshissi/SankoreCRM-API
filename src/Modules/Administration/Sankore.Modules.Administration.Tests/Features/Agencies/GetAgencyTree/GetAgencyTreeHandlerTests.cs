@@ -26,17 +26,22 @@ public sealed class GetAgencyTreeHandlerTests : IDisposable
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    private static string TestCode(string name)
+        => new string(name.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant() is { Length: > 0 } s
+            ? s[..Math.Min(8, s.Length)]
+            : "TST";
+
     private static Agency HQ(Guid tenantId, string name = "Siège Social")
-        => Agency.Create(tenantId, name, "", AgencyType.HeadQuarter, null, null);
+        => Agency.Create(tenantId, TestCode(name), name, "", AgencyType.HeadQuarter, null, null);
 
     private static Agency Branch(Guid tenantId, Guid parentId, string name = "Branche Dakar")
-        => Agency.Create(tenantId, name, "", AgencyType.Branch, parentId, null);
+        => Agency.Create(tenantId, TestCode(name), name, "", AgencyType.Branch, parentId, null);
 
     private static Agency ServicePoint(Guid tenantId, Guid parentId, string name = "Point de Service")
-        => Agency.Create(tenantId, name, "", AgencyType.ServicePoint, parentId, null);
+        => Agency.Create(tenantId, TestCode(name), name, "", AgencyType.ServicePoint, parentId, null);
 
     private static Agency Counter(Guid tenantId, Guid parentId, string name = "Guichet")
-        => Agency.Create(tenantId, name, "", AgencyType.Counter, parentId, null);
+        => Agency.Create(tenantId, TestCode(name), name, "", AgencyType.Counter, parentId, null);
 
     private GetAgencyTreeHandler BuildHandler()
         => new(db: _factory.CreateContext());

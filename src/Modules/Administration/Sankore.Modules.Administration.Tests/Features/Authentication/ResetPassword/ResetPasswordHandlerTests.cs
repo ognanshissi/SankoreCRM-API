@@ -27,7 +27,7 @@ public sealed class ResetPasswordHandlerTests : IDisposable
     private async Task<AppUser> SeedActiveUserAsync(string email = "user@test.sn")
     {
         await using var seed = _factory.CreateContext();
-        var agency = Agency.Create(_tenantId, "HQ", "HQ", AgencyType.HeadQuarter, null, null);
+        var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Amadou Ba", email);
@@ -119,7 +119,7 @@ public sealed class ResetPasswordHandlerTests : IDisposable
     public async Task Should_fail_when_user_is_pending_activation()
     {
         await using var seed = _factory.CreateContext();
-        var agency = Agency.Create(_tenantId, "HQ", "HQ", AgencyType.HeadQuarter, null, null);
+        var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Pending User", "pending@test.sn");
@@ -146,7 +146,7 @@ public sealed class ResetPasswordHandlerTests : IDisposable
     public async Task Should_fail_when_user_is_disabled()
     {
         await using var seed = _factory.CreateContext();
-        var agency = Agency.Create(_tenantId, "HQ", "HQ", AgencyType.HeadQuarter, null, null);
+        var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Disabled User", "disabled@test.sn");

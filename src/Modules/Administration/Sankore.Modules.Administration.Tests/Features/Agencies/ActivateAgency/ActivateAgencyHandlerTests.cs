@@ -30,7 +30,7 @@ public sealed class ActivateAgencyHandlerTests : IDisposable
     private async Task<Agency> SeedDeletedHq()
     {
         await using var db = _factory.CreateContext();
-        var hq = Agency.Create(_tenantId, "Siège", "Desc", AgencyType.HeadQuarter, null, null);
+        var hq = Agency.Create(_tenantId, "HQ0001", "Siège", "Desc", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(hq);
         await db.SaveChangesAsync();
 
@@ -79,7 +79,7 @@ public sealed class ActivateAgencyHandlerTests : IDisposable
     public async Task Fails_when_agency_is_not_deactivated()
     {
         await using var db = _factory.CreateContext();
-        var hq = Agency.Create(_tenantId, "Siège", "Desc", AgencyType.HeadQuarter, null, null);
+        var hq = Agency.Create(_tenantId, "HQ0001", "Siège", "Desc", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(hq);
         await db.SaveChangesAsync();
 
@@ -99,7 +99,7 @@ public sealed class ActivateAgencyHandlerTests : IDisposable
         var otherFactory = new TestAdminDbContextFactory(otherTenantId);
 
         await using var db = otherFactory.CreateContext();
-        var hq = Agency.Create(otherTenantId, "Autre Siège", "", AgencyType.HeadQuarter, null, null);
+        var hq = Agency.Create(otherTenantId, "HQ0001", "Autre Siège", "", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(hq);
         await db.SaveChangesAsync();
 

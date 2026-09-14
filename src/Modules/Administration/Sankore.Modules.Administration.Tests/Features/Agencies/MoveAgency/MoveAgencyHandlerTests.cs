@@ -25,9 +25,9 @@ public sealed class MoveAgencyHandlerTests : IDisposable
     private async Task<(Agency hq, Agency branch, Agency sp)> SeedThreeLevels()
     {
         await using var db = _factory.CreateContext();
-        var hq = Agency.Create(_tenantId, "Siège", "", AgencyType.HeadQuarter, null, null);
-        var branch = Agency.Create(_tenantId, "Branche", "", AgencyType.Branch, hq.Id, null);
-        var sp = Agency.Create(_tenantId, "Point de Service", "", AgencyType.ServicePoint, branch.Id, null);
+        var hq = Agency.Create(_tenantId, "HQ0001", "Siège", "", AgencyType.HeadQuarter, null, null);
+        var branch = Agency.Create(_tenantId, "BR0001", "Branche", "", AgencyType.Branch, hq.Id, null);
+        var sp = Agency.Create(_tenantId, "SP0001", "Point de Service", "", AgencyType.ServicePoint, branch.Id, null);
         db.Agencies.AddRange(hq, branch, sp);
         await db.SaveChangesAsync();
         return (hq, branch, sp);
@@ -58,8 +58,8 @@ public sealed class MoveAgencyHandlerTests : IDisposable
     public async Task Promotes_hq_to_root_by_clearing_parent()
     {
         await using var db = _factory.CreateContext();
-        var hq1 = Agency.Create(_tenantId, "Siège 1", "", AgencyType.HeadQuarter, null, null);
-        var hq2 = Agency.Create(_tenantId, "Siège 2", "", AgencyType.HeadQuarter, hq1.Id, null);
+        var hq1 = Agency.Create(_tenantId, "HQ0001", "Siège 1", "", AgencyType.HeadQuarter, null, null);
+        var hq2 = Agency.Create(_tenantId, "HQ0002", "Siège 2", "", AgencyType.HeadQuarter, hq1.Id, null);
         db.Agencies.AddRange(hq1, hq2);
         await db.SaveChangesAsync();
 

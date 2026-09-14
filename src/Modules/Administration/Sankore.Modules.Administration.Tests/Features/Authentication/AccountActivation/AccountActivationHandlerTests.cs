@@ -30,7 +30,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
     private async Task<AppUser> SeedPendingUserAsync(string email = "user@test.sn")
     {
         await using var seed = _factory.CreateContext();
-        var agency = Agency.Create(_tenantId, "HQ", "HQ", AgencyType.HeadQuarter, null, null);
+        var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Aminata Diallo", email);
@@ -111,7 +111,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
     public async Task Should_fail_when_account_is_already_active()
     {
         await using var seed = _factory.CreateContext();
-        var agency = Agency.Create(_tenantId, "HQ", "HQ", AgencyType.HeadQuarter, null, null);
+        var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
         var user = AppUser.Create(_tenantId, agency.Id, "Moussa Sow", "active@test.sn");

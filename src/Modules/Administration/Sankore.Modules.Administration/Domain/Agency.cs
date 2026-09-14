@@ -28,6 +28,7 @@ public sealed class Agency : AggregateRoot
 
     public static Agency Create(
         Guid tenantId,
+        string code,
         string name,
         string description,
         AgencyType agencyType,
@@ -44,7 +45,7 @@ public sealed class Agency : AggregateRoot
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            Code = GenerateCode(name),
+            Code = code,
             Name = name.Trim(),
             Description = description.Trim(),
             AgencyType = agencyType,
@@ -104,11 +105,6 @@ public sealed class Agency : AggregateRoot
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    private static string GenerateCode(string name)
-    {
-        var clean = new string(name.Where(char.IsLetterOrDigit).ToArray());
-        return (clean.Length <= 6 ? clean : clean[..6]).ToUpperInvariant();
-    }
 }
 
 public enum AgencyType
