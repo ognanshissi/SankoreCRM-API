@@ -22,6 +22,12 @@ internal sealed class ListAgenciesHandler(
                 ? query.Where(a => a.ParentAgencyId == null)
                 : query.Where(a => a.ParentAgencyId == request.ParentAgencyId);
 
+        if (!string.IsNullOrWhiteSpace(request.SearchKey))
+        {
+            var key = request.SearchKey.Trim().ToLower();
+            query = query.Where(a => a.Name.ToLower().Contains(key) || a.Code.ToLower().Contains(key));
+        }
+
         query = query.OrderBy(a => a.Name);
 
         var totalCount = await query.CountAsync(ct);

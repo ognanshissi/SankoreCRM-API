@@ -18,6 +18,7 @@ public static class ListAgenciesEndpoint
             .WithDescription(
                 "Returns a paginated list of agencies. " +
                 "Pass parentId=<guid> to filter children; parentId=00000000-0000-0000-0000-000000000000 returns root-level agencies. " +
+                "Pass search=<text> to filter by name or code (case-insensitive substring match). " +
                 "Pass includeDeleted=true to include soft-deleted entries. " +
                 "Pass page and pageSize for pagination (pageSize=0 returns all). " +
                 "Requires permission: agency:read.")
@@ -34,6 +35,7 @@ public static class ListAgenciesEndpoint
     private static async Task<IResult> Handle(
         ISender sender,
         Guid? parentId,
+        string? search,
         bool includeDeleted,
         int page,
         int pageSize,
@@ -43,7 +45,7 @@ public static class ListAgenciesEndpoint
         var effectivePageSize = pageSize < 0 ? 20 : pageSize;
 
         var result = await sender.Send(
-            new ListAgenciesQuery(parentId, includeDeleted, effectivePage, effectivePageSize), ct);
+            new ListAgenciesQuery(parentId, search, includeDeleted, effectivePage, effectivePageSize), ct);
 
         return Results.Ok(result.Value);
     }
