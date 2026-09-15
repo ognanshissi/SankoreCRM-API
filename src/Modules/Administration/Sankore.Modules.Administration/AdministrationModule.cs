@@ -57,6 +57,8 @@ public static class AdministrationModule
             .AddEntityFrameworkStores<AdministrationDbContext>();
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
+        services.AddScoped<Features.Agencies.CreateAgency.IAgencyCodeGenerator,
+                           Features.Agencies.CreateAgency.PostgresAgencyCodeGenerator>();
         services.Configure<JwtOptions>(config.GetSection("Jwt"));
         services.AddScoped<IJwtTokenService, JwtTokenService>();
 

@@ -21,6 +21,11 @@ internal sealed class GetUserHandler(
         if (user is null)
             return Result.Fail<UserDto>($"User {request.UserId} not found.");
 
+        var roles = await db.UserRoles
+            .Where(ur => ur.UserId == user.Id && ur.IsActive)
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name!)
+            .ToListAsync(ct);
+
         return Result.Ok(new UserDto(
             user.Id,
             user.FullName,
@@ -36,6 +41,7 @@ internal sealed class GetUserHandler(
             user.Specialties,
             user.IsAvailable,
             user.EnableNotifications,
-            user.AccountType.ToString()));
+            user.AccountType.ToString(),
+            roles));
     }
 }

@@ -10,7 +10,8 @@ namespace Sankore.Modules.Administration.Features.Agencies.CreateAgency;
 
 internal sealed class CreateAgencyHandler(
     AdministrationDbContext db,
-    ICurrentUser currentUser
+    ICurrentUser currentUser,
+    IAgencyCodeGenerator codeGenerator
 ) : IRequestHandler<CreateAgencyCommand, Result<CreateAgencyResult>>
 {
     public async Task<Result<CreateAgencyResult>> Handle(
@@ -44,10 +45,7 @@ internal sealed class CreateAgencyHandler(
                 location);
         }
 
-        var seqVal = await db.Database
-            .SqlQuery<long>($"""SELECT nextval('administration.agency_code_seq') AS "Value" """)
-            .SingleAsync(ct);
-        var code = $"AG{seqVal:D6}";
+        var code = await codeGenerator.NextCodeAsync(ct);
 
         var agency = Agency.Create(
             tenantId: currentUser.TenantId,

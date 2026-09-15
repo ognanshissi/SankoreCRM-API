@@ -8,6 +8,13 @@ using Sankore.Modules.Administration.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
 using Xunit;
 
+file sealed class SequentialCodeGenerator : IAgencyCodeGenerator
+{
+    private int _counter;
+    public Task<string> NextCodeAsync(CancellationToken ct = default)
+        => Task.FromResult($"AG{++_counter:D6}");
+}
+
 public sealed class CreateAgencyHandlerTests : IDisposable
 {
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -26,7 +33,7 @@ public sealed class CreateAgencyHandlerTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private CreateAgencyHandler BuildHandler()
-        => new(_factory.CreateContext(), _currentUser);
+        => new(_factory.CreateContext(), _currentUser, new SequentialCodeGenerator());
 
     private static CreateAgencyCommand HqCommand(string name = "Siège Social")
         => new(name, "Description", AgencyType.HeadQuarter, null,
@@ -51,12 +58,12 @@ public sealed class CreateAgencyHandlerTests : IDisposable
     // ── S2 : code généré à partir du nom ────────────────────────────────────
 
     [Fact]
-    public async Task Generated_code_is_derived_from_name()
+    public async Task Generated_code_follows_sequence_format()
     {
         var result = await BuildHandler().Handle(HqCommand("Dakar Agency"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Code.Should().Be("DAKARA"); // first 6 alphanum chars uppercase
+        result.Value.Code.Should().MatchRegex(@"^AG\d{6}$");
     }
 
     // ── S3 : l'agence est persistée en base ─────────────────────────────────

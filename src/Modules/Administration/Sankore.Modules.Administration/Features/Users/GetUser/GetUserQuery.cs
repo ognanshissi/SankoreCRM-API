@@ -20,4 +20,5 @@ public sealed record UserDto(
     List<string> Specialties,
     bool IsAvailable,
     bool EnableNotifications,
-    string AccountType);
+    string AccountType,
+    List<string> Roles);
