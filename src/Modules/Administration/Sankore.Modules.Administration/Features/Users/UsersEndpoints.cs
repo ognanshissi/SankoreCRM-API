@@ -7,6 +7,7 @@ using Sankore.Modules.Administration.Features.Users.CreateUser;
 using Sankore.Modules.Administration.Features.Users.DeactivateUser;
 using Sankore.Modules.Administration.Features.Users.GetUser;
 using Sankore.Modules.Administration.Features.Users.GetUserPermissions;
+using Sankore.Modules.Administration.Features.Users.GetUserStatusStats;
 using Sankore.Modules.Administration.Features.Users.ListUsers;
 using Sankore.Modules.Administration.Features.Users.ReactivateUser;
 using Sankore.Modules.Administration.Features.Users.Register;
@@ -23,6 +24,7 @@ public static class UsersEndpoints
         var group = app.MapGroup("users").WithTags("Users");
 
         return group
+            .MapGetUserStatusStats()
             .MapListUsers()
             .MapCreateUser()
             .MapGetUser()
