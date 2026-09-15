@@ -33,7 +33,7 @@ public sealed class AssignRoleHandlerTests : IDisposable
     [Fact]
     public async Task Assigns_role_and_persists_UserRole_record()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Fatou Diop", "fatou@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Fatou", "Diop", "fatou@test.sn");
         var role = AppRole.Create("Agent", "Agent");
         var roleId = Guid.NewGuid();
         typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(role, roleId);
@@ -69,7 +69,7 @@ public sealed class AssignRoleHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_user_belongs_to_different_tenant()
     {
-        var user = AppUser.Create(Guid.NewGuid(), Guid.NewGuid(), "Other Tenant", "other@test.sn");
+        var user = AppUser.Create(Guid.NewGuid(), Guid.NewGuid(), "Other", "Tenant", "other@test.sn");
         var (handler, um, _) = BuildHandler();
         um.FindByIdAsync(user.Id.ToString()).Returns(user);
 
@@ -83,7 +83,7 @@ public sealed class AssignRoleHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_role_not_found()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Awa Ba", "awa@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Awa", "Mike", "awa@test.sn");
         var (handler, um, rm) = BuildHandler();
         um.FindByIdAsync(user.Id.ToString()).Returns(user);
         rm.FindByIdAsync(Arg.Any<string>()).Returns((AppRole?)null);
@@ -97,7 +97,7 @@ public sealed class AssignRoleHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_role_is_not_assignable()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Awa Ba", "awa@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Awa", "Mike", "awa@test.sn");
         var systemRole = AppRole.Create("System", "Compte technique", isSystem: true); // IsAssignable = false
         var roleId = Guid.NewGuid();
         typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(systemRole, roleId);
@@ -117,7 +117,7 @@ public sealed class AssignRoleHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_user_already_has_role_active()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Ibou Fall", "ibou@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Ibou", "Fall","ibou@test.sn");
         var role = AppRole.Create("Agent", "Agent");
         var roleId = Guid.NewGuid();
         typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(role, roleId);

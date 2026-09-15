@@ -110,7 +110,7 @@ public sealed class DeleteAgencyHandlerTests : IDisposable
         var hq = await SeedHq();
 
         await using var db = _factory.CreateContext();
-        var user = AppUser.Create(_tenantId, hq.Id, "Alice Diallo", "alice@sankore.sn");
+        var user = AppUser.Create(_tenantId, hq.Id, "Alice", "Diallo", "alice@sankore.sn");
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
@@ -118,7 +118,7 @@ public sealed class DeleteAgencyHandlerTests : IDisposable
             new DeleteAgencyCommand(hq.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("users assigned");
+        result.Error.Should().Contain("active users");
 
         // Verify the agency was NOT deleted
         await using var db2 = _factory.CreateContext();

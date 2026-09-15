@@ -21,6 +21,9 @@ public sealed class AppUser: IdentityUser<Guid>
     public Agency? Agency { get; private set; } = null!;
     public string FullName { get; private set; } = null!;
 
+    public string FirstName { get; private set; } = null!;
+    public string LastName { get; private set; } = null!;
+
     // ── M12 lifecycle (F12.1) ─────────────────────────────────────────────
     public UserStatus Status { get; private set; } = UserStatus.PendingActivation;
     public bool MfaEnabled { get; private set; } = true;
@@ -67,10 +70,13 @@ public sealed class AppUser: IdentityUser<Guid>
 
     // ── Factories ─────────────────────────────────────────────────────────
 
-    public static AppUser Create(Guid tenantId, Guid agencyId, string fullName, string email)
+    public static AppUser Create(Guid tenantId, Guid agencyId, string firstName, string lastName, string email)
     {
-        if (string.IsNullOrWhiteSpace(fullName))
+        if (string.IsNullOrWhiteSpace(firstName))
             throw new DomainException("User must have a name.", "User.Name.Required");
+        if (string.IsNullOrWhiteSpace(lastName))
+            throw new DomainException("User must have a name.", "User.Name.Required");
+        
         if (string.IsNullOrWhiteSpace(email))
             throw new DomainException("User must have an email.", "User.Email.Required");
 
@@ -79,7 +85,9 @@ public sealed class AppUser: IdentityUser<Guid>
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             AgencyId = agencyId,
-            FullName = fullName,
+            FirstName = firstName,
+            LastName = lastName,
+            FullName = $"{firstName} {lastName}",
             UserName = email,
             Email = email,
             Status = UserStatus.PendingActivation,
@@ -110,10 +118,10 @@ public sealed class AppUser: IdentityUser<Guid>
     }
 
     public static AppUser CreateAgent(
-        Guid tenantId, Guid agencyId, string fullName, string email,
+        Guid tenantId, Guid agencyId, string firstName, string lastName, string email,
         IEnumerable<string> languages, IEnumerable<string> specialties)
     {
-        var user = Create(tenantId, agencyId, fullName, email);
+        var user = Create(tenantId, agencyId, firstName, lastName, email);
         user.SpokenLanguages = languages.ToList();
         user.Specialties = specialties.ToList();
         user.IsAvailable = true;

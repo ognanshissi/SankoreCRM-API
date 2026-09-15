@@ -49,7 +49,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
         seed.RolePermissions.Add(RolePermission.Grant(role.Id, permission.Id));
         await seed.SaveChangesAsync();
 
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Samba Diallo", "samba@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Samba", "Diallo", "samba@test.sn");
 
         var um = IdentityMockFactory.BuildUserManager();
         var cu = Substitute.For<ICurrentUser>();
@@ -85,7 +85,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
         seed.PermissionAttributions.Add(attribution);
         await seed.SaveChangesAsync();
 
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Aissatou Ba", "aissatou@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Aissatou", "Ba", "aissatou@test.sn");
         typeof(AppUser).GetProperty(nameof(AppUser.Id))!.SetValue(user, userId);
 
         var um = IdentityMockFactory.BuildUserManager();
@@ -119,7 +119,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
         seed.PermissionAttributions.Add(expired);
         await seed.SaveChangesAsync();
 
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Test User", "test@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Test", "User", "test@test.sn");
         typeof(AppUser).GetProperty(nameof(AppUser.Id))!.SetValue(user, userId);
 
         var um = IdentityMockFactory.BuildUserManager();
@@ -152,7 +152,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_user_belongs_to_different_tenant()
     {
-        var user = AppUser.Create(Guid.NewGuid(), Guid.NewGuid(), "Foreign", "foreign@test.sn");
+        var user = AppUser.Create(Guid.NewGuid(), Guid.NewGuid(), "Foreign", "User", "foreign@test.sn");
 
         var um = IdentityMockFactory.BuildUserManager();
         var cu = Substitute.For<ICurrentUser>();

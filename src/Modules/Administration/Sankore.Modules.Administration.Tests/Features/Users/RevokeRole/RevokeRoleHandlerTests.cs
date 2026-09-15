@@ -40,7 +40,7 @@ public sealed class RevokeRoleHandlerTests : IDisposable
         seed.UserRoles.Add(UserRole.Assign(_tenantId, userId, roleId, Guid.NewGuid()));
         await seed.SaveChangesAsync();
 
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Oumar Ndiaye", "oumar@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Oumar", "Ndiaye", "oumar@test.sn");
         typeof(AppUser).GetProperty(nameof(AppUser.Id))!.SetValue(user, userId);
 
         var role = AppRole.Create("Agent", "Agent");
@@ -78,7 +78,7 @@ public sealed class RevokeRoleHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_role_not_found()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Test", "test@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Test", "User", "test@test.sn");
         var (handler, um, rm) = BuildHandler();
         um.FindByIdAsync(user.Id.ToString()).Returns(user);
         rm.FindByIdAsync(Arg.Any<string>()).Returns((AppRole?)null);
@@ -94,7 +94,7 @@ public sealed class RevokeRoleHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_revoking_System_role()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Root", "root@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Root", "User", "root@test.sn");
         var systemRole = AppRole.Create("System", "Compte technique", isSystem: true);
         var roleId = Guid.NewGuid();
         typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(systemRole, roleId);
@@ -114,7 +114,7 @@ public sealed class RevokeRoleHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_user_does_not_have_the_role()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Ndeye Seck", "ndeye@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Ndeye", "Seck", "ndeye@test.sn");
         var role = AppRole.Create("Agent", "Agent");
         var roleId = Guid.NewGuid();
         typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(role, roleId);

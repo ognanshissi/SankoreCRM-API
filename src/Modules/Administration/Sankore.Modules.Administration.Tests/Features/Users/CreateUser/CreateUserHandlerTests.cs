@@ -81,7 +81,8 @@ public sealed class CreateUserHandlerTests : IDisposable
         var command = new CreateUserCommand(
             AgencyId: agency.Id,
             RoleId: roleId,
-            FullName: "Aminata Diallo",
+            FirstName: "Aminata",
+            LastName: "Diallo",
             Email: "aminata@sankorefinance.sn",
             DefaultLanguage: "fr",
             SpokenLanguages: ["Wolof", "FR"],
@@ -99,7 +100,7 @@ public sealed class CreateUserHandlerTests : IDisposable
             Arg.Is<UserCreatedEvent>(e =>
                 e.TenantId == _tenantId &&
                 e.Email == command.Email &&
-                e.FullName == command.FullName),
+                e.FullName == $"{command.FirstName} {command.LastName}"),
             Arg.Any<CancellationToken>());
 
         // Profile and custom UserRole row persisted
@@ -127,7 +128,8 @@ public sealed class CreateUserHandlerTests : IDisposable
         var command = new CreateUserCommand(
             AgencyId: Guid.NewGuid(), // no agency seeded
             RoleId: Guid.NewGuid(),
-            FullName: "Test User",
+            FirstName: "Test",
+            LastName: "User",
             Email: "test@example.com",
             DefaultLanguage: "fr",
             SpokenLanguages: [],
@@ -152,7 +154,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         var agency = Agency.Create(_tenantId, "AG0001", "Agence Test", "", AgencyType.HeadQuarter, null, null);
         db.Agencies.Add(agency);
 
-        var existingUser = AppUser.Create(_tenantId, agency.Id, "Existing User", "taken@test.com");
+        var existingUser = AppUser.Create(_tenantId, agency.Id, "Existing", "User", "taken@test.com");
         existingUser.NormalizedEmail = "TAKEN@TEST.COM";
         db.Users.Add(existingUser);
         await db.SaveChangesAsync();
@@ -176,7 +178,8 @@ public sealed class CreateUserHandlerTests : IDisposable
         var command = new CreateUserCommand(
             AgencyId: agency.Id,
             RoleId: roleId,
-            FullName: "Duplicate User",
+            FirstName: "Duplicate",
+            LastName: "User",
             Email: "taken@test.com", // same email
             DefaultLanguage: "fr",
             SpokenLanguages: [],

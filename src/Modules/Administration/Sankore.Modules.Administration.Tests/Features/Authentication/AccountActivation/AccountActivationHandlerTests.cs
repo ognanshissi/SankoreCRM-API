@@ -33,7 +33,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
         var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
-        var user = AppUser.Create(_tenantId, agency.Id, "Aminata Diallo", email);
+        var user = AppUser.Create(_tenantId, agency.Id, "Aminata","Diallo", email);
         user.NormalizedEmail = email.ToUpperInvariant();
 
         // Set a non-null hash so PasswordHistory.Create succeeds in the handler
@@ -114,7 +114,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
         var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
-        var user = AppUser.Create(_tenantId, agency.Id, "Moussa Sow", "active@test.sn");
+        var user = AppUser.Create(_tenantId, agency.Id, "Moussa", "Sow", "active@test.sn");
         user.NormalizedEmail = "ACTIVE@TEST.SN";
         user.Activate();
         seed.Users.Add(user);

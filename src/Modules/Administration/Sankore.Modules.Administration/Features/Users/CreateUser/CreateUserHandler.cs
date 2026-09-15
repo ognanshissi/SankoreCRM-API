@@ -49,7 +49,7 @@ internal sealed class CreateUserHandler(
             return Result.Fail<CreateUserResult>("A user with this email already exists in this tenant.");
 
         // 4. Create the user aggregate (Status = PendingActivation, no password yet)
-        var user = AppUser.Create(tenantId, request.AgencyId, request.FullName, request.Email);
+        var user = AppUser.Create(tenantId, request.AgencyId, request.FirstName, request.LastName, request.Email);
 
         var identityResult = await userManager.CreateAsync(user);
         if (!identityResult.Succeeded)

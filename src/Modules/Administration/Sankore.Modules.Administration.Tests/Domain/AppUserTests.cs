@@ -16,7 +16,7 @@ public sealed class AppUserTests
     {
         var tenantId = Guid.NewGuid();
         var agencyId = Guid.NewGuid();
-        return AppUser.Create(tenantId, agencyId, name, email);
+        return AppUser.Create(tenantId, agencyId, "", "", email);
     }
 
     // ── Initial state ─────────────────────────────────────────────────────

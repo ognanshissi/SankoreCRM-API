@@ -39,7 +39,7 @@ public sealed class AssignScopedPermissionHandlerTests : IDisposable
     [Fact]
     public async Task Creates_attribution_and_returns_its_id()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Mariama Bah", "mariama@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Mariama", "Bah", "mariama@test.sn");
 
         await using var seed = _factory.CreateContext();
         seed.Permissions.Add(Permission.Create("agency:read", "Read Agency", "Administration", "read"));
@@ -83,7 +83,7 @@ public sealed class AssignScopedPermissionHandlerTests : IDisposable
     [Fact]
     public async Task Fails_when_permission_code_does_not_exist()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Test", "test@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Test", "User", "test@test.sn");
         var handler = BuildHandler(user);
 
         var result = await handler.Handle(
@@ -100,7 +100,7 @@ public sealed class AssignScopedPermissionHandlerTests : IDisposable
     public async Task Fails_when_duplicate_active_attribution_exists()
     {
         var userId = Guid.NewGuid();
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Dial Mbaye", "dial@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Dial", "Mbaye", "dial@test.sn");
         typeof(AppUser).GetProperty(nameof(AppUser.Id))!.SetValue(user, userId);
 
         await using var seed = _factory.CreateContext();
@@ -123,7 +123,7 @@ public sealed class AssignScopedPermissionHandlerTests : IDisposable
     [Fact]
     public async Task Accepts_global_attribution_with_null_scope()
     {
-        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Coumba Sarr", "coumba@test.sn");
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Coumba", "Sarr", "coumba@test.sn");
 
         await using var seed = _factory.CreateContext();
         seed.Permissions.Add(Permission.Create("user:read", "Read User", "Administration", "read"));

@@ -30,7 +30,7 @@ public sealed class ResetPasswordHandlerTests : IDisposable
         var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
-        var user = AppUser.Create(_tenantId, agency.Id, "Amadou Ba", email);
+        var user = AppUser.Create(_tenantId, agency.Id, "Amadou", "Johnson", email);
         user.NormalizedEmail = email.ToUpperInvariant();
         user.Activate();
 
@@ -122,7 +122,7 @@ public sealed class ResetPasswordHandlerTests : IDisposable
         var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
-        var user = AppUser.Create(_tenantId, agency.Id, "Pending User", "pending@test.sn");
+        var user = AppUser.Create(_tenantId, agency.Id, "Pending", "User", "pending@test.sn");
         user.NormalizedEmail = "PENDING@TEST.SN";
         // Status remains PendingActivation (not activated)
         seed.Users.Add(user);
@@ -149,7 +149,7 @@ public sealed class ResetPasswordHandlerTests : IDisposable
         var agency = Agency.Create(_tenantId, "HQ0001", "HQ", "HQ", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
-        var user = AppUser.Create(_tenantId, agency.Id, "Disabled User", "disabled@test.sn");
+        var user = AppUser.Create(_tenantId, agency.Id, "Disabled", "User", "disabled@test.sn");
         user.NormalizedEmail = "DISABLED@TEST.SN";
         user.Activate();
         user.Deactivate();

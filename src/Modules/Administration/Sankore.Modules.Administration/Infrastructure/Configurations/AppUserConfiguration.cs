@@ -10,7 +10,9 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
     public void Configure(EntityTypeBuilder<AppUser> builder)
     {
         builder.ToTable("app_users");
-        builder.Property(u => u.FullName).HasMaxLength(200).IsRequired();
+        builder.Property(u => u.FullName).HasMaxLength(200);
+        builder.Property(u => u.FirstName).HasMaxLength(200).HasDefaultValue("");
+        builder.Property(u => u.LastName).HasMaxLength(200).HasDefaultValue("");
 
         // M12 lifecycle columns
         builder.Property(u => u.Status)

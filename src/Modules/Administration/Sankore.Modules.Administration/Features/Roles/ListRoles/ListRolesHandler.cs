@@ -18,7 +18,13 @@ internal sealed class ListRolesHandler(AdministrationDbContext db, ICurrentUser 
             .Where(r => r.IsAssignable
                      && (r.TenantId == null || r.TenantId == currentUser.TenantId))
             .OrderBy(r => r.Name)
-            .Select(r => new RoleDto(r.Id, r.Name!, r.Label, r.IsSystem, r.IsAssignable))
+            .Select(r => new RoleDto(
+                r.Id,
+                r.Name!,
+                r.Label,
+                r.IsSystem,
+                r.IsAssignable,
+                db.RolePermissions.Count(rp => rp.RoleId == r.Id)))
             .ToListAsync(ct);
 
         return Result.Ok(roles);

@@ -40,7 +40,8 @@ public static class CreateUserEndpoint
         var result = await sender.Send(new CreateUserCommand(
             AgencyId: req.AgencyId,
             RoleId: req.RoleId,
-            FullName: req.FullName,
+            FirstName: req.FirstName,
+            LastName: req.LastName,
             Email: req.Email,
             DefaultLanguage: req.DefaultLanguage,
             SpokenLanguages: req.SpokenLanguages,
@@ -56,7 +57,8 @@ public static class CreateUserEndpoint
 public sealed record CreateUserRequest(
     Guid AgencyId,
     Guid RoleId,
-    string FullName,
+    string FirstName,
+    string LastName,
     string Email,
     string DefaultLanguage,
     List<string> SpokenLanguages,

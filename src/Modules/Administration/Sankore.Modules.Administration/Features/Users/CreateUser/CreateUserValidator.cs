@@ -8,7 +8,8 @@ public sealed class CreateUserValidator : AbstractValidator<CreateUserCommand>
     {
         RuleFor(x => x.AgencyId).NotEmpty();
         RuleFor(x => x.RoleId).NotEmpty();
-        RuleFor(x => x.FullName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.FirstName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.LastName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(200);
         RuleFor(x => x.DefaultLanguage).NotEmpty().MaximumLength(10);
         RuleFor(x => x.CallerUserId).NotEmpty();

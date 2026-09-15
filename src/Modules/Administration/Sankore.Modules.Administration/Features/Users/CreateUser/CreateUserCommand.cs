@@ -11,7 +11,8 @@ namespace Sankore.Modules.Administration.Features.Users.CreateUser;
 public sealed record CreateUserCommand(
     Guid AgencyId,
     Guid RoleId,
-    string FullName,
+    string FirstName,
+    string LastName,
     string Email,
     string DefaultLanguage,
     List<string> SpokenLanguages,

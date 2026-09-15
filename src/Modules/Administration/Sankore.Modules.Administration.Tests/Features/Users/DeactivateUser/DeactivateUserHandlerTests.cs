@@ -36,7 +36,7 @@ public sealed class DeactivateUserHandlerTests : IDisposable
         var agency = Agency.Create(_tenantId, "HQ0001", "Agence HQ", "", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
-        var user = AppUser.Create(_tenantId, agency.Id, "Moussa Sow", "moussa@test.sn");
+        var user = AppUser.Create(_tenantId, agency.Id, "Moussa", "Sow", "moussa@test.sn");
         user.Activate();
         seed.Users.Add(user);
 
@@ -99,7 +99,7 @@ public sealed class DeactivateUserHandlerTests : IDisposable
         var agency = Agency.Create(_tenantId, "AG0001", "Agence Test", "", AgencyType.HeadQuarter, null, null);
         seed.Agencies.Add(agency);
 
-        var user = AppUser.Create(_tenantId, agency.Id, "Fatou Ndiaye", "fatou@test.sn");
+        var user = AppUser.Create(_tenantId, agency.Id, "Fatou", "Ndiaye", "fatou@test.sn");
         user.Activate();
         user.Deactivate(); // put in Disabled state
         seed.Users.Add(user);
