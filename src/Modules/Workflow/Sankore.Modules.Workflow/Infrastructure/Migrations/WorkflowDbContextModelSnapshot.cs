@@ -23,6 +23,102 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowAction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("action_type");
+
+                    b.Property<string>("ConfigJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasDefaultValue("{}")
+                        .HasColumnName("config_json");
+
+                    b.Property<int>("ExecutionOrder")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("execution_order");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<Guid>("TransitionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transition_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_workflow_actions");
+
+                    b.HasIndex("TransitionId", "ExecutionOrder")
+                        .HasDatabaseName("ix_workflow_actions_transition_id_execution_order");
+
+                    b.ToTable("workflow_actions", "workflow");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowAuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ActedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("acted_by_user_id");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("comment");
+
+                    b.Property<string>("ContextSnapshot")
+                        .HasColumnType("text")
+                        .HasColumnName("context_snapshot");
+
+                    b.Property<string>("EventCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("event_code");
+
+                    b.Property<Guid?>("FromStateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_state_id");
+
+                    b.Property<Guid>("InstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instance_id");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("ToStateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_state_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_workflow_audit_entries");
+
+                    b.HasIndex("TenantId", "InstanceId", "OccurredAt")
+                        .HasDatabaseName("ix_workflow_audit_entries_tenant_id_instance_id_occurred_at");
+
+                    b.ToTable("workflow_audit_entries", "workflow");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowInstance", b =>
                 {
                     b.Property<Guid>("Id")
@@ -33,6 +129,17 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
+
+                    b.Property<string>("ContextJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("{}")
+                        .HasColumnName("context_json");
+
+                    b.Property<Guid?>("CurrentStateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_state_id");
 
                     b.Property<int>("CurrentStepOrder")
                         .HasColumnType("integer")
@@ -66,6 +173,11 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("template_id");
 
+                    b.Property<int>("TemplateVersion")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("template_version");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -94,6 +206,10 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("approver_role_code");
+
+                    b.Property<Guid?>("AssignedToUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_to_user_id");
 
                     b.Property<string>("Comment")
                         .HasMaxLength(2000)
@@ -150,7 +266,62 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                     b.HasIndex("InstanceId", "Order")
                         .HasDatabaseName("ix_workflow_instance_steps_instance_id_order");
 
+                    b.HasIndex("TenantId", "AssignedToUserId", "Status")
+                        .HasDatabaseName("ix_workflow_instance_steps_tenant_id_assigned_to_user_id_status");
+
                     b.ToTable("workflow_instance_steps", "workflow");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("field");
+
+                    b.Property<int>("LogicalGroup")
+                        .HasColumnType("integer")
+                        .HasColumnName("logical_group");
+
+                    b.Property<string>("Operator")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("operator");
+
+                    b.Property<string>("RuleType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("rule_type");
+
+                    b.Property<Guid>("StepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("step_id");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_workflow_rules");
+
+                    b.HasIndex("StepId", "RuleType")
+                        .HasDatabaseName("ix_workflow_rules_step_id_rule_type");
+
+                    b.ToTable("workflow_rules", "workflow");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowStepDefinition", b =>
@@ -164,6 +335,13 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("approver_role_code");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("STEP_0")
+                        .HasColumnName("code");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
@@ -179,6 +357,13 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                     b.Property<int>("Order")
                         .HasColumnType("integer")
                         .HasColumnName("order");
+
+                    b.Property<string>("StateType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Approval")
+                        .HasColumnName("state_type");
 
                     b.Property<Guid>("TemplateId")
                         .HasColumnType("uuid")
@@ -196,6 +381,84 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasDatabaseName("ix_workflow_step_definitions_template_id_order");
 
                     b.ToTable("workflow_step_definitions", "workflow");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AssignedRoleCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("assigned_role_code");
+
+                    b.Property<Guid?>("AssignedToUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_to_user_id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<string>("CompletionComment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("completion_comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<DateTimeOffset?>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
+                    b.Property<Guid>("InstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instance_id");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Normal")
+                        .HasColumnName("priority");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pending")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id")
+                        .HasName("pk_workflow_tasks");
+
+                    b.HasIndex("TenantId", "InstanceId")
+                        .HasDatabaseName("ix_workflow_tasks_tenant_id_instance_id");
+
+                    b.HasIndex("TenantId", "AssignedToUserId", "Status")
+                        .HasDatabaseName("ix_workflow_tasks_tenant_id_assigned_to_user_id_status");
+
+                    b.ToTable("workflow_tasks", "workflow");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowTemplate", b =>
@@ -242,15 +505,129 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("version");
+
                     b.HasKey("Id")
                         .HasName("pk_workflow_templates");
 
                     b.HasIndex("TenantId", "EntityType")
                         .IsUnique()
                         .HasDatabaseName("ix_workflow_templates_tenant_id_entity_type")
-                        .HasFilter("\"IsActive\" = true");
+                        .HasFilter("is_active = true");
+
+                    b.HasIndex("TenantId", "EntityType", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ix_workflow_templates_tenant_id_entity_type_version");
 
                     b.ToTable("workflow_templates", "workflow");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowTransition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ConditionJson")
+                        .HasColumnType("text")
+                        .HasColumnName("condition_json");
+
+                    b.Property<string>("EventCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("event_code");
+
+                    b.Property<Guid>("FromStateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_state_id");
+
+                    b.Property<bool>("IsAutoGenerated")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_auto_generated");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer")
+                        .HasColumnName("priority");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<Guid?>("ToStateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_state_id");
+
+                    b.Property<string>("ToTerminalStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("to_terminal_status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_workflow_transitions");
+
+                    b.HasIndex("TemplateId", "FromStateId", "EventCode", "Priority")
+                        .HasDatabaseName("ix_workflow_transitions_template_id_from_state_id_event_code_p");
+
+                    b.ToTable("workflow_transitions", "workflow");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowTrigger", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ConditionJson")
+                        .HasColumnType("text")
+                        .HasColumnName("condition_json");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EventName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("event_name");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TriggerType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("trigger_type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_workflow_triggers");
+
+                    b.HasIndex("TenantId", "EventName", "IsActive")
+                        .HasDatabaseName("ix_workflow_triggers_tenant_id_event_name_is_active");
+
+                    b.HasIndex("TenantId", "TemplateId", "EventName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_workflow_triggers_tenant_id_template_id_event_name");
+
+                    b.ToTable("workflow_triggers", "workflow");
                 });
 
             modelBuilder.Entity("Sankore.Shared.Infrastructure.Outbox.OutboxMessage", b =>
@@ -305,6 +682,16 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasConstraintName("fk_workflow_instance_steps_workflow_instances_instance_id");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowRule", b =>
+                {
+                    b.HasOne("Sankore.Modules.Workflow.Domain.WorkflowStepDefinition", null)
+                        .WithMany("Rules")
+                        .HasForeignKey("StepId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_workflow_rules_workflow_step_definitions_step_id");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowStepDefinition", b =>
                 {
                     b.HasOne("Sankore.Modules.Workflow.Domain.WorkflowTemplate", null)
@@ -315,14 +702,31 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasConstraintName("fk_workflow_step_definitions_workflow_templates_template_id");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowTransition", b =>
+                {
+                    b.HasOne("Sankore.Modules.Workflow.Domain.WorkflowTemplate", null)
+                        .WithMany("Transitions")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_workflow_transitions_workflow_templates_template_id");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowInstance", b =>
                 {
                     b.Navigation("Steps");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowStepDefinition", b =>
+                {
+                    b.Navigation("Rules");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Workflow.Domain.WorkflowTemplate", b =>
                 {
                     b.Navigation("Steps");
+
+                    b.Navigation("Transitions");
                 });
 #pragma warning restore 612, 618
         }

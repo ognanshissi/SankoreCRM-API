@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Workflow.Domain;
@@ -9,7 +10,9 @@ namespace Sankore.Modules.Workflow.Features.Instances.RejectStep;
 
 internal sealed class RejectStepHandler(
     WorkflowDbContext db,
-    ICurrentUser currentUser) : IRequestHandler<RejectStepCommand, Result>
+    ICurrentUser currentUser,
+    IConditionEvaluator conditionEvaluator,
+    IActionExecutorDispatcher actionDispatcher) : IRequestHandler<RejectStepCommand, Result>
 {
     public async Task<Result> Handle(RejectStepCommand request, CancellationToken ct)
     {
@@ -37,16 +40,83 @@ internal sealed class RejectStepHandler(
                 "You do not have the required role.");
         }
 
+        var transitions = await db.WorkflowTransitions
+            .Where(t => t.TemplateId == instance.TemplateId)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var transitionIds = transitions.Select(t => t.Id).ToList();
+        var allActions = await db.WorkflowActions
+            .Where(a => transitionIds.Contains(a.TransitionId))
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var actionsByTransitionId = allActions
+            .GroupBy(a => a.TransitionId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyCollection<WorkflowAction>)g.OrderBy(a => a.ExecutionOrder).ToList());
+
+        var context = DeserializeContext(instance.ContextJson);
+
         try
         {
-            instance.Reject(currentUser.Id, request.Comment);
+            instance.Reject(currentUser.Id, request.Comment, transitions,
+                context, conditionEvaluator, actionsByTransitionId);
         }
         catch (DomainException ex)
         {
             return Result.Fail(ex.Message);
         }
 
+        if (instance.PendingAuditEntries.Count > 0)
+            db.WorkflowAuditEntries.AddRange(instance.PendingAuditEntries);
+
         await db.SaveChangesAsync(ct);
+
+        if (instance.PendingActions.Count > 0)
+        {
+            var wfContext = new WorkflowContext
+            {
+                InstanceId    = instance.Id,
+                TenantId      = instance.TenantId,
+                EntityType    = instance.EntityType,
+                EntityId      = instance.EntityId,
+                ActedByUserId = currentUser.Id,
+                Variables     = context
+            };
+            await actionDispatcher.ExecuteAllAsync(instance.PendingActions, wfContext, ct);
+        }
+
         return Result.Ok();
+    }
+
+    private static IReadOnlyDictionary<string, object> DeserializeContext(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}")
+            return new Dictionary<string, object>();
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                result[prop.Name] = prop.Value.ValueKind switch
+                {
+                    JsonValueKind.Number when prop.Value.TryGetDouble(out var d) => d,
+                    JsonValueKind.True  => true,
+                    JsonValueKind.False => false,
+                    JsonValueKind.Array => prop.Value.EnumerateArray()
+                                              .Select(e => e.ToString()).ToArray(),
+                    _                   => prop.Value.GetString() ?? string.Empty
+                };
+            }
+            return result;
+        }
+        catch
+        {
+            return new Dictionary<string, object>();
+        }
     }
 }

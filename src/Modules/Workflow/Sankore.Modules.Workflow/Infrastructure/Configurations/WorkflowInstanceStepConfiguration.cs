@@ -17,7 +17,10 @@ internal sealed class WorkflowInstanceStepConfiguration : IEntityTypeConfigurati
         b.Property(s => s.Status).HasConversion<string>().HasMaxLength(50);
         b.Property(s => s.SlaHours);
         b.Property(s => s.DueAt);
+        b.Property(s => s.AssignedToUserId);
 
         b.HasIndex(s => new { s.InstanceId, s.Order });
+        // My-steps lookup: find all active steps assigned to a specific user.
+        b.HasIndex(s => new { s.TenantId, s.AssignedToUserId, s.Status });
     }
 }

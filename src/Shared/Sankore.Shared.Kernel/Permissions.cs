@@ -116,6 +116,21 @@ public static class Permissions
     public static readonly PermissionItem CanCancelWorkflow =
         new("workflow:cancel", "Cancel a Workflow Instance", ApplicationModules.Workflow, "cancel");
 
+    public static readonly PermissionItem CanViewWorkflowInstances =
+        new("workflow:instance:view", "List and View Workflow Instances", ApplicationModules.Workflow, "view");
+
+    public static readonly PermissionItem CanCompleteWorkflowTask =
+        new("workflow:task:complete", "Complete or Cancel a Workflow Task", ApplicationModules.Workflow, "complete");
+
+    public static readonly PermissionItem CanAssignWorkflowStep =
+        new("workflow:step:assign", "Assign or Reassign a Workflow Step", ApplicationModules.Workflow, "assign");
+
+    public static readonly PermissionItem CanManageWorkflowTriggers =
+        new("workflow:trigger:manage", "Add, Remove and List Workflow Triggers", ApplicationModules.Workflow, "manage");
+
+    public static readonly PermissionItem CanViewWorkflowAnalytics =
+        new("workflow:analytics:view", "View Workflow Analytics and Statistics", ApplicationModules.Workflow, "view");
+
     // ── Product catalogue (F12.4) ─────────────────────────────────────────
 
     public static readonly PermissionItem CanCreateProduct =
@@ -208,6 +223,11 @@ public static class Permissions
         CanStartWorkflow,
         CanApproveWorkflow,
         CanCancelWorkflow,
+        CanViewWorkflowInstances,
+        CanCompleteWorkflowTask,
+        CanAssignWorkflowStep,
+        CanManageWorkflowTriggers,
+        CanViewWorkflowAnalytics,
         CanReadEmailTemplates,
         CanManageEmailTemplates,
         CanReadEmailOutbox,

@@ -12,6 +12,12 @@ public sealed class WorkflowStepDefinition
     /// <summary>1-based execution order within the template.</summary>
     public int Order { get; private set; }
 
+    /// <summary>Machine-readable state code (e.g. "STEP_1"). Auto-set from Order.</summary>
+    public string Code { get; private set; } = string.Empty;
+
+    /// <summary>Semantic type of this node in the state machine.</summary>
+    public StateType StateType { get; private set; } = StateType.Approval;
+
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
 
@@ -20,6 +26,9 @@ public sealed class WorkflowStepDefinition
 
     /// <summary>Optional SLA — how many hours the approver has to act.</summary>
     public int? TimeoutHours { get; private set; }
+
+    private readonly List<WorkflowRule> _rules = [];
+    public IReadOnlyCollection<WorkflowRule> Rules => _rules.AsReadOnly();
 
     private WorkflowStepDefinition() { }
 
@@ -38,14 +47,30 @@ public sealed class WorkflowStepDefinition
 
         return new WorkflowStepDefinition
         {
-            Id = Guid.NewGuid(),
-            TemplateId = templateId,
-            Order = order,
-            Name = name.Trim(),
-            Description = description?.Trim(),
+            Id               = Guid.NewGuid(),
+            TemplateId       = templateId,
+            Order            = order,
+            Code             = $"STEP_{order}",
+            StateType        = StateType.Approval,
+            Name             = name.Trim(),
+            Description      = description?.Trim(),
             ApproverRoleCode = approverRoleCode,
-            TimeoutHours = timeoutHours
+            TimeoutHours     = timeoutHours
         };
+    }
+
+    public WorkflowRule AddRule(RuleType ruleType, string field, RuleOperator op, string value, int logicalGroup = 0)
+    {
+        var rule = WorkflowRule.Create(TemplateId, Id, ruleType, field, op, value, logicalGroup);
+        _rules.Add(rule);
+        return rule;
+    }
+
+    public void RemoveRule(Guid ruleId)
+    {
+        var rule = _rules.FirstOrDefault(r => r.Id == ruleId)
+            ?? throw new Sankore.Shared.Kernel.DomainException("Rule not found.");
+        _rules.Remove(rule);
     }
 
     public void Update(string name, string? description, string? approverRoleCode, int? timeoutHours)

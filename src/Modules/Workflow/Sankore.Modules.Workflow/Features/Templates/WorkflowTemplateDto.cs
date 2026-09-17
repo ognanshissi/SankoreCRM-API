@@ -7,6 +7,7 @@ public sealed record WorkflowTemplateDto(
     string Name,
     string? Description,
     bool IsActive,
+    int Version,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     List<WorkflowStepDto> Steps);

@@ -12,6 +12,7 @@ internal static class TemplateMapper
             Name: t.Name,
             Description: t.Description,
             IsActive: t.IsActive,
+            Version: t.Version,
             CreatedAt: t.CreatedAt,
             UpdatedAt: t.UpdatedAt,
             Steps: t.Steps

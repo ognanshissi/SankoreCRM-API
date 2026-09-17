@@ -7,6 +7,7 @@ using Sankore.Modules.Workflow.Features.Instances.StartInstance;
 using Sankore.Modules.Workflow.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
 using Xunit;
+using NSubstitute;
 
 public sealed class StartInstanceHandlerTests : IDisposable
 {
@@ -21,7 +22,8 @@ public sealed class StartInstanceHandlerTests : IDisposable
         var cu = Substitute.For<ICurrentUser>();
         cu.TenantId.Returns(_tenantId);
         cu.Id.Returns(Guid.NewGuid());
-        return new StartInstanceHandler(_factory.CreateContext(), cu);
+        return new StartInstanceHandler(
+            _factory.CreateContext(), cu, Substitute.For<IRuleEvaluator>());
     }
 
     private async Task<WorkflowTemplate> SeedActiveTemplate(string entityType = "Lead")
@@ -34,6 +36,7 @@ public sealed class StartInstanceHandlerTests : IDisposable
         await using var seed = _factory.CreateContext();
         seed.WorkflowTemplates.Add(t);
         seed.WorkflowStepDefinitions.AddRange(t.Steps);
+        seed.WorkflowTransitions.AddRange(t.Transitions);
         await seed.SaveChangesAsync();
         return t;
     }
@@ -91,6 +94,7 @@ public sealed class StartInstanceHandlerTests : IDisposable
         // Use IgnoreQueryFilters to insert into the shared InMemory db
         seed.WorkflowTemplates.Add(otherTemplate);
         seed.WorkflowStepDefinitions.AddRange(otherTemplate.Steps);
+        seed.WorkflowTransitions.AddRange(otherTemplate.Transitions);
         await seed.SaveChangesAsync();
 
         // Our handler context is scoped to _tenantId — it must NOT see otherTenantId's template

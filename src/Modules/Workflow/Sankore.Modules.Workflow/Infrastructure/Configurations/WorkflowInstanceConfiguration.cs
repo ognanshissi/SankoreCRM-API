@@ -13,6 +13,9 @@ internal sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<W
 
         b.Property(i => i.EntityType).HasMaxLength(100).IsRequired();
         b.Property(i => i.Status).HasConversion<string>().HasMaxLength(50);
+        b.Property(i => i.ContextJson).HasColumnType("text").HasDefaultValue("{}");
+        b.Property(i => i.TemplateVersion).HasDefaultValue(1).ValueGeneratedNever();
+        b.Property(i => i.CurrentStateId).IsRequired(false);
 
         b.HasIndex(i => new { i.TenantId, i.EntityType, i.EntityId });
 
@@ -24,5 +27,7 @@ internal sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<W
         b.Navigation(i => i.Steps).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         b.Ignore(i => i.DomainEvents);
+        b.Ignore(i => i.PendingActions);
+        b.Ignore(i => i.PendingAuditEntries);
     }
 }

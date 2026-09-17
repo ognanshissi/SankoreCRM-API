@@ -17,6 +17,7 @@ using Sankore.Modules.Administration;
 using Sankore.Modules.Workflow;
 using Sankore.Modules.Notifications;
 using Sankore.Modules.Notifications.Infrastructure.Consumers;
+using Sankore.Modules.Workflow.Infrastructure.Triggers;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Infrastructure.Logging;
@@ -145,6 +146,9 @@ builder.Services.AddMassTransit(x =>
 {
     // Notification module consumers
     x.AddConsumer<TenantNotificationSettingsChangedConsumer>();
+
+    // Workflow module consumers
+    x.AddConsumer<WorkflowTriggerConsumer>();
 
     var useRabbitMq = builder.Configuration.GetValue<bool>("Messaging:UseRabbitMq");
 

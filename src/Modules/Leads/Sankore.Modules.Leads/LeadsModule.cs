@@ -13,6 +13,7 @@ using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.Workflow;
 
 /// <summary>
 /// Composition root of the Leads module (M13). This is the ONE public
@@ -49,6 +50,7 @@ public static class LeadsModule
         services.AddScoped<CherryPickingStrategy>();
         services.AddScoped<DispatchingStrategyFactory>();
 
+        services.AddScoped<IContextProvider, LeadContextProvider>();
         services.AddOutboxForModule<LeadsDbContext>();
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 

@@ -1,13 +1,14 @@
-using Sankore.Shared.Kernel.ValueObject;
-
-namespace Sankore.Modules.Leads.Features.CaptureLead;
-
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Shared.Infrastructure.Workflow;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Kernel.ValueObject;
+
+namespace Sankore.Modules.Leads.Features.CaptureLead;
 
 /// <summary>
 /// F13.1 (multi-channel capture) + F13.2 (duplicate detection, simplified
@@ -17,7 +18,8 @@ using Sankore.Shared.Kernel;
 public sealed class CaptureLeadHandler(
     LeadsDbContext db,
     ILogger<CaptureLeadHandler> logger,
-    TimeProvider clock)
+    TimeProvider clock,
+    IBus bus)
     : IRequestHandler<CaptureLeadCommand, Result<CaptureLeadResult>>
 {
     public async Task<Result<CaptureLeadResult>> Handle(
@@ -52,6 +54,22 @@ public sealed class CaptureLeadHandler(
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation("Lead {LeadId} captured from source {Source}", lead.Id, cmd.Source);
+
+        // Publish trigger signal so the Workflow module can auto-start a Lead workflow
+        // if an EntityEvent trigger for "LEAD_CAPTURED" is configured on the tenant's template.
+        await bus.Publish(new WorkflowTriggerSignal(
+            TenantId:   cmd.TenantId,
+            EntityType: "Lead",
+            EntityId:   lead.Id,
+            EventName:  "LEAD_CAPTURED",
+            Context: new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["status"]            = lead.Status.ToString(),
+                ["score"]             = (double)lead.Score,
+                ["source"]            = lead.Source.ToString(),
+                ["interestedProduct"] = lead.InterestedProduct ?? string.Empty,
+                ["preferredLanguage"] = lead.PreferredLanguage ?? string.Empty,
+            }), ct);
 
         return Result.Ok(new CaptureLeadResult(lead.Id, lead.Status.ToString()));
     }

@@ -30,7 +30,8 @@ public sealed class ApproveRejectHandlerTests : IDisposable
     }
 
     private ApproveStepHandler ApproveHandler(ICurrentUser? cu = null) =>
-        new(_factory.CreateContext(), cu ?? BuildUser("branchmanager"), _bus);
+        new(_factory.CreateContext(), cu ?? BuildUser("branchmanager"), _bus,
+            Substitute.For<IRuleEvaluator>());
 
     private RejectStepHandler RejectHandler(ICurrentUser? cu = null) =>
         new(_factory.CreateContext(), cu ?? BuildUser("branchmanager"));
@@ -46,6 +47,7 @@ public sealed class ApproveRejectHandlerTests : IDisposable
         await using var seed = _factory.CreateContext();
         seed.WorkflowTemplates.Add(template);
         seed.WorkflowStepDefinitions.AddRange(template.Steps);
+        seed.WorkflowTransitions.AddRange(template.Transitions);
         await seed.SaveChangesAsync();
 
         var instance = WorkflowInstance.Start(template, Guid.NewGuid(), Guid.NewGuid());

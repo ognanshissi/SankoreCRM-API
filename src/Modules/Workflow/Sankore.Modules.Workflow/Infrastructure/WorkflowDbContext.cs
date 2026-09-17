@@ -12,6 +12,12 @@ public sealed class WorkflowDbContext(
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<WorkflowTemplate> WorkflowTemplates => Set<WorkflowTemplate>();
     public DbSet<WorkflowStepDefinition> WorkflowStepDefinitions => Set<WorkflowStepDefinition>();
+    public DbSet<WorkflowRule> WorkflowRules => Set<WorkflowRule>();
+    public DbSet<WorkflowTransition> WorkflowTransitions => Set<WorkflowTransition>();
+    public DbSet<WorkflowAction> WorkflowActions => Set<WorkflowAction>();
+    public DbSet<WorkflowTask> WorkflowTasks => Set<WorkflowTask>();
+    public DbSet<WorkflowAuditEntry> WorkflowAuditEntries => Set<WorkflowAuditEntry>();
+    public DbSet<WorkflowTrigger> WorkflowTriggers => Set<WorkflowTrigger>();
     public DbSet<WorkflowInstance> WorkflowInstances => Set<WorkflowInstance>();
     public DbSet<WorkflowInstanceStep> WorkflowInstanceSteps => Set<WorkflowInstanceStep>();
 
@@ -41,5 +47,9 @@ public sealed class WorkflowDbContext(
             .HasQueryFilter(i => i.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<WorkflowInstanceStep>()
             .HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<WorkflowTask>()
+            .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<WorkflowTrigger>()
+            .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
     }
 }

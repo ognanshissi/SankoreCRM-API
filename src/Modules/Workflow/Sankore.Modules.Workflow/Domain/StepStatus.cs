@@ -10,8 +10,10 @@ public enum StepStatus
     Approved,
     /// <summary>Approver rejected this step.</summary>
     Rejected,
-    /// <summary>Step bypassed (e.g. no approver configured).</summary>
+    /// <summary>Step bypassed by a SkipIf or RequireIf rule.</summary>
     Skipped,
+    /// <summary>Step approved automatically by an AutoApproveIf rule.</summary>
+    AutoApproved,
     /// <summary>Step exceeded its SLA deadline without a decision.</summary>
     TimedOut
 }

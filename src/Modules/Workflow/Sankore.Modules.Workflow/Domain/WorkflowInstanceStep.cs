@@ -18,6 +18,12 @@ public sealed class WorkflowInstanceStep
     /// <summary>Role code required to act on this step (copied from the definition).</summary>
     public string? ApproverRoleCode { get; private set; }
 
+    /// <summary>
+    /// Specific user assigned to work on this step.
+    /// When null, any user holding <see cref="ApproverRoleCode"/> may act.
+    /// </summary>
+    public Guid? AssignedToUserId { get; private set; }
+
     /// <summary>SLA timeout copied from the step definition. Null means no deadline.</summary>
     public int? SlaHours { get; private set; }
 
@@ -93,5 +99,37 @@ public sealed class WorkflowInstanceStep
     {
         Status = StepStatus.Skipped;
         CompletedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void AutoApprove()
+    {
+        if (Status != StepStatus.Pending)
+            throw new DomainException("Only a pending step can be auto-approved.");
+        Status = StepStatus.AutoApproved;
+        CompletedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Assigns this step to a specific user (admin or system action).
+    /// The step must be awaiting approval.
+    /// </summary>
+    public void Assign(Guid userId)
+    {
+        if (Status != StepStatus.AwaitingApproval)
+            throw new DomainException("Only an active (AwaitingApproval) step can be assigned.");
+        AssignedToUserId = userId;
+    }
+
+    /// <summary>
+    /// Transfers responsibility to <paramref name="toUserId"/>.
+    /// The caller must be the current assignee or the operation is rejected.
+    /// </summary>
+    public void Delegate(Guid fromUserId, Guid toUserId)
+    {
+        if (Status != StepStatus.AwaitingApproval)
+            throw new DomainException("Only an active (AwaitingApproval) step can be delegated.");
+        if (AssignedToUserId.HasValue && AssignedToUserId.Value != fromUserId)
+            throw new DomainException("You are not the current assignee of this step.");
+        AssignedToUserId = toUserId;
     }
 }
