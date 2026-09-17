@@ -45,6 +45,15 @@ public sealed class WorkflowInstance : AggregateRoot
     /// </summary>
     public string ContextJson { get; private set; } = "{}";
 
+    /// <summary>Set when this instance was started by a <see cref="EventCodes.StartChildWorkflow"/> action on a parent.</summary>
+    public Guid? ParentInstanceId { get; private set; }
+
+    /// <summary>
+    /// Id of the child instance this workflow is currently suspended waiting for.
+    /// Non-null only when <see cref="Status"/> is <see cref="WorkflowStatus.WaitingForChild"/>.
+    /// </summary>
+    public Guid? WaitingForChildId { get; private set; }
+
     private readonly List<WorkflowInstanceStep> _steps = [];
     public IReadOnlyCollection<WorkflowInstanceStep> Steps => _steps.AsReadOnly();
 
@@ -274,10 +283,46 @@ public sealed class WorkflowInstance : AggregateRoot
             contextSnapshot: ContextJson));
     }
 
+    /// <summary>
+    /// Called on the child instance immediately after it is created to record its parent.
+    /// </summary>
+    internal void SetParent(Guid parentInstanceId) =>
+        ParentInstanceId = parentInstanceId;
+
+    /// <summary>
+    /// Suspends this instance until the specified child workflow completes.
+    /// Transitions the status to <see cref="WorkflowStatus.WaitingForChild"/>.
+    /// </summary>
+    public void PauseForChild(Guid childInstanceId)
+    {
+        if (Status is WorkflowStatus.Completed or WorkflowStatus.Rejected
+                   or WorkflowStatus.Cancelled or WorkflowStatus.TimedOut)
+            throw new DomainException("Cannot pause a workflow that has already reached a terminal state.");
+
+        Status           = WorkflowStatus.WaitingForChild;
+        WaitingForChildId = childInstanceId;
+    }
+
+    /// <summary>
+    /// Restores the instance to <see cref="WorkflowStatus.InProgress"/> after the awaited
+    /// child completes, so that a <see cref="EventCodes.ChildCompleted"/> transition can fire.
+    /// </summary>
+    public void ResumeFromChild(Guid childInstanceId)
+    {
+        if (Status != WorkflowStatus.WaitingForChild)
+            throw new DomainException("Workflow is not waiting for a child instance.");
+        if (WaitingForChildId != childInstanceId)
+            throw new DomainException("This workflow is not waiting for the specified child instance.");
+
+        Status            = WorkflowStatus.InProgress;
+        WaitingForChildId = null;
+    }
+
     /// <summary>Manually cancels the workflow (admin action).</summary>
     public void Cancel()
     {
-        if (Status is WorkflowStatus.Completed or WorkflowStatus.Rejected or WorkflowStatus.Cancelled)
+        if (Status is WorkflowStatus.Completed or WorkflowStatus.Rejected
+                   or WorkflowStatus.Cancelled or WorkflowStatus.TimedOut)
             throw new DomainException("Workflow is already finished.");
 
         Status = WorkflowStatus.Cancelled;

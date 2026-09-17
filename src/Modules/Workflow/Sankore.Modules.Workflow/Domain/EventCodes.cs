@@ -26,4 +26,10 @@ public static class EventCodes
 
     /// <summary>Current assignee delegated the step to another user (audit only, not a state-machine event).</summary>
     public const string Delegate = "DELEGATE";
+
+    /// <summary>
+    /// A child workflow instance completed — fires on the parent to resume it.
+    /// Template designers define a transition on this event to control the next state.
+    /// </summary>
+    public const string ChildCompleted = "CHILD_COMPLETED";
 }

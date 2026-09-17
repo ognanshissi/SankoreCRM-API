@@ -105,7 +105,8 @@ internal sealed class SlaCheckerJob(
             || instance.Status is WorkflowStatus.Completed
                 or WorkflowStatus.Rejected
                 or WorkflowStatus.Cancelled
-                or WorkflowStatus.TimedOut)
+                or WorkflowStatus.TimedOut
+                or WorkflowStatus.WaitingForChild)
             return;
 
         // Check whether the template defines a TIMEOUT escalation transition.

@@ -13,5 +13,11 @@ public enum WorkflowStatus
     /// <summary>Manually cancelled before completion.</summary>
     Cancelled,
     /// <summary>A step exceeded its SLA deadline — workflow stopped.</summary>
-    TimedOut
+    TimedOut,
+
+    /// <summary>
+    /// Workflow is suspended waiting for a child workflow instance to complete.
+    /// Resumes automatically when the child fires <see cref="EventCodes.ChildCompleted"/>.
+    /// </summary>
+    WaitingForChild
 }

@@ -16,8 +16,12 @@ internal sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<W
         b.Property(i => i.ContextJson).HasColumnType("text").HasDefaultValue("{}");
         b.Property(i => i.TemplateVersion).HasDefaultValue(1).ValueGeneratedNever();
         b.Property(i => i.CurrentStateId).IsRequired(false);
+        b.Property(i => i.ParentInstanceId).IsRequired(false);
+        b.Property(i => i.WaitingForChildId).IsRequired(false);
 
         b.HasIndex(i => new { i.TenantId, i.EntityType, i.EntityId });
+        // Fast lookup: find all child instances of a parent.
+        b.HasIndex(i => i.ParentInstanceId).HasFilter("parent_instance_id IS NOT NULL");
 
         b.HasMany(i => i.Steps)
          .WithOne()

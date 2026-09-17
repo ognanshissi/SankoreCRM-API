@@ -17,6 +17,7 @@ using Sankore.Modules.Workflow.Infrastructure.Conditions;
 using Sankore.Modules.Workflow.Infrastructure.Rules;
 using Sankore.Modules.Workflow.Infrastructure.Actions;
 using Sankore.Modules.Workflow.Infrastructure.Actions.Executors;
+using Sankore.Modules.Workflow.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Triggers;
 using Sankore.Modules.Workflow.PublicApi;
 

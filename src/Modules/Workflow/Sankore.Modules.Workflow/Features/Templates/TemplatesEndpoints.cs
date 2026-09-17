@@ -21,6 +21,7 @@ using Sankore.Modules.Workflow.Features.Templates.Transitions.RemoveTransition;
 using Sankore.Modules.Workflow.Features.Templates.Triggers.AddTrigger;
 using Sankore.Modules.Workflow.Features.Templates.Triggers.ListTriggers;
 using Sankore.Modules.Workflow.Features.Templates.Triggers.RemoveTrigger;
+using Sankore.Modules.Workflow.Features.Templates.GetTemplateDiff;
 using Sankore.Modules.Workflow.Features.Templates.UpdateStep;
 using Sankore.Modules.Workflow.Features.Templates.UpdateTemplate;
 
@@ -36,6 +37,7 @@ public static class TemplatesEndpoints
         return group
             .MapCreateTemplate()
             .MapCreateDraft()
+            .MapGetTemplateDiff()
             .MapListTemplates()
             .MapGetTemplate()
             .MapUpdateTemplate()
