@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies;
+using Sankore.Modules.Administration.Features.PermissionsCatalog;
 using Sankore.Modules.Administration.Features.CompanyInfo;
 using Sankore.Modules.Administration.Features.Authentication.AccountActivation;
 using Sankore.Modules.Administration.Features.Authentication.ForgotPassword;
@@ -97,6 +98,7 @@ public static class AdministrationModule
         app.MapTerritoriesEndpoints();
         app.MapAgenciesEndpoints();
         app.MapRolesEndpoints();
+        app.MapPermissionsEndpoints();
         app.MapProductsEndpoints();
         app.MapNotificationSettingsEndpoints();
         app.MapCompanyInfoEndpoints();

@@ -20,7 +20,7 @@ internal static class GetUserRolesEndpoint
         })
         .WithName("GetUserRoles")
         .WithSummary("Get all active roles assigned to a user")
-        .RequireAuthorization(Permissions.CanReadUser.Code)
+        .RequireAuthorization(Shared.Kernel.Permissions.CanReadUser.Code)
         .Produces<List<UserRoleDto>>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status401Unauthorized)

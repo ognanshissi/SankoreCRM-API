@@ -17,7 +17,7 @@ internal sealed class UpdateProductHandler(AdministrationDbContext db)
         if (product is null)
             return Result.Fail("PRODUCT_NOT_FOUND: Product not found.");
 
-        product.Update(request.Name, request.Description);
+        product.Update(request.Name, request.Description, string.Empty, string.Empty);
         await db.SaveChangesAsync(ct);
 
         return Result.Ok();
