@@ -369,6 +369,44 @@ public sealed class Lead : AggregateRoot
     public Result MarkLost(string reason) => Close(LeadCloseReason.Lost, reason);
 
     /// <summary>
+    /// Applies field values from the source lead onto this (target) lead during a merge.
+    /// Only fields with a non-null source value AND whose corresponding preference flag
+    /// is true are overwritten. Call before <see cref="MergeInto"/> on the source.
+    /// </summary>
+    internal void ApplyMergeOverrides(
+        string? email             = null,
+        string? firstName         = null,
+        string? lastName          = null,
+        string? nationalId        = null,
+        string? customerReference = null,
+        DateOnly? dateOfBirth     = null,
+        LeadGender? gender        = null,
+        Money? desiredAmount      = null,
+        string? comment           = null,
+        string? companyName       = null,
+        string? companyEmail      = null,
+        string? companyPhone      = null,
+        string? website           = null,
+        GeoPoint? location        = null)
+    {
+        if (email             is not null) Email             = email;
+        if (firstName         is not null) FirstName         = firstName;
+        if (lastName          is not null) LastName          = lastName;
+        if (nationalId        is not null) NationalId        = nationalId;
+        if (customerReference is not null) CustomerReference = customerReference;
+        if (dateOfBirth.HasValue)          DateOfBirth       = dateOfBirth;
+        if (gender.HasValue)               Gender            = gender.Value;
+        if (desiredAmount     is not null) DesiredAmount     = desiredAmount;
+        if (comment           is not null) Comment           = comment;
+        if (companyName       is not null) CompanyName       = companyName;
+        if (companyEmail      is not null) CompanyEmail      = companyEmail;
+        if (companyPhone      is not null) CompanyPhone      = companyPhone;
+        if (website           is not null) Website           = website;
+        if (location          is not null) Location          = location;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
     /// Archives this lead as the source of a merge, raising a structured domain event
     /// so that the merge appears in the audit trail and timeline.
     /// </summary>

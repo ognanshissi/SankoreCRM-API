@@ -15,7 +15,8 @@ public static class MergeLeadsEndpoint
             .WithName("MergeLeads")
             .WithTags("Leads")
             .RequireAuthorization(Permissions.CanMergeLeads.Code)
-            .Produces(StatusCodes.Status204NoContent)
+            .Produces<MergeLeadResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
@@ -32,12 +33,29 @@ public static class MergeLeadsEndpoint
         var mergedBy = http.User.GetUserId();
 
         var result = await sender.Send(
-            new MergeLeadsCommand(targetLeadId, req.SourceLeadId, mergedBy), ct);
+            new MergeLeadsCommand(
+                TargetLeadId:     targetLeadId,
+                SourceLeadId:     req.SourceLeadId,
+                MergedBy:         mergedBy,
+                FieldPreferences: req.FieldPreferences), ct);
 
-        return result.IsSuccess
-            ? Results.NoContent()
-            : Results.Problem(title: "Lead merge failed", detail: result.Error, statusCode: 422);
+        if (!result.IsSuccess)
+        {
+            return result.Error is "TARGET_LEAD_NOT_FOUND" or "SOURCE_LEAD_NOT_FOUND"
+                ? Results.NotFound(new { error = result.Error })
+                : Results.Problem(title: "Lead merge failed", detail: result.Error, statusCode: 422);
+        }
+
+        return Results.Ok(result.Value);
     }
 }
 
-public sealed record MergeLeadsRequest(Guid SourceLeadId);
+/// <param name="SourceLeadId">The duplicate lead to be archived and merged into the target.</param>
+/// <param name="FieldPreferences">
+/// Optional field-level selection: set Take* = true for each field whose value should be
+/// taken from the SOURCE rather than kept from the TARGET. When omitted, all target
+/// field values are preserved unchanged.
+/// </param>
+public sealed record MergeLeadsRequest(
+    Guid SourceLeadId,
+    MergeFieldPreferences? FieldPreferences = null);

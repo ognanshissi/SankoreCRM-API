@@ -33,7 +33,12 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
             .Where(r => r.LeadId == query.LeadId)
             .ToListAsync(ct);
 
-        await Task.WhenAll(activitiesTask, scoresTask, assignmentsTask, remindersTask);
+        // Merges in which this lead participated (as target or as source).
+        var mergesTask = db.LeadMerges
+            .Where(m => m.TargetLeadId == query.LeadId || m.SourceLeadId == query.LeadId)
+            .ToListAsync(ct);
+
+        await Task.WhenAll(activitiesTask, scoresTask, assignmentsTask, remindersTask, mergesTask);
 
         var events = new List<TimelineEvent>();
 
@@ -100,6 +105,33 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
                     Title:       $"Reminder {r.Status.ToString().ToLowerInvariant()}: {r.Title}",
                     Detail:      null,
                     ActorId:     null));
+            }
+        }
+
+        // Merge events
+        foreach (var m in mergesTask.Result)
+        {
+            if (m.TargetLeadId == query.LeadId)
+            {
+                var overrides = string.IsNullOrEmpty(m.OverriddenFields)
+                    ? string.Empty
+                    : $" • Fields taken from source: {m.OverriddenFields}";
+
+                events.Add(new TimelineEvent(
+                    OccurredAt: m.MergedAt,
+                    Kind:        TimelineEventKind.Merge,
+                    Title:       $"Lead {m.SourceLeadId} merged into this lead",
+                    Detail:      $"Merged by {m.MergedBy}{overrides}",
+                    ActorId:     m.MergedBy));
+            }
+            else
+            {
+                events.Add(new TimelineEvent(
+                    OccurredAt: m.MergedAt,
+                    Kind:        TimelineEventKind.Merge,
+                    Title:       $"This lead was merged into {m.TargetLeadId}",
+                    Detail:      $"Merged by {m.MergedBy}",
+                    ActorId:     m.MergedBy));
             }
         }
 
