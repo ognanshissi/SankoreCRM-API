@@ -35,12 +35,12 @@ internal sealed class DispatchLeadHandler(
         CancellationToken ct)
     {
         // 1. Load lead (tenant-scoped automatically by the DbContext's global query filter)
-        var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == cmd.LeadId, ct);
+        var lead = await db.Leads.AsTracking().FirstOrDefaultAsync(l => l.Id == cmd.LeadId, ct);
 
         if (lead is null)
             return Result.Fail<DispatchLeadResult>("LEAD_NOT_FOUND");
 
-        if (lead.Status != LeadStatus.SalesQualified)
+        if (lead.Status != LeadStatus.Qualified)
             return Result.Fail<DispatchLeadResult>("LEAD_NOT_QUALIFIED");
 
         // 2. Load available agents from the Users module (cross-module contract — PublicApi only)

@@ -145,6 +145,65 @@ public static class Permissions
     public static readonly PermissionItem CanDeleteProduct =
         new("product:delete", "Delete Product Speciality", ApplicationModules.Administration, "delete");
 
+    // ── Leads module (M13) ────────────────────────────────────────────────
+
+    public static readonly PermissionItem CanCaptureLead =
+        new("lead:create", "Capture / Create a Lead", ApplicationModules.Leads, "create");
+
+    public static readonly PermissionItem CanReadLead =
+        new("lead:read", "View Lead Details", ApplicationModules.Leads, "read");
+
+    public static readonly PermissionItem CanUpdateLead =
+        new("lead:update", "Update Lead Information", ApplicationModules.Leads, "update");
+
+    public static readonly PermissionItem CanAssignLead =
+        new("lead:assign", "Assign / Reassign a Lead Owner", ApplicationModules.Leads, "assign");
+
+    public static readonly PermissionItem CanQualifyLead =
+        new("lead:qualify", "Qualify a Lead", ApplicationModules.Leads, "qualify");
+
+    public static readonly PermissionItem CanCloseLead =
+        new("lead:close", "Mark a Lead as Lost, Disqualified or Archived", ApplicationModules.Leads, "close");
+
+    public static readonly PermissionItem CanMovePipelineStage =
+        new("lead:pipeline", "Move a Lead Along the Sales Pipeline", ApplicationModules.Leads, "pipeline");
+
+    public static readonly PermissionItem CanLogLeadActivity =
+        new("lead:activity:log", "Log an Activity on a Lead", ApplicationModules.Leads, "activity:log");
+
+    public static readonly PermissionItem CanConvertLead =
+        new("lead:convert", "Convert a Lead into a Customer", ApplicationModules.Leads, "convert");
+
+    public static readonly PermissionItem CanNurtureLead =
+        new("lead:nurture", "Move a Lead into the Nurturing State", ApplicationModules.Leads, "nurture");
+
+    public static readonly PermissionItem CanRecycleLead =
+        new("lead:recycle", "Recycle a Closed or Nurturing Lead", ApplicationModules.Leads, "recycle");
+
+    public static readonly PermissionItem CanManageDispatchingRules =
+        new("lead:dispatching-rule:manage", "Create and Update Dispatching Rules", ApplicationModules.Leads, "dispatching-rule:manage");
+
+    public static readonly PermissionItem CanReadDispatchingRules =
+        new("lead:dispatching-rule:read", "Read Dispatching Rules", ApplicationModules.Leads, "dispatching-rule:read");
+
+    public static readonly PermissionItem CanManageLeadReminders =
+        new("lead:reminder:manage", "Create, Complete and Dismiss Lead Reminders", ApplicationModules.Leads, "reminder:manage");
+
+    public static readonly PermissionItem CanTagLead =
+        new("lead:tag", "Add and Remove Tags on a Lead", ApplicationModules.Leads, "tag");
+
+    public static readonly PermissionItem CanImportLeads =
+        new("lead:import", "Bulk-import Leads from a structured list", ApplicationModules.Leads, "import");
+
+    public static readonly PermissionItem CanMergeLeads =
+        new("lead:merge", "Merge a Duplicate Lead into a Target Lead", ApplicationModules.Leads, "merge");
+
+    public static readonly PermissionItem CanExportLeads =
+        new("lead:export", "Export Leads to CSV", ApplicationModules.Leads, "export");
+
+    public static readonly PermissionItem CanViewLeadAnalytics =
+        new("lead:analytics:view", "View Lead SLA, Funnel and Agent Performance Analytics", ApplicationModules.Leads, "analytics:view");
+
     // ── Company info (Administration module) ──────────────────────────────
 
     public static readonly PermissionItem CanReadCompanyInfo =
@@ -238,5 +297,24 @@ public static class Permissions
         CanManageEmailQuota,
         CanReadCompanyInfo,
         CanUpdateCompanyInfo,
+        CanCaptureLead,
+        CanReadLead,
+        CanUpdateLead,
+        CanAssignLead,
+        CanQualifyLead,
+        CanCloseLead,
+        CanMovePipelineStage,
+        CanLogLeadActivity,
+        CanConvertLead,
+        CanNurtureLead,
+        CanRecycleLead,
+        CanManageDispatchingRules,
+        CanReadDispatchingRules,
+        CanManageLeadReminders,
+        CanTagLead,
+        CanImportLeads,
+        CanMergeLeads,
+        CanExportLeads,
+        CanViewLeadAnalytics,
     ];
 }

@@ -1,14 +1,20 @@
 namespace Sankore.Modules.Leads.Domain;
 
+/// <summary>
+/// High-level business lifecycle state of a Lead (M13 spec).
+/// Separate from <see cref="PipelineStage"/> which tracks the granular sales funnel position.
+/// </summary>
 public enum LeadStatus
 {
     New,
-    Contacted,
-    MarketingQualified,   // MQL
-    SalesQualified,       // SQL — eligible for dispatching
-    Assigned,
+    Open,
+    Qualifying,
+    Qualified,      // formerly SalesQualified — eligible for dispatching
+    Nurturing,
+    Recycled,
     Converted,
     Lost,
+    Disqualified,
     Archived
 }
 
@@ -21,7 +27,9 @@ public enum LeadSource
     Referral,
     FileImport,
     Partner,
-    InboundCall
+    InboundCall,
+    WhatsApp,
+    MarketingCampaign
 }
 
 public enum DispatchingStrategy
@@ -29,6 +37,6 @@ public enum DispatchingStrategy
     RoundRobin,
     WeightedRoundRobin,
     CherryPicking,
-    CompatibilityScoring,   // default & recommended — see CompatibilityScorer
+    CompatibilityScoring,
     StickyAssignment
 }

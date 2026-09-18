@@ -54,6 +54,23 @@ public sealed class DispatchingRule: ITenant
         FirstContactSla = TimeSpan.FromHours(2),
         IsActive = true
     };
+
+    public void Update(
+        string name,
+        ScoringWeights weights,
+        int maxLeadsPerAgent,
+        int antiMonopolyThreshold,
+        TimeSpan firstContactSla)
+    {
+        Name                  = name;
+        Weights               = weights;
+        MaxLeadsPerAgent      = maxLeadsPerAgent;
+        AntiMonopolyThreshold = antiMonopolyThreshold;
+        FirstContactSla       = firstContactSla;
+    }
+
+    public void Activate()   => IsActive = true;
+    public void Deactivate() => IsActive = false;
 }
 
 /// <summary>

@@ -4,12 +4,8 @@ using MediatR;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Kernel.ValueObject;
 
-/// <summary>
-/// Command: capture a new prospect (F13.1). This is the entry point of the
-/// whole lead funnel — a lead is Captured, then Qualified (separate slice,
-/// not shown here), then Dispatched (see Features/DispatchLead).
-/// </summary>
 public sealed record CaptureLeadCommand(
     Guid TenantId,
     string FullName,
@@ -19,11 +15,29 @@ public sealed record CaptureLeadCommand(
     string PreferredLanguage,
     double Latitude,
     double Longitude,
-    Guid? PreferredAgencyId
+    Guid? PreferredAgencyId,
+    string? FirstName = null,
+    string? LastName = null,
+    string? Email = null,
+    LeadGender Gender = LeadGender.Unknown,
+    DateOnly? DateOfBirth = null,
+    decimal? DesiredAmount = null,
+    string? DesiredCurrency = null,
+    string? Campaign = null,
+    LeadChannel? Channel = null,
+    string? Comment = null,
+    string? ExternalReference = null,
+    Guid? OwnerId = null,
+    Guid? AgencyId = null,
+    Guid? AgentCollectedLeadId = null,
+    string? CompanyName = null,
+    string? CompanyEmail = null,
+    string? CompanyPhone = null,
+    string? Website = null
 ) : IRequest<Result<CaptureLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";
-    public string? ResourceId => null; // ID not yet assigned at dispatch time
+    public string? ResourceId => null;
 }
 
 public sealed record CaptureLeadResult(Guid LeadId, string Status);

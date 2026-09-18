@@ -3,11 +3,7 @@ namespace Sankore.Modules.Leads.Domain.Events;
 using Sankore.Shared.Kernel;
 
 /// <summary>
-/// In-process domain events raised by the Lead aggregate itself. These are
-/// distinct from the integration events published by the DispatchLead slice:
-/// domain events model "what changed in this aggregate" and may be consumed
-/// synchronously within the same module (e.g. to update projections),
-/// whereas integration events are the asynchronous, cross-module contract.
+/// In-process domain events raised by the Lead aggregate itself.
 /// </summary>
 public sealed record LeadCapturedDomainEvent(Guid LeadId) : DomainEventBase;
 
@@ -16,3 +12,15 @@ public sealed record LeadQualifiedDomainEvent(
 
 public sealed record LeadAssignedDomainEvent(
     Guid LeadId, Guid AssignmentId, Guid AgentId) : DomainEventBase;
+
+public sealed record LeadStatusChangedDomainEvent(
+    Guid LeadId, LeadStatus Previous, LeadStatus New) : DomainEventBase;
+
+public sealed record LeadOwnerChangedDomainEvent(
+    Guid LeadId, Guid? PreviousOwnerId, Guid NewOwnerId) : DomainEventBase;
+
+public sealed record LeadPipelineStageChangedDomainEvent(
+    Guid LeadId, PipelineStage Previous, PipelineStage New) : DomainEventBase;
+
+public sealed record LeadConvertedDomainEvent(
+    Guid LeadId, Guid CustomerId) : DomainEventBase;

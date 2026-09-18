@@ -66,7 +66,7 @@ public sealed class LeadTestBuilder
             preferredAgencyId: _agencyId,
             clock: TimeProvider.System);
 
-        lead.Qualify(75); // moves to SalesQualified by default for dispatching tests
+        lead.Qualify(75); // moves to Qualified (score ≥ 60) by default for dispatching tests
         lead.ClearDomainEvents();
         return lead;
     }

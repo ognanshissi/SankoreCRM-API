@@ -21,6 +21,11 @@ public sealed class CaptureLeadValidator : AbstractValidator<CaptureLeadCommand>
         RuleFor(x => x.InterestedProduct).NotEmpty();
         RuleFor(x => x.PreferredLanguage).NotEmpty();
 
+        RuleFor(x => x.DesiredCurrency)
+            .NotEmpty().WithMessage("DesiredCurrency is required when DesiredAmount is provided.")
+            .Length(3).WithMessage("Currency must be an ISO 4217 code (3 letters).")
+            .When(x => x.DesiredAmount.HasValue);
+
         RuleFor(x => x.Latitude).InclusiveBetween(-90, 90);
         RuleFor(x => x.Longitude).InclusiveBetween(-180, 180);
     }

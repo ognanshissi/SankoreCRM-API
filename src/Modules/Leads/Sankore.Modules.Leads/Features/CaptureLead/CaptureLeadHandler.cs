@@ -7,13 +7,12 @@ using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Workflow;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
+using Money = Sankore.Shared.Kernel.ValueObject.Money;
 
 namespace Sankore.Modules.Leads.Features.CaptureLead;
 
 /// <summary>
-/// F13.1 (multi-channel capture) + F13.2 (duplicate detection, simplified
-/// here to a phone-number match — production version also matches on
-/// national ID and biometric face match once available).
+/// F13.1 (multi-channel capture) + F13.2 (duplicate detection by phone).
 /// </summary>
 public sealed class CaptureLeadHandler(
     LeadsDbContext db,
@@ -25,9 +24,12 @@ public sealed class CaptureLeadHandler(
     public async Task<Result<CaptureLeadResult>> Handle(
         CaptureLeadCommand cmd, CancellationToken ct)
     {
-        // F13.2: simple duplicate detection by phone number within the tenant.
+        // F13.2: duplicate detection by phone number within the tenant.
         var existing = await db.Leads
-            .Where(l => l.PhoneNumber == cmd.PhoneNumber && l.Status != LeadStatus.Lost)
+            .Where(l => l.PhoneNumber == cmd.PhoneNumber
+                     && l.Status != LeadStatus.Lost
+                     && l.Status != LeadStatus.Archived
+                     && l.Status != LeadStatus.Disqualified)
             .FirstOrDefaultAsync(ct);
 
         if (existing is not null)
@@ -40,23 +42,36 @@ public sealed class CaptureLeadHandler(
         }
 
         var lead = Lead.Capture(
-            tenantId: cmd.TenantId,
-            fullName: cmd.FullName,
-            phoneNumber: cmd.PhoneNumber,
-            source: cmd.Source,
-            interestedProduct: cmd.InterestedProduct,
-            preferredLanguage: cmd.PreferredLanguage,
-            location: new GeoPoint(cmd.Latitude, cmd.Longitude),
-            preferredAgencyId: cmd.PreferredAgencyId,
-            clock: clock);
+            tenantId:             cmd.TenantId,
+            fullName:             cmd.FullName,
+            phoneNumber:          cmd.PhoneNumber,
+            source:               cmd.Source,
+            interestedProduct:    cmd.InterestedProduct,
+            preferredLanguage:    cmd.PreferredLanguage,
+            location:             new GeoPoint(cmd.Latitude, cmd.Longitude),
+            preferredAgencyId:    cmd.PreferredAgencyId,
+            clock:                clock,
+            firstName:            cmd.FirstName,
+            lastName:             cmd.LastName,
+            email:                cmd.Email,
+            gender:               cmd.Gender,
+            dateOfBirth:          cmd.DateOfBirth,
+            desiredAmount:        cmd.DesiredAmount.HasValue && cmd.DesiredCurrency is not null
+                                      ? new Money(cmd.DesiredAmount.Value, cmd.DesiredCurrency)
+                                      : null,
+            campaign:             cmd.Campaign,
+            channel:              cmd.Channel,
+            comment:              cmd.Comment,
+            externalReference:    cmd.ExternalReference,
+            ownerId:              cmd.OwnerId,
+            agencyId:             cmd.AgencyId,
+            agentCollectedLeadId: cmd.AgentCollectedLeadId);
 
         db.Leads.Add(lead);
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation("Lead {LeadId} captured from source {Source}", lead.Id, cmd.Source);
 
-        // Publish trigger signal so the Workflow module can auto-start a Lead workflow
-        // if an EntityEvent trigger for "LEAD_CAPTURED" is configured on the tenant's template.
         await bus.Publish(new WorkflowTriggerSignal(
             TenantId:   cmd.TenantId,
             EntityType: "Lead",

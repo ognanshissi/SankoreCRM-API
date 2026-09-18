@@ -11,6 +11,10 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<LeadAssignment> LeadAssignments => Set<LeadAssignment>();
     public DbSet<DispatchingRule> DispatchingRules => Set<DispatchingRule>();
+    public DbSet<ScoreHistory> ScoreHistories => Set<ScoreHistory>();
+    public DbSet<LeadActivity> LeadActivities => Set<LeadActivity>();
+    public DbSet<LeadReminder> LeadReminders => Set<LeadReminder>();
+    public DbSet<LeadTag> LeadTags => Set<LeadTag>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -61,6 +65,18 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
 
         modelBuilder.Entity<DispatchingRule>()
             .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<ScoreHistory>()
+            .HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<LeadActivity>()
+            .HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<LeadReminder>()
+            .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<LeadTag>()
+            .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

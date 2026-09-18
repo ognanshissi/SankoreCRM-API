@@ -89,7 +89,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
         result.Value.CompatibilityScore.Should().BeGreaterThan(70);
 
         var storedLead = await db.Leads.FindAsync(lead.Id);
-        storedLead!.Status.Should().Be(LeadStatus.Assigned);
+        storedLead!.Status.Should().Be(LeadStatus.Qualified);
         storedLead.CurrentAssignmentId.Should().NotBeNull();
 
         await publisher.Received(1).PublishAsync(
