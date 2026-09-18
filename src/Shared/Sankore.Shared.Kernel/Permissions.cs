@@ -207,6 +207,9 @@ public static class Permissions
     public static readonly PermissionItem CanViewLeadAnalytics =
         new("lead:analytics:view", "View Lead SLA, Funnel and Agent Performance Analytics", ApplicationModules.Leads, "analytics:view");
 
+    public static readonly PermissionItem CanManageQualificationTemplates =
+        new("lead:qualification-template:manage", "Create and Manage Qualification Templates", ApplicationModules.Leads, "qualification-template:manage");
+
     public static readonly PermissionItem CanRecordConsent =
         new("lead:consent:record", "Record Prospect Consent", ApplicationModules.Leads, "consent:record");
 
@@ -326,6 +329,7 @@ public static class Permissions
         CanDismissDuplicate,
         CanExportLeads,
         CanViewLeadAnalytics,
+        CanManageQualificationTemplates,
         CanRecordConsent,
         CanWithdrawConsent,
     ];

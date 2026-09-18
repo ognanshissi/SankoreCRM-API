@@ -18,6 +18,8 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<DuplicateDismissal> DuplicateDismissals => Set<DuplicateDismissal>();
     public DbSet<LeadMerge> LeadMerges => Set<LeadMerge>();
     public DbSet<LeadConsent> LeadConsents => Set<LeadConsent>();
+    public DbSet<QualificationTemplate> QualificationTemplates => Set<QualificationTemplate>();
+    public DbSet<QualificationResponse> QualificationResponses => Set<QualificationResponse>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -89,6 +91,12 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
 
         modelBuilder.Entity<LeadConsent>()
             .HasQueryFilter(c => c.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<QualificationTemplate>()
+            .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<QualificationResponse>()
+            .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

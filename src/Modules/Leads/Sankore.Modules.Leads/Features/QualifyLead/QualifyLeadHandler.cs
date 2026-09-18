@@ -1,12 +1,16 @@
 namespace Sankore.Modules.Leads.Features.QualifyLead;
 
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class QualifyLeadHandler(LeadsDbContext db, LeadScoreCalculator calculator)
+internal sealed class QualifyLeadHandler(
+    LeadsDbContext db,
+    LeadScoreCalculator calculator,
+    TimeProvider clock)
     : IRequestHandler<QualifyLeadCommand, Result<QualifyLeadResult>>
 {
     public async Task<Result<QualifyLeadResult>> Handle(
@@ -19,15 +23,50 @@ internal sealed class QualifyLeadHandler(LeadsDbContext db, LeadScoreCalculator 
         if (lead is null)
             return Result.Fail<QualifyLeadResult>("LEAD_NOT_FOUND");
 
-        // Determine score — explicit or auto-calculated.
         string factorsJson;
         int score;
+        Guid? qualificationResponseId = null;
 
-        if (cmd.Score.HasValue)
+        // ── Path 1: template-driven scoring ──────────────────────────────────
+        if (cmd.TemplateId.HasValue && cmd.Answers is not null)
+        {
+            var template = await db.QualificationTemplates
+                .Include(t => t.Questions)
+                .FirstOrDefaultAsync(t => t.Id == cmd.TemplateId.Value && t.IsActive, ct);
+
+            if (template is null)
+                return Result.Fail<QualifyLeadResult>("QUALIFICATION_TEMPLATE_NOT_FOUND");
+
+            // Validate required questions are answered.
+            var answeredIds = cmd.Answers.Select(a => a.QuestionId).ToHashSet();
+            var missingRequired = template.Questions
+                .Where(q => q.IsRequired && !answeredIds.Contains(q.Id))
+                .ToList();
+
+            if (missingRequired.Count > 0)
+                return Result.Fail<QualifyLeadResult>("REQUIRED_QUESTIONS_NOT_ANSWERED");
+
+            (score, factorsJson) = ScoreFromTemplate(template, cmd.Answers);
+
+            var response = QualificationResponse.Create(
+                tenantId:      lead.TenantId,
+                leadId:        lead.Id,
+                templateId:    template.Id,
+                answeredBy:    cmd.QualifiedBy,
+                clock:         clock,
+                answers:       cmd.Answers.Select(a => (a.QuestionId, a.Value)).ToList(),
+                computedScore: score);
+
+            db.QualificationResponses.Add(response);
+            qualificationResponseId = response.Id;
+        }
+        // ── Path 2: explicit score override ──────────────────────────────────
+        else if (cmd.Score.HasValue)
         {
             score       = cmd.Score.Value;
             factorsJson = "{}";
         }
+        // ── Path 3: auto-calculate from lead attributes ───────────────────────
         else
         {
             (score, factorsJson) = calculator.Calculate(lead);
@@ -37,21 +76,86 @@ internal sealed class QualifyLeadHandler(LeadsDbContext db, LeadScoreCalculator 
         if (qualifyResult.IsFailure)
             return Result.Fail<QualifyLeadResult>(qualifyResult.Error!);
 
-        // Record the immutable audit entry.
-        var history = ScoreHistory.Create(
-            tenantId:     lead.TenantId,
-            leadId:       lead.Id,
-            score:        score,
-            triggerEvent: cmd.TriggerEvent,
-            factorsJson:  factorsJson);
+        db.ScoreHistories.Add(ScoreHistory.Create(
+            tenantId:                lead.TenantId,
+            leadId:                  lead.Id,
+            score:                   score,
+            triggerEvent:            cmd.TriggerEvent,
+            factorsJson:             factorsJson,
+            qualificationResponseId: qualificationResponseId));
 
-        db.ScoreHistories.Add(history);
         await db.SaveChangesAsync(ct);
 
+        var (nextAction, nextDetail) = DetermineNextAction(score, lead.Status);
+
         return Result.Ok(new QualifyLeadResult(
-            LeadId:      lead.Id,
-            Score:       score,
-            Status:      lead.Status.ToString(),
-            FactorsJson: factorsJson));
+            LeadId:                  lead.Id,
+            Score:                   score,
+            Status:                  lead.Status.ToString(),
+            FactorsJson:             factorsJson,
+            NextAction:              nextAction,
+            NextActionDetail:        nextDetail,
+            QualificationResponseId: qualificationResponseId));
     }
+
+    // ── Scoring helpers ────────────────────────────────────────────────────
+
+    private static (int Score, string FactorsJson) ScoreFromTemplate(
+        QualificationTemplate template,
+        IReadOnlyList<QualificationAnswerInput> answers)
+    {
+        var answerMap    = answers.ToDictionary(a => a.QuestionId, a => a.Value);
+        int earnedWeight = 0;
+        int totalWeight  = template.Questions.Sum(q => q.Weight);
+
+        var factorDetails = template.Questions.Select(q =>
+        {
+            answerMap.TryGetValue(q.Id, out var value);
+            var earned = ComputeEarned(q, value);
+            earnedWeight += earned;
+            return new { questionId = q.Id, label = q.Label, weight = q.Weight, earned };
+        }).ToList();
+
+        var score = totalWeight > 0
+            ? Math.Clamp((int)Math.Round(earnedWeight / (double)totalWeight * 100), 0, 100)
+            : 0;
+
+        var factorsJson = JsonSerializer.Serialize(new
+        {
+            template    = template.Name,
+            totalWeight,
+            earnedWeight,
+            score,
+            factors     = factorDetails
+        });
+
+        return (score, factorsJson);
+    }
+
+    private static int ComputeEarned(QualificationQuestion question, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        return question.Type switch
+        {
+            QuestionType.YesNo                                     =>
+                value.Equals("true", StringComparison.OrdinalIgnoreCase) ? question.Weight : 0,
+            QuestionType.SingleChoice or QuestionType.MultiChoice  => question.Weight,
+            QuestionType.Numeric                                   =>
+                decimal.TryParse(value, out var n) && n > 0 ? question.Weight : 0,
+            QuestionType.Text                                      => question.Weight,
+            _                                                      => 0
+        };
+    }
+
+    private static (QualificationNextAction Action, string Detail) DetermineNextAction(
+        int score, LeadStatus status)
+        => score switch
+        {
+            >= 60 => (QualificationNextAction.DispatchToAgent,
+                      "Lead qualifié — prêt à être dispatché à un agent commercial."),
+            >= 40 => (QualificationNextAction.CollectMoreData,
+                      "Score insuffisant pour le dispatch — compléter les informations manquantes."),
+            _     => (QualificationNextAction.Disqualify,
+                      "Score trop faible — envisager la disqualification du lead.")
+        };
 }

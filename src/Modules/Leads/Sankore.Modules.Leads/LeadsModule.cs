@@ -22,6 +22,7 @@ using Sankore.Modules.Leads.Features.ListDismissals;
 using Sankore.Modules.Leads.Features.RecordConsent;
 using Sankore.Modules.Leads.Features.WithdrawConsent;
 using Sankore.Modules.Leads.Features.ListConsents;
+using Sankore.Modules.Leads.Features.QualificationTemplates;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Features.MergeLeads;
 using Sankore.Modules.Leads.Features.GetLeadTimeline;
@@ -148,6 +149,9 @@ public static class LeadsModule
         group.MapMergeLeads();
         group.MapDismissDuplicate();
         group.MapListDismissals();
+
+        // Qualification Templates
+        group.MapQualificationTemplatesEndpoints();
 
         // Phase 13 — Consent Management
         group.MapRecordConsent();

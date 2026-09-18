@@ -21,5 +21,7 @@ internal sealed class ScoreHistoryConfiguration : IEntityTypeConfiguration<Score
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(s => new { s.LeadId, s.RecalculatedAt });
+        builder.HasIndex(s => s.QualificationResponseId)
+               .HasFilter("qualification_response_id IS NOT NULL");
     }
 }

@@ -19,18 +19,23 @@ public sealed class ScoreHistory
 
     public DateTimeOffset RecalculatedAt { get; private set; }
 
+    /// <summary>Set when scoring was driven by a <see cref="QualificationResponse"/>; null for auto/manual scoring.</summary>
+    public Guid? QualificationResponseId { get; private set; }
+
     private ScoreHistory() { }
 
     public static ScoreHistory Create(
-        Guid tenantId, Guid leadId, int score, string triggerEvent, string factorsJson = "{}")
+        Guid tenantId, Guid leadId, int score, string triggerEvent,
+        string factorsJson = "{}", Guid? qualificationResponseId = null)
         => new()
         {
-            Id              = Guid.NewGuid(),
-            TenantId        = tenantId,
-            LeadId          = leadId,
-            Score           = score,
-            TriggerEvent    = triggerEvent,
-            FactorsJson     = factorsJson,
-            RecalculatedAt  = DateTimeOffset.UtcNow
+            Id                       = Guid.NewGuid(),
+            TenantId                 = tenantId,
+            LeadId                   = leadId,
+            Score                    = score,
+            TriggerEvent             = triggerEvent,
+            FactorsJson              = factorsJson,
+            RecalculatedAt           = DateTimeOffset.UtcNow,
+            QualificationResponseId  = qualificationResponseId
         };
 }
