@@ -32,7 +32,8 @@ public static class FindDuplicatesEndpoint
         DateOnly? dateOfBirth      = null,
         double? latitude           = null,
         double? longitude          = null,
-        double? minConfidence      = null)
+        double? minConfidence      = null,
+        Guid? sourceLeadId         = null)
     {
         var result = await sender.Send(new FindDuplicatesQuery(
             PhoneNumber:       phoneNumber,
@@ -43,7 +44,8 @@ public static class FindDuplicatesEndpoint
             DateOfBirth:       dateOfBirth,
             Latitude:          latitude,
             Longitude:         longitude,
-            MinConfidence:     minConfidence), ct);
+            MinConfidence:     minConfidence,
+            SourceLeadId:      sourceLeadId), ct);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)

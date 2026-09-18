@@ -44,6 +44,21 @@ internal sealed class FindDuplicatesHandler(LeadsDbContext db)
                  (customerRef != null && l.CustomerReference != null && l.CustomerReference.ToLower() == customerRef.ToLower())))
             .ToListAsync(ct);
 
+        // Exclude candidates that have already been dismissed relative to the source lead.
+        if (query.SourceLeadId is Guid sourceId && candidates.Count > 0)
+        {
+            var candidateIds = candidates.Select(l => l.Id).ToList();
+            var dismissedIds = await db.DuplicateDismissals
+                .Where(d =>
+                    (d.LeadId == sourceId        && candidateIds.Contains(d.CandidateLeadId)) ||
+                    (d.CandidateLeadId == sourceId && candidateIds.Contains(d.LeadId)))
+                .Select(d => d.CandidateLeadId == sourceId ? d.LeadId : d.CandidateLeadId)
+                .ToListAsync(ct);
+
+            if (dismissedIds.Count > 0)
+                candidates = candidates.Where(l => !dismissedIds.Contains(l.Id)).ToList();
+        }
+
         var scorer      = new IdentityMatchScorer();
         var threshold   = query.MinConfidence ?? IdentityMatchScorer.MinConfidence;
 

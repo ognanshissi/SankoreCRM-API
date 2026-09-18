@@ -21,5 +21,10 @@ public sealed record FindDuplicatesQuery(
     /// Override the minimum confidence threshold (0-100). Defaults to <see cref="IdentityMatchScorer.MinConfidence"/> (30).
     /// Raise this value (e.g. 70) to return only high-confidence matches.
     /// </summary>
-    double? MinConfidence = null
+    double? MinConfidence = null,
+    /// <summary>
+    /// When set, pairs that have already been dismissed relative to this lead are excluded from results.
+    /// Pass the Id of the lead from whose record the search is being triggered.
+    /// </summary>
+    Guid? SourceLeadId = null
 ) : IRequest<Result<IReadOnlyList<DuplicateMatchResult>>>;

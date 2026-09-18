@@ -24,3 +24,9 @@ public sealed record LeadPipelineStageChangedDomainEvent(
 
 public sealed record LeadConvertedDomainEvent(
     Guid LeadId, Guid CustomerId) : DomainEventBase;
+
+public sealed record LeadMergedDomainEvent(
+    Guid SourceLeadId, Guid TargetLeadId, Guid MergedBy) : DomainEventBase;
+
+public sealed record DuplicateDismissedDomainEvent(
+    Guid LeadId, Guid CandidateLeadId, Guid DismissedBy) : DomainEventBase;

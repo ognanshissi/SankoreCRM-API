@@ -48,4 +48,7 @@ public sealed record LeadDto(
     DateTimeOffset? LastActivityAt,
     string? LossReason,
     DateTimeOffset? ConvertedAt,
-    Guid? ConvertedToCustomerId);
+    Guid? ConvertedToCustomerId,
+    string? NationalId,
+    string? CustomerReference,
+    string ProspectType);

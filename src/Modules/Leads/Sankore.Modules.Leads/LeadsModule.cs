@@ -16,6 +16,7 @@ using Sankore.Modules.Leads.Features.GetLead;
 using Sankore.Modules.Leads.Features.ConvertLead;
 using Sankore.Modules.Leads.Features.Bulk;
 using Sankore.Modules.Leads.Features.Import;
+using Sankore.Modules.Leads.Features.DismissDuplicate;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Features.MergeLeads;
 using Sankore.Modules.Leads.Features.GetLeadTimeline;
@@ -138,6 +139,7 @@ public static class LeadsModule
         group.MapImportLeads();
         group.MapFindDuplicates();
         group.MapMergeLeads();
+        group.MapDismissDuplicate();
 
         // Phase 11 — Lead Timeline & Export
         group.MapGetLeadTimeline();

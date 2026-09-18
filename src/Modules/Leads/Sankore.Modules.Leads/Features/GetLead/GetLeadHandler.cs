@@ -58,6 +58,9 @@ internal sealed class GetLeadHandler(LeadsDbContext db)
             LastActivityAt:           lead.LastActivityAt,
             LossReason:               lead.LossReason,
             ConvertedAt:              lead.ConvertedAt,
-            ConvertedToCustomerId:    lead.ConvertedToCustomerId));
+            ConvertedToCustomerId:    lead.ConvertedToCustomerId,
+            NationalId:               lead.NationalId,
+            CustomerReference:        lead.CustomerReference,
+            ProspectType:             lead.ProspectType.ToString()));
     }
 }

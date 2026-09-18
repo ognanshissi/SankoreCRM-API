@@ -369,6 +369,23 @@ public sealed class Lead : AggregateRoot
     public Result MarkLost(string reason) => Close(LeadCloseReason.Lost, reason);
 
     /// <summary>
+    /// Archives this lead as the source of a merge, raising a structured domain event
+    /// so that the merge appears in the audit trail and timeline.
+    /// </summary>
+    public Result MergeInto(Guid targetLeadId, Guid mergedBy)
+    {
+        var closeResult = Close(
+            LeadCloseReason.Archived,
+            $"Merged into lead {targetLeadId} by {mergedBy}");
+
+        if (closeResult.IsFailure)
+            return closeResult;
+
+        RaiseDomainEvent(new Events.LeadMergedDomainEvent(Id, targetLeadId, mergedBy));
+        return Result.Ok();
+    }
+
+    /// <summary>
     /// Transitions a New lead to Open — signals the first manual or system
     /// action has been taken on this lead.
     /// </summary>

@@ -15,6 +15,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<LeadActivity> LeadActivities => Set<LeadActivity>();
     public DbSet<LeadReminder> LeadReminders => Set<LeadReminder>();
     public DbSet<LeadTag> LeadTags => Set<LeadTag>();
+    public DbSet<DuplicateDismissal> DuplicateDismissals => Set<DuplicateDismissal>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -77,6 +78,9 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
 
         modelBuilder.Entity<LeadTag>()
             .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<DuplicateDismissal>()
+            .HasQueryFilter(d => d.TenantId == tenant.CurrentTenantId);
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

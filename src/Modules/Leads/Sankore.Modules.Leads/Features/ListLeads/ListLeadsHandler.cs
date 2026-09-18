@@ -94,7 +94,10 @@ internal sealed class ListLeadsHandler(LeadsDbContext db)
                 lead.LastActivityAt,
                 lead.LossReason,
                 lead.ConvertedAt,
-                lead.ConvertedToCustomerId))
+                lead.ConvertedToCustomerId,
+                lead.NationalId,
+                lead.CustomerReference,
+                lead.ProspectType.ToString()))
             .ToListAsync(ct);
 
         return Result.Ok(new PagedResult<LeadDto>(items, total, page, size));

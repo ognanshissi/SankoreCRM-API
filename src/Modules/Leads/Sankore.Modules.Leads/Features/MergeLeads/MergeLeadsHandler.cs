@@ -59,10 +59,8 @@ internal sealed class MergeLeadsHandler(LeadsDbContext db)
             .Where(t => t.LeadId == cmd.SourceLeadId)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.LeadId, cmd.TargetLeadId), ct);
 
-        // Archive the source lead.
-        var closeResult = source.Close(
-            LeadCloseReason.Archived,
-            $"Merged into lead {cmd.TargetLeadId} by {cmd.MergedBy}");
+        // Archive the source lead and raise LeadMergedDomainEvent for traceability.
+        var closeResult = source.MergeInto(cmd.TargetLeadId, cmd.MergedBy);
 
         if (closeResult.IsFailure)
             return closeResult;

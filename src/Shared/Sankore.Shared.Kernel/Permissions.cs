@@ -198,6 +198,9 @@ public static class Permissions
     public static readonly PermissionItem CanMergeLeads =
         new("lead:merge", "Merge a Duplicate Lead into a Target Lead", ApplicationModules.Leads, "merge");
 
+    public static readonly PermissionItem CanDismissDuplicate =
+        new("lead:duplicate:dismiss", "Dismiss a Potential Duplicate Match", ApplicationModules.Leads, "duplicate:dismiss");
+
     public static readonly PermissionItem CanExportLeads =
         new("lead:export", "Export Leads to CSV", ApplicationModules.Leads, "export");
 
@@ -314,6 +317,7 @@ public static class Permissions
         CanTagLead,
         CanImportLeads,
         CanMergeLeads,
+        CanDismissDuplicate,
         CanExportLeads,
         CanViewLeadAnalytics,
     ];
