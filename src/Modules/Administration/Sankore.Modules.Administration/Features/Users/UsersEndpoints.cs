@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Administration.Features.Users.AdminResetPassword;
 using Sankore.Modules.Administration.Features.Users.AssignRole;
 using Sankore.Modules.Administration.Features.Users.AssignScopedPermission;
+using Sankore.Modules.Administration.Features.Users.ChangePassword;
 using Sankore.Modules.Administration.Features.Users.CreateUser;
 using Sankore.Modules.Administration.Features.Users.DeactivateUser;
 using Sankore.Modules.Administration.Features.Users.GetUser;
@@ -38,6 +40,8 @@ public static class UsersEndpoints
             .MapGetUserRoles()
             .MapGetUserPermissions()
             .MapAssignScopedPermission()
-            .MapRevokeScopedPermission();
+            .MapRevokeScopedPermission()
+            .MapChangePassword()
+            .MapAdminResetPassword();
     }
 }

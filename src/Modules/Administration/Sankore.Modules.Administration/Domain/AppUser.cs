@@ -193,6 +193,13 @@ public sealed class AppUser: IdentityUser<Guid>
     public void ExtendPasswordExpiry(int days = PasswordExpiryDays)
         => PasswordExpiresAt = DateTimeOffset.UtcNow.AddDays(days);
 
+    /// <summary>
+    /// Marks the password as immediately expired so the user is forced to change it
+    /// on next login. Used by admin-initiated password resets.
+    /// </summary>
+    public void ExpirePasswordNow()
+        => PasswordExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+
     /// <summary>Updates mutable user details. Only non-null parameters are applied.</summary>
     public void UpdateDetails(
         string? fullName,
