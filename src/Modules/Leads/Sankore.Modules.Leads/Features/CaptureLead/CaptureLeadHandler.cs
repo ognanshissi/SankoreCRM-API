@@ -26,13 +26,15 @@ public sealed class CaptureLeadHandler(
         CaptureLeadCommand cmd, CancellationToken ct)
     {
         // ── Duplicate detection (multi-signal identity scoring) ──────────────
+        IReadOnlyList<DuplicateMatchResult>? warnMatches = null;
+
         if (!cmd.Force)
         {
             var probe = MatchProbe.From(
                 cmd.PhoneNumber, cmd.Email, cmd.NationalId, cmd.CustomerReference,
                 cmd.FullName, cmd.DateOfBirth,
-                latitude:  cmd.Latitude  == 0 && cmd.Longitude  == 0 ? null : cmd.Latitude,
-                longitude: cmd.Longitude == 0 && cmd.Latitude   == 0 ? null : cmd.Longitude);
+                latitude:  cmd.Latitude  == 0 && cmd.Longitude == 0 ? null : cmd.Latitude,
+                longitude: cmd.Longitude == 0 && cmd.Latitude  == 0 ? null : cmd.Longitude);
 
             var phoneDigits = probe.PhoneDigits;
             var emailNorm   = probe.EmailNorm;
@@ -54,7 +56,7 @@ public sealed class CaptureLeadHandler(
             {
                 var scorer  = new IdentityMatchScorer();
                 var matches = candidates
-                    .Select(l => scorer.Score(l, probe))
+                    .Select(l => scorer.Score(l, probe, cmd.MinConfidenceThreshold))
                     .Where(r => r is not null)
                     .Select(r => r!)
                     .OrderByDescending(r => r.ConfidenceScore)
@@ -63,24 +65,20 @@ public sealed class CaptureLeadHandler(
                 if (matches.Count > 0)
                 {
                     logger.LogInformation(
-                        "Duplicate gate triggered for phone {Phone} — {Count} match(es) found",
-                        cmd.PhoneNumber, matches.Count);
+                        "Duplicate gate triggered for phone {Phone} — {Count} match(es), mode={Mode}",
+                        cmd.PhoneNumber, matches.Count, cmd.GateMode);
 
-                    var potentialMatches = matches.Select(m => new PotentialDuplicateMatch(
-                        m.LeadId,
-                        m.FullName,
-                        m.PhoneNumber,
-                        m.Email,
-                        m.Status.ToString(),
-                        m.ConfidenceScore,
-                        m.ConfidenceLabel,
-                        m.MatchReasons.Select(r => r.Key).ToList())).ToList();
+                    if (cmd.GateMode == DuplicateGateMode.Block)
+                    {
+                        return Result.Ok(new CaptureLeadResult(
+                            LeadId:              null,
+                            Status:              null,
+                            DuplicateDetected:   true,
+                            PotentialDuplicates: matches));
+                    }
 
-                    return Result.Ok(new CaptureLeadResult(
-                        LeadId:              null,
-                        Status:              null,
-                        DuplicateDetected:   true,
-                        PotentialDuplicates: potentialMatches));
+                    // Warn mode: fall through to create the lead; carry matches for response.
+                    warnMatches = matches;
                 }
             }
         }
@@ -136,6 +134,10 @@ public sealed class CaptureLeadHandler(
                 ["preferredLanguage"] = lead.PreferredLanguage ?? string.Empty,
             }), ct);
 
-        return Result.Ok(new CaptureLeadResult(lead.Id, lead.Status.ToString()));
+        return Result.Ok(new CaptureLeadResult(
+            LeadId:              lead.Id,
+            Status:              lead.Status.ToString(),
+            DuplicateDetected:   warnMatches is not null,
+            PotentialDuplicates: warnMatches));
     }
 }

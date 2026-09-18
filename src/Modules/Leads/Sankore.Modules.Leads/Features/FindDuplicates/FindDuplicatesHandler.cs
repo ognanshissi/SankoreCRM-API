@@ -44,10 +44,11 @@ internal sealed class FindDuplicatesHandler(LeadsDbContext db)
                  (customerRef != null && l.CustomerReference != null && l.CustomerReference.ToLower() == customerRef.ToLower())))
             .ToListAsync(ct);
 
-        var scorer = new IdentityMatchScorer();
+        var scorer      = new IdentityMatchScorer();
+        var threshold   = query.MinConfidence ?? IdentityMatchScorer.MinConfidence;
 
         var results = candidates
-            .Select(l => scorer.Score(l, probe))
+            .Select(l => scorer.Score(l, probe, threshold))
             .Where(r => r is not null)
             .Select(r => r!)
             .OrderByDescending(r => r.ConfidenceScore)

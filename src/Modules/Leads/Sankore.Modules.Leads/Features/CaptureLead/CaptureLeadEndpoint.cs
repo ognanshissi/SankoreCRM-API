@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
@@ -61,17 +62,21 @@ public static class CaptureLeadEndpoint
             CompanyEmail:         req.CompanyEmail,
             CompanyPhone:         req.CompanyPhone,
             Website:              req.Website,
-            ProspectType:         req.ProspectType ?? LeadType.Individual,
-            NationalId:           req.NationalId,
-            CustomerReference:    req.CustomerReference,
-            Force:                req.Force), ct);
+            ProspectType:             req.ProspectType ?? LeadType.Individual,
+            NationalId:               req.NationalId,
+            CustomerReference:        req.CustomerReference,
+            GateMode:                 req.GateMode ?? DuplicateGateMode.Block,
+            MinConfidenceThreshold:   req.MinConfidenceThreshold ?? IdentityMatchScorer.MinConfidence,
+            Force:                    req.Force), ct);
 
         if (!result.IsSuccess)
             return Results.Problem(title: "Lead capture failed", detail: result.Error, statusCode: 422);
 
-        if (result.Value.DuplicateDetected)
+        // Block mode with duplicates: lead was NOT created.
+        if (result.Value.DuplicateDetected && result.Value.LeadId is null)
             return Results.Conflict(result.Value);
 
+        // Warn mode with duplicates (or no duplicates): lead WAS created.
         return Results.Created($"/api/leads/{result.Value.LeadId}", result.Value);
     }
 }
@@ -107,7 +112,15 @@ public sealed record CaptureLeadRequest(
     string? NationalId = null,
     string? CustomerReference = null,
     /// <summary>
-    /// Set to true to bypass the duplicate-confirmation gate and force creation
-    /// even when potential duplicates are detected.
+    /// Block (default): returns 409 when duplicates found; re-submit with Force=true to override.
+    /// Warn: creates the lead and returns 201 with DuplicateDetected=true when duplicates found.
+    /// </summary>
+    DuplicateGateMode? GateMode = null,
+    /// <summary>
+    /// Minimum confidence score (0-100) for a candidate to trigger the gate. Defaults to 30.
+    /// </summary>
+    double? MinConfidenceThreshold = null,
+    /// <summary>
+    /// Set to true to bypass the duplicate gate entirely and force creation.
     /// </summary>
     bool Force = false);

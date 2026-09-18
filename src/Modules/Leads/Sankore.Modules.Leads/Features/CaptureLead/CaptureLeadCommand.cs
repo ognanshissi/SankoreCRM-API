@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.CaptureLead;
 
 using MediatR;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
@@ -38,8 +39,16 @@ public sealed record CaptureLeadCommand(
     string? NationalId = null,
     string? CustomerReference = null,
     /// <summary>
-    /// When true, bypasses the duplicate-confirmation gate and forces creation
-    /// even if a matching active lead already exists.
+    /// Controls whether a duplicate match blocks creation (409) or just warns (201 + DuplicateDetected=true).
+    /// </summary>
+    DuplicateGateMode GateMode = DuplicateGateMode.Block,
+    /// <summary>
+    /// Minimum confidence score (0-100) for a candidate to be considered a potential duplicate.
+    /// Defaults to <see cref="IdentityMatchScorer.MinConfidence"/> (30).
+    /// </summary>
+    double MinConfidenceThreshold = IdentityMatchScorer.MinConfidence,
+    /// <summary>
+    /// When true, bypasses the duplicate gate entirely and forces creation regardless of matches.
     /// </summary>
     bool Force = false
 ) : IRequest<Result<CaptureLeadResult>>, ICommand, IResourceCommand
@@ -48,21 +57,14 @@ public sealed record CaptureLeadCommand(
     public string? ResourceId => null;
 }
 
-/// <param name="LeadId">Id of the created lead. Null when <see cref="DuplicateDetected"/> is true.</param>
-/// <param name="DuplicateDetected">True when potential duplicates were found and Force was not set.
-/// The caller should surface <see cref="PotentialDuplicates"/> to the user and re-submit with Force=true.</param>
+/// <param name="LeadId">Id of the created lead. Null only when <see cref="DuplicateDetected"/> is true AND <see cref="DuplicateGateMode.Block"/> was used.</param>
+/// <param name="DuplicateDetected">
+/// True when potential duplicates were found.
+/// In <see cref="DuplicateGateMode.Block"/> mode the lead was NOT created (LeadId is null) — re-submit with Force=true to override.
+/// In <see cref="DuplicateGateMode.Warn"/> mode the lead WAS created (LeadId is set) — surface the warning to the user.
+/// </param>
 public sealed record CaptureLeadResult(
     Guid? LeadId,
     string? Status,
     bool DuplicateDetected = false,
-    IReadOnlyList<PotentialDuplicateMatch>? PotentialDuplicates = null);
-
-public sealed record PotentialDuplicateMatch(
-    Guid LeadId,
-    string FullName,
-    string PhoneNumber,
-    string? Email,
-    string Status,
-    double ConfidenceScore,
-    string ConfidenceLabel,
-    IReadOnlyList<string> MatchedOn);
+    IReadOnlyList<DuplicateMatchResult>? PotentialDuplicates = null);

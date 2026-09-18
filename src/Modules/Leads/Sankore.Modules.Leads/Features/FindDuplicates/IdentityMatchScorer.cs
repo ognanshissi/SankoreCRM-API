@@ -30,7 +30,7 @@ internal sealed class IdentityMatchScorer
 
     // ── Score a single candidate ──────────────────────────────────────────────
 
-    public DuplicateMatchResult? Score(Lead candidate, MatchProbe probe)
+    public DuplicateMatchResult? Score(Lead candidate, MatchProbe probe, double minConfidence = MinConfidence)
     {
         var reasons = new List<MatchReason>();
         double total = 0;
@@ -132,7 +132,7 @@ internal sealed class IdentityMatchScorer
             }
         }
 
-        if (reasons.Count == 0 || total < MinConfidence)
+        if (reasons.Count == 0 || total < minConfidence)
             return null;
 
         var confidence = Math.Min(100.0, Math.Round(total, 1));
