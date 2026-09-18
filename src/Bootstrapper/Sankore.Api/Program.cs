@@ -32,6 +32,12 @@ builder.AddServiceDefaults();
 
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
+
+// Serialize enums as their string names in all HTTP JSON responses and requests.
+// This keeps the wire format human-readable and consistent with the Swagger schema.
+builder.Services.ConfigureHttpJsonOptions(opts =>
+    opts.SerializerOptions.Converters.Add(
+        new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 
@@ -194,6 +200,11 @@ builder.Services.AddSwaggerGen(options =>
             new List<string>()
         }
     });
+
+    // Render every enum as a string schema with all valid member names listed.
+    // Ensures Swagger UI shows "New | Open | Qualifying | ..." instead of "0 | 1 | 2 | ...".
+    options.SchemaFilter<EnumSchemaFilter>();
+    options.UseInlineDefinitionsForEnums();
 });
 #endregion
 
