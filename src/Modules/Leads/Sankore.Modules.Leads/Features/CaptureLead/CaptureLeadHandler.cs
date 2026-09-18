@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Workflow;
 using Sankore.Shared.Kernel;
@@ -24,45 +25,63 @@ public sealed class CaptureLeadHandler(
     public async Task<Result<CaptureLeadResult>> Handle(
         CaptureLeadCommand cmd, CancellationToken ct)
     {
-        // ── Duplicate detection (phone OR email match on active leads) ────────
+        // ── Duplicate detection (multi-signal identity scoring) ──────────────
         if (!cmd.Force)
         {
-            var phoneNorm = cmd.PhoneNumber.Trim();
-            var emailNorm = cmd.Email?.Trim().ToLowerInvariant();
+            var probe = MatchProbe.From(
+                cmd.PhoneNumber, cmd.Email, cmd.NationalId, cmd.CustomerReference,
+                cmd.FullName, cmd.DateOfBirth,
+                latitude:  cmd.Latitude  == 0 && cmd.Longitude  == 0 ? null : cmd.Latitude,
+                longitude: cmd.Longitude == 0 && cmd.Latitude   == 0 ? null : cmd.Longitude);
 
-            var duplicates = await db.Leads
-                .Where(l => l.Status != LeadStatus.Lost
-                         && l.Status != LeadStatus.Archived
-                         && l.Status != LeadStatus.Disqualified
-                         && (l.PhoneNumber == phoneNorm
-                             || (emailNorm != null && l.Email != null
-                                 && l.Email.ToLower() == emailNorm)))
+            var phoneDigits = probe.PhoneDigits;
+            var emailNorm   = probe.EmailNorm;
+            var nationalId  = probe.NationalId;
+            var customerRef = probe.CustomerReference;
+
+            var candidates = await db.Leads
+                .Where(l =>
+                    l.Status != LeadStatus.Lost &&
+                    l.Status != LeadStatus.Archived &&
+                    l.Status != LeadStatus.Disqualified &&
+                    ((phoneDigits != null && l.PhoneNumber.EndsWith(phoneDigits)) ||
+                     (emailNorm != null && l.Email != null && l.Email.ToLower() == emailNorm) ||
+                     (nationalId != null && l.NationalId != null && l.NationalId.ToLower() == nationalId.ToLower()) ||
+                     (customerRef != null && l.CustomerReference != null && l.CustomerReference.ToLower() == customerRef.ToLower())))
                 .ToListAsync(ct);
 
-            if (duplicates.Count > 0)
+            if (candidates.Count > 0)
             {
-                logger.LogInformation(
-                    "Duplicate gate triggered for phone {Phone} — {Count} match(es) found",
-                    phoneNorm, duplicates.Count);
+                var scorer  = new IdentityMatchScorer();
+                var matches = candidates
+                    .Select(l => scorer.Score(l, probe))
+                    .Where(r => r is not null)
+                    .Select(r => r!)
+                    .OrderByDescending(r => r.ConfidenceScore)
+                    .ToList();
 
-                var matches = duplicates.Select(l =>
+                if (matches.Count > 0)
                 {
-                    var matchedOn = new List<string>();
-                    if (l.PhoneNumber == phoneNorm) matchedOn.Add("phone");
-                    if (emailNorm != null && l.Email != null &&
-                        string.Equals(l.Email, emailNorm, StringComparison.OrdinalIgnoreCase))
-                        matchedOn.Add("email");
+                    logger.LogInformation(
+                        "Duplicate gate triggered for phone {Phone} — {Count} match(es) found",
+                        cmd.PhoneNumber, matches.Count);
 
-                    return new PotentialDuplicateMatch(
-                        l.Id, l.FullName, l.PhoneNumber, l.Email,
-                        l.Status.ToString(), matchedOn);
-                }).ToList();
+                    var potentialMatches = matches.Select(m => new PotentialDuplicateMatch(
+                        m.LeadId,
+                        m.FullName,
+                        m.PhoneNumber,
+                        m.Email,
+                        m.Status.ToString(),
+                        m.ConfidenceScore,
+                        m.ConfidenceLabel,
+                        m.MatchReasons.Select(r => r.Key).ToList())).ToList();
 
-                return Result.Ok(new CaptureLeadResult(
-                    LeadId:              null,
-                    Status:              null,
-                    DuplicateDetected:   true,
-                    PotentialDuplicates: matches));
+                    return Result.Ok(new CaptureLeadResult(
+                        LeadId:              null,
+                        Status:              null,
+                        DuplicateDetected:   true,
+                        PotentialDuplicates: potentialMatches));
+                }
             }
         }
 
@@ -92,7 +111,9 @@ public sealed class CaptureLeadHandler(
             ownerId:              cmd.OwnerId,
             agencyId:             cmd.AgencyId,
             agentCollectedLeadId: cmd.AgentCollectedLeadId,
-            prospectType:         cmd.ProspectType);
+            prospectType:         cmd.ProspectType,
+            nationalId:           cmd.NationalId,
+            customerReference:    cmd.CustomerReference);
 
         db.Leads.Add(lead);
         await db.SaveChangesAsync(ct);

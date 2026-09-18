@@ -63,6 +63,8 @@ public static class SystemCaptureLeadEndpoint
             OwnerId:              req.OwnerId,
             AgencyId:             req.AgencyId,
             ProspectType:         req.ProspectType ?? LeadType.Individual,
+            NationalId:           req.NationalId,
+            CustomerReference:    req.CustomerReference,
             // Always bypass duplicate confirmation — automated pipelines have no human to confirm.
             Force: true), ct);
 
@@ -94,4 +96,6 @@ public sealed record SystemCaptureLeadRequest(
     string? ExternalReference = null,
     Guid? OwnerId = null,
     Guid? AgencyId = null,
-    LeadType? ProspectType = null);
+    LeadType? ProspectType = null,
+    string? NationalId = null,
+    string? CustomerReference = null);

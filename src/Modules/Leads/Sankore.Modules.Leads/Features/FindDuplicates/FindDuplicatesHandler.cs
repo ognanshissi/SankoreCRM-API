@@ -2,46 +2,57 @@ namespace Sankore.Modules.Leads.Features.FindDuplicates;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
 internal sealed class FindDuplicatesHandler(LeadsDbContext db)
-    : IRequestHandler<FindDuplicatesQuery, Result<IReadOnlyList<LeadDuplicateDto>>>
+    : IRequestHandler<FindDuplicatesQuery, Result<IReadOnlyList<DuplicateMatchResult>>>
 {
-    public async Task<Result<IReadOnlyList<LeadDuplicateDto>>> Handle(
+    public async Task<Result<IReadOnlyList<DuplicateMatchResult>>> Handle(
         FindDuplicatesQuery query, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(query.PhoneNumber) && string.IsNullOrWhiteSpace(query.Email))
-            return Result.Fail<IReadOnlyList<LeadDuplicateDto>>("At least one of phoneNumber or email is required.");
+        var probe = MatchProbe.From(
+            query.PhoneNumber, query.Email, query.NationalId,
+            query.CustomerReference, query.FullName,
+            query.DateOfBirth, query.Latitude, query.Longitude);
 
-        var phone = query.PhoneNumber?.Trim();
-        var email = query.Email?.Trim().ToLowerInvariant();
+        // At least one strong identifier signal is required for a meaningful search.
+        if (probe.PhoneDigits is null && probe.EmailNorm is null
+            && probe.NationalId is null && probe.CustomerReference is null)
+        {
+            return Result.Fail<IReadOnlyList<DuplicateMatchResult>>(
+                "At least one of phoneNumber, email, nationalId, or customerReference is required.");
+        }
 
-        var leads = await db.Leads
+        var phoneDigits    = probe.PhoneDigits;
+        var emailNorm      = probe.EmailNorm;
+        var nationalId     = probe.NationalId;
+        var customerRef    = probe.CustomerReference;
+
+        // DB pre-filter: candidates that match at least one strong signal.
+        // Phone suffix match via EndsWith (translates to SQL LIKE '%<digits>').
+        // Name / DOB / location are additive signals scored in-memory only.
+        var candidates = await db.Leads
             .Where(l =>
-                (phone != null && l.PhoneNumber == phone) ||
-                (email != null && l.Email != null && l.Email.ToLower() == email))
-            .OrderBy(l => l.CapturedAt)
+                l.Status != LeadStatus.Lost &&
+                l.Status != LeadStatus.Archived &&
+                l.Status != LeadStatus.Disqualified &&
+                ((phoneDigits != null && l.PhoneNumber.EndsWith(phoneDigits)) ||
+                 (emailNorm != null && l.Email != null && l.Email.ToLower() == emailNorm) ||
+                 (nationalId != null && l.NationalId != null && l.NationalId.ToLower() == nationalId.ToLower()) ||
+                 (customerRef != null && l.CustomerReference != null && l.CustomerReference.ToLower() == customerRef.ToLower())))
             .ToListAsync(ct);
 
-        var results = leads.Select(l =>
-        {
-            var matchedOn = new List<string>();
-            if (phone != null && l.PhoneNumber == phone) matchedOn.Add("phone");
-            if (email != null && l.Email != null &&
-                string.Equals(l.Email, email, StringComparison.OrdinalIgnoreCase)) matchedOn.Add("email");
+        var scorer = new IdentityMatchScorer();
 
-            return new LeadDuplicateDto(
-                LeadId:    l.Id,
-                FullName:  l.FullName,
-                PhoneNumber: l.PhoneNumber,
-                Email:     l.Email,
-                Status:    l.Status,
-                Source:    l.Source,
-                CapturedAt: l.CapturedAt,
-                MatchedOn: matchedOn);
-        }).ToList();
+        var results = candidates
+            .Select(l => scorer.Score(l, probe))
+            .Where(r => r is not null)
+            .Select(r => r!)
+            .OrderByDescending(r => r.ConfidenceScore)
+            .ToList();
 
-        return Result.Ok<IReadOnlyList<LeadDuplicateDto>>(results);
+        return Result.Ok<IReadOnlyList<DuplicateMatchResult>>(results);
     }
 }

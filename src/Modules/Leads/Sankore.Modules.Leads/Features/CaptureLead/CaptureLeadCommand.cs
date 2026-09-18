@@ -35,6 +35,8 @@ public sealed record CaptureLeadCommand(
     string? CompanyPhone = null,
     string? Website = null,
     LeadType ProspectType = LeadType.Individual,
+    string? NationalId = null,
+    string? CustomerReference = null,
     /// <summary>
     /// When true, bypasses the duplicate-confirmation gate and forces creation
     /// even if a matching active lead already exists.
@@ -61,4 +63,6 @@ public sealed record PotentialDuplicateMatch(
     string PhoneNumber,
     string? Email,
     string Status,
+    double ConfidenceScore,
+    string ConfidenceLabel,
     IReadOnlyList<string> MatchedOn);

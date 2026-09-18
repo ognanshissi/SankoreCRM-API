@@ -62,6 +62,8 @@ public static class CaptureLeadEndpoint
             CompanyPhone:         req.CompanyPhone,
             Website:              req.Website,
             ProspectType:         req.ProspectType ?? LeadType.Individual,
+            NationalId:           req.NationalId,
+            CustomerReference:    req.CustomerReference,
             Force:                req.Force), ct);
 
         if (!result.IsSuccess)
@@ -102,6 +104,8 @@ public sealed record CaptureLeadRequest(
     string? CompanyPhone = null,
     string? Website = null,
     LeadType? ProspectType = null,
+    string? NationalId = null,
+    string? CustomerReference = null,
     /// <summary>
     /// Set to true to bypass the duplicate-confirmation gate and force creation
     /// even when potential duplicates are detected.

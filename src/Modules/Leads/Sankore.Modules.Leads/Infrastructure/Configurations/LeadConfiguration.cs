@@ -38,6 +38,14 @@ internal sealed class LeadConfiguration : IEntityTypeConfiguration<Lead>
         builder.Property(l => l.IntentLevel).HasConversion<string>().HasMaxLength(20);
         builder.Property(l => l.Channel).HasConversion<string>().HasMaxLength(30);
 
+        // Identity fields for duplicate detection
+        builder.Property(l => l.NationalId).HasMaxLength(50);
+        builder.Property(l => l.CustomerReference).HasMaxLength(100);
+        builder.HasIndex(l => new { l.TenantId, l.NationalId })
+               .HasFilter("national_id IS NOT NULL");
+        builder.HasIndex(l => new { l.TenantId, l.CustomerReference })
+               .HasFilter("customer_reference IS NOT NULL");
+
         // Capture context
         builder.Property(l => l.Campaign).HasMaxLength(100);
         builder.Property(l => l.ExternalReference).HasMaxLength(100);

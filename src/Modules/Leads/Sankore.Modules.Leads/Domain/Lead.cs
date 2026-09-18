@@ -41,6 +41,8 @@ public sealed class Lead : AggregateRoot
     public LeadChannel? Channel { get; private set; }
     public string? Campaign { get; private set; }
     public string? ExternalReference { get; private set; }
+    public string? NationalId { get; private set; }
+    public string? CustomerReference { get; private set; }
     public string? Comment { get; private set; }
     public DateTimeOffset CapturedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -103,7 +105,9 @@ public sealed class Lead : AggregateRoot
         Guid? ownerId = null,
         Guid? agencyId = null,
         Guid? agentCollectedLeadId = null,
-        LeadType prospectType = LeadType.Individual)
+        LeadType prospectType = LeadType.Individual,
+        string? nationalId = null,
+        string? customerReference = null)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Lead must have a name.");
@@ -137,6 +141,8 @@ public sealed class Lead : AggregateRoot
             OwnerId               = ownerId,
             AgentCollectedLeadId  = agentCollectedLeadId,
             ProspectType          = prospectType,
+            NationalId            = nationalId?.Trim(),
+            CustomerReference     = customerReference?.Trim(),
             Status                = LeadStatus.New,
             PipelineStage         = Domain.PipelineStage.New,
             IntentLevel           = LeadIntentLevel.Unknown,
