@@ -43,6 +43,7 @@ using Sankore.Modules.Leads.Features.SetIntentLevel;
 using Sankore.Modules.Leads.Features.SetQualificationCompleteness;
 using Sankore.Modules.Leads.Features.UpdateLead;
 using Sankore.Modules.Leads.Features.UpdateLeadOwner;
+using Sankore.Modules.Leads.Features.SystemCaptureLead;
 using Sankore.Modules.Leads.Features.UpdatePipelineStage;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Extensions;
@@ -90,6 +91,7 @@ public static class LeadsModule
         // Phase 1 — Core CRUD & Lifecycle
         group.MapListLeads();
         group.MapCaptureLead();
+        group.MapSystemCaptureLead();
         group.MapGetLead();
         group.MapUpdateLead();
         group.MapUpdateLeadOwner();

@@ -24,23 +24,49 @@ public sealed class CaptureLeadHandler(
     public async Task<Result<CaptureLeadResult>> Handle(
         CaptureLeadCommand cmd, CancellationToken ct)
     {
-        // F13.2: duplicate detection by phone number within the tenant.
-        var existing = await db.Leads
-            .Where(l => l.PhoneNumber == cmd.PhoneNumber
-                     && l.Status != LeadStatus.Lost
-                     && l.Status != LeadStatus.Archived
-                     && l.Status != LeadStatus.Disqualified)
-            .FirstOrDefaultAsync(ct);
-
-        if (existing is not null)
+        // ── Duplicate detection (phone OR email match on active leads) ────────
+        if (!cmd.Force)
         {
-            logger.LogInformation(
-                "Duplicate lead capture attempt for phone {Phone}, existing lead {LeadId}",
-                cmd.PhoneNumber, existing.Id);
+            var phoneNorm = cmd.PhoneNumber.Trim();
+            var emailNorm = cmd.Email?.Trim().ToLowerInvariant();
 
-            return Result.Ok(new CaptureLeadResult(existing.Id, existing.Status.ToString()));
+            var duplicates = await db.Leads
+                .Where(l => l.Status != LeadStatus.Lost
+                         && l.Status != LeadStatus.Archived
+                         && l.Status != LeadStatus.Disqualified
+                         && (l.PhoneNumber == phoneNorm
+                             || (emailNorm != null && l.Email != null
+                                 && l.Email.ToLower() == emailNorm)))
+                .ToListAsync(ct);
+
+            if (duplicates.Count > 0)
+            {
+                logger.LogInformation(
+                    "Duplicate gate triggered for phone {Phone} — {Count} match(es) found",
+                    phoneNorm, duplicates.Count);
+
+                var matches = duplicates.Select(l =>
+                {
+                    var matchedOn = new List<string>();
+                    if (l.PhoneNumber == phoneNorm) matchedOn.Add("phone");
+                    if (emailNorm != null && l.Email != null &&
+                        string.Equals(l.Email, emailNorm, StringComparison.OrdinalIgnoreCase))
+                        matchedOn.Add("email");
+
+                    return new PotentialDuplicateMatch(
+                        l.Id, l.FullName, l.PhoneNumber, l.Email,
+                        l.Status.ToString(), matchedOn);
+                }).ToList();
+
+                return Result.Ok(new CaptureLeadResult(
+                    LeadId:              null,
+                    Status:              null,
+                    DuplicateDetected:   true,
+                    PotentialDuplicates: matches));
+            }
         }
 
+        // ── Create the lead ───────────────────────────────────────────────────
         var lead = Lead.Capture(
             tenantId:             cmd.TenantId,
             fullName:             cmd.FullName,
@@ -65,12 +91,15 @@ public sealed class CaptureLeadHandler(
             externalReference:    cmd.ExternalReference,
             ownerId:              cmd.OwnerId,
             agencyId:             cmd.AgencyId,
-            agentCollectedLeadId: cmd.AgentCollectedLeadId);
+            agentCollectedLeadId: cmd.AgentCollectedLeadId,
+            prospectType:         cmd.ProspectType);
 
         db.Leads.Add(lead);
         await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Lead {LeadId} captured from source {Source}", lead.Id, cmd.Source);
+        logger.LogInformation(
+            "Lead {LeadId} captured from source {Source} (forced: {Force})",
+            lead.Id, cmd.Source, cmd.Force);
 
         await bus.Publish(new WorkflowTriggerSignal(
             TenantId:   cmd.TenantId,

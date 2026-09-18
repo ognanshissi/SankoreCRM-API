@@ -58,17 +58,18 @@ internal sealed class LeadScoreCalculator
 
     private static int SourceScore(Lead lead) => lead.Source switch
     {
-        LeadSource.WalkIn           => 20,
-        LeadSource.InboundCall      => 18,
-        LeadSource.Referral         => 18,
-        LeadSource.WhatsApp         => 15,
-        LeadSource.MobileAgent      => 15,
-        LeadSource.Web              => 12,
-        LeadSource.Partner          => 12,
-        LeadSource.SmsUssdCampaign  => 10,
-        LeadSource.MarketingCampaign => 10,
-        LeadSource.FileImport       => 5,
-        _                           => 8
+        LeadSource.Agency      => 20,   // in-branch capture — high intent
+        LeadSource.CallCenter  => 18,
+        LeadSource.Referral    => 18,
+        LeadSource.WhatsApp    => 15,
+        LeadSource.MobileAgent => 15,
+        LeadSource.Web         => 12,
+        LeadSource.Partner     => 12,
+        LeadSource.Sms         => 10,
+        LeadSource.Ussd        => 10,
+        LeadSource.Campaign    => 10,
+        LeadSource.FileImport  => 5,
+        _                      => 8
     };
 
     private static int DesiredAmountScore(Lead lead)

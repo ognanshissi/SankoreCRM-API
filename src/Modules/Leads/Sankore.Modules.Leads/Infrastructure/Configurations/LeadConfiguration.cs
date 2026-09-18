@@ -30,6 +30,7 @@ internal sealed class LeadConfiguration : IEntityTypeConfiguration<Lead>
         builder.Property(l => l.Website).HasMaxLength(300);
 
         // Enums stored as strings
+        builder.Property(l => l.ProspectType).HasConversion<string>().HasMaxLength(20);
         builder.Property(l => l.Status).HasConversion<string>().HasMaxLength(30);
         builder.Property(l => l.Source).HasConversion<string>().HasMaxLength(30);
         builder.Property(l => l.PipelineStage).HasConversion<string>().HasMaxLength(40);

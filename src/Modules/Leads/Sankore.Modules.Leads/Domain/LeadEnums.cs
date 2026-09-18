@@ -1,5 +1,11 @@
 namespace Sankore.Modules.Leads.Domain;
 
+public enum LeadType
+{
+    Individual,
+    Corporate
+}
+
 public enum LeadIntentLevel
 {
     Unknown,

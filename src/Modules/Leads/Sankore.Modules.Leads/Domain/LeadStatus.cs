@@ -22,14 +22,15 @@ public enum LeadSource
 {
     Web,
     MobileAgent,
-    WalkIn,
-    SmsUssdCampaign,
-    Referral,
-    FileImport,
-    Partner,
-    InboundCall,
+    Agency,        // prospect captured in-branch by an agent (was WalkIn)
+    CallCenter,    // inbound or outbound call centre capture (was InboundCall)
+    Sms,
+    Ussd,
     WhatsApp,
-    MarketingCampaign
+    Referral,
+    Partner,
+    FileImport,
+    Campaign       // any marketing / mass-campaign origin (merged SmsUssdCampaign + MarketingCampaign)
 }
 
 public enum DispatchingStrategy

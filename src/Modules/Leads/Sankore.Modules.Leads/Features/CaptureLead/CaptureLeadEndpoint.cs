@@ -17,6 +17,7 @@ public static class CaptureLeadEndpoint
             .WithTags("Leads")
             .RequireAuthorization(Permissions.CanCaptureLead.Code)
             .Produces<CaptureLeadResult>(StatusCodes.Status201Created)
+            .Produces<CaptureLeadResult>(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status400BadRequest)
             .WithOpenApi()
             .WithTenantHeader();
@@ -59,11 +60,17 @@ public static class CaptureLeadEndpoint
             CompanyName:          req.CompanyName,
             CompanyEmail:         req.CompanyEmail,
             CompanyPhone:         req.CompanyPhone,
-            Website:              req.Website), ct);
+            Website:              req.Website,
+            ProspectType:         req.ProspectType ?? LeadType.Individual,
+            Force:                req.Force), ct);
 
-        return result.IsSuccess
-            ? Results.Created($"/api/leads/{result.Value.LeadId}", result.Value)
-            : Results.Problem(title: "Lead capture failed", detail: result.Error, statusCode: 422);
+        if (!result.IsSuccess)
+            return Results.Problem(title: "Lead capture failed", detail: result.Error, statusCode: 422);
+
+        if (result.Value.DuplicateDetected)
+            return Results.Conflict(result.Value);
+
+        return Results.Created($"/api/leads/{result.Value.LeadId}", result.Value);
     }
 }
 
@@ -93,4 +100,10 @@ public sealed record CaptureLeadRequest(
     string? CompanyName = null,
     string? CompanyEmail = null,
     string? CompanyPhone = null,
-    string? Website = null);
+    string? Website = null,
+    LeadType? ProspectType = null,
+    /// <summary>
+    /// Set to true to bypass the duplicate-confirmation gate and force creation
+    /// even when potential duplicates are detected.
+    /// </summary>
+    bool Force = false);

@@ -25,6 +25,9 @@ public sealed class Lead : AggregateRoot
     public LeadGender Gender { get; private set; } = LeadGender.Unknown;
     public DateOnly? DateOfBirth { get; private set; }
 
+    /// <summary>Individual (B2C) or Corporate (B2B) prospect.</summary>
+    public LeadType ProspectType { get; private set; } = LeadType.Individual;
+
     // ── Organisation (optional, for corporate leads) ────────────────────────
     public string? CompanyName { get; private set; }
     public string? CompanyEmail { get; private set; }
@@ -99,7 +102,8 @@ public sealed class Lead : AggregateRoot
         string? externalReference = null,
         Guid? ownerId = null,
         Guid? agencyId = null,
-        Guid? agentCollectedLeadId = null)
+        Guid? agentCollectedLeadId = null,
+        LeadType prospectType = LeadType.Individual)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Lead must have a name.");
@@ -132,6 +136,7 @@ public sealed class Lead : AggregateRoot
             AgencyId              = agencyId,
             OwnerId               = ownerId,
             AgentCollectedLeadId  = agentCollectedLeadId,
+            ProspectType          = prospectType,
             Status                = LeadStatus.New,
             PipelineStage         = Domain.PipelineStage.New,
             IntentLevel           = LeadIntentLevel.Unknown,

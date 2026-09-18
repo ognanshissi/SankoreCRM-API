@@ -33,11 +33,32 @@ public sealed record CaptureLeadCommand(
     string? CompanyName = null,
     string? CompanyEmail = null,
     string? CompanyPhone = null,
-    string? Website = null
+    string? Website = null,
+    LeadType ProspectType = LeadType.Individual,
+    /// <summary>
+    /// When true, bypasses the duplicate-confirmation gate and forces creation
+    /// even if a matching active lead already exists.
+    /// </summary>
+    bool Force = false
 ) : IRequest<Result<CaptureLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";
     public string? ResourceId => null;
 }
 
-public sealed record CaptureLeadResult(Guid LeadId, string Status);
+/// <param name="LeadId">Id of the created lead. Null when <see cref="DuplicateDetected"/> is true.</param>
+/// <param name="DuplicateDetected">True when potential duplicates were found and Force was not set.
+/// The caller should surface <see cref="PotentialDuplicates"/> to the user and re-submit with Force=true.</param>
+public sealed record CaptureLeadResult(
+    Guid? LeadId,
+    string? Status,
+    bool DuplicateDetected = false,
+    IReadOnlyList<PotentialDuplicateMatch>? PotentialDuplicates = null);
+
+public sealed record PotentialDuplicateMatch(
+    Guid LeadId,
+    string FullName,
+    string PhoneNumber,
+    string? Email,
+    string Status,
+    IReadOnlyList<string> MatchedOn);
