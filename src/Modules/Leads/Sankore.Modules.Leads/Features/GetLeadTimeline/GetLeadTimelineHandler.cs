@@ -38,7 +38,12 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
             .Where(m => m.TargetLeadId == query.LeadId || m.SourceLeadId == query.LeadId)
             .ToListAsync(ct);
 
-        await Task.WhenAll(activitiesTask, scoresTask, assignmentsTask, remindersTask, mergesTask);
+        // Dismissals recorded by or against this lead.
+        var dismissalsTask = db.DuplicateDismissals
+            .Where(d => d.LeadId == query.LeadId || d.CandidateLeadId == query.LeadId)
+            .ToListAsync(ct);
+
+        await Task.WhenAll(activitiesTask, scoresTask, assignmentsTask, remindersTask, mergesTask, dismissalsTask);
 
         var events = new List<TimelineEvent>();
 
@@ -133,6 +138,22 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
                     Detail:      $"Merged by {m.MergedBy}",
                     ActorId:     m.MergedBy));
             }
+        }
+
+        // Dismissal events
+        foreach (var d in dismissalsTask.Result)
+        {
+            var otherLeadId = d.LeadId == query.LeadId ? d.CandidateLeadId : d.LeadId;
+            var detail = string.IsNullOrEmpty(d.Reason)
+                ? null
+                : $"Reason: {d.Reason}";
+
+            events.Add(new TimelineEvent(
+                OccurredAt: d.DismissedAt,
+                Kind:        TimelineEventKind.DuplicateDismissed,
+                Title:       $"Lead {otherLeadId} marked as non-duplicate",
+                Detail:      detail,
+                ActorId:     d.DismissedBy));
         }
 
         return Result.Ok<IReadOnlyList<TimelineEvent>>(

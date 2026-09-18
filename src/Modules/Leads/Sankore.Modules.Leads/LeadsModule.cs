@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Leads.Features.CaptureLead;
 using Sankore.Modules.Leads.Features.CloseLead;
 using Sankore.Modules.Leads.Features.DispatchLead;
@@ -17,6 +18,7 @@ using Sankore.Modules.Leads.Features.ConvertLead;
 using Sankore.Modules.Leads.Features.Bulk;
 using Sankore.Modules.Leads.Features.Import;
 using Sankore.Modules.Leads.Features.DismissDuplicate;
+using Sankore.Modules.Leads.Features.ListDismissals;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Features.MergeLeads;
 using Sankore.Modules.Leads.Features.GetLeadTimeline;
@@ -82,6 +84,8 @@ public static class LeadsModule
         services.AddOutboxForModule<LeadsDbContext>();
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
+        services.Configure<LeadModuleSettings>(config.GetSection("Leads"));
+
         return services;
     }
 
@@ -140,6 +144,7 @@ public static class LeadsModule
         group.MapFindDuplicates();
         group.MapMergeLeads();
         group.MapDismissDuplicate();
+        group.MapListDismissals();
 
         // Phase 11 — Lead Timeline & Export
         group.MapGetLeadTimeline();

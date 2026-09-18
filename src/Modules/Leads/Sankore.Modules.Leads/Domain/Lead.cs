@@ -424,6 +424,15 @@ public sealed class Lead : AggregateRoot
     }
 
     /// <summary>
+    /// Raises <see cref="Events.DuplicateDismissedDomainEvent"/> on this lead so the
+    /// timeline interceptor can dispatch it after the SaveChanges commit.
+    /// Called by <c>DismissDuplicateHandler</c> since <see cref="DuplicateDismissal"/>
+    /// is not an aggregate root and cannot raise domain events itself.
+    /// </summary>
+    internal void RaiseDismissalEvent(Guid candidateLeadId, Guid dismissedBy)
+        => RaiseDomainEvent(new Events.DuplicateDismissedDomainEvent(Id, candidateLeadId, dismissedBy));
+
+    /// <summary>
     /// Transitions a New lead to Open — signals the first manual or system
     /// action has been taken on this lead.
     /// </summary>

@@ -61,6 +61,21 @@ internal sealed class ConvertLeadHandler(
 
                 if (candidates.Count > 0)
                 {
+                    // Exclude pairs that have already been dismissed by the user.
+                    var candidateIds  = candidates.Select(l => l.Id).ToList();
+                    var dismissedIds  = await db.DuplicateDismissals
+                        .Where(d =>
+                            (d.LeadId == cmd.LeadId && candidateIds.Contains(d.CandidateLeadId)) ||
+                            (d.CandidateLeadId == cmd.LeadId && candidateIds.Contains(d.LeadId)))
+                        .Select(d => d.CandidateLeadId == cmd.LeadId ? d.LeadId : d.CandidateLeadId)
+                        .ToListAsync(ct);
+
+                    if (dismissedIds.Count > 0)
+                        candidates = candidates.Where(l => !dismissedIds.Contains(l.Id)).ToList();
+                }
+
+                if (candidates.Count > 0)
+                {
                     var scorer  = new IdentityMatchScorer();
                     var matches = candidates
                         .Select(l => scorer.Score(l, probe, cmd.MinConfidenceThreshold))

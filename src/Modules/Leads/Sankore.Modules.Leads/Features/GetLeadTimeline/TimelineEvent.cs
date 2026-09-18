@@ -6,7 +6,8 @@ public enum TimelineEventKind
     ScoreChange,
     Assignment,
     Reminder,
-    Merge
+    Merge,
+    DuplicateDismissed
 }
 
 public sealed record TimelineEvent(
