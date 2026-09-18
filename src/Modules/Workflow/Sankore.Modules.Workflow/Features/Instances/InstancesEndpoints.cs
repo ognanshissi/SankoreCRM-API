@@ -6,6 +6,7 @@ using Sankore.Modules.Workflow.Features.Instances.AssignStep;
 using Sankore.Modules.Workflow.Features.Instances.CancelInstance;
 using Sankore.Modules.Workflow.Features.Instances.DelegateStep;
 using Sankore.Modules.Workflow.Features.Instances.GetInstance;
+using Sankore.Modules.Workflow.Features.Instances.GetCompletedTasks;
 using Sankore.Modules.Workflow.Features.Instances.GetInstanceAudit;
 using Sankore.Modules.Workflow.Features.Instances.ListInstances;
 using Sankore.Modules.Workflow.Features.Instances.ListMySteps;
@@ -21,6 +22,7 @@ public static class InstancesEndpoints
         var group = app.MapGroup("instances").WithTags("WorkflowInstances");
 
         group.MapListMySteps();
+        group.MapGetCompletedTasks();
 
         return group
             .MapStartInstance()
