@@ -7,7 +7,8 @@ public enum TimelineEventKind
     Assignment,
     Reminder,
     Merge,
-    DuplicateDismissed
+    DuplicateDismissed,
+    Consent
 }
 
 public sealed record TimelineEvent(

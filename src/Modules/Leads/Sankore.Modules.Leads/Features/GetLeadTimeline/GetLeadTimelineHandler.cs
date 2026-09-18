@@ -43,7 +43,12 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
             .Where(d => d.LeadId == query.LeadId || d.CandidateLeadId == query.LeadId)
             .ToListAsync(ct);
 
-        await Task.WhenAll(activitiesTask, scoresTask, assignmentsTask, remindersTask, mergesTask, dismissalsTask);
+        // All consent records for this lead.
+        var consentsTask = db.LeadConsents
+            .Where(c => c.LeadId == query.LeadId)
+            .ToListAsync(ct);
+
+        await Task.WhenAll(activitiesTask, scoresTask, assignmentsTask, remindersTask, mergesTask, dismissalsTask, consentsTask);
 
         var events = new List<TimelineEvent>();
 
@@ -137,6 +142,27 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
                     Title:       $"This lead was merged into {m.TargetLeadId}",
                     Detail:      $"Merged by {m.MergedBy}",
                     ActorId:     m.MergedBy));
+            }
+        }
+
+        // Consent events — one entry at recording, another at withdrawal if applicable
+        foreach (var c in consentsTask.Result)
+        {
+            events.Add(new TimelineEvent(
+                OccurredAt: c.GrantedAt,
+                Kind:        TimelineEventKind.Consent,
+                Title:       $"Consent granted: {c.Type}",
+                Detail:      $"Channel: {c.Channel}" + (c.ProofReference is not null ? $" • Proof: {c.ProofReference}" : string.Empty),
+                ActorId:     c.RecordedBy));
+
+            if (c.WithdrawnAt.HasValue)
+            {
+                events.Add(new TimelineEvent(
+                    OccurredAt: c.WithdrawnAt.Value,
+                    Kind:        TimelineEventKind.Consent,
+                    Title:       $"Consent withdrawn: {c.Type}",
+                    Detail:      c.WithdrawalReason,
+                    ActorId:     c.WithdrawnBy));
             }
         }
 

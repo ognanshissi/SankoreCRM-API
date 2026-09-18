@@ -19,6 +19,9 @@ using Sankore.Modules.Leads.Features.Bulk;
 using Sankore.Modules.Leads.Features.Import;
 using Sankore.Modules.Leads.Features.DismissDuplicate;
 using Sankore.Modules.Leads.Features.ListDismissals;
+using Sankore.Modules.Leads.Features.RecordConsent;
+using Sankore.Modules.Leads.Features.WithdrawConsent;
+using Sankore.Modules.Leads.Features.ListConsents;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Features.MergeLeads;
 using Sankore.Modules.Leads.Features.GetLeadTimeline;
@@ -145,6 +148,11 @@ public static class LeadsModule
         group.MapMergeLeads();
         group.MapDismissDuplicate();
         group.MapListDismissals();
+
+        // Phase 13 — Consent Management
+        group.MapRecordConsent();
+        group.MapWithdrawConsent();
+        group.MapListConsents();
 
         // Phase 11 — Lead Timeline & Export
         group.MapGetLeadTimeline();

@@ -432,6 +432,14 @@ public sealed class Lead : AggregateRoot
     internal void RaiseDismissalEvent(Guid candidateLeadId, Guid dismissedBy)
         => RaiseDomainEvent(new Events.DuplicateDismissedDomainEvent(Id, candidateLeadId, dismissedBy));
 
+    /// <summary>Raises <see cref="Events.ConsentRecordedDomainEvent"/>. Called by <c>RecordConsentHandler</c>.</summary>
+    internal void RaiseConsentRecordedEvent(Guid consentId, string consentType)
+        => RaiseDomainEvent(new Events.ConsentRecordedDomainEvent(Id, consentId, consentType));
+
+    /// <summary>Raises <see cref="Events.ConsentWithdrawnDomainEvent"/>. Called by <c>WithdrawConsentHandler</c>.</summary>
+    internal void RaiseConsentWithdrawnEvent(Guid consentId, string consentType)
+        => RaiseDomainEvent(new Events.ConsentWithdrawnDomainEvent(Id, consentId, consentType));
+
     /// <summary>
     /// Transitions a New lead to Open — signals the first manual or system
     /// action has been taken on this lead.

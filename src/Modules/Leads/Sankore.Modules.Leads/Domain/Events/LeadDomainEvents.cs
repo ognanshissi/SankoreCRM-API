@@ -30,3 +30,9 @@ public sealed record LeadMergedDomainEvent(
 
 public sealed record DuplicateDismissedDomainEvent(
     Guid LeadId, Guid CandidateLeadId, Guid DismissedBy) : DomainEventBase;
+
+public sealed record ConsentRecordedDomainEvent(
+    Guid LeadId, Guid ConsentId, string ConsentType) : DomainEventBase;
+
+public sealed record ConsentWithdrawnDomainEvent(
+    Guid LeadId, Guid ConsentId, string ConsentType) : DomainEventBase;

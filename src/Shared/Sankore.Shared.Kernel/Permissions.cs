@@ -207,6 +207,12 @@ public static class Permissions
     public static readonly PermissionItem CanViewLeadAnalytics =
         new("lead:analytics:view", "View Lead SLA, Funnel and Agent Performance Analytics", ApplicationModules.Leads, "analytics:view");
 
+    public static readonly PermissionItem CanRecordConsent =
+        new("lead:consent:record", "Record Prospect Consent", ApplicationModules.Leads, "consent:record");
+
+    public static readonly PermissionItem CanWithdrawConsent =
+        new("lead:consent:withdraw", "Withdraw Prospect Consent", ApplicationModules.Leads, "consent:withdraw");
+
     // ── Company info (Administration module) ──────────────────────────────
 
     public static readonly PermissionItem CanReadCompanyInfo =
@@ -320,5 +326,7 @@ public static class Permissions
         CanDismissDuplicate,
         CanExportLeads,
         CanViewLeadAnalytics,
+        CanRecordConsent,
+        CanWithdrawConsent,
     ];
 }
