@@ -14,6 +14,7 @@ public class LeadAssignmentConfiguration: IEntityTypeConfiguration<LeadAssignmen
         builder.HasIndex(a => a.LeadId);
         builder.HasIndex(a => a.AgentId); // no foreign key, the agency live inside UserModule
         builder.HasIndex(a => new { a.SlaDeadline, a.FirstContactAt });
+        builder.Property(a => a.CompatibilityFactorsJson).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
 
         builder.HasOne<Lead>()
             .WithMany()

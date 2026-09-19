@@ -6,8 +6,9 @@ using Sankore.Modules.Administration.PublicApi;
 /// <summary>
 /// A single scored candidate produced by a strategy. Higher CompatibilityScore
 /// wins, subject to the anti-monopoly filter applied afterward by the handler.
+/// FactorsJson carries the per-factor breakdown for dispatch audit (US-M13-072).
 /// </summary>
-public sealed record ScoredCandidate(AgentSummary Agent, double CompatibilityScore);
+public sealed record ScoredCandidate(AgentSummary Agent, double CompatibilityScore, string FactorsJson = "{}");
 
 /// <summary>
 /// Strategy abstraction (F13.9): each dispatching strategy configured by a

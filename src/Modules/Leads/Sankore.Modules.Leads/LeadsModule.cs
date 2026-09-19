@@ -77,7 +77,11 @@ public static class LeadsModule
 
         // DispatchLead slice-internal services
         services.AddScoped<CompatibilityScorer>();
-        services.AddScoped<CompatibilityScoringStrategy>();
+        // CompatibilityScoringStrategy receives IDistributedCache when registered
+        // (Redis in production via AddRedisDistributedCache; null in unit tests).
+        services.AddScoped(sp =>
+            new CompatibilityScoringStrategy(
+                sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
         services.AddScoped<RoundRobinStrategy>();
         services.AddScoped<WeightedRoundRobinStrategy>();
         services.AddScoped<StickyAssignmentStrategy>();

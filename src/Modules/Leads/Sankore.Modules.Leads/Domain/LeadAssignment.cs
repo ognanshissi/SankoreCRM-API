@@ -22,11 +22,20 @@ public sealed class LeadAssignment
     public DateTimeOffset SlaDeadline { get; private set; }
     public DateTimeOffset? FirstContactAt { get; private set; }
 
+    /// <summary>
+    /// JSON breakdown of per-factor contributions used to compute
+    /// <see cref="CompatibilityScore"/> (language, product, geography,
+    /// workload, performance, agency). Persisted for post-hoc audit of
+    /// contested dispatching decisions (US-M13-072).
+    /// </summary>
+    public string CompatibilityFactorsJson { get; private set; } = "{}";
+
     private LeadAssignment() { } // EF Core
 
     public static LeadAssignment Create(
         Guid tenantId, Guid leadId, Guid agentId, DispatchingStrategy strategy,
-        double compatibilityScore, DateTimeOffset slaDeadline, DateTimeOffset createdAt)
+        double compatibilityScore, DateTimeOffset slaDeadline, DateTimeOffset createdAt,
+        string compatibilityFactorsJson = "{}")
         => new()
         {
             Id = Guid.NewGuid(),
@@ -37,7 +46,8 @@ public sealed class LeadAssignment
             CompatibilityScore = compatibilityScore,
             WasManualOverride = false,
             CreatedAt = createdAt,
-            SlaDeadline = slaDeadline
+            SlaDeadline = slaDeadline,
+            CompatibilityFactorsJson = compatibilityFactorsJson
         };
 
     public static LeadAssignment CreateManualOverride(

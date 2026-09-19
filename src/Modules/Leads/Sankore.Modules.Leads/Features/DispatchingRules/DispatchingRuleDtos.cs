@@ -19,4 +19,5 @@ public sealed record ScoringWeightsDto(
     double Product,
     double Geography,
     double Workload,
-    double Performance);
+    double Performance,
+    double Agency = 0);

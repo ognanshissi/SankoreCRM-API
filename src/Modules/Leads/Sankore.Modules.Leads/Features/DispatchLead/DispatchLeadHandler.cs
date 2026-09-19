@@ -109,7 +109,8 @@ internal sealed class DispatchLeadHandler(
             strategy: cmd.Strategy,
             compatibilityScore: winner.CompatibilityScore,
             slaDeadline: clock.GetUtcNow().Add(rules.FirstContactSla),
-            createdAt: clock.GetUtcNow());
+            createdAt: clock.GetUtcNow(),
+            compatibilityFactorsJson: winner.FactorsJson);
 
         var assignResult = lead.AssignTo(assignment);
         if (assignResult.IsFailure)

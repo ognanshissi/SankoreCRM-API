@@ -27,7 +27,7 @@ public class CompatibilityScorerTests
             .WithConversionRate(0.65)
             .Build();
 
-        var score = _sut.Score(lead, agent, DispatchingRule.Default());
+        var score = _sut.Score(lead, agent, DispatchingRule.Default()).TotalScore;
 
         score.Should().BeGreaterThan(85);
     }
@@ -49,7 +49,7 @@ public class CompatibilityScorerTests
             .WithConversionRate(0.0)
             .Build();
 
-        var score = _sut.Score(lead, agent, DispatchingRule.Default());
+        var score = _sut.Score(lead, agent, DispatchingRule.Default()).TotalScore;
 
         score.Should().BeLessOrEqualTo(5);
     }
@@ -74,7 +74,7 @@ public class CompatibilityScorerTests
             .WithConversionRate(0.8)
             .Build();
 
-        var score = _sut.Score(lead, agent, DispatchingRule.Default());
+        var score = _sut.Score(lead, agent, DispatchingRule.Default()).TotalScore;
 
         score.Should().BeGreaterThan(50);
     }
@@ -105,10 +105,11 @@ public class CompatibilityScorerTests
             .Build();
 
         var rules = DispatchingRule.Default();
-        var score = _sut.Score(lead, agent, rules);
+        var score = _sut.Score(lead, agent, rules).TotalScore;
 
-        // Only the geography weight contributes here (language/product/workload/perf all zero).
-        var expectedScore = Math.Round(rules.Weights.Geography * expectedFactor, 2);
+        // Geography + workload (load=0 means full workload credit) contribute.
+        var expectedScore = Math.Round(
+            rules.Weights.Geography * expectedFactor + rules.Weights.Workload * 1.0, 2);
         score.Should().BeApproximately(expectedScore, 1.0);
     }
 }
