@@ -33,10 +33,11 @@ public static class ListLeadsEndpoint
         Guid? ownerId = null,
         Guid? agencyId = null,
         string? search = null,
-        string? tag = null)
+        string? tag = null,
+        LeadIntentLevel? intentLevel = null)
     {
         var result = await sender.Send(
-            new ListLeadsQuery(page, pageSize, status, pipelineStage, source, ownerId, agencyId, search, tag), ct);
+            new ListLeadsQuery(page, pageSize, status, pipelineStage, source, ownerId, agencyId, search, tag, intentLevel), ct);
 
         return Results.Ok(result.Value);
     }

@@ -38,6 +38,9 @@ internal sealed class ListLeadsHandler(LeadsDbContext db)
                 l.PhoneNumber.Contains(search));
         }
 
+        if (query.IntentLevel.HasValue)
+            q = q.Where(l => l.IntentLevel == query.IntentLevel.Value);
+
         if (!string.IsNullOrWhiteSpace(query.Tag))
         {
             var tag = query.Tag.Trim().ToLowerInvariant();
