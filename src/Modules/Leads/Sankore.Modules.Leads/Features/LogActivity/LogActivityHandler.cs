@@ -2,11 +2,16 @@ namespace Sankore.Modules.Leads.Features.LogActivity;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.RecalculateLeadScore;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class LogActivityHandler(LeadsDbContext db)
+internal sealed class LogActivityHandler(
+    LeadsDbContext db,
+    ISender sender,
+    IOptions<LeadModuleSettings> settings)
     : IRequestHandler<LogActivityCommand, Result<LogActivityResult>>
 {
     public async Task<Result<LogActivityResult>> Handle(
@@ -34,6 +39,15 @@ internal sealed class LogActivityHandler(LeadsDbContext db)
 
         db.LeadActivities.Add(activity);
         await db.SaveChangesAsync(ct);
+
+        // Auto-recalculate score after the activity is persisted (if enabled and lead is active).
+        if (settings.Value.EnableAutoScoreRecalculation &&
+            lead.Status is not (LeadStatus.Converted or LeadStatus.Archived
+                             or LeadStatus.Lost or LeadStatus.Disqualified))
+        {
+            await sender.Send(
+                new RecalculateLeadScoreCommand(lead.Id, "ACTIVITY_LOGGED"), ct);
+        }
 
         return Result.Ok(new LogActivityResult(activity.Id, activity.PerformedAt));
     }

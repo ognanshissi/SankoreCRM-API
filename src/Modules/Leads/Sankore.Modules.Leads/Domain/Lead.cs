@@ -289,6 +289,16 @@ public sealed class Lead : AggregateRoot
         return Result.Ok();
     }
 
+    /// <summary>
+    /// Updates the score in-place without changing lead status.
+    /// Used for background auto-recalculations triggered by activity or data changes.
+    /// </summary>
+    internal void RecordScoreUpdate(int score)
+    {
+        Score     = Math.Clamp(score, 0, 100);
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>Updates the intent level (Hot/Warm/Cold/Unknown).</summary>
     public void UpdateIntentLevel(LeadIntentLevel level)
     {

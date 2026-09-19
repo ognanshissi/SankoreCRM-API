@@ -12,4 +12,25 @@ public sealed class LeadModuleSettings
     /// Default: <see langword="false"/>.
     /// </summary>
     public bool RequireDismissalReason { get; init; } = false;
+
+    /// <summary>
+    /// When <see langword="true"/>, the lead score is automatically
+    /// recalculated after each activity is logged.
+    /// Default: <see langword="true"/>.
+    /// </summary>
+    public bool EnableAutoScoreRecalculation { get; init; } = true;
+
+    /// <summary>
+    /// Minimum absolute score change (0-100) that triggers a
+    /// <see cref="Features.RecalculateLeadScore.Events.LeadScoreCriticallyChangedIntegrationEvent"/>.
+    /// Default: 20 points.
+    /// </summary>
+    public int CriticalScoreChangeDelta { get; init; } = 20;
+
+    /// <summary>
+    /// Score thresholds that, when crossed in either direction, trigger a
+    /// critical-change notification regardless of <see cref="CriticalScoreChangeDelta"/>.
+    /// Default: [40, 60] — the Disqualify / Qualify boundaries.
+    /// </summary>
+    public int[] CriticalScoreThresholds { get; init; } = [40, 60];
 }

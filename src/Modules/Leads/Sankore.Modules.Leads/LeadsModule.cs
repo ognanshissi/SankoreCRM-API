@@ -42,6 +42,7 @@ using Sankore.Modules.Leads.Features.RecycleLead;
 using Sankore.Modules.Leads.Features.ReopenLead;
 using Sankore.Modules.Leads.Features.ReturnLeadToQueue;
 using Sankore.Modules.Leads.Features.GetScoreHistory;
+using Sankore.Modules.Leads.Features.RecalculateLeadScore;
 using Sankore.Modules.Leads.Features.ListActivities;
 using Sankore.Modules.Leads.Features.ListLeads;
 using Sankore.Modules.Leads.Features.LogActivity;
@@ -110,6 +111,7 @@ public static class LeadsModule
 
         // Phase 2 — Qualification & Scoring
         group.MapQualifyLead();
+        group.MapRecalculateLeadScore();
         group.MapSetIntentLevel();
         group.MapSetQualificationCompleteness();
         group.MapGetScoreHistory();
