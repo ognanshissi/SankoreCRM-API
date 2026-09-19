@@ -21,6 +21,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<QualificationTemplate> QualificationTemplates => Set<QualificationTemplate>();
     public DbSet<QualificationResponse> QualificationResponses => Set<QualificationResponse>();
     public DbSet<QualificationSection> QualificationSections => Set<QualificationSection>();
+    public DbSet<LeadOwnerAssignmentHistory> LeadOwnerAssignmentHistories => Set<LeadOwnerAssignmentHistory>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -98,6 +99,9 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
 
         modelBuilder.Entity<QualificationResponse>()
             .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<LeadOwnerAssignmentHistory>()
+            .HasQueryFilter(h => h.TenantId == tenant.CurrentTenantId);
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

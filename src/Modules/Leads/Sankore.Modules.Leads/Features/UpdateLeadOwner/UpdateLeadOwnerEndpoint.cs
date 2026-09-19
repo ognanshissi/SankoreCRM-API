@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
 public static class UpdateLeadOwnerEndpoint
@@ -16,6 +17,7 @@ public static class UpdateLeadOwnerEndpoint
             .RequireAuthorization(Permissions.CanAssignLead.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
         return app;
@@ -25,9 +27,17 @@ public static class UpdateLeadOwnerEndpoint
         Guid leadId,
         UpdateLeadOwnerRequest req,
         ISender sender,
+        HttpContext http,
         CancellationToken ct)
     {
-        var result = await sender.Send(new UpdateLeadOwnerCommand(leadId, req.OwnerId), ct);
+        var assignedBy = http.User.GetUserId();
+
+        var result = await sender.Send(new UpdateLeadOwnerCommand(
+            LeadId:           leadId,
+            OwnerId:          req.OwnerId,
+            AssignedBy:       assignedBy,
+            AssignmentMethod: req.AssignmentMethod ?? "Manual",
+            Reason:           req.Reason), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -37,4 +47,8 @@ public static class UpdateLeadOwnerEndpoint
     }
 }
 
-public sealed record UpdateLeadOwnerRequest(Guid OwnerId);
+public sealed record UpdateLeadOwnerRequest(
+    Guid OwnerId,
+    string? Reason = null,
+    /// <summary>Manual | Import | System. Defaults to Manual.</summary>
+    string? AssignmentMethod = null);

@@ -41,6 +41,7 @@ using Sankore.Modules.Leads.Features.NurtureLead;
 using Sankore.Modules.Leads.Features.RecycleLead;
 using Sankore.Modules.Leads.Features.ReopenLead;
 using Sankore.Modules.Leads.Features.ReturnLeadToQueue;
+using Sankore.Modules.Leads.Features.GetOwnerHistory;
 using Sankore.Modules.Leads.Features.GetScoreHistory;
 using Sankore.Modules.Leads.Features.NextAction;
 using Sankore.Modules.Leads.Features.RecalculateLeadScore;
@@ -106,6 +107,7 @@ public static class LeadsModule
         group.MapGetLead();
         group.MapUpdateLead();
         group.MapUpdateLeadOwner();
+        group.MapGetOwnerHistory();
         group.MapUpdatePipelineStage();
         group.MapCloseLead();
         group.MapDispatchLead();
