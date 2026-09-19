@@ -3,9 +3,10 @@ namespace Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
 
 /// <summary>
-/// Tenant-configurable qualification questionnaire.
+/// Tenant-configurable qualification questionnaire scoped to a financial product.
 /// Lifecycle: Draft → Published → Archived.
-/// Only <see cref="TemplateStatus.Published"/> templates can be used for lead qualification.
+/// Only one <see cref="TemplateStatus.Published"/> template can exist per
+/// <see cref="ProductType"/> per tenant at any time.
 /// </summary>
 public sealed class QualificationTemplate : AggregateRoot
 {
@@ -13,8 +14,8 @@ public sealed class QualificationTemplate : AggregateRoot
     public string Name { get; private set; } = default!;
     public string? Description { get; private set; }
 
-    /// <summary>Optional product filter hint (not enforced server-side).</summary>
-    public string? ProductName { get; private set; }
+    /// <summary>Financial product this template is scoped to. Null = generic (not product-specific).</summary>
+    public ProductType? ProductType { get; private set; }
 
     public TemplateStatus Status { get; private set; }
 
@@ -37,14 +38,14 @@ public sealed class QualificationTemplate : AggregateRoot
         string name,
         DateTimeOffset now,
         string? description = null,
-        string? productName = null)
+        ProductType? productType = null)
         => new()
         {
             Id          = Guid.NewGuid(),
             TenantId    = tenantId,
             Name        = name.Trim(),
             Description = description?.Trim(),
-            ProductName = productName?.Trim(),
+            ProductType = productType,
             Status      = TemplateStatus.Draft,
             Version     = 0,
             CreatedAt   = now
@@ -83,14 +84,14 @@ public sealed class QualificationTemplate : AggregateRoot
     // ── Editing (Draft only) ───────────────────────────────────────────────
 
     /// <summary>Updates the template's display fields. Only allowed in <see cref="TemplateStatus.Draft"/>.</summary>
-    public Result UpdateDetails(string name, string? description, string? productName)
+    public Result UpdateDetails(string name, string? description, ProductType? productType)
     {
         if (Status != TemplateStatus.Draft)
             return Result.Fail("TEMPLATE_NOT_IN_DRAFT_STATUS");
 
         Name        = name.Trim();
         Description = description?.Trim();
-        ProductName = productName?.Trim();
+        ProductType = productType;
         return Result.Ok();
     }
 
@@ -132,7 +133,7 @@ public sealed class QualificationTemplate : AggregateRoot
 
     /// <summary>
     /// Clears the question and section collections so the handler can
-    /// rebuild them from the update request. Called before <c>RemoveRange</c> in EF.
+    /// rebuild them from the update request. Called before <c>ExecuteDeleteAsync</c> in EF.
     /// </summary>
     internal void ClearQuestionsAndSections()
     {

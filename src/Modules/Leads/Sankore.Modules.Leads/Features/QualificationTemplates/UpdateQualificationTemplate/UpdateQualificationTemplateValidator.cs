@@ -11,7 +11,6 @@ internal sealed class UpdateQualificationTemplateValidator
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Description).MaximumLength(1000).When(x => x.Description is not null);
-        RuleFor(x => x.ProductName).MaximumLength(100).When(x => x.ProductName is not null);
 
         RuleFor(x => x)
             .Must(x => (x.Questions is { Count: > 0 }) || (x.Sections is { Count: > 0 }))

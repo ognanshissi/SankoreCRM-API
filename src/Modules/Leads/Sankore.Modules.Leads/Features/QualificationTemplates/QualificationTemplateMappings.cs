@@ -8,7 +8,7 @@ internal static class QualificationTemplateMappings
         t.Id,
         t.Name,
         t.Description,
-        t.ProductName,
+        t.ProductType?.ToString(),
         t.Status.ToString(),
         t.Version,
         t.PublishedAt,

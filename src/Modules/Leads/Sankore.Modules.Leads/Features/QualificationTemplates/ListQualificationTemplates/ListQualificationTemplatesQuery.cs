@@ -6,8 +6,8 @@ using Sankore.Modules.Leads.Features.QualificationTemplates;
 using Sankore.Shared.Kernel;
 
 /// <param name="Status">Filter by lifecycle status. Defaults to <see cref="TemplateStatus.Published"/>.</param>
-/// <param name="ProductName">Optional product name filter.</param>
+/// <param name="ProductType">Optional product type filter.</param>
 internal sealed record ListQualificationTemplatesQuery(
     TemplateStatus? Status = TemplateStatus.Published,
-    string? ProductName = null)
+    ProductType? ProductType = null)
     : IRequest<Result<IReadOnlyList<QualificationTemplateDto>>>;

@@ -21,7 +21,7 @@ internal sealed class ArchiveQualificationTemplateHandler(LeadsDbContext db)
         var result = template.Archive();
         if (result.IsFailure)
             return result;
-
+        db.QualificationTemplates.Update(template);
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

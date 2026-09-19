@@ -4,7 +4,7 @@ public sealed record QualificationTemplateDto(
     Guid Id,
     string Name,
     string? Description,
-    string? ProductName,
+    string? ProductType,
     string Status,
     int Version,
     DateTimeOffset? PublishedAt,

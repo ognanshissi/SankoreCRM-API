@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.QualificationTemplates.PublishQualifica
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
@@ -22,6 +23,22 @@ internal sealed class PublishQualificationTemplateHandler(LeadsDbContext db, Tim
         var result = template.Publish(clock.GetUtcNow());
         if (result.IsFailure)
             return result;
+
+        // Auto-archive the previous Published template for this product type (if any).
+        // Ensures at most one Published template per (TenantId, ProductType).
+        if (template.ProductType.HasValue)
+        {
+            var superseded = await db.QualificationTemplates
+                .AsTracking()
+                .Where(t => t.Id != cmd.TemplateId
+                            && t.TenantId == template.TenantId
+                            && t.ProductType == template.ProductType
+                            && t.Status == TemplateStatus.Published)
+                .ToListAsync(ct);
+
+            foreach (var prev in superseded)
+                prev.Archive();
+        }
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

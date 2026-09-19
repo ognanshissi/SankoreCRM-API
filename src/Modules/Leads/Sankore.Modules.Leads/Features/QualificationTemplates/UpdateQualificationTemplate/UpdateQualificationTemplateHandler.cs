@@ -20,7 +20,7 @@ internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db)
         if (template is null)
             return Result.Fail("TEMPLATE_NOT_FOUND");
 
-        var detailsResult = template.UpdateDetails(cmd.Name, cmd.Description, cmd.ProductName);
+        var detailsResult = template.UpdateDetails(cmd.Name, cmd.Description, cmd.ProductType);
         if (detailsResult.IsFailure)
             return detailsResult;
 
@@ -39,7 +39,7 @@ internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db)
             template, cmd.Sections, cmd.Questions);
         if (buildResult.IsFailure)
             return buildResult;
-
+        
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }
