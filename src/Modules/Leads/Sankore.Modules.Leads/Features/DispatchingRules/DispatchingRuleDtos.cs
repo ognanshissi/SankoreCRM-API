@@ -11,6 +11,7 @@ public sealed record DispatchingRuleDto(
     int MaxTasksPerAgent,
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
+    TimeSpan DeclineExclusionTtl,
     bool IsActive,
     int Priority,
     IReadOnlyList<Guid> ExcludedAgentIds);

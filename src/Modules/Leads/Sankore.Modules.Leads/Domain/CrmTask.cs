@@ -121,6 +121,29 @@ public sealed class CrmTask : ITenant
     }
 
     /// <summary>
+    /// Agent declines the task (US-M13-084). Unassigns the agent and resets
+    /// status to Pending so the task re-enters the dispatch pool.
+    /// Returns the declining agent's ID for exclusion-cache and capacity-cache handling.
+    /// </summary>
+    public Result<Guid> Decline()
+    {
+        if (Status == CrmTaskStatus.Completed) return Result.Fail<Guid>("TASK_ALREADY_COMPLETED");
+        if (Status == CrmTaskStatus.Cancelled)  return Result.Fail<Guid>("TASK_CANCELLED");
+        if (AssignedAgentId is null)             return Result.Fail<Guid>("TASK_NOT_ASSIGNED");
+
+        var agentId     = AssignedAgentId.Value;
+        AssignedAgentId = null;
+        Status          = CrmTaskStatus.Pending;
+        StartedAt       = null;
+
+        // Clear dispatch audit — stale after decline
+        CompatibilityScore       = null;
+        CompatibilityFactorsJson = null;
+
+        return Result.Ok(agentId);
+    }
+
+    /// <summary>
     /// Audited reassignment (US-M13-083). Changes the assigned agent and optionally
     /// extends the SLA deadline. Cannot reassign a completed or cancelled task.
     /// Returns the previous agent id so the caller can invalidate capacity caches.

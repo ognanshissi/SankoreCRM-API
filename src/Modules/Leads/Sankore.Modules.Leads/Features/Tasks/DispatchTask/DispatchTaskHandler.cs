@@ -27,6 +27,7 @@ internal sealed class DispatchTaskHandler(
     CompatibilityScorer scorer,
     DispatchingStrategyFactory strategyFactory,
     AgentCapacityService capacityService,
+    AgentExclusionService exclusionService,
     ILogger<DispatchTaskHandler> logger)
     : IRequestHandler<DispatchTaskCommand, Result<DispatchTaskResult>>
 {
@@ -82,6 +83,15 @@ internal sealed class DispatchTaskHandler(
 
         if (eligible.Count == 0)
             return Result.Fail<DispatchTaskResult>("NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS");
+
+        // 5b. Temporary decline exclusions (US-M13-084): agents who recently
+        //     declined this specific task are skipped until their TTL expires.
+        var declined = await exclusionService.GetExcludedAgentIdsAsync(cmd.TenantId, cmd.TaskId, ct);
+        if (declined.Count > 0)
+            eligible = eligible.Where(a => !declined.Contains(a.Id)).ToList();
+
+        if (eligible.Count == 0)
+            return Result.Fail<DispatchTaskResult>("NO_AGENT_AVAILABLE_AFTER_DECLINE_EXCLUSIONS");
 
         // 5a. Saturation filter (US-M13-082): exclude agents at task capacity.
         var unsaturated = new List<AgentSummary>(eligible.Count);

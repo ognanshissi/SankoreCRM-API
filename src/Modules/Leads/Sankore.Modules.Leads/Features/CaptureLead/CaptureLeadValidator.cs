@@ -10,16 +10,11 @@ public sealed class CaptureLeadValidator : AbstractValidator<CaptureLeadCommand>
     {
         RuleFor(x => x.TenantId).NotEmpty();
 
-        RuleFor(x => x.FullName)
-            .NotEmpty().WithMessage(_ => localizer["Lead.FullName.Required"])
-            .MaximumLength(200);
-
         RuleFor(x => x.PhoneNumber)
             .NotEmpty().WithMessage(_ => localizer["Lead.Phone.Required"])
             .Matches(@"^\+?[0-9\s\-]{8,20}$").WithMessage(_ => localizer["Lead.Phone.Format"]);
 
         RuleFor(x => x.InterestedProduct).NotEmpty();
-        RuleFor(x => x.PreferredLanguage).NotEmpty();
 
         RuleFor(x => x.DesiredCurrency)
             .NotEmpty().WithMessage("DesiredCurrency is required when DesiredAmount is provided.")

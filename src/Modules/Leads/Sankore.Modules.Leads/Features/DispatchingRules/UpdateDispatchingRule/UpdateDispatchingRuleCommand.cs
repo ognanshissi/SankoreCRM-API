@@ -13,7 +13,8 @@ internal sealed record UpdateDispatchingRuleCommand(
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
     int Priority = 0,
-    IReadOnlyList<Guid>? ExcludedAgentIds = null
+    IReadOnlyList<Guid>? ExcludedAgentIds = null,
+    TimeSpan? DeclineExclusionTtl = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "DispatchingRule";

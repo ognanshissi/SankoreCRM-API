@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sankore.Modules.Leads.Infrastructure;
@@ -11,9 +12,11 @@ using Sankore.Modules.Leads.Infrastructure;
 namespace Sankore.Modules.Leads.Infrastructure.Migrations
 {
     [DbContext(typeof(LeadsDbContext))]
-    partial class LeadsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260919173852_AddAgencyIdToLeads")]
+    partial class AddAgencyIdToLeads
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -135,10 +138,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<int>("AntiMonopolyThreshold")
                         .HasColumnType("integer")
                         .HasColumnName("anti_monopoly_threshold");
-
-                    b.Property<TimeSpan>("DeclineExclusionTtl")
-                        .HasColumnType("interval")
-                        .HasColumnName("decline_exclusion_ttl");
 
                     b.Property<string>("ExcludedAgentIds")
                         .IsRequired()
@@ -1143,50 +1142,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("score_histories", "leads");
                 });
 
-            modelBuilder.Entity("Sankore.Modules.Leads.Domain.TaskDecline", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AgentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("agent_id");
-
-                    b.Property<DateTimeOffset>("DeclinedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("declined_at");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("reason");
-
-                    b.Property<Guid>("TaskId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("task_id");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_task_declines");
-
-                    b.HasIndex("TaskId")
-                        .HasDatabaseName("ix_task_declines_task_id");
-
-                    b.HasIndex("TenantId", "AgentId")
-                        .HasDatabaseName("ix_task_declines_tenant_id_agent_id");
-
-                    b.HasIndex("TenantId", "TaskId", "DeclinedAt")
-                        .HasDatabaseName("ix_task_declines_tenant_id_task_id_declined_at");
-
-                    b.ToTable("task_declines", "leads");
-                });
-
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.TaskGenerationRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1552,16 +1507,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_score_histories_leads_lead_id");
-                });
-
-            modelBuilder.Entity("Sankore.Modules.Leads.Domain.TaskDecline", b =>
-                {
-                    b.HasOne("Sankore.Modules.Leads.Domain.CrmTask", null)
-                        .WithMany()
-                        .HasForeignKey("TaskId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_task_declines_crm_tasks_task_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.TaskReassignment", b =>

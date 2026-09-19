@@ -25,6 +25,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<LeadOwnerAssignmentHistory> LeadOwnerAssignmentHistories => Set<LeadOwnerAssignmentHistory>();
     public DbSet<CrmTask> CrmTasks => Set<CrmTask>();
     public DbSet<TaskReassignment> TaskReassignments => Set<TaskReassignment>();
+    public DbSet<TaskDecline> TaskDeclines => Set<TaskDecline>();
     public DbSet<TaskGenerationRule> TaskGenerationRules => Set<TaskGenerationRule>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
@@ -118,6 +119,9 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
 
         modelBuilder.Entity<TaskReassignment>()
             .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<TaskDecline>()
+            .HasQueryFilter(d => d.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<TaskGenerationRule>()
             .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);

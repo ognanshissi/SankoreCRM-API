@@ -95,6 +95,10 @@ public static class LeadsModule
         services.AddScoped<StickyAssignmentStrategy>();
         services.AddScoped<CherryPickingStrategy>();
         services.AddScoped<DispatchingStrategyFactory>();
+        // AgentExclusionService: Redis-cached per-task decline exclusions (US-M13-084).
+        services.AddScoped(sp =>
+            new AgentExclusionService(
+                sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 
         // QualifyLead slice-internal services
         services.AddScoped<LeadScoreCalculator>();

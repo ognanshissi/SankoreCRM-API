@@ -28,6 +28,7 @@ internal sealed class GetDispatchingRuleHandler(LeadsDbContext db)
                 r.MaxTasksPerAgent,
                 r.AntiMonopolyThreshold,
                 r.FirstContactSla,
+                r.DeclineExclusionTtl,
                 r.IsActive,
                 r.Priority,
                 r.ExcludedAgentIds))

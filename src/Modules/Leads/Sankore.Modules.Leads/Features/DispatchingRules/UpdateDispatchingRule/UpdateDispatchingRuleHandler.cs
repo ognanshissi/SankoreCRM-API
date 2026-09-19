@@ -33,7 +33,8 @@ internal sealed class UpdateDispatchingRuleHandler(LeadsDbContext db)
             antiMonopolyThreshold: cmd.AntiMonopolyThreshold,
             firstContactSla:       cmd.FirstContactSla,
             priority:              cmd.Priority,
-            excludedAgentIds:      cmd.ExcludedAgentIds ?? []);
+            excludedAgentIds:      cmd.ExcludedAgentIds ?? [],
+            declineExclusionTtl:   cmd.DeclineExclusionTtl);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();
