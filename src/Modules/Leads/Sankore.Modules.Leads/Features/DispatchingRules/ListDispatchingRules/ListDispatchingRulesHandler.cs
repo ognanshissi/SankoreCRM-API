@@ -30,6 +30,7 @@ internal sealed class ListDispatchingRulesHandler(LeadsDbContext db)
                     r.Weights.Performance,
                     r.Weights.Agency),
                 r.MaxLeadsPerAgent,
+                r.MaxTasksPerAgent,
                 r.AntiMonopolyThreshold,
                 r.FirstContactSla,
                 r.IsActive,

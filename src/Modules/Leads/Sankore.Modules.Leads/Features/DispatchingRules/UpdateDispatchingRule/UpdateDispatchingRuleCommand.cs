@@ -9,6 +9,7 @@ internal sealed record UpdateDispatchingRuleCommand(
     string Name,
     ScoringWeightsDto Weights,
     int MaxLeadsPerAgent,
+    int MaxTasksPerAgent,
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
     int Priority = 0,

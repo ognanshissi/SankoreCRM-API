@@ -26,7 +26,8 @@ internal sealed class CreateDispatchingRuleHandler(LeadsDbContext db)
             antiMonopolyThreshold: cmd.AntiMonopolyThreshold,
             firstContactSla:       cmd.FirstContactSla,
             priority:              cmd.Priority,
-            excludedAgentIds:      cmd.ExcludedAgentIds);
+            excludedAgentIds:      cmd.ExcludedAgentIds,
+            maxTasksPerAgent:      cmd.MaxTasksPerAgent);
 
         db.DispatchingRules.Add(rule);
         await db.SaveChangesAsync(ct);

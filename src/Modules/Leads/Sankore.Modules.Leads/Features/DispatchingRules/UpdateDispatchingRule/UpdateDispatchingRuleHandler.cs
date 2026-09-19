@@ -29,6 +29,7 @@ internal sealed class UpdateDispatchingRuleHandler(LeadsDbContext db)
                                        cmd.Weights.Performance,
                                        cmd.Weights.Agency),
             maxLeadsPerAgent:      cmd.MaxLeadsPerAgent,
+            maxTasksPerAgent:      cmd.MaxTasksPerAgent,
             antiMonopolyThreshold: cmd.AntiMonopolyThreshold,
             firstContactSla:       cmd.FirstContactSla,
             priority:              cmd.Priority,

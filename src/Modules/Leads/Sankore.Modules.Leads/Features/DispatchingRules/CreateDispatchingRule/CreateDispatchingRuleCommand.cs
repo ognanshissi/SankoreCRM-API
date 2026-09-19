@@ -11,6 +11,7 @@ internal sealed record CreateDispatchingRuleCommand(
     DispatchingStrategy Strategy,
     ScoringWeightsDto Weights,
     int MaxLeadsPerAgent,
+    int MaxTasksPerAgent,
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
     int Priority = 0,

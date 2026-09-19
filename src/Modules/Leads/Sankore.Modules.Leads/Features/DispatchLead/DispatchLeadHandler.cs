@@ -25,6 +25,7 @@ internal sealed class DispatchLeadHandler(
     IAdministrationModule usersModule,
     CompatibilityScorer scorer,
     DispatchingStrategyFactory strategyFactory,
+    AgentCapacityService capacityService,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     ILogger<DispatchLeadHandler> logger,
     TimeProvider clock)
@@ -78,9 +79,30 @@ internal sealed class DispatchLeadHandler(
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
         }
 
+        // 5a. Saturation filter (US-M13-082): exclude agents whose open CRM task
+        //     count has already reached MaxTasksPerAgent. Capacity reads are served
+        //     from the short-TTL Redis cache maintained by AgentCapacityService.
+        var unsaturated = new List<AgentSummary>(eligible_candidates.Count);
+        foreach (var agent in eligible_candidates)
+        {
+            var openTasks = await capacityService.GetOpenTaskCountAsync(cmd.TenantId, agent.Id, ct);
+            if (openTasks < rules.MaxTasksPerAgent)
+                unsaturated.Add(agent);
+        }
+
+        if (unsaturated.Count == 0)
+        {
+            await publisher.PublishAsync(
+                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "ALL_AGENTS_AT_TASK_CAPACITY"), ct);
+            logger.LogWarning(
+                "Lead {LeadId} blocked: all {Count} eligible agents are at task capacity ({Max})",
+                lead.Id, eligible_candidates.Count, rules.MaxTasksPerAgent);
+            return Result.Fail<DispatchLeadResult>("ALL_AGENTS_AT_TASK_CAPACITY");
+        }
+
         // 5. Apply the selected strategy to rank candidates
         var strategy = strategyFactory.Create(cmd.Strategy);
-        var scored = await strategy.EvaluateAsync(lead, eligible_candidates, rules, scorer, ct);
+        var scored = await strategy.EvaluateAsync(lead, unsaturated, rules, scorer, ct);
 
         // 5. Apply the anti-monopoly filter (F13.15)
         var eligible = scored

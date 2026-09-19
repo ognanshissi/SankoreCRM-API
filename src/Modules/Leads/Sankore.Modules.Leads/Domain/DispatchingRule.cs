@@ -15,6 +15,13 @@ public sealed class DispatchingRule: ITenant
     public DispatchingStrategy Strategy { get; private set; }
     public ScoringWeights Weights { get; private set; } = default!;
     public int MaxLeadsPerAgent { get; private set; }
+
+    /// <summary>
+    /// Maximum number of open CRM tasks (Pending + InProgress) an agent may hold
+    /// before being excluded from the dispatch pool (US-M13-082).
+    /// </summary>
+    public int MaxTasksPerAgent { get; private set; }
+
     public int AntiMonopolyThreshold { get; private set; }
     public TimeSpan FirstContactSla { get; private set; }
     public bool IsActive { get; private set; }
@@ -37,7 +44,8 @@ public sealed class DispatchingRule: ITenant
         Guid tenantId, string name, DispatchingStrategy strategy,
         ScoringWeights weights, int maxLeadsPerAgent, int antiMonopolyThreshold,
         TimeSpan firstContactSla, int priority = 0,
-        IReadOnlyList<Guid>? excludedAgentIds = null)
+        IReadOnlyList<Guid>? excludedAgentIds = null,
+        int maxTasksPerAgent = 20)
         => new()
         {
             Id                    = Guid.NewGuid(),
@@ -46,6 +54,7 @@ public sealed class DispatchingRule: ITenant
             Strategy              = strategy,
             Weights               = weights,
             MaxLeadsPerAgent      = maxLeadsPerAgent,
+            MaxTasksPerAgent      = maxTasksPerAgent,
             AntiMonopolyThreshold = antiMonopolyThreshold,
             FirstContactSla       = firstContactSla,
             IsActive              = true,
@@ -65,6 +74,7 @@ public sealed class DispatchingRule: ITenant
         Strategy = DispatchingStrategy.CompatibilityScoring,
         Weights = new ScoringWeights(Language: 25, Product: 25, Geography: 20, Workload: 15, Performance: 15),
         MaxLeadsPerAgent = 30,
+        MaxTasksPerAgent = 20,
         AntiMonopolyThreshold = 5,
         FirstContactSla = TimeSpan.FromHours(2),
         IsActive = true
@@ -74,6 +84,7 @@ public sealed class DispatchingRule: ITenant
         string name,
         ScoringWeights weights,
         int maxLeadsPerAgent,
+        int maxTasksPerAgent,
         int antiMonopolyThreshold,
         TimeSpan firstContactSla,
         int priority,
@@ -82,6 +93,7 @@ public sealed class DispatchingRule: ITenant
         Name                  = name;
         Weights               = weights;
         MaxLeadsPerAgent      = maxLeadsPerAgent;
+        MaxTasksPerAgent      = maxTasksPerAgent;
         AntiMonopolyThreshold = antiMonopolyThreshold;
         FirstContactSla       = firstContactSla;
         Priority              = priority;

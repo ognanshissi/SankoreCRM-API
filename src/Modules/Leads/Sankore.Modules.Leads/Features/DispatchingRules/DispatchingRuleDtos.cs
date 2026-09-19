@@ -8,6 +8,7 @@ public sealed record DispatchingRuleDto(
     DispatchingStrategy Strategy,
     ScoringWeightsDto Weights,
     int MaxLeadsPerAgent,
+    int MaxTasksPerAgent,
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
     bool IsActive,

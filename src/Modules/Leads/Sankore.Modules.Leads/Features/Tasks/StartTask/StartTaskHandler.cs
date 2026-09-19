@@ -2,10 +2,15 @@ namespace Sankore.Modules.Leads.Features.Tasks.StartTask;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class StartTaskHandler(LeadsDbContext db)
+// StartTask moves a task from Pending → InProgress; the open task count
+// does not change (both statuses count as open) so no cache invalidation is
+// needed. The handler is still injected with AgentCapacityService to maintain
+// consistent constructor signatures across all task handlers.
+internal sealed class StartTaskHandler(LeadsDbContext db, AgentCapacityService capacityService)
     : IRequestHandler<StartTaskCommand, Result>
 {
     public async Task<Result> Handle(StartTaskCommand cmd, CancellationToken ct)

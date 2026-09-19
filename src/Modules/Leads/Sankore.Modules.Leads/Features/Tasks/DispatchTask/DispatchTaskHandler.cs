@@ -3,11 +3,11 @@ namespace Sankore.Modules.Leads.Features.Tasks.DispatchTask;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 using Sankore.Modules.Leads.Infrastructure;
-using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -26,6 +26,7 @@ internal sealed class DispatchTaskHandler(
     IAdministrationModule usersModule,
     CompatibilityScorer scorer,
     DispatchingStrategyFactory strategyFactory,
+    AgentCapacityService capacityService,
     ILogger<DispatchTaskHandler> logger)
     : IRequestHandler<DispatchTaskCommand, Result<DispatchTaskResult>>
 {
@@ -82,9 +83,26 @@ internal sealed class DispatchTaskHandler(
         if (eligible.Count == 0)
             return Result.Fail<DispatchTaskResult>("NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS");
 
+        // 5a. Saturation filter (US-M13-082): exclude agents at task capacity.
+        var unsaturated = new List<AgentSummary>(eligible.Count);
+        foreach (var agent in eligible)
+        {
+            var openTasks = await capacityService.GetOpenTaskCountAsync(cmd.TenantId, agent.Id, ct);
+            if (openTasks < rules.MaxTasksPerAgent)
+                unsaturated.Add(agent);
+        }
+
+        if (unsaturated.Count == 0)
+        {
+            logger.LogWarning(
+                "Task {TaskId} blocked: all eligible agents are at task capacity ({Max})",
+                task.Id, rules.MaxTasksPerAgent);
+            return Result.Fail<DispatchTaskResult>("ALL_AGENTS_AT_TASK_CAPACITY");
+        }
+
         // 6. Score candidates using the same engine as lead dispatch (US-M13-072)
         var strategy = strategyFactory.Create(cmd.Strategy);
-        var scored   = await strategy.EvaluateAsync(lead, eligible, rules, scorer, ct);
+        var scored   = await strategy.EvaluateAsync(lead, unsaturated, rules, scorer, ct);
 
         // 7. Apply the anti-monopoly filter (same threshold as lead dispatch)
         var ranked = scored
@@ -108,6 +126,9 @@ internal sealed class DispatchTaskHandler(
             return Result.Fail<DispatchTaskResult>(dispatchResult.Error!);
 
         await db.SaveChangesAsync(ct);
+
+        // Invalidate capacity for the winning agent — they now hold one more open task.
+        await capacityService.InvalidateAsync(cmd.TenantId, winner.Agent.Id, ct);
 
         logger.LogInformation(
             "Task {TaskId} dispatched to agent {AgentId} (score={Score}, strategy={Strategy})",

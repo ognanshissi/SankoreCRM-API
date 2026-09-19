@@ -6,17 +6,26 @@ using Sankore.Modules.Administration.PublicApi;
 
 /// <summary>
 /// Scores compatibility between a lead and a candidate agent (0-100),
-/// combining language, product specialty, geographic proximity, current
-/// workload, agency match, and historical conversion performance (F13.10,
-/// US-M13-072). Returns a <see cref="CompatibilityScoreResult"/> that
-/// carries both the final score and a per-factor breakdown (FactorsJson)
-/// for post-hoc dispatch audit.
+/// combining language, product specialty, geographic proximity, combined
+/// workload (active leads + open CRM tasks), agency match, and historical
+/// conversion performance (F13.10, US-M13-072, US-M13-082).
+///
+/// The <paramref name="openTaskCount"/> parameter carries the agent's current
+/// open CRM task count, pre-fetched and cached by <see cref="AgentCapacityService"/>.
+/// When omitted (default 0) the task dimension contributes no load — which is
+/// the correct behaviour for unit tests and strategies that pre-filter saturated
+/// agents themselves.
 ///
 /// Internal to the DispatchLead slice.
 /// </summary>
 internal sealed class CompatibilityScorer
 {
-    public CompatibilityScoreResult Score(Lead lead, AgentSummary agent, DispatchingRule rules)
+    /// <param name="openTaskCount">
+    /// Pre-fetched open CRM task count for this agent (US-M13-082).
+    /// Default 0 preserves backward compatibility with tests.
+    /// </param>
+    public CompatibilityScoreResult Score(
+        Lead lead, AgentSummary agent, DispatchingRule rules, int openTaskCount = 0)
     {
         // 1. Language match
         bool languageMatch    = agent.SpokenLanguages.Contains(lead.PreferredLanguage, StringComparer.OrdinalIgnoreCase);
@@ -33,11 +42,17 @@ internal sealed class CompatibilityScorer
         double decayFactor   = distanceKm.HasValue ? DistanceDecay(distanceKm.Value) : 0;
         double geoContrib    = rules.Weights.Geography * decayFactor;
 
-        // 4. Workload balance (less loaded agents score higher)
-        double loadRatio     = rules.MaxLeadsPerAgent <= 0
+        // 4. Workload balance — blends lead load and CRM task load (US-M13-082).
+        //    Each dimension is normalized to [0, 1]; the average is the combined ratio.
+        //    An agent with no tasks contributes 0 task load (taskLoadRatio = 0).
+        double leadLoadRatio = rules.MaxLeadsPerAgent <= 0
             ? 0
             : agent.ActiveLeadsCount / (double)rules.MaxLeadsPerAgent;
-        double workloadContrib = rules.Weights.Workload * (1 - Math.Min(loadRatio, 1));
+        double taskLoadRatio = rules.MaxTasksPerAgent <= 0
+            ? 0
+            : openTaskCount / (double)rules.MaxTasksPerAgent;
+        double combinedLoadRatio  = (leadLoadRatio + taskLoadRatio) / 2.0;
+        double workloadContrib    = rules.Weights.Workload * (1 - Math.Min(combinedLoadRatio, 1));
 
         // 5. Historical conversion performance
         double perfContrib   = rules.Weights.Performance * agent.ConversionRate30d;
@@ -55,7 +70,18 @@ internal sealed class CompatibilityScorer
             language    = new { matched = languageMatch, weight = rules.Weights.Language, contribution = languageContrib },
             product     = new { matched = productMatch, weight = rules.Weights.Product, contribution = productContrib },
             geography   = new { distanceKm = distanceKm.HasValue ? Math.Round(distanceKm.Value, 2) : (double?)null, decayFactor, weight = rules.Weights.Geography, contribution = geoContrib },
-            workload    = new { activeLeads = agent.ActiveLeadsCount, maxLeads = rules.MaxLeadsPerAgent, loadRatio = Math.Round(loadRatio, 3), weight = rules.Weights.Workload, contribution = workloadContrib },
+            workload    = new
+            {
+                activeLeads       = agent.ActiveLeadsCount,
+                maxLeads          = rules.MaxLeadsPerAgent,
+                leadLoadRatio     = Math.Round(leadLoadRatio, 3),
+                openTasks         = openTaskCount,
+                maxTasks          = rules.MaxTasksPerAgent,
+                taskLoadRatio     = Math.Round(taskLoadRatio, 3),
+                combinedLoadRatio = Math.Round(combinedLoadRatio, 3),
+                weight            = rules.Weights.Workload,
+                contribution      = workloadContrib
+            },
             performance = new { conversionRate30d = agent.ConversionRate30d, weight = rules.Weights.Performance, contribution = perfContrib },
             agency      = new { matched = agencyMatch, agentAgencyId = agent.AgencyId, preferredAgencyId = lead.PreferredAgencyId, weight = rules.Weights.Agency, contribution = agencyContrib }
         });

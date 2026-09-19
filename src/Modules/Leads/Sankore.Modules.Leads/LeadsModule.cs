@@ -79,11 +79,17 @@ public static class LeadsModule
 
         // DispatchLead slice-internal services
         services.AddScoped<CompatibilityScorer>();
-        // CompatibilityScoringStrategy receives IDistributedCache when registered
-        // (Redis in production via AddRedisDistributedCache; null in unit tests).
+        // AgentCapacityService: Redis-cached open CRM task count per agent (US-M13-082).
+        // IDistributedCache is null in unit tests → falls back to direct DB query.
+        services.AddScoped(sp =>
+            new AgentCapacityService(
+                sp.GetRequiredService<LeadsDbContext>(),
+                sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
+        // CompatibilityScoringStrategy receives both caches when registered.
         services.AddScoped(sp =>
             new CompatibilityScoringStrategy(
-                sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
+                sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>(),
+                sp.GetRequiredService<AgentCapacityService>()));
         services.AddScoped<RoundRobinStrategy>();
         services.AddScoped<WeightedRoundRobinStrategy>();
         services.AddScoped<StickyAssignmentStrategy>();
