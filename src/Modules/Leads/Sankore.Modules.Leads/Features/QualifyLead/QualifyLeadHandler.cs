@@ -77,10 +77,10 @@ internal sealed class QualifyLeadHandler(
             score       = cmd.Score.Value;
             factorsJson = "{}";
         }
-        // ── Path 3: auto-calculate from lead attributes ───────────────────────
+        // ── Path 3: auto-calculate from lead attributes + activity history ──────
         else
         {
-            (score, factorsJson) = calculator.Calculate(lead);
+            (score, factorsJson) = await calculator.CalculateAsync(lead, ct);
         }
 
         var qualifyResult = lead.Qualify(score);
