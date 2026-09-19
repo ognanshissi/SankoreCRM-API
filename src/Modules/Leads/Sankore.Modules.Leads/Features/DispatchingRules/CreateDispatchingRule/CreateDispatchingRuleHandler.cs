@@ -21,9 +21,11 @@ internal sealed class CreateDispatchingRuleHandler(LeadsDbContext db)
                                       cmd.Weights.Geography,
                                       cmd.Weights.Workload,
                                       cmd.Weights.Performance),
-            maxLeadsPerAgent:     cmd.MaxLeadsPerAgent,
+            maxLeadsPerAgent:      cmd.MaxLeadsPerAgent,
             antiMonopolyThreshold: cmd.AntiMonopolyThreshold,
-            firstContactSla:      cmd.FirstContactSla);
+            firstContactSla:       cmd.FirstContactSla,
+            priority:              cmd.Priority,
+            excludedAgentIds:      cmd.ExcludedAgentIds);
 
         db.DispatchingRules.Add(rule);
         await db.SaveChangesAsync(ct);

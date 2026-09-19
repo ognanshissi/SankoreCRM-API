@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Infrastructure;
 
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Infrastructure.Outbox;
@@ -52,7 +53,12 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
                 w.Property(x => x.Workload).HasColumnName("weight_workload");
                 w.Property(x => x.Performance).HasColumnName("weight_performance");
             });
-            b.HasIndex(r => new { r.TenantId, r.IsActive });
+            b.Property(r => r.ExcludedAgentIds)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => (IReadOnlyList<Guid>)(JsonSerializer.Deserialize<List<Guid>>(v, (JsonSerializerOptions?)null) ?? new List<Guid>()));
+            b.HasIndex(r => new { r.TenantId, r.Strategy, r.IsActive, r.Priority });
         });
 
         modelBuilder.Entity<OutboxMessage>(b =>

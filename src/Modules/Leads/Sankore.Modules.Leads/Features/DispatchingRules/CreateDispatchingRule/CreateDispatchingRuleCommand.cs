@@ -12,7 +12,9 @@ internal sealed record CreateDispatchingRuleCommand(
     ScoringWeightsDto Weights,
     int MaxLeadsPerAgent,
     int AntiMonopolyThreshold,
-    TimeSpan FirstContactSla
+    TimeSpan FirstContactSla,
+    int Priority = 0,
+    IReadOnlyList<Guid>? ExcludedAgentIds = null
 ) : IRequest<Result<Guid>>, ICommand, IResourceCommand
 {
     public string ResourceType => "DispatchingRule";

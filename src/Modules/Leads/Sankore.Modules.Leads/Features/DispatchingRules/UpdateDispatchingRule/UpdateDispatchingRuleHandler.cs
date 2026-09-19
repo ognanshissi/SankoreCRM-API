@@ -20,16 +20,18 @@ internal sealed class UpdateDispatchingRuleHandler(LeadsDbContext db)
             return Result.Fail("RULE_NOT_FOUND");
 
         rule.Update(
-            name:                 cmd.Name,
-            weights:              new ScoringWeights(
-                                      cmd.Weights.Language,
-                                      cmd.Weights.Product,
-                                      cmd.Weights.Geography,
-                                      cmd.Weights.Workload,
-                                      cmd.Weights.Performance),
-            maxLeadsPerAgent:     cmd.MaxLeadsPerAgent,
+            name:                  cmd.Name,
+            weights:               new ScoringWeights(
+                                       cmd.Weights.Language,
+                                       cmd.Weights.Product,
+                                       cmd.Weights.Geography,
+                                       cmd.Weights.Workload,
+                                       cmd.Weights.Performance),
+            maxLeadsPerAgent:      cmd.MaxLeadsPerAgent,
             antiMonopolyThreshold: cmd.AntiMonopolyThreshold,
-            firstContactSla:      cmd.FirstContactSla);
+            firstContactSla:       cmd.FirstContactSla,
+            priority:              cmd.Priority,
+            excludedAgentIds:      cmd.ExcludedAgentIds ?? []);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

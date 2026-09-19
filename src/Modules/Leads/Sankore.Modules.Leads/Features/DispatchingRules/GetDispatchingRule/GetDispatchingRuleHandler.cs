@@ -26,7 +26,9 @@ internal sealed class GetDispatchingRuleHandler(LeadsDbContext db)
                 r.MaxLeadsPerAgent,
                 r.AntiMonopolyThreshold,
                 r.FirstContactSla,
-                r.IsActive))
+                r.IsActive,
+                r.Priority,
+                r.ExcludedAgentIds))
             .FirstOrDefaultAsync(ct);
 
         return rule is null

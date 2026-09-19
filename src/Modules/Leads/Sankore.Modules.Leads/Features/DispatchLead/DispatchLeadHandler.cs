@@ -58,15 +58,29 @@ internal sealed class DispatchLeadHandler(
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
         }
 
-        // 3. Load tenant-specific dispatching rules (fallback to sane defaults)
+        // 3. Load tenant-specific dispatching rules (fallback to sane defaults).
+        //    When multiple active rules share a strategy, the highest Priority wins.
         var rules = await db.DispatchingRules
             .Where(r => r.IsActive && r.Strategy == cmd.Strategy)
-            .SingleOrDefaultAsync(ct)
+            .OrderByDescending(r => r.Priority)
+            .FirstOrDefaultAsync(ct)
             ?? DispatchingRule.Default();
 
-        // 4. Apply the selected strategy to rank candidates
+        // 4. Filter out permanently excluded agents before strategy evaluation.
+        var eligible_candidates = rules.ExcludedAgentIds.Count > 0
+            ? candidates.Where(a => !rules.ExcludedAgentIds.Contains(a.Id)).ToList()
+            : candidates;
+
+        if (eligible_candidates.Count == 0)
+        {
+            await publisher.PublishAsync(
+                new LeadDispatchingFailedEvent(lead.Id, "NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS"), ct);
+            return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
+        }
+
+        // 5. Apply the selected strategy to rank candidates
         var strategy = strategyFactory.Create(cmd.Strategy);
-        var scored = await strategy.EvaluateAsync(lead, candidates, rules, scorer, ct);
+        var scored = await strategy.EvaluateAsync(lead, eligible_candidates, rules, scorer, ct);
 
         // 5. Apply the anti-monopoly filter (F13.15)
         var eligible = scored

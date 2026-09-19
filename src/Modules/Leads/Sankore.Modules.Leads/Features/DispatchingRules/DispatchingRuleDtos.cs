@@ -10,7 +10,9 @@ public sealed record DispatchingRuleDto(
     int MaxLeadsPerAgent,
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
-    bool IsActive);
+    bool IsActive,
+    int Priority,
+    IReadOnlyList<Guid> ExcludedAgentIds);
 
 public sealed record ScoringWeightsDto(
     double Language,

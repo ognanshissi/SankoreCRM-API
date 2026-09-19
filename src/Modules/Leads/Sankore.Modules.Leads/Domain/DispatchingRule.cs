@@ -19,23 +19,38 @@ public sealed class DispatchingRule: ITenant
     public TimeSpan FirstContactSla { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// When multiple rules share the same strategy, the one with the highest
+    /// priority wins. Default: 0.
+    /// </summary>
+    public int Priority { get; private set; }
+
+    /// <summary>
+    /// Agent IDs permanently excluded from this rule's dispatch pool
+    /// (e.g. agents on leave, under probation, or dedicated to other segments).
+    /// </summary>
+    public IReadOnlyList<Guid> ExcludedAgentIds { get; private set; } = [];
+
     private DispatchingRule() { } // EF Core
 
     public static DispatchingRule Create(
         Guid tenantId, string name, DispatchingStrategy strategy,
         ScoringWeights weights, int maxLeadsPerAgent, int antiMonopolyThreshold,
-        TimeSpan firstContactSla)
+        TimeSpan firstContactSla, int priority = 0,
+        IReadOnlyList<Guid>? excludedAgentIds = null)
         => new()
         {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            Name = name,
-            Strategy = strategy,
-            Weights = weights,
-            MaxLeadsPerAgent = maxLeadsPerAgent,
+            Id                    = Guid.NewGuid(),
+            TenantId              = tenantId,
+            Name                  = name,
+            Strategy              = strategy,
+            Weights               = weights,
+            MaxLeadsPerAgent      = maxLeadsPerAgent,
             AntiMonopolyThreshold = antiMonopolyThreshold,
-            FirstContactSla = firstContactSla,
-            IsActive = true
+            FirstContactSla       = firstContactSla,
+            IsActive              = true,
+            Priority              = priority,
+            ExcludedAgentIds      = excludedAgentIds ?? []
         };
 
     /// <summary>
@@ -60,13 +75,17 @@ public sealed class DispatchingRule: ITenant
         ScoringWeights weights,
         int maxLeadsPerAgent,
         int antiMonopolyThreshold,
-        TimeSpan firstContactSla)
+        TimeSpan firstContactSla,
+        int priority,
+        IReadOnlyList<Guid> excludedAgentIds)
     {
         Name                  = name;
         Weights               = weights;
         MaxLeadsPerAgent      = maxLeadsPerAgent;
         AntiMonopolyThreshold = antiMonopolyThreshold;
         FirstContactSla       = firstContactSla;
+        Priority              = priority;
+        ExcludedAgentIds      = excludedAgentIds;
     }
 
     public void Activate()   => IsActive = true;

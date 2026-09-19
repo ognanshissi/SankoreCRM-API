@@ -17,7 +17,7 @@ internal sealed class ListDispatchingRulesHandler(LeadsDbContext db)
             q = q.Where(r => r.IsActive);
 
         var rules = await q
-            .OrderBy(r => r.Name)
+            .OrderByDescending(r => r.Priority).ThenBy(r => r.Name)
             .Select(r => new DispatchingRuleDto(
                 r.Id,
                 r.Name,
@@ -31,7 +31,9 @@ internal sealed class ListDispatchingRulesHandler(LeadsDbContext db)
                 r.MaxLeadsPerAgent,
                 r.AntiMonopolyThreshold,
                 r.FirstContactSla,
-                r.IsActive))
+                r.IsActive,
+                r.Priority,
+                r.ExcludedAgentIds))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<DispatchingRuleDto>>(rules);
