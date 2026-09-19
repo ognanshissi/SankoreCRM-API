@@ -10,7 +10,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-
         }
 
         /// <inheritdoc />

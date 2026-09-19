@@ -138,7 +138,7 @@ public sealed class Lead : AggregateRoot
             Comment               = comment?.Trim(),
             InterestedProduct     = interestedProduct,
             DesiredAmount         = desiredAmount,
-            PreferredLanguage     = preferredLanguage,
+            PreferredLanguage     = preferredLanguage ?? "FR",
             Location              = location,
             PreferredAgencyId     = preferredAgencyId,
             AgencyId              = agencyId,
@@ -155,7 +155,11 @@ public sealed class Lead : AggregateRoot
             CapturedAt            = now,
             CreatedAt             = now,
             UpdatedAt             = now,
-            ExpiresAt             = now.Add(lifetime ?? TimeSpan.FromDays(180))
+            ExpiresAt             = now.Add(lifetime ?? TimeSpan.FromDays(180)),
+            Website = "",
+            CompanyEmail = "",
+            CompanyName = "",
+            CompanyPhone = "",
         };
 
         lead.RaiseDomainEvent(new LeadCapturedDomainEvent(lead.Id));
