@@ -17,6 +17,10 @@ public sealed class CrmTaskConfiguration : IEntityTypeConfiguration<CrmTask>
         builder.Property(t => t.Title).HasMaxLength(200).IsRequired();
         builder.Property(t => t.Description).HasMaxLength(1000);
         builder.Property(t => t.TriggerEventType).HasMaxLength(100);
+        builder.Property(t => t.CompatibilityFactorsJson)
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("NULL");
+        builder.Property(t => t.CompatibilityScore);
 
         builder.HasIndex(t => new { t.TenantId, t.Status, t.DueAt });
         builder.HasIndex(t => new { t.LeadId, t.Status });

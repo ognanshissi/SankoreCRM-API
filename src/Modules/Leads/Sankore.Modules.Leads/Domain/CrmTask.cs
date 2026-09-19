@@ -28,6 +28,19 @@ public sealed class CrmTask : ITenant
     public string? TriggerEventType { get; private set; }
     public Guid? TriggerEventId { get; private set; }
 
+    /// <summary>
+    /// Compatibility score (0-100) produced by the dispatching engine when
+    /// this task was auto-dispatched via US-M13-081. Null for manual assignments.
+    /// </summary>
+    public double? CompatibilityScore { get; private set; }
+
+    /// <summary>
+    /// Per-factor breakdown JSON produced by CompatibilityScorer for the
+    /// winning agent. Mirrors LeadAssignment.CompatibilityFactorsJson for
+    /// the same explainability guarantee (US-M13-072 / US-M13-081).
+    /// </summary>
+    public string? CompatibilityFactorsJson { get; private set; }
+
     private CrmTask() { }
 
     public static CrmTask Create(
@@ -85,5 +98,25 @@ public sealed class CrmTask : ITenant
         return Result.Ok();
     }
 
+    /// <summary>
+    /// Manual assignment — bypasses the scoring engine. Used for admin
+    /// overrides and direct task hand-offs. No audit score is recorded.
+    /// </summary>
     public void AssignTo(Guid agentId) => AssignedAgentId = agentId;
+
+    /// <summary>
+    /// Scored dispatch — assigns the task to the best-ranked agent and
+    /// stores the compatibility breakdown for post-hoc auditability
+    /// (US-M13-081). A cancelled or completed task cannot be dispatched.
+    /// </summary>
+    public Result Dispatch(Guid agentId, double compatibilityScore, string compatibilityFactorsJson)
+    {
+        if (Status == CrmTaskStatus.Completed) return Result.Fail("TASK_ALREADY_COMPLETED");
+        if (Status == CrmTaskStatus.Cancelled)  return Result.Fail("TASK_CANCELLED");
+
+        AssignedAgentId          = agentId;
+        CompatibilityScore       = compatibilityScore;
+        CompatibilityFactorsJson = compatibilityFactorsJson;
+        return Result.Ok();
+    }
 }

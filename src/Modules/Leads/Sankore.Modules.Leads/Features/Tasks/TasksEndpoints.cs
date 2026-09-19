@@ -9,6 +9,7 @@ using Sankore.Modules.Leads.Features.Tasks.AssignTask;
 using Sankore.Modules.Leads.Features.Tasks.CancelTask;
 using Sankore.Modules.Leads.Features.Tasks.CompleteTask;
 using Sankore.Modules.Leads.Features.Tasks.CreateTask;
+using Sankore.Modules.Leads.Features.Tasks.DispatchTask;
 using Sankore.Modules.Leads.Features.Tasks.GetTask;
 using Sankore.Modules.Leads.Features.Tasks.ListTasks;
 using Sankore.Modules.Leads.Features.Tasks.StartTask;
@@ -85,6 +86,16 @@ public static class TasksEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        // POST /tasks/{taskId}/dispatch  (US-M13-081 — scored auto-dispatch)
+        group.MapPost("{taskId:guid}/dispatch", DispatchTask)
+            .WithName("DispatchCrmTask")
+            .WithTags("Tasks")
+            .RequireAuthorization(Permissions.CanManageCrmTasks.Code)
+            .Produces<DispatchTaskResult>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         return app;
     }
 
@@ -153,6 +164,19 @@ public static class TasksEndpoints
             ? Results.NoContent()
             : Results.NotFound();
     }
+
+    private static async Task<IResult> DispatchTask(
+        Guid taskId, DispatchTaskRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new DispatchTaskCommand(taskId, req.TenantId, req.Strategy), ct);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error is "TASK_NOT_FOUND" or "LEAD_NOT_FOUND"
+                ? Results.NotFound(new { error = result.Error })
+                : Results.Problem(title: "Dispatch failed", detail: result.Error, statusCode: 422);
+    }
 }
 
 public sealed record CreateTaskRequest(
@@ -167,3 +191,7 @@ public sealed record CreateTaskRequest(
     string? Description = null);
 
 public sealed record AssignTaskRequest(Guid AgentId);
+
+public sealed record DispatchTaskRequest(
+    Guid TenantId,
+    DispatchingStrategy Strategy = DispatchingStrategy.CompatibilityScoring);
