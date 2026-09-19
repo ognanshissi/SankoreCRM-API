@@ -30,6 +30,7 @@ public sealed record QualifyLeadResult(
     Guid LeadId,
     int Score,
     string Status,
+    string IntentLevel,
     string FactorsJson,
     QualificationNextAction NextAction,
     string NextActionDetail,

@@ -25,6 +25,7 @@ internal sealed class QualifyLeadHandler(
 
         string factorsJson;
         int score;
+        double completeness = lead.QualificationCompleteness; // keep existing unless template used
         Guid? qualificationResponseId = null;
 
         // ── Path 1: template-driven scoring ──────────────────────────────────
@@ -38,12 +39,11 @@ internal sealed class QualifyLeadHandler(
             if (template is null)
                 return Result.Fail<QualifyLeadResult>("QUALIFICATION_TEMPLATE_NOT_FOUND");
 
-            // Evaluate conditional rules to determine effective hidden/required questions.
-            var answerMap    = cmd.Answers.ToDictionary(a => a.QuestionId, a => a.Value);
-            var hiddenIds    = GetHiddenQuestionIds(template.Questions, answerMap);
+            var answerMap     = cmd.Answers.ToDictionary(a => a.QuestionId, a => a.Value);
+            var hiddenIds     = GetHiddenQuestionIds(template.Questions, answerMap);
             var extraRequired = GetExtraRequiredQuestionIds(template.Questions, answerMap);
 
-            // Validate required questions (IsRequired OR rule-forced) are answered.
+            // Validate all required/rule-forced questions are answered.
             var missingRequired = template.Questions
                 .Where(q => !hiddenIds.Contains(q.Id))
                 .Where(q => (q.IsRequired || extraRequired.Contains(q.Id)) && !answerMap.ContainsKey(q.Id))
@@ -53,6 +53,11 @@ internal sealed class QualifyLeadHandler(
                 return Result.Fail<QualifyLeadResult>("REQUIRED_QUESTIONS_NOT_ANSWERED");
 
             (score, factorsJson) = ScoreFromTemplate(template, cmd.Answers, hiddenIds);
+
+            // Completeness = answered active questions / total active questions.
+            var activeQuestions   = template.Questions.Where(q => !hiddenIds.Contains(q.Id)).ToList();
+            var answeredActive    = activeQuestions.Count(q => answerMap.TryGetValue(q.Id, out var v) && !string.IsNullOrWhiteSpace(v));
+            completeness          = activeQuestions.Count > 0 ? (double)answeredActive / activeQuestions.Count : 0.0;
 
             var response = QualificationResponse.Create(
                 tenantId:      lead.TenantId,
@@ -82,6 +87,13 @@ internal sealed class QualifyLeadHandler(
         if (qualifyResult.IsFailure)
             return Result.Fail<QualifyLeadResult>(qualifyResult.Error!);
 
+        // Derive intent level from score and update the lead.
+        var intentLevel = DeriveIntentLevel(score);
+        lead.UpdateIntentLevel(intentLevel);
+
+        // Update qualification completeness when changed.
+        lead.SetQualificationCompleteness(completeness);
+
         db.ScoreHistories.Add(ScoreHistory.Create(
             tenantId:                lead.TenantId,
             leadId:                  lead.Id,
@@ -98,6 +110,7 @@ internal sealed class QualifyLeadHandler(
             LeadId:                  lead.Id,
             Score:                   score,
             Status:                  lead.Status.ToString(),
+            IntentLevel:             intentLevel.ToString(),
             FactorsJson:             factorsJson,
             NextAction:              nextAction,
             NextActionDetail:        nextDetail,
@@ -112,18 +125,16 @@ internal sealed class QualifyLeadHandler(
     {
         var hidden = new HashSet<Guid>();
         foreach (var q in questions)
-        {
             foreach (var rule in q.GetRules())
             {
                 if (rule.Action != QuestionRuleAction.Hide) continue;
-                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var triggerAnswer) &&
-                    triggerAnswer.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
+                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var v) &&
+                    v.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
                 {
                     hidden.Add(q.Id);
                     break;
                 }
             }
-        }
         return hidden;
     }
 
@@ -133,18 +144,16 @@ internal sealed class QualifyLeadHandler(
     {
         var required = new HashSet<Guid>();
         foreach (var q in questions)
-        {
             foreach (var rule in q.GetRules())
             {
                 if (rule.Action != QuestionRuleAction.Require) continue;
-                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var triggerAnswer) &&
-                    triggerAnswer.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
+                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var v) &&
+                    v.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
                 {
                     required.Add(q.Id);
                     break;
                 }
             }
-        }
         return required;
     }
 
@@ -155,9 +164,7 @@ internal sealed class QualifyLeadHandler(
         IReadOnlyList<QualificationAnswerInput> answers,
         HashSet<Guid> hiddenIds)
     {
-        var answerMap = answers.ToDictionary(a => a.QuestionId, a => a.Value);
-
-        // Only active (non-hidden) questions participate in scoring.
+        var answerMap       = answers.ToDictionary(a => a.QuestionId, a => a.Value);
         var activeQuestions = template.Questions.Where(q => !hiddenIds.Contains(q.Id)).ToList();
 
         int earnedWeight = 0;
@@ -194,14 +201,10 @@ internal sealed class QualifyLeadHandler(
         {
             QuestionType.YesNo =>
                 value.Equals("true", StringComparison.OrdinalIgnoreCase) ? question.Weight : 0,
-
             QuestionType.SingleChoice or QuestionType.MultiChoice => question.Weight,
-
             QuestionType.Numeric => ComputeNumericEarned(question, value),
-
-            QuestionType.Text => question.Weight,
-
-            _ => 0
+            QuestionType.Text    => question.Weight,
+            _                    => 0
         };
     }
 
@@ -209,7 +212,6 @@ internal sealed class QualifyLeadHandler(
     {
         if (!decimal.TryParse(value, out var n)) return 0;
 
-        // Proportional scoring when both bounds are set.
         if (question.MinValue.HasValue && question.MaxValue.HasValue &&
             question.MaxValue.Value > question.MinValue.Value)
         {
@@ -219,9 +221,18 @@ internal sealed class QualifyLeadHandler(
             return (int)Math.Round((double)ratio * question.Weight);
         }
 
-        // Fallback: any positive value earns full weight.
         return n > 0 ? question.Weight : 0;
     }
+
+    // ── Intent & next-action helpers ───────────────────────────────────────
+
+    private static LeadIntentLevel DeriveIntentLevel(int score) => score switch
+    {
+        >= 80 => LeadIntentLevel.Hot,
+        >= 60 => LeadIntentLevel.Warm,
+        >= 40 => LeadIntentLevel.Cold,
+        _     => LeadIntentLevel.Unknown
+    };
 
     private static (QualificationNextAction Action, string Detail) DetermineNextAction(
         int score, LeadStatus status)

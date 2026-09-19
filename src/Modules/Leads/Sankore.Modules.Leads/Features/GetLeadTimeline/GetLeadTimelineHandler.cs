@@ -33,22 +33,36 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
             .Where(r => r.LeadId == query.LeadId)
             .ToListAsync(ct);
 
-        // Merges in which this lead participated (as target or as source).
         var mergesTask = db.LeadMerges
             .Where(m => m.TargetLeadId == query.LeadId || m.SourceLeadId == query.LeadId)
             .ToListAsync(ct);
 
-        // Dismissals recorded by or against this lead.
         var dismissalsTask = db.DuplicateDismissals
             .Where(d => d.LeadId == query.LeadId || d.CandidateLeadId == query.LeadId)
             .ToListAsync(ct);
 
-        // All consent records for this lead.
         var consentsTask = db.LeadConsents
             .Where(c => c.LeadId == query.LeadId)
             .ToListAsync(ct);
 
-        await Task.WhenAll(activitiesTask, scoresTask, assignmentsTask, remindersTask, mergesTask, dismissalsTask, consentsTask);
+        // Qualification responses joined with template metadata for rich context.
+        var qualificationsTask = (
+            from r in db.QualificationResponses
+            where r.LeadId == query.LeadId
+            join t in db.QualificationTemplates on r.TemplateId equals t.Id
+            select new
+            {
+                r.Id,
+                r.AnsweredBy,
+                r.AnsweredAt,
+                r.ComputedScore,
+                TemplateName = t.Name,
+                t.ProductType
+            }).ToListAsync(ct);
+
+        await Task.WhenAll(
+            activitiesTask, scoresTask, assignmentsTask, remindersTask,
+            mergesTask, dismissalsTask, consentsTask, qualificationsTask);
 
         var events = new List<TimelineEvent>();
 
@@ -67,8 +81,11 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
                 ActorId:     a.PerformedBy));
         }
 
-        // Score changes
-        foreach (var s in scoresTask.Result)
+        // Score changes — exclude entries tied to a qualification response
+        // (those are surfaced as richer Qualification events below).
+        var qualificationResponseIds = qualificationsTask.Result.Select(q => q.Id).ToHashSet();
+        foreach (var s in scoresTask.Result.Where(s => s.QualificationResponseId is null ||
+                                                        !qualificationResponseIds.Contains(s.QualificationResponseId.Value)))
         {
             events.Add(new TimelineEvent(
                 OccurredAt: s.RecalculatedAt,
@@ -76,6 +93,18 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
                 Title:       $"Score updated to {s.Score}",
                 Detail:      s.TriggerEvent,
                 ActorId:     null));
+        }
+
+        // Qualification form submissions
+        foreach (var q in qualificationsTask.Result)
+        {
+            var product = q.ProductType.HasValue ? $" ({q.ProductType})" : string.Empty;
+            events.Add(new TimelineEvent(
+                OccurredAt: q.AnsweredAt,
+                Kind:        TimelineEventKind.Qualification,
+                Title:       $"Qualification via «{q.TemplateName}»{product} — {q.ComputedScore}/100",
+                Detail:      NextActionLabel(q.ComputedScore),
+                ActorId:     q.AnsweredBy));
         }
 
         // Assignments
@@ -97,7 +126,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
                 ActorId:     a.AgentId));
         }
 
-        // Reminders — one event at creation, another at resolution if resolved
+        // Reminders
         foreach (var r in remindersTask.Result)
         {
             events.Add(new TimelineEvent(
@@ -145,7 +174,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
             }
         }
 
-        // Consent events — one entry at recording, another at withdrawal if applicable
+        // Consent events
         foreach (var c in consentsTask.Result)
         {
             events.Add(new TimelineEvent(
@@ -170,9 +199,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         foreach (var d in dismissalsTask.Result)
         {
             var otherLeadId = d.LeadId == query.LeadId ? d.CandidateLeadId : d.LeadId;
-            var detail = string.IsNullOrEmpty(d.Reason)
-                ? null
-                : $"Reason: {d.Reason}";
+            var detail = string.IsNullOrEmpty(d.Reason) ? null : $"Reason: {d.Reason}";
 
             events.Add(new TimelineEvent(
                 OccurredAt: d.DismissedAt,
@@ -185,4 +212,11 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         return Result.Ok<IReadOnlyList<TimelineEvent>>(
             [.. events.OrderByDescending(e => e.OccurredAt)]);
     }
+
+    private static string NextActionLabel(int score) => score switch
+    {
+        >= 60 => "Prêt à être dispatché à un agent commercial.",
+        >= 40 => "Score insuffisant — compléter les informations manquantes.",
+        _     => "Score trop faible — envisager la disqualification."
+    };
 }
