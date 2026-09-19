@@ -11,6 +11,7 @@ using Sankore.Shared.Kernel;
 /// </summary>
 public sealed record LeadDispatchedEvent(
     Guid LeadId,
+    Guid TenantId,
     Guid AgentId,
     DispatchingStrategy Strategy,
     double Score,
@@ -23,6 +24,7 @@ public sealed record LeadDispatchedEvent(
 /// </summary>
 public sealed record LeadDispatchingFailedEvent(
     Guid LeadId,
+    Guid TenantId,
     string Reason) : IntegrationEventBase;
 
 /// <summary>

@@ -45,6 +45,8 @@ using Sankore.Modules.Leads.Features.GetOwnerHistory;
 using Sankore.Modules.Leads.Features.GetScoreHistory;
 using Sankore.Modules.Leads.Features.NextAction;
 using Sankore.Modules.Leads.Features.RecalculateLeadScore;
+using Sankore.Modules.Leads.Features.Tasks;
+using Sankore.Modules.Leads.Features.TaskGenerationRules;
 using Sankore.Modules.Leads.Features.ListActivities;
 using Sankore.Modules.Leads.Features.ListLeads;
 using Sankore.Modules.Leads.Features.LogActivity;
@@ -176,6 +178,10 @@ public static class LeadsModule
         group.MapGetSlaBreaches();
         group.MapGetAgentPerformance();
         group.MapGetFunnelMetrics();
+
+        // Phase 13 — CRM Tasks & Task Generation Rules (US-M13-080)
+        group.MapTasksEndpoints();
+        group.MapTaskGenerationRulesEndpoints();
 
         return app;
     }

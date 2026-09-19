@@ -52,7 +52,7 @@ internal sealed class DispatchLeadHandler(
         if (candidates.Count == 0)
         {
             await publisher.PublishAsync(
-                new LeadDispatchingFailedEvent(lead.Id, "NO_AGENT_AVAILABLE"), ct);
+                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE"), ct);
 
             logger.LogWarning("Lead {LeadId} could not be dispatched: no agent available", lead.Id);
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
@@ -74,7 +74,7 @@ internal sealed class DispatchLeadHandler(
         if (eligible_candidates.Count == 0)
         {
             await publisher.PublishAsync(
-                new LeadDispatchingFailedEvent(lead.Id, "NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS"), ct);
+                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS"), ct);
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
         }
 
@@ -125,6 +125,7 @@ internal sealed class DispatchLeadHandler(
         await publisher.PublishAsync(
             new LeadDispatchedEvent(
                 LeadId: lead.Id,
+                TenantId: cmd.TenantId,
                 AgentId: winner.Agent.Id,
                 Strategy: cmd.Strategy,
                 Score: winner.CompatibilityScore,

@@ -216,6 +216,15 @@ public static class Permissions
     public static readonly PermissionItem CanWithdrawConsent =
         new("lead:consent:withdraw", "Withdraw Prospect Consent", ApplicationModules.Leads, "consent:withdraw");
 
+    public static readonly PermissionItem CanReadCrmTasks =
+        new("lead:task:read", "View CRM Tasks", ApplicationModules.Leads, "task:read");
+
+    public static readonly PermissionItem CanManageCrmTasks =
+        new("lead:task:manage", "Create, Complete and Cancel CRM Tasks", ApplicationModules.Leads, "task:manage");
+
+    public static readonly PermissionItem CanManageTaskGenerationRules =
+        new("lead:task-rule:manage", "Configure Task Generation Rules", ApplicationModules.Leads, "task-rule:manage");
+
     // ── Company info (Administration module) ──────────────────────────────
 
     public static readonly PermissionItem CanReadCompanyInfo =
@@ -332,5 +341,8 @@ public static class Permissions
         CanManageQualificationTemplates,
         CanRecordConsent,
         CanWithdrawConsent,
+        CanReadCrmTasks,
+        CanManageCrmTasks,
+        CanManageTaskGenerationRules,
     ];
 }

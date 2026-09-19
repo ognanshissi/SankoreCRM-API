@@ -23,6 +23,8 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<QualificationResponse> QualificationResponses => Set<QualificationResponse>();
     public DbSet<QualificationSection> QualificationSections => Set<QualificationSection>();
     public DbSet<LeadOwnerAssignmentHistory> LeadOwnerAssignmentHistories => Set<LeadOwnerAssignmentHistory>();
+    public DbSet<CrmTask> CrmTasks => Set<CrmTask>();
+    public DbSet<TaskGenerationRule> TaskGenerationRules => Set<TaskGenerationRule>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -52,6 +54,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
                 w.Property(x => x.Geography).HasColumnName("weight_geography");
                 w.Property(x => x.Workload).HasColumnName("weight_workload");
                 w.Property(x => x.Performance).HasColumnName("weight_performance");
+                w.Property(x => x.Agency).HasColumnName("weight_agency");
             });
             b.Property(r => r.ExcludedAgentIds)
                 .HasColumnType("jsonb")
@@ -108,6 +111,12 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
 
         modelBuilder.Entity<LeadOwnerAssignmentHistory>()
             .HasQueryFilter(h => h.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<CrmTask>()
+            .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<TaskGenerationRule>()
+            .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

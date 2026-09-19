@@ -16,6 +16,7 @@ using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Administration;
 using Sankore.Modules.Workflow;
 using Sankore.Modules.Notifications;
+using Sankore.Modules.Leads.Features.Consumers;
 using Sankore.Modules.Notifications.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Triggers;
@@ -151,6 +152,10 @@ builder.Services.AddScoped<IAuditWriter, SqlAuditWriter>();
 // touching module code (OutboxProcessor<T> only depends on IBus).
 builder.Services.AddMassTransit(x =>
 {
+    // Leads module consumers (US-M13-080 — task generation from events)
+    x.AddConsumer<LeadDispatchedTaskConsumer>();
+    x.AddConsumer<LeadDispatchingFailedTaskConsumer>();
+
     // Notification module consumers
     x.AddConsumer<TenantNotificationSettingsChangedConsumer>();
 
