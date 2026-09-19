@@ -375,6 +375,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("owner_id");
 
+                    b.Property<string>("PhoneBlindIndex")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("phone_blind_index");
+
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -455,6 +460,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.HasIndex("TenantId", "NationalId")
                         .HasDatabaseName("ix_leads_tenant_id_national_id")
                         .HasFilter("national_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "PhoneBlindIndex")
+                        .HasDatabaseName("ix_leads_tenant_id_phone_blind_index")
+                        .HasFilter("phone_blind_index IS NOT NULL");
 
                     b.HasIndex("TenantId", "PipelineStage")
                         .HasDatabaseName("ix_leads_tenant_id_pipeline_stage");
@@ -671,6 +680,75 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasFilter("status = 'Active'");
 
                     b.ToTable("lead_consents", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadImportJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed");
+
+                    b.Property<string>("FailureDetailsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("failure_details_json");
+
+                    b.Property<string>("FileReference")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("file_reference");
+
+                    b.Property<Guid>("InitiatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("initiated_by");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("original_file_name");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("integer")
+                        .HasColumnName("skipped");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("Succeeded")
+                        .HasColumnType("integer")
+                        .HasColumnName("succeeded");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_rows");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lead_import_jobs");
+
+                    b.ToTable("lead_import_jobs", "leads");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadMerge", b =>

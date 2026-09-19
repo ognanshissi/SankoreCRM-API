@@ -19,12 +19,16 @@ public sealed class CaptureLeadHandler(
     LeadsDbContext db,
     ILogger<CaptureLeadHandler> logger,
     TimeProvider clock,
-    IBus bus)
+    IBus bus,
+    IPhoneBlindIndexer phoneBlindIndexer)
     : IRequestHandler<CaptureLeadCommand, Result<CaptureLeadResult>>
 {
     public async Task<Result<CaptureLeadResult>> Handle(
         CaptureLeadCommand cmd, CancellationToken ct)
     {
+        // ── Compute phone blind index (HMAC-SHA256 on normalized phone) ────
+        var phoneIndex = phoneBlindIndexer.Compute(cmd.PhoneNumber);
+
         // ── Duplicate detection (multi-signal identity scoring) ──────────────
         IReadOnlyList<DuplicateMatchResult>? warnMatches = null;
 
@@ -36,17 +40,21 @@ public sealed class CaptureLeadHandler(
                 latitude:  cmd.Latitude  == 0 && cmd.Longitude == 0 ? null : cmd.Latitude,
                 longitude: cmd.Longitude == 0 && cmd.Latitude  == 0 ? null : cmd.Longitude);
 
-            var phoneDigits = probe.PhoneDigits;
             var emailNorm   = probe.EmailNorm;
             var nationalId  = probe.NationalId;
             var customerRef = probe.CustomerReference;
+
+            // Primary phone dedup uses the blind index (indexed, exact match).
+            // Falls back to suffix match for legacy leads without a blind index.
+            var phoneDigits = probe.PhoneDigits;
 
             var candidates = await db.Leads
                 .Where(l =>
                     l.Status != LeadStatus.Lost &&
                     l.Status != LeadStatus.Archived &&
                     l.Status != LeadStatus.Disqualified &&
-                    ((phoneDigits != null && l.PhoneNumber.EndsWith(phoneDigits)) ||
+                    ((l.PhoneBlindIndex != null && l.PhoneBlindIndex == phoneIndex) ||
+                     (l.PhoneBlindIndex == null && phoneDigits != null && l.PhoneNumber.EndsWith(phoneDigits)) ||
                      (emailNorm != null && l.Email != null && l.Email.ToLower() == emailNorm) ||
                      (nationalId != null && l.NationalId != null && l.NationalId.ToLower() == nationalId.ToLower()) ||
                      (customerRef != null && l.CustomerReference != null && l.CustomerReference.ToLower() == customerRef.ToLower())))
@@ -86,7 +94,7 @@ public sealed class CaptureLeadHandler(
         // ── Create the lead ───────────────────────────────────────────────────
         var lead = Lead.Capture(
             tenantId:             cmd.TenantId,
-            fullName:             cmd.FullName,
+            fullName:             $"{cmd.FirstName} {cmd.LastName}",
             phoneNumber:          cmd.PhoneNumber,
             source:               cmd.Source,
             interestedProduct:    cmd.InterestedProduct,
@@ -111,7 +119,8 @@ public sealed class CaptureLeadHandler(
             agentCollectedLeadId: cmd.AgentCollectedLeadId,
             prospectType:         cmd.ProspectType,
             nationalId:           cmd.NationalId,
-            customerReference:    cmd.CustomerReference);
+            customerReference:    cmd.CustomerReference,
+            phoneBlindIndex:      phoneIndex);
 
         db.Leads.Add(lead);
         await db.SaveChangesAsync(ct);

@@ -20,7 +20,10 @@ using Sankore.Modules.Leads.Features.Consumers;
 using Sankore.Modules.Notifications.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Triggers;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Sankore.Shared.Infrastructure.Auth;
+using Sankore.Shared.Infrastructure.BackgroundJobs;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Infrastructure.Logging;
 using Sankore.Shared.Infrastructure.Localization;
@@ -66,8 +69,21 @@ builder.Services.AddHttpLogging(o =>
 // ---------------------------------------------------------------------
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
-builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+
+// Context-aware registrations: background jobs (Hangfire) set BackgroundJobContext
+// via AsyncLocal; HTTP requests fall back to the standard JWT-based implementations.
+builder.Services.AddScoped<ICurrentUser>(sp =>
+{
+    if (BackgroundJobContext.CurrentUser is { } bgUser)
+        return bgUser;
+    return new HttpContextCurrentUser(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>());
+});
+builder.Services.AddScoped<ITenantContext>(sp =>
+{
+    if (BackgroundJobContext.CurrentTenant is { } bgTenant)
+        return bgTenant;
+    return new HttpTenantContext(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>());
+});
 builder.Services.AddTenantStore(builder.Configuration);
 builder.Services.AddLanguageResolution();
 builder.Services.AddLocalization(opts => opts.ResourcesPath = "Resources");
@@ -178,6 +194,15 @@ builder.Services.AddMassTransit(x =>
     }
 });
 
+// Hangfire — background job processing (lead import, etc.)
+builder.Services.AddHangfire(cfg =>
+    cfg.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+       .UseSimpleAssemblyNameTypeSerializer()
+       .UseRecommendedSerializerSettings()
+       .UsePostgreSqlStorage(opts =>
+           opts.UseNpgsqlConnection(connectionString)));
+builder.Services.AddHangfireServer();
+
 // Redis distributed cache — used by Notifications module for provider resolution
 builder.AddRedisDistributedCache("redis");
 
@@ -258,6 +283,7 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseHangfireDashboard("/hangfire");
 }
 
 app.UseExceptionHandler();

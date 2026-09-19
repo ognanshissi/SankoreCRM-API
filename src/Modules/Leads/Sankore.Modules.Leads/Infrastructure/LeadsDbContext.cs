@@ -27,6 +27,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<TaskReassignment> TaskReassignments => Set<TaskReassignment>();
     public DbSet<TaskDecline> TaskDeclines => Set<TaskDecline>();
     public DbSet<TaskGenerationRule> TaskGenerationRules => Set<TaskGenerationRule>();
+    public DbSet<LeadImportJob> LeadImportJobs => Set<LeadImportJob>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -125,6 +126,17 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
 
         modelBuilder.Entity<TaskGenerationRule>()
             .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<LeadImportJob>(b =>
+        {
+            b.ToTable("lead_import_jobs");
+            b.HasKey(j => j.Id);
+            b.Property(j => j.Status).HasConversion(
+                v => v.ToString(),
+                v => Enum.Parse<LeadImportStatus>(v))
+                .HasMaxLength(20);
+            b.HasQueryFilter(j => j.TenantId == tenant.CurrentTenantId);
+        });
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

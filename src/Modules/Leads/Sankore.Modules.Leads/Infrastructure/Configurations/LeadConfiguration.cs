@@ -15,6 +15,7 @@ internal sealed class LeadConfiguration : IEntityTypeConfiguration<Lead>
         // Required scalars
         builder.Property(l => l.FullName).HasMaxLength(200).IsRequired();
         builder.Property(l => l.PhoneNumber).HasMaxLength(30).IsRequired();
+        builder.Property(l => l.PhoneBlindIndex).HasMaxLength(64);
         builder.Property(l => l.InterestedProduct).HasMaxLength(100).IsRequired();
         builder.Property(l => l.PreferredLanguage).HasMaxLength(50).IsRequired();
 
@@ -74,6 +75,8 @@ internal sealed class LeadConfiguration : IEntityTypeConfiguration<Lead>
         builder.HasIndex(l => new { l.TenantId, l.Status });
         builder.HasIndex(l => new { l.TenantId, l.PipelineStage });
         builder.HasIndex(l => l.PhoneNumber);
+        builder.HasIndex(l => new { l.TenantId, l.PhoneBlindIndex })
+               .HasFilter("phone_blind_index IS NOT NULL");
         builder.HasIndex(l => l.FullName);
         builder.HasIndex(l => l.ExpiresAt);
 

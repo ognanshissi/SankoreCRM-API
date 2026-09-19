@@ -17,6 +17,7 @@ using Sankore.Modules.Leads.Features.GetLead;
 using Sankore.Modules.Leads.Features.ConvertLead;
 using Sankore.Modules.Leads.Features.Bulk;
 using Sankore.Modules.Leads.Features.Import;
+using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Features.DismissDuplicate;
 using Sankore.Modules.Leads.Features.ListDismissals;
 using Sankore.Modules.Leads.Features.RecordConsent;
@@ -100,6 +101,9 @@ public static class LeadsModule
             new AgentExclusionService(
                 sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 
+        // Phone blind index (HMAC-SHA256) for duplicate detection (US-M13-010)
+        services.AddSingleton<IPhoneBlindIndexer, HmacPhoneBlindIndexer>();
+
         // QualifyLead slice-internal services
         services.AddScoped<LeadScoreCalculator>();
 
@@ -108,6 +112,9 @@ public static class LeadsModule
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
         services.Configure<LeadModuleSettings>(config.GetSection("Leads"));
+
+        // Import — file storage for uploaded CSV files
+        services.AddSingleton<IImportFileStore, LocalImportFileStore>();
 
         return services;
     }
@@ -167,6 +174,7 @@ public static class LeadsModule
 
         // Phase 10 — Import, Duplicate Detection & Merge
         group.MapImportLeads();
+        group.MapGetImportStatus();
         group.MapFindDuplicates();
         group.MapMergeLeads();
         group.MapDismissDuplicate();

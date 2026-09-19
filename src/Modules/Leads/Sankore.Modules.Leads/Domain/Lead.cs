@@ -21,6 +21,8 @@ public sealed class Lead : AggregateRoot
     public string? FirstName { get; private set; }
     public string? LastName { get; private set; }
     public string PhoneNumber { get; private set; } = default!;
+    /// <summary>HMAC-SHA256 blind index on the normalized phone (last 8 digits). Used for dedup queries.</summary>
+    public string? PhoneBlindIndex { get; private set; }
     public string? Email { get; private set; }
     public LeadGender Gender { get; private set; } = LeadGender.Unknown;
     public DateOnly? DateOfBirth { get; private set; }
@@ -107,7 +109,8 @@ public sealed class Lead : AggregateRoot
         Guid? agentCollectedLeadId = null,
         LeadType prospectType = LeadType.Individual,
         string? nationalId = null,
-        string? customerReference = null)
+        string? customerReference = null,
+        string? phoneBlindIndex = null)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Lead must have a name.");
@@ -124,6 +127,7 @@ public sealed class Lead : AggregateRoot
             FirstName             = firstName?.Trim(),
             LastName              = lastName?.Trim(),
             PhoneNumber           = phoneNumber.Trim(),
+            PhoneBlindIndex       = phoneBlindIndex,
             Email                 = email?.Trim(),
             Gender                = gender,
             DateOfBirth           = dateOfBirth,
