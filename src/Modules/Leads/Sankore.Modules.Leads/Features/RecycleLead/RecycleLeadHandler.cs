@@ -20,7 +20,8 @@ internal sealed class RecycleLeadHandler(LeadsDbContext db)
         var result = lead.Recycle(cmd.NewSource, cmd.NewCampaign);
         if (result.IsFailure)
             return result;
-
+        
+        db.Leads.Update(lead);
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

@@ -18,6 +18,7 @@ internal sealed class SetIntentLevelHandler(LeadsDbContext db)
             return Result.Fail("LEAD_NOT_FOUND");
 
         lead.UpdateIntentLevel(cmd.IntentLevel);
+        db.Leads.Update(lead);
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

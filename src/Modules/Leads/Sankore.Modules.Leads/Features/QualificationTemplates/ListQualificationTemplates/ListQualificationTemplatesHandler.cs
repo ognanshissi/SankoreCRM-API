@@ -13,30 +13,21 @@ internal sealed class ListQualificationTemplatesHandler(LeadsDbContext db)
         ListQualificationTemplatesQuery query, CancellationToken ct)
     {
         var templatesQuery = db.QualificationTemplates
+            .Include(t => t.Sections)
             .Include(t => t.Questions)
             .AsQueryable();
 
-        if (query.ActiveOnly)
-            templatesQuery = templatesQuery.Where(t => t.IsActive);
+        if (query.Status.HasValue)
+            templatesQuery = templatesQuery.Where(t => t.Status == query.Status.Value);
+
+        if (query.ProductName is not null)
+            templatesQuery = templatesQuery.Where(t => t.ProductName == query.ProductName);
 
         var templates = await templatesQuery
             .OrderBy(t => t.Name)
             .ToListAsync(ct);
 
-        var dtos = templates.Select(t => new QualificationTemplateDto(
-            t.Id,
-            t.Name,
-            t.Description,
-            t.ProductName,
-            t.IsActive,
-            t.CreatedAt,
-            t.Questions
-                .OrderBy(q => q.Order)
-                .Select(q => new QualificationQuestionDto(
-                    q.Id, q.Label, q.Type.ToString(),
-                    q.GetOptions(), q.Weight, q.IsRequired, q.Order))
-                .ToList()))
-            .ToList();
+        var dtos = templates.Select(QualificationTemplateMappings.ToDto).ToList();
 
         return Result.Ok<IReadOnlyList<QualificationTemplateDto>>(dtos);
     }

@@ -4,8 +4,8 @@ using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Tenant-configurable qualification questionnaire.
-/// Each template holds an ordered list of weighted questions; the scorer
-/// normalises the earned weights to a 0-100 score.
+/// Lifecycle: Draft → Published → Archived.
+/// Only <see cref="TemplateStatus.Published"/> templates can be used for lead qualification.
 /// </summary>
 public sealed class QualificationTemplate : AggregateRoot
 {
@@ -13,14 +13,19 @@ public sealed class QualificationTemplate : AggregateRoot
     public string Name { get; private set; } = default!;
     public string? Description { get; private set; }
 
-    /// <summary>
-    /// Optional product filter. When set, only leads interested in this product
-    /// are shown this template in the UI (not enforced server-side).
-    /// </summary>
+    /// <summary>Optional product filter hint (not enforced server-side).</summary>
     public string? ProductName { get; private set; }
 
-    public bool IsActive { get; private set; }
+    public TemplateStatus Status { get; private set; }
+
+    /// <summary>Monotonically increasing counter — incremented each time the template is published.</summary>
+    public int Version { get; private set; }
+
+    public DateTimeOffset? PublishedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+
+    private readonly List<QualificationSection> _sections = [];
+    public IReadOnlyList<QualificationSection> Sections => _sections.AsReadOnly();
 
     private readonly List<QualificationQuestion> _questions = [];
     public IReadOnlyList<QualificationQuestion> Questions => _questions.AsReadOnly();
@@ -40,21 +45,98 @@ public sealed class QualificationTemplate : AggregateRoot
             Name        = name.Trim(),
             Description = description?.Trim(),
             ProductName = productName?.Trim(),
-            IsActive    = true,
+            Status      = TemplateStatus.Draft,
+            Version     = 0,
             CreatedAt   = now
         };
 
-    /// <summary>Appends a question to the end of the template.</summary>
-    public void AddQuestion(
+    // ── Lifecycle ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Publishes the template, making it available for qualification.
+    /// Requires at least one question. Increments <see cref="Version"/>.
+    /// </summary>
+    public Result Publish(DateTimeOffset now)
+    {
+        if (Status == TemplateStatus.Archived)
+            return Result.Fail("TEMPLATE_ALREADY_ARCHIVED");
+
+        if (_questions.Count == 0)
+            return Result.Fail("TEMPLATE_HAS_NO_QUESTIONS");
+
+        Status      = TemplateStatus.Published;
+        Version    += 1;
+        PublishedAt = now;
+        return Result.Ok();
+    }
+
+    /// <summary>Retires the template. Existing qualification responses are preserved.</summary>
+    public Result Archive()
+    {
+        if (Status == TemplateStatus.Archived)
+            return Result.Fail("TEMPLATE_ALREADY_ARCHIVED");
+
+        Status = TemplateStatus.Archived;
+        return Result.Ok();
+    }
+
+    // ── Editing (Draft only) ───────────────────────────────────────────────
+
+    /// <summary>Updates the template's display fields. Only allowed in <see cref="TemplateStatus.Draft"/>.</summary>
+    public Result UpdateDetails(string name, string? description, string? productName)
+    {
+        if (Status != TemplateStatus.Draft)
+            return Result.Fail("TEMPLATE_NOT_IN_DRAFT_STATUS");
+
+        Name        = name.Trim();
+        Description = description?.Trim();
+        ProductName = productName?.Trim();
+        return Result.Ok();
+    }
+
+    /// <summary>Appends a section to the template. Only allowed in <see cref="TemplateStatus.Draft"/>.</summary>
+    public Result<QualificationSection> AddSection(string title, string? description)
+    {
+        if (Status != TemplateStatus.Draft)
+            return Result.Fail<QualificationSection>("TEMPLATE_NOT_IN_DRAFT_STATUS");
+
+        var order   = _sections.Count + 1;
+        var section = QualificationSection.Create(Id, title, description, order);
+        _sections.Add(section);
+        return Result.Ok(section);
+    }
+
+    /// <summary>Appends a question to the template. Only allowed in <see cref="TemplateStatus.Draft"/>.</summary>
+    public Result AddQuestion(
         string label,
         QuestionType type,
         int weight,
         bool isRequired,
-        string[]? options = null)
+        Guid? sectionId = null,
+        string[]? options = null,
+        string? helpText = null,
+        string? placeholderText = null,
+        decimal? minValue = null,
+        decimal? maxValue = null,
+        IReadOnlyList<(Guid TriggerQuestionId, string TriggerValue, QuestionRuleAction Action)>? rules = null)
     {
+        if (Status != TemplateStatus.Draft)
+            return Result.Fail("TEMPLATE_NOT_IN_DRAFT_STATUS");
+
         var order = _questions.Count + 1;
-        _questions.Add(QualificationQuestion.Create(Id, label, type, weight, isRequired, order, options));
+        _questions.Add(QualificationQuestion.Create(
+            Id, label, type, weight, isRequired, order,
+            sectionId, options, helpText, placeholderText, minValue, maxValue, rules));
+        return Result.Ok();
     }
 
-    public void Deactivate() => IsActive = false;
+    /// <summary>
+    /// Clears the question and section collections so the handler can
+    /// rebuild them from the update request. Called before <c>RemoveRange</c> in EF.
+    /// </summary>
+    internal void ClearQuestionsAndSections()
+    {
+        _questions.Clear();
+        _sections.Clear();
+    }
 }

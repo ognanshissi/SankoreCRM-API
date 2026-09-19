@@ -20,6 +20,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<LeadConsent> LeadConsents => Set<LeadConsent>();
     public DbSet<QualificationTemplate> QualificationTemplates => Set<QualificationTemplate>();
     public DbSet<QualificationResponse> QualificationResponses => Set<QualificationResponse>();
+    public DbSet<QualificationSection> QualificationSections => Set<QualificationSection>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

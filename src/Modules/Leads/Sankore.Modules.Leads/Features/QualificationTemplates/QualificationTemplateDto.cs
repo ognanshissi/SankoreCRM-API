@@ -5,15 +5,35 @@ public sealed record QualificationTemplateDto(
     string Name,
     string? Description,
     string? ProductName,
-    bool IsActive,
+    string Status,
+    int Version,
+    DateTimeOffset? PublishedAt,
     DateTimeOffset CreatedAt,
+    IReadOnlyList<QualificationSectionDto> Sections,
     IReadOnlyList<QualificationQuestionDto> Questions);
+
+public sealed record QualificationSectionDto(
+    Guid Id,
+    string Title,
+    string? Description,
+    int Order);
 
 public sealed record QualificationQuestionDto(
     Guid Id,
+    Guid? SectionId,
     string Label,
+    string? HelpText,
+    string? PlaceholderText,
     string Type,
     string[] Options,
     int Weight,
     bool IsRequired,
-    int Order);
+    int Order,
+    decimal? MinValue,
+    decimal? MaxValue,
+    IReadOnlyList<QuestionRuleDto> Rules);
+
+public sealed record QuestionRuleDto(
+    Guid TriggerQuestionId,
+    string TriggerValue,
+    string Action);

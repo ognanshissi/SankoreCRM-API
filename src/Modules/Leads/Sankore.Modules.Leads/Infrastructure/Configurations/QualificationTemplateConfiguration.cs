@@ -14,19 +14,42 @@ internal sealed class QualificationTemplateConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.Name).HasMaxLength(200).IsRequired();
         builder.Property(t => t.Description).HasMaxLength(1000);
         builder.Property(t => t.ProductName).HasMaxLength(100);
+        builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(t => t.Version).IsRequired();
+        builder.Property(t => t.PublishedAt);
 
         // Domain events are transient.
         builder.Ignore(t => t.DomainEvents);
 
-        // Questions — owned 1-to-many, separate table.
+        // Sections — 1-to-many, separate table.
+        builder.HasMany(t => t.Sections)
+               .WithOne()
+               .HasForeignKey(s => s.TemplateId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        // Questions — 1-to-many, separate table.
         builder.HasMany(t => t.Questions)
                .WithOne()
                .HasForeignKey(q => q.TemplateId)
                .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(t => new { t.TenantId, t.IsActive });
+        builder.HasIndex(t => new { t.TenantId, t.Status });
         builder.HasIndex(t => new { t.TenantId, t.ProductName })
                .HasFilter("product_name IS NOT NULL");
+    }
+}
+
+internal sealed class QualificationSectionConfiguration : IEntityTypeConfiguration<QualificationSection>
+{
+    public void Configure(EntityTypeBuilder<QualificationSection> builder)
+    {
+        builder.ToTable("qualification_sections");
+        builder.HasKey(s => s.Id);
+
+        builder.Property(s => s.Title).HasMaxLength(200).IsRequired();
+        builder.Property(s => s.Description).HasMaxLength(1000);
+
+        builder.HasIndex(s => new { s.TemplateId, s.Order });
     }
 }
 
@@ -38,8 +61,13 @@ internal sealed class QualificationQuestionConfiguration : IEntityTypeConfigurat
         builder.HasKey(q => q.Id);
 
         builder.Property(q => q.Label).HasMaxLength(500).IsRequired();
+        builder.Property(q => q.HelpText).HasMaxLength(1000);
+        builder.Property(q => q.PlaceholderText).HasMaxLength(200);
         builder.Property(q => q.OptionsJson).HasColumnType("jsonb");
+        builder.Property(q => q.RulesJson).HasColumnType("jsonb");
         builder.Property(q => q.Type).HasConversion<string>().HasMaxLength(20);
+        builder.Property(q => q.MinValue).HasColumnType("numeric(18,4)");
+        builder.Property(q => q.MaxValue).HasColumnType("numeric(18,4)");
 
         builder.HasIndex(q => new { q.TemplateId, q.Order });
     }

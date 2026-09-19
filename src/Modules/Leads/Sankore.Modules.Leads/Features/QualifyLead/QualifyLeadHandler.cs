@@ -32,21 +32,27 @@ internal sealed class QualifyLeadHandler(
         {
             var template = await db.QualificationTemplates
                 .Include(t => t.Questions)
-                .FirstOrDefaultAsync(t => t.Id == cmd.TemplateId.Value && t.IsActive, ct);
+                .FirstOrDefaultAsync(
+                    t => t.Id == cmd.TemplateId.Value && t.Status == TemplateStatus.Published, ct);
 
             if (template is null)
                 return Result.Fail<QualifyLeadResult>("QUALIFICATION_TEMPLATE_NOT_FOUND");
 
-            // Validate required questions are answered.
-            var answeredIds = cmd.Answers.Select(a => a.QuestionId).ToHashSet();
+            // Evaluate conditional rules to determine effective hidden/required questions.
+            var answerMap    = cmd.Answers.ToDictionary(a => a.QuestionId, a => a.Value);
+            var hiddenIds    = GetHiddenQuestionIds(template.Questions, answerMap);
+            var extraRequired = GetExtraRequiredQuestionIds(template.Questions, answerMap);
+
+            // Validate required questions (IsRequired OR rule-forced) are answered.
             var missingRequired = template.Questions
-                .Where(q => q.IsRequired && !answeredIds.Contains(q.Id))
+                .Where(q => !hiddenIds.Contains(q.Id))
+                .Where(q => (q.IsRequired || extraRequired.Contains(q.Id)) && !answerMap.ContainsKey(q.Id))
                 .ToList();
 
             if (missingRequired.Count > 0)
                 return Result.Fail<QualifyLeadResult>("REQUIRED_QUESTIONS_NOT_ANSWERED");
 
-            (score, factorsJson) = ScoreFromTemplate(template, cmd.Answers);
+            (score, factorsJson) = ScoreFromTemplate(template, cmd.Answers, hiddenIds);
 
             var response = QualificationResponse.Create(
                 tenantId:      lead.TenantId,
@@ -98,17 +104,66 @@ internal sealed class QualifyLeadHandler(
             QualificationResponseId: qualificationResponseId));
     }
 
+    // ── Rule evaluation ────────────────────────────────────────────────────
+
+    private static HashSet<Guid> GetHiddenQuestionIds(
+        IReadOnlyList<QualificationQuestion> questions,
+        Dictionary<Guid, string> answerMap)
+    {
+        var hidden = new HashSet<Guid>();
+        foreach (var q in questions)
+        {
+            foreach (var rule in q.GetRules())
+            {
+                if (rule.Action != QuestionRuleAction.Hide) continue;
+                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var triggerAnswer) &&
+                    triggerAnswer.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
+                {
+                    hidden.Add(q.Id);
+                    break;
+                }
+            }
+        }
+        return hidden;
+    }
+
+    private static HashSet<Guid> GetExtraRequiredQuestionIds(
+        IReadOnlyList<QualificationQuestion> questions,
+        Dictionary<Guid, string> answerMap)
+    {
+        var required = new HashSet<Guid>();
+        foreach (var q in questions)
+        {
+            foreach (var rule in q.GetRules())
+            {
+                if (rule.Action != QuestionRuleAction.Require) continue;
+                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var triggerAnswer) &&
+                    triggerAnswer.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
+                {
+                    required.Add(q.Id);
+                    break;
+                }
+            }
+        }
+        return required;
+    }
+
     // ── Scoring helpers ────────────────────────────────────────────────────
 
     private static (int Score, string FactorsJson) ScoreFromTemplate(
         QualificationTemplate template,
-        IReadOnlyList<QualificationAnswerInput> answers)
+        IReadOnlyList<QualificationAnswerInput> answers,
+        HashSet<Guid> hiddenIds)
     {
-        var answerMap    = answers.ToDictionary(a => a.QuestionId, a => a.Value);
-        int earnedWeight = 0;
-        int totalWeight  = template.Questions.Sum(q => q.Weight);
+        var answerMap = answers.ToDictionary(a => a.QuestionId, a => a.Value);
 
-        var factorDetails = template.Questions.Select(q =>
+        // Only active (non-hidden) questions participate in scoring.
+        var activeQuestions = template.Questions.Where(q => !hiddenIds.Contains(q.Id)).ToList();
+
+        int earnedWeight = 0;
+        int totalWeight  = activeQuestions.Sum(q => q.Weight);
+
+        var factorDetails = activeQuestions.Select(q =>
         {
             answerMap.TryGetValue(q.Id, out var value);
             var earned = ComputeEarned(q, value);
@@ -137,14 +192,35 @@ internal sealed class QualifyLeadHandler(
         if (string.IsNullOrWhiteSpace(value)) return 0;
         return question.Type switch
         {
-            QuestionType.YesNo                                     =>
+            QuestionType.YesNo =>
                 value.Equals("true", StringComparison.OrdinalIgnoreCase) ? question.Weight : 0,
-            QuestionType.SingleChoice or QuestionType.MultiChoice  => question.Weight,
-            QuestionType.Numeric                                   =>
-                decimal.TryParse(value, out var n) && n > 0 ? question.Weight : 0,
-            QuestionType.Text                                      => question.Weight,
-            _                                                      => 0
+
+            QuestionType.SingleChoice or QuestionType.MultiChoice => question.Weight,
+
+            QuestionType.Numeric => ComputeNumericEarned(question, value),
+
+            QuestionType.Text => question.Weight,
+
+            _ => 0
         };
+    }
+
+    private static int ComputeNumericEarned(QualificationQuestion question, string value)
+    {
+        if (!decimal.TryParse(value, out var n)) return 0;
+
+        // Proportional scoring when both bounds are set.
+        if (question.MinValue.HasValue && question.MaxValue.HasValue &&
+            question.MaxValue.Value > question.MinValue.Value)
+        {
+            var ratio = (n - question.MinValue.Value) /
+                        (question.MaxValue.Value - question.MinValue.Value);
+            ratio = Math.Clamp(ratio, 0m, 1m);
+            return (int)Math.Round((double)ratio * question.Weight);
+        }
+
+        // Fallback: any positive value earns full weight.
+        return n > 0 ? question.Weight : 0;
     }
 
     private static (QualificationNextAction Action, string Detail) DetermineNextAction(

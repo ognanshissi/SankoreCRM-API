@@ -5,9 +5,12 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.QualificationTemplates.ArchiveQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.CreateQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.GetQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.ListQualificationTemplates;
+using Sankore.Modules.Leads.Features.QualificationTemplates.PublishQualificationTemplate;
+using Sankore.Modules.Leads.Features.QualificationTemplates.UpdateQualificationTemplate;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
@@ -41,6 +44,33 @@ public static class QualificationTemplatesEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        group.MapPut("{templateId:guid}", UpdateTemplate)
+            .WithName("UpdateQualificationTemplate")
+            .WithTags("Leads")
+            .RequireAuthorization(Permissions.CanManageQualificationTemplates.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        group.MapPost("{templateId:guid}/publish", PublishTemplate)
+            .WithName("PublishQualificationTemplate")
+            .WithTags("Leads")
+            .RequireAuthorization(Permissions.CanManageQualificationTemplates.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        group.MapPost("{templateId:guid}/archive", ArchiveTemplate)
+            .WithName("ArchiveQualificationTemplate")
+            .WithTags("Leads")
+            .RequireAuthorization(Permissions.CanManageQualificationTemplates.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         return app;
     }
 
@@ -57,7 +87,8 @@ public static class QualificationTemplatesEndpoints
             Name:        req.Name,
             Description: req.Description,
             ProductName: req.ProductName,
-            Questions:   req.Questions), ct);
+            Questions:   req.Questions,
+            Sections:    req.Sections), ct);
 
         if (!result.IsSuccess)
             return Results.Problem(title: "Create template failed", detail: result.Error, statusCode: 422);
@@ -66,11 +97,14 @@ public static class QualificationTemplatesEndpoints
     }
 
     private static async Task<IResult> ListTemplates(
-        bool activeOnly,
+        TemplateStatus? status,
+        string? productName,
         ISender sender,
         CancellationToken ct)
     {
-        var result = await sender.Send(new ListQualificationTemplatesQuery(activeOnly), ct);
+        var result = await sender.Send(new ListQualificationTemplatesQuery(
+            Status: status ?? TemplateStatus.Published,
+            ProductName: productName), ct);
         return Results.Ok(result.Value);
     }
 
@@ -84,11 +118,67 @@ public static class QualificationTemplatesEndpoints
             ? Results.Ok(result.Value)
             : Results.NotFound(new { error = result.Error });
     }
+
+    private static async Task<IResult> UpdateTemplate(
+        Guid templateId,
+        UpdateQualificationTemplateRequest req,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(new UpdateQualificationTemplateCommand(
+            TemplateId:  templateId,
+            Name:        req.Name,
+            Description: req.Description,
+            ProductName: req.ProductName,
+            Questions:   req.Questions,
+            Sections:    req.Sections), ct);
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error is "TEMPLATE_NOT_FOUND"
+                ? Results.NotFound(new { error = result.Error })
+                : Results.Problem(title: "Update template failed", detail: result.Error, statusCode: 422);
+    }
+
+    private static async Task<IResult> PublishTemplate(
+        Guid templateId,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(new PublishQualificationTemplateCommand(templateId), ct);
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error is "TEMPLATE_NOT_FOUND"
+                ? Results.NotFound(new { error = result.Error })
+                : Results.Problem(title: "Publish template failed", detail: result.Error, statusCode: 422);
+    }
+
+    private static async Task<IResult> ArchiveTemplate(
+        Guid templateId,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(new ArchiveQualificationTemplateCommand(templateId), ct);
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error is "TEMPLATE_NOT_FOUND"
+                ? Results.NotFound(new { error = result.Error })
+                : Results.Problem(title: "Archive template failed", detail: result.Error, statusCode: 422);
+    }
 }
 
-/// <param name="Questions">Ordered list of questions; weight is normalised across all questions to derive a 0-100 score.</param>
+/// <param name="Questions">Flat question list. Provide either this or <paramref name="Sections"/>, not both.</param>
+/// <param name="Sections">Section-grouped questions. Provide either this or <paramref name="Questions"/>, not both.</param>
 public sealed record CreateQualificationTemplateRequest(
     string Name,
     string? Description,
     string? ProductName,
-    IReadOnlyList<QuestionInput> Questions);
+    IReadOnlyList<QuestionInput>? Questions = null,
+    IReadOnlyList<SectionInput>? Sections = null);
+
+public sealed record UpdateQualificationTemplateRequest(
+    string Name,
+    string? Description,
+    string? ProductName,
+    IReadOnlyList<QuestionInput>? Questions = null,
+    IReadOnlyList<SectionInput>? Sections = null);

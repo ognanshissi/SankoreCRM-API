@@ -21,6 +21,7 @@ internal sealed class ReturnLeadToQueueHandler(LeadsDbContext db)
         if (result.IsFailure)
             return result;
 
+        db.Leads.Update(lead);
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

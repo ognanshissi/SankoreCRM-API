@@ -18,6 +18,7 @@ internal sealed class SetQualificationCompletenessHandler(LeadsDbContext db)
             return Result.Fail("LEAD_NOT_FOUND");
 
         lead.SetQualificationCompleteness(cmd.Completeness);
+        db.Leads.Update(lead);
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

@@ -1,12 +1,13 @@
-namespace Sankore.Modules.Leads.Features.QualificationTemplates.CreateQualificationTemplate;
+namespace Sankore.Modules.Leads.Features.QualificationTemplates.UpdateQualificationTemplate;
 
 using FluentValidation;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.QualificationTemplates.CreateQualificationTemplate;
 
-internal sealed class CreateQualificationTemplateValidator
-    : AbstractValidator<CreateQualificationTemplateCommand>
+internal sealed class UpdateQualificationTemplateValidator
+    : AbstractValidator<UpdateQualificationTemplateCommand>
 {
-    public CreateQualificationTemplateValidator()
+    public UpdateQualificationTemplateValidator()
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Description).MaximumLength(1000).When(x => x.Description is not null);

@@ -32,7 +32,7 @@ internal sealed class RecordFirstContactHandler(LeadsDbContext db)
 
         var contactedAt = cmd.ContactedAt ?? DateTimeOffset.UtcNow;
         assignment.RecordFirstContact(contactedAt);
-
+        db.Leads.Update(lead);
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }
