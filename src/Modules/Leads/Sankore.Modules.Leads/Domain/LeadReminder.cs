@@ -72,4 +72,17 @@ public sealed class LeadReminder
         ResolvedAt = DateTimeOffset.UtcNow;
         return Result.Ok();
     }
+    
+    /// <summary>Moves the due date to a new point in the future.</summary>
+    public Result Reschedule(DateTimeOffset newDueAt)
+    {
+        if (Status != ReminderStatus.Pending)
+            return Result.Fail("Only a Pending reminder can be rescheduled.");
+
+        if (newDueAt <= DateTimeOffset.UtcNow)
+            return Result.Fail("New due date must be in the future.");
+
+        DueAt = newDueAt;
+        return Result.Ok();
+    }
 }

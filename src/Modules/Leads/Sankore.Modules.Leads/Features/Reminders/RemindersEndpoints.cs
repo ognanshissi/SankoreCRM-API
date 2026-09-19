@@ -9,6 +9,7 @@ using Sankore.Modules.Leads.Features.Reminders.CompleteReminder;
 using Sankore.Modules.Leads.Features.Reminders.CreateReminder;
 using Sankore.Modules.Leads.Features.Reminders.DismissReminder;
 using Sankore.Modules.Leads.Features.Reminders.ListReminders;
+using Sankore.Modules.Leads.Features.Reminders.RescheduleReminder;
 using Sankore.Shared.Kernel;
 
 public static class RemindersEndpoints
@@ -50,6 +51,16 @@ public static class RemindersEndpoints
         // POST leads/{leadId}/reminders/{reminderId}/dismiss
         group.MapPost("{reminderId:guid}/dismiss", DismissReminder)
             .WithName("DismissLeadReminder")
+            .WithTags("Leads")
+            .RequireAuthorization(Permissions.CanManageLeadReminders.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // PUT leads/{leadId}/reminders/{reminderId}/reschedule
+        group.MapPut("{reminderId:guid}/reschedule", RescheduleReminder)
+            .WithName("RescheduleLeadReminder")
             .WithTags("Leads")
             .RequireAuthorization(Permissions.CanManageLeadReminders.Code)
             .Produces(StatusCodes.Status204NoContent)
@@ -107,6 +118,21 @@ public static class RemindersEndpoints
                 ? Results.NotFound()
                 : Results.Problem(title: "Dismiss failed", detail: result.Error, statusCode: 422);
     }
+
+    private static async Task<IResult> RescheduleReminder(
+        Guid leadId, Guid reminderId,
+        RescheduleReminderRequest req,
+        ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new RescheduleReminderCommand(leadId, reminderId, req.NewDueAt), ct);
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error == "REMINDER_NOT_FOUND"
+                ? Results.NotFound()
+                : Results.Problem(title: "Reschedule failed", detail: result.Error, statusCode: 422);
+    }
 }
 
 public sealed record CreateReminderRequest(
@@ -114,3 +140,5 @@ public sealed record CreateReminderRequest(
     Guid CreatedBy,
     DateTimeOffset DueAt,
     string? Notes = null);
+
+public sealed record RescheduleReminderRequest(DateTimeOffset NewDueAt);
