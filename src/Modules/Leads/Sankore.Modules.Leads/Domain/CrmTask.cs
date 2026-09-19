@@ -119,4 +119,23 @@ public sealed class CrmTask : ITenant
         CompatibilityFactorsJson = compatibilityFactorsJson;
         return Result.Ok();
     }
+
+    /// <summary>
+    /// Audited reassignment (US-M13-083). Changes the assigned agent and optionally
+    /// extends the SLA deadline. Cannot reassign a completed or cancelled task.
+    /// Returns the previous agent id so the caller can invalidate capacity caches.
+    /// </summary>
+    public Result<Guid?> Reassign(Guid newAgentId, DateTimeOffset? newSlaDeadline = null)
+    {
+        if (Status == CrmTaskStatus.Completed) return Result.Fail<Guid?>("TASK_ALREADY_COMPLETED");
+        if (Status == CrmTaskStatus.Cancelled)  return Result.Fail<Guid?>("TASK_CANCELLED");
+
+        var previous    = AssignedAgentId;
+        AssignedAgentId = newAgentId;
+
+        if (newSlaDeadline.HasValue)
+            SlaDeadline = newSlaDeadline;
+
+        return Result.Ok(previous);
+    }
 }
