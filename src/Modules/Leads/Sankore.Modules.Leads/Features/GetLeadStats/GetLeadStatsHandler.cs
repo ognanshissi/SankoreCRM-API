@@ -18,6 +18,8 @@ internal sealed class GetLeadStatsHandler(LeadsDbContext db)
             baseQuery = baseQuery.Where(l => l.CapturedAt >= query.From.Value);
         if (query.To.HasValue)
             baseQuery = baseQuery.Where(l => l.CapturedAt <= query.To.Value);
+        if (query.AgencyId.HasValue)
+            baseQuery = baseQuery.Where(l => l.AgencyId == query.AgencyId.Value);
 
         var total = await baseQuery.CountAsync(ct);
 

@@ -24,9 +24,10 @@ public static class GetLeadStatsEndpoint
         ISender sender,
         CancellationToken ct,
         DateTimeOffset? from = null,
-        DateTimeOffset? to = null)
+        DateTimeOffset? to = null,
+        Guid? agencyId = null)
     {
-        var result = await sender.Send(new GetLeadStatsQuery(from, to), ct);
+        var result = await sender.Send(new GetLeadStatsQuery(from, to, agencyId), ct);
         return Results.Ok(result.Value);
     }
 }

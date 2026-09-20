@@ -6,7 +6,8 @@ using Sankore.Shared.Kernel;
 
 internal sealed record GetLeadStatsQuery(
     DateTimeOffset? From = null,
-    DateTimeOffset? To = null
+    DateTimeOffset? To = null,
+    Guid? AgencyId = null
 ) : IRequest<Result<LeadStatsDto>>;
 
 public sealed record LeadStatsDto(

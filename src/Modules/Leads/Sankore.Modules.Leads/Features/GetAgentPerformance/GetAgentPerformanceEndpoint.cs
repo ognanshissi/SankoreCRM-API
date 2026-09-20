@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 public static class GetAgentPerformanceEndpoint
@@ -22,12 +23,16 @@ public static class GetAgentPerformanceEndpoint
 
     private static async Task<IResult> Handle(
         ISender sender,
+        ICurrentUser currentUser,
         CancellationToken ct,
         DateTimeOffset? from = null,
         DateTimeOffset? to = null,
-        Guid? agentId = null)
+        Guid? agentId = null,
+        Guid? agencyId = null)
     {
-        var result = await sender.Send(new GetAgentPerformanceQuery(from, to, agentId), ct);
+        var result = await sender.Send(new GetAgentPerformanceQuery(
+            from, to, agentId, agencyId,
+            currentUser.Id, currentUser.Roles), ct);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)

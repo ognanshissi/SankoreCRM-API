@@ -2,13 +2,20 @@ namespace Sankore.Modules.Leads.Features.GetAgentPerformance;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetAgentPerformanceHandler(LeadsDbContext db)
+internal sealed class GetAgentPerformanceHandler(
+    LeadsDbContext db,
+    ITenantContext tenant,
+    IAdministrationModule admin)
     : IRequestHandler<GetAgentPerformanceQuery, Result<IReadOnlyList<AgentPerformanceDto>>>
 {
+    private static readonly HashSet<string> SupervisorRoles =
+        ["System", "Administrator", "SalesManager", "BranchManager"];
+
     public async Task<Result<IReadOnlyList<AgentPerformanceDto>>> Handle(
         GetAgentPerformanceQuery query, CancellationToken ct)
     {
@@ -21,12 +28,41 @@ internal sealed class GetAgentPerformanceHandler(LeadsDbContext db)
         if (query.AgentId.HasValue)
             assignmentsQ = assignmentsQ.Where(a => a.AgentId == query.AgentId.Value);
 
+        // ── Agency filter ───────────────────────────────────────────────
+        if (query.AgencyId.HasValue)
+        {
+            var agencyLeadIds = db.Leads
+                .Where(l => l.AgencyId == query.AgencyId.Value)
+                .Select(l => l.Id);
+            assignmentsQ = assignmentsQ.Where(a => agencyLeadIds.Contains(a.LeadId));
+        }
+
+        // ── PermissionAttribution scoping (US-M13-182) ──────────────────
+        if (query.CurrentUserId.HasValue && query.CurrentUserRoles is not null)
+        {
+            var isSupervisor = query.CurrentUserRoles.Any(r => SupervisorRoles.Contains(r));
+
+            if (!isSupervisor)
+            {
+                // Agent sees only their own performance
+                assignmentsQ = assignmentsQ.Where(a => a.AgentId == query.CurrentUserId.Value);
+            }
+            else if (!query.CurrentUserRoles.Contains("System"))
+            {
+                // Manager sees their team only
+                var teamIds = await admin.GetTeamAgentIdsAsync(
+                    tenant.CurrentTenantId, query.CurrentUserId.Value, ct);
+
+                var visibleIds = teamIds.Append(query.CurrentUserId.Value).ToList();
+                assignmentsQ = assignmentsQ.Where(a => visibleIds.Contains(a.AgentId));
+            }
+        }
+
         var assignments = await assignmentsQ.ToListAsync(ct);
 
         if (assignments.Count == 0)
             return Result.Ok<IReadOnlyList<AgentPerformanceDto>>([]);
 
-        // Count converted leads per agent (via current assignment on the lead).
         var agentIds = assignments.Select(a => a.AgentId).Distinct().ToList();
 
         var convertedByAgent = await db.Leads
