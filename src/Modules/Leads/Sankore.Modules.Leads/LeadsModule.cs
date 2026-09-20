@@ -56,6 +56,7 @@ using Sankore.Modules.Leads.Features.SlaConfigs;
 using Sankore.Modules.Leads.Features.GetPipeline;
 using Sankore.Modules.Leads.Features.Opportunities;
 using Sankore.Modules.Leads.Features.SlaMonitoring;
+using Sankore.Modules.Leads.Features.NurturingExecution;
 using Sankore.Modules.Leads.Features.ListActivities;
 using Sankore.Modules.Leads.Features.ListLeads;
 using Sankore.Modules.Leads.Features.LogActivity;
@@ -66,6 +67,7 @@ using Sankore.Modules.Leads.Features.UpdateLead;
 using Sankore.Modules.Leads.Features.UpdateLeadOwner;
 using Sankore.Modules.Leads.Features.SystemCaptureLead;
 using Sankore.Modules.Leads.Features.UpdatePipelineStage;
+using Sankore.Modules.Leads.Features.NurturingSequences;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Infrastructure.Workflow;
@@ -123,6 +125,9 @@ public static class LeadsModule
 
         // SLA monitoring — Hangfire recurring job (US-M13-141/142)
         services.AddSlaMonitoring();
+
+        // Nurturing execution — Hangfire recurring job (US-M13-151)
+        services.AddTransient<ExecuteNurturingJob>();
 
         // Import — file storage for uploaded CSV files
         services.AddSingleton<IImportFileStore, LocalImportFileStore>();
@@ -217,6 +222,9 @@ public static class LeadsModule
 
         // Opportunities (US-M13-130/131)
         group.MapOpportunitiesEndpoints();
+
+        // Nurturing Sequences catalogue (US-M13-150)
+        group.MapNurturingSequencesEndpoints();
 
         // Phase 14 — Configuration (US-M13-190..197)
         group.MapLeadSourcesEndpoints();

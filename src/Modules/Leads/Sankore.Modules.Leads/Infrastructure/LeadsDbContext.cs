@@ -34,6 +34,9 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<PipelineStageConfig> PipelineStageConfigs => Set<PipelineStageConfig>();
     public DbSet<SlaConfig> SlaConfigs => Set<SlaConfig>();
     public DbSet<Opportunity> Opportunities => Set<Opportunity>();
+    public DbSet<NurturingSequence> NurturingSequences => Set<NurturingSequence>();
+    public DbSet<NurturingStep> NurturingSteps => Set<NurturingStep>();
+    public DbSet<NurturingEnrollment> NurturingEnrollments => Set<NurturingEnrollment>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -78,6 +81,38 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
             b.ToTable("outbox_messages");
             b.HasKey(m => m.Id);
             b.HasIndex(m => new { m.ProcessedAt, m.OccurredAt });
+        });
+
+        modelBuilder.Entity<NurturingSequence>(b =>
+        {
+            b.ToTable("nurturing_sequences");
+            b.HasKey(s => s.Id);
+            b.Property(s => s.Name).HasMaxLength(200).IsRequired();
+            b.Property(s => s.Description).HasMaxLength(2000);
+            b.HasMany(s => s.Steps).WithOne().HasForeignKey(st => st.SequenceId).OnDelete(DeleteBehavior.Cascade);
+            b.HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        });
+
+        modelBuilder.Entity<NurturingStep>(b =>
+        {
+            b.ToTable("nurturing_steps");
+            b.HasKey(st => st.Id);
+            b.Property(st => st.EmailTemplateKey).HasMaxLength(100).IsRequired();
+            b.Property(st => st.Subject).HasMaxLength(200);
+            b.HasIndex(st => new { st.SequenceId, st.Order });
+        });
+
+        modelBuilder.Entity<NurturingEnrollment>(b =>
+        {
+            b.ToTable("nurturing_enrollments");
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            b.Property(e => e.CancellationReason).HasMaxLength(500);
+            b.HasIndex(e => new { e.TenantId, e.Status, e.NextStepDueAt });
+            b.HasIndex(e => new { e.LeadId, e.Status });
+            b.HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
         });
 
         modelBuilder.Entity<Opportunity>(b =>

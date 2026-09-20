@@ -23,9 +23,10 @@ public static class NurtureLeadEndpoint
     }
 
     private static async Task<IResult> Handle(
-        Guid leadId, ISender sender, CancellationToken ct)
+        Guid leadId, NurtureLeadRequest? req, ISender sender, CancellationToken ct)
     {
-        var result = await sender.Send(new NurtureLeadCommand(leadId), ct);
+        var result = await sender.Send(
+            new NurtureLeadCommand(leadId, req?.SequenceId), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -34,3 +35,5 @@ public static class NurtureLeadEndpoint
                 : Results.Problem(title: "Nurture failed", detail: result.Error, statusCode: 422);
     }
 }
+
+public sealed record NurtureLeadRequest(Guid? SequenceId = null);

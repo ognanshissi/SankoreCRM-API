@@ -257,6 +257,14 @@ public static class Permissions
     public static readonly PermissionItem CanReadSlaConfigs =
         new("lead:sla-config:read", "Read SLA Configurations", ApplicationModules.Leads, "sla-config:read");
 
+    // ── Nurturing sequences (US-M13-150/151) ──────────────────────────────
+
+    public static readonly PermissionItem CanManageNurturingSequences =
+        new("lead:nurturing-sequence:manage", "Create and Update Nurturing Sequences", ApplicationModules.Leads, "nurturing-sequence:manage");
+
+    public static readonly PermissionItem CanReadNurturingSequences =
+        new("lead:nurturing-sequence:read", "Read Nurturing Sequences", ApplicationModules.Leads, "nurturing-sequence:read");
+
     // ── Opportunities (US-M13-130/131) ────────────────────────────────────
 
     public static readonly PermissionItem CanManageOpportunities =
@@ -396,5 +404,7 @@ public static class Permissions
         CanReadSlaConfigs,
         CanManageOpportunities,
         CanReadOpportunities,
+        CanManageNurturingSequences,
+        CanReadNurturingSequences,
     ];
 }

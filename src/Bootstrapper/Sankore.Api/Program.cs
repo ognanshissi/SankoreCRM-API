@@ -292,6 +292,11 @@ if (app.Environment.IsDevelopment())
         "sla-breach-check",
         job => job.ExecuteAsync(Guid.Empty),
         "*/15 * * * *");
+
+    Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.NurturingExecution.ExecuteNurturingJob>(
+        "nurturing-execution",
+        job => job.ExecuteAsync(Guid.Empty),
+        "*/10 * * * *");
 }
 
 app.UseExceptionHandler();
