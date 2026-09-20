@@ -16,37 +16,36 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         if (!leadExists)
             return Result.Fail<IReadOnlyList<TimelineEvent>>("LEAD_NOT_FOUND");
 
-        // Fan out all queries in parallel.
-        var activitiesTask = db.LeadActivities
+        var activities = await db.LeadActivities
             .Where(a => a.LeadId == query.LeadId)
             .ToListAsync(ct);
 
-        var scoresTask = db.ScoreHistories
+        var scores = await db.ScoreHistories
             .Where(s => s.LeadId == query.LeadId)
             .ToListAsync(ct);
 
-        var assignmentsTask = db.LeadAssignments
+        var assignments = await db.LeadAssignments
             .Where(a => a.LeadId == query.LeadId)
             .ToListAsync(ct);
 
-        var remindersTask = db.LeadReminders
+        var reminders = await db.LeadReminders
             .Where(r => r.LeadId == query.LeadId)
             .ToListAsync(ct);
 
-        var mergesTask = db.LeadMerges
+        var merges = await db.LeadMerges
             .Where(m => m.TargetLeadId == query.LeadId || m.SourceLeadId == query.LeadId)
             .ToListAsync(ct);
 
-        var dismissalsTask = db.DuplicateDismissals
+        var dismissals = await db.DuplicateDismissals
             .Where(d => d.LeadId == query.LeadId || d.CandidateLeadId == query.LeadId)
             .ToListAsync(ct);
 
-        var consentsTask = db.LeadConsents
+        var consents = await db.LeadConsents
             .Where(c => c.LeadId == query.LeadId)
             .ToListAsync(ct);
 
         // Qualification responses joined with template metadata for rich context.
-        var qualificationsTask = (
+        var qualifications = await (
             from r in db.QualificationResponses
             where r.LeadId == query.LeadId
             join t in db.QualificationTemplates on r.TemplateId equals t.Id
@@ -60,14 +59,10 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
                 t.ProductType
             }).ToListAsync(ct);
 
-        await Task.WhenAll(
-            activitiesTask, scoresTask, assignmentsTask, remindersTask,
-            mergesTask, dismissalsTask, consentsTask, qualificationsTask);
-
         var events = new List<TimelineEvent>();
 
         // Activities
-        foreach (var a in activitiesTask.Result)
+        foreach (var a in activities)
         {
             var detail = a.Outcome.HasValue
                 ? $"{a.Notes} • Outcome: {a.Outcome}"
@@ -83,8 +78,8 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
 
         // Score changes — exclude entries tied to a qualification response
         // (those are surfaced as richer Qualification events below).
-        var qualificationResponseIds = qualificationsTask.Result.Select(q => q.Id).ToHashSet();
-        foreach (var s in scoresTask.Result.Where(s => s.QualificationResponseId is null ||
+        var qualificationResponseIds = qualifications.Select(q => q.Id).ToHashSet();
+        foreach (var s in scores.Where(s => s.QualificationResponseId is null ||
                                                         !qualificationResponseIds.Contains(s.QualificationResponseId.Value)))
         {
             events.Add(new TimelineEvent(
@@ -96,7 +91,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         }
 
         // Qualification form submissions
-        foreach (var q in qualificationsTask.Result)
+        foreach (var q in qualifications)
         {
             var product = q.ProductType.HasValue ? $" ({q.ProductType})" : string.Empty;
             events.Add(new TimelineEvent(
@@ -108,7 +103,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         }
 
         // Assignments
-        foreach (var a in assignmentsTask.Result)
+        foreach (var a in assignments)
         {
             var title = a.WasManualOverride
                 ? $"Manually assigned to agent {a.AgentId}"
@@ -127,7 +122,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         }
 
         // Reminders
-        foreach (var r in remindersTask.Result)
+        foreach (var r in reminders)
         {
             events.Add(new TimelineEvent(
                 OccurredAt: r.CreatedAt,
@@ -148,7 +143,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         }
 
         // Merge events
-        foreach (var m in mergesTask.Result)
+        foreach (var m in merges)
         {
             if (m.TargetLeadId == query.LeadId)
             {
@@ -175,7 +170,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         }
 
         // Consent events
-        foreach (var c in consentsTask.Result)
+        foreach (var c in consents)
         {
             events.Add(new TimelineEvent(
                 OccurredAt: c.GrantedAt,
@@ -196,7 +191,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         }
 
         // Dismissal events
-        foreach (var d in dismissalsTask.Result)
+        foreach (var d in dismissals)
         {
             var otherLeadId = d.LeadId == query.LeadId ? d.CandidateLeadId : d.LeadId;
             var detail = string.IsNullOrEmpty(d.Reason) ? null : $"Reason: {d.Reason}";

@@ -26,26 +26,20 @@ internal sealed class GetNextActionHandler(LeadsDbContext db)
 
         var now = DateTimeOffset.UtcNow;
 
-        // Load the current assignment and pending reminders in parallel.
-        var assignmentTask = lead.CurrentAssignmentId.HasValue
-            ? db.LeadAssignments
+        var assignment = lead.CurrentAssignmentId.HasValue
+            ? await db.LeadAssignments
                 .AsNoTracking()
                 .Where(a => a.Id == lead.CurrentAssignmentId.Value)
                 .FirstOrDefaultAsync(ct)
-            : Task.FromResult<LeadAssignment?>(null);
+            : null;
 
-        var overdueReminderTask = db.LeadReminders
+        var overdueReminder = await db.LeadReminders
             .AsNoTracking()
             .Where(r => r.LeadId == lead.Id &&
                         r.Status == ReminderStatus.Pending &&
                         r.DueAt < now)
             .OrderBy(r => r.DueAt)
             .FirstOrDefaultAsync(ct);
-
-        await Task.WhenAll(assignmentTask, overdueReminderTask);
-
-        var assignment      = assignmentTask.Result;
-        var overdueReminder = overdueReminderTask.Result;
 
         // ── Priority-ordered rule engine ─────────────────────────────────────
 
