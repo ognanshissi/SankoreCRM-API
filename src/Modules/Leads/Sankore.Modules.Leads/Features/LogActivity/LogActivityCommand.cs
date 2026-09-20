@@ -9,7 +9,6 @@ internal sealed record LogActivityCommand(
     Guid LeadId,
     ActivityType Type,
     string Subject,
-    Guid PerformedBy,
     string? Notes = null,
     DateTimeOffset? ScheduledAt = null,
     int? DurationMinutes = null,

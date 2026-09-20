@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 public static class LogActivityEndpoint
@@ -27,6 +28,7 @@ public static class LogActivityEndpoint
         Guid leadId,
         LogActivityRequest req,
         ISender sender,
+        ICurrentUser currentUser,
         CancellationToken ct)
     {
         var result = await sender.Send(
@@ -34,7 +36,6 @@ public static class LogActivityEndpoint
                 LeadId:              leadId,
                 Type:                req.Type,
                 Subject:             req.Subject,
-                PerformedBy:         req.PerformedBy,
                 Notes:               req.Notes,
                 ScheduledAt:         req.ScheduledAt,
                 DurationMinutes:     req.DurationMinutes,
@@ -58,7 +59,6 @@ public static class LogActivityEndpoint
 public sealed record LogActivityRequest(
     ActivityType Type,
     string Subject,
-    Guid PerformedBy,
     string? Notes = null,
     DateTimeOffset? ScheduledAt = null,
     int? DurationMinutes = null,

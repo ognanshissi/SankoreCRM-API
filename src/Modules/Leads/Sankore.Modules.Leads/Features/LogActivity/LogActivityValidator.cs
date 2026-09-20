@@ -11,9 +11,6 @@ internal sealed class LogActivityValidator : AbstractValidator<LogActivityComman
             .NotEmpty().WithMessage("Subject is required.")
             .MaximumLength(200);
 
-        RuleFor(x => x.PerformedBy)
-            .NotEmpty().WithMessage("PerformedBy must be a valid user id.");
-
         RuleFor(x => x.DurationMinutes)
             .GreaterThan(0)
             .When(x => x.DurationMinutes.HasValue)

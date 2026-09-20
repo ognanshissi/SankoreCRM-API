@@ -1,3 +1,5 @@
+using Sankore.Shared.Infrastructure.Auth;
+
 namespace Sankore.Modules.Leads.Features.LogActivity;
 
 using MediatR;
@@ -12,6 +14,7 @@ using Sankore.Shared.Kernel.ValueObject;
 internal sealed class LogActivityHandler(
     LeadsDbContext db,
     ISender sender,
+    ICurrentUser currentUser,
     IOptions<LeadModuleSettings> settings)
     : IRequestHandler<LogActivityCommand, Result<LogActivityResult>>
 {
@@ -59,7 +62,7 @@ internal sealed class LogActivityHandler(
             leadId:              lead.Id,
             type:                cmd.Type,
             subject:             cmd.Subject,
-            performedBy:         cmd.PerformedBy,
+            performedBy:         currentUser.Id,
             notes:               cmd.Notes,
             scheduledAt:         cmd.ScheduledAt,
             durationMinutes:     cmd.DurationMinutes,

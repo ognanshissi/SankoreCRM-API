@@ -18,7 +18,7 @@ internal sealed class ListActivitiesHandler(LeadsDbContext db)
         var activities = await db.LeadActivities
             .Where(a => a.LeadId == query.LeadId)
             .OrderByDescending(a => a.PerformedAt)
-            .Skip((query.Page - 1) * query.PageSize)
+            .Skip(Math.Max(0, (query.Page - 1)) * query.PageSize)
             .Take(query.PageSize)
             .Select(a => new ActivityDto(
                 a.Id,
