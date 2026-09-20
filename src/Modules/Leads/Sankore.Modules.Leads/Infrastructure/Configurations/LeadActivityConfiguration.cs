@@ -24,6 +24,23 @@ internal sealed class LeadActivityConfiguration : IEntityTypeConfiguration<LeadA
             .HasConversion<string>()
             .HasMaxLength(30);
 
+        // Attachments — JSONB references to external object storage (US-M13-100)
+        builder.Property(a => a.AttachmentsJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("attachments");
+
+        // CTI (US-M13-101)
+        builder.Property(a => a.CtiCallReference).HasMaxLength(200);
+
+        // Visit location — owned GeoPoint (US-M13-102)
+        builder.OwnsOne(a => a.VisitLocation, loc =>
+        {
+            loc.Property(p => p.Latitude).HasColumnName("visit_lat");
+            loc.Property(p => p.Longitude).HasColumnName("visit_lng");
+        });
+
+        builder.Property(a => a.VisitPhotoReference).HasMaxLength(500);
+
         builder.HasOne<Lead>()
             .WithMany()
             .HasForeignKey(a => a.LeadId)

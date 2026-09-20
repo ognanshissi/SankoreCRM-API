@@ -31,19 +31,25 @@ public static class LogActivityEndpoint
     {
         var result = await sender.Send(
             new LogActivityCommand(
-                LeadId:          leadId,
-                Type:            req.Type,
-                Subject:         req.Subject,
-                PerformedBy:     req.PerformedBy,
-                Notes:           req.Notes,
-                ScheduledAt:     req.ScheduledAt,
-                DurationMinutes: req.DurationMinutes,
-                Outcome:         req.Outcome),
+                LeadId:              leadId,
+                Type:                req.Type,
+                Subject:             req.Subject,
+                PerformedBy:         req.PerformedBy,
+                Notes:               req.Notes,
+                ScheduledAt:         req.ScheduledAt,
+                DurationMinutes:     req.DurationMinutes,
+                Outcome:             req.Outcome,
+                AttachmentsJson:     req.AttachmentsJson,
+                CtiCallReference:    req.CtiCallReference,
+                IsSystemGenerated:   req.IsSystemGenerated,
+                VisitLatitude:       req.VisitLatitude,
+                VisitLongitude:      req.VisitLongitude,
+                VisitPhotoReference: req.VisitPhotoReference),
             ct);
 
         return result.IsSuccess
             ? Results.Created($"leads/{leadId}/activities/{result.Value!.ActivityId}", result.Value)
-            : result.Error == "LEAD_NOT_FOUND"
+            : result.Error is "LEAD_NOT_FOUND"
                 ? Results.NotFound()
                 : Results.Problem(title: "Log activity failed", detail: result.Error, statusCode: 422);
     }
@@ -56,4 +62,10 @@ public sealed record LogActivityRequest(
     string? Notes = null,
     DateTimeOffset? ScheduledAt = null,
     int? DurationMinutes = null,
-    ActivityOutcome? Outcome = null);
+    ActivityOutcome? Outcome = null,
+    string? AttachmentsJson = null,
+    string? CtiCallReference = null,
+    bool IsSystemGenerated = false,
+    double? VisitLatitude = null,
+    double? VisitLongitude = null,
+    string? VisitPhotoReference = null);

@@ -23,7 +23,13 @@ internal sealed class GetActivityHandler(LeadsDbContext db)
                 a.ScheduledAt,
                 a.PerformedAt,
                 a.DurationMinutes,
-                a.Outcome))
+                a.Outcome,
+                a.AttachmentsJson,
+                a.CtiCallReference,
+                a.IsSystemGenerated,
+                a.VisitLocation != null ? a.VisitLocation.Latitude : null,
+                a.VisitLocation != null ? a.VisitLocation.Longitude : null,
+                a.VisitPhotoReference))
             .FirstOrDefaultAsync(ct);
 
         return activity is null

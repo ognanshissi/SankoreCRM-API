@@ -22,5 +22,8 @@ public enum ConsentType
     ThirdPartySharing,
 
     /// <summary>Behavioural profiling and analytics.</summary>
-    ProfilingAndAnalytics
+    ProfilingAndAnalytics,
+
+    /// <summary>Recording GPS location during field visits (E03 — Addendum F13.1 §3.6).</summary>
+    LocationTracking
 }

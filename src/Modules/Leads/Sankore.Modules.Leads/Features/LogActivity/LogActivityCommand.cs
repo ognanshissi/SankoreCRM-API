@@ -13,7 +13,13 @@ internal sealed record LogActivityCommand(
     string? Notes = null,
     DateTimeOffset? ScheduledAt = null,
     int? DurationMinutes = null,
-    ActivityOutcome? Outcome = null
+    ActivityOutcome? Outcome = null,
+    string? AttachmentsJson = null,
+    string? CtiCallReference = null,
+    bool IsSystemGenerated = false,
+    double? VisitLatitude = null,
+    double? VisitLongitude = null,
+    string? VisitPhotoReference = null
 ) : IRequest<Result<LogActivityResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

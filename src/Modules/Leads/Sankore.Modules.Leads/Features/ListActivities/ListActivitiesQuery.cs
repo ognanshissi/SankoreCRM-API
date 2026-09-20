@@ -19,4 +19,10 @@ public sealed record ActivityDto(
     DateTimeOffset? ScheduledAt,
     DateTimeOffset PerformedAt,
     int? DurationMinutes,
-    ActivityOutcome? Outcome);
+    ActivityOutcome? Outcome,
+    string? AttachmentsJson = null,
+    string? CtiCallReference = null,
+    bool IsSystemGenerated = false,
+    double? VisitLatitude = null,
+    double? VisitLongitude = null,
+    string? VisitPhotoReference = null);

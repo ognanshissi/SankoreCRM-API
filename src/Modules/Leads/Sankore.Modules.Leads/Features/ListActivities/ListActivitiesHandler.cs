@@ -29,7 +29,13 @@ internal sealed class ListActivitiesHandler(LeadsDbContext db)
                 a.ScheduledAt,
                 a.PerformedAt,
                 a.DurationMinutes,
-                a.Outcome))
+                a.Outcome,
+                a.AttachmentsJson,
+                a.CtiCallReference,
+                a.IsSystemGenerated,
+                a.VisitLocation != null ? a.VisitLocation.Latitude : null,
+                a.VisitLocation != null ? a.VisitLocation.Longitude : null,
+                a.VisitPhotoReference))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<ActivityDto>>(activities);
