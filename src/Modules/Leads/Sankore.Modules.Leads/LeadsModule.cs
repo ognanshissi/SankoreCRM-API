@@ -48,6 +48,11 @@ using Sankore.Modules.Leads.Features.NextAction;
 using Sankore.Modules.Leads.Features.RecalculateLeadScore;
 using Sankore.Modules.Leads.Features.Tasks;
 using Sankore.Modules.Leads.Features.TaskGenerationRules;
+using Sankore.Modules.Leads.Features.LeadSources;
+using Sankore.Modules.Leads.Features.ScoringConfigs;
+using Sankore.Modules.Leads.Features.TaskTypes;
+using Sankore.Modules.Leads.Features.PipelineStages;
+using Sankore.Modules.Leads.Features.SlaConfigs;
 using Sankore.Modules.Leads.Features.ListActivities;
 using Sankore.Modules.Leads.Features.ListLeads;
 using Sankore.Modules.Leads.Features.LogActivity;
@@ -200,6 +205,13 @@ public static class LeadsModule
         // Phase 13 — CRM Tasks & Task Generation Rules (US-M13-080)
         group.MapTasksEndpoints();
         group.MapTaskGenerationRulesEndpoints();
+
+        // Phase 14 — Configuration (US-M13-190..197)
+        group.MapLeadSourcesEndpoints();
+        group.MapScoringConfigsEndpoints();
+        group.MapTaskTypesEndpoints();
+        group.MapPipelineStagesEndpoints();
+        group.MapSlaConfigsEndpoints();
 
         return app;
     }

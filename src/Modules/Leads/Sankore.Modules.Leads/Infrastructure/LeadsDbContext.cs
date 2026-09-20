@@ -28,6 +28,11 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<TaskDecline> TaskDeclines => Set<TaskDecline>();
     public DbSet<TaskGenerationRule> TaskGenerationRules => Set<TaskGenerationRule>();
     public DbSet<LeadImportJob> LeadImportJobs => Set<LeadImportJob>();
+    public DbSet<LeadSourceConfig> LeadSourceConfigs => Set<LeadSourceConfig>();
+    public DbSet<ScoringConfig> ScoringConfigs => Set<ScoringConfig>();
+    public DbSet<TaskTypeConfig> TaskTypeConfigs => Set<TaskTypeConfig>();
+    public DbSet<PipelineStageConfig> PipelineStageConfigs => Set<PipelineStageConfig>();
+    public DbSet<SlaConfig> SlaConfigs => Set<SlaConfig>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -136,6 +141,60 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
                 v => Enum.Parse<LeadImportStatus>(v))
                 .HasMaxLength(20);
             b.HasQueryFilter(j => j.TenantId == tenant.CurrentTenantId);
+        });
+
+        // ── Configuration entities (US-M13-190..197) ────────────────────
+
+        modelBuilder.Entity<LeadSourceConfig>(b =>
+        {
+            b.ToTable("lead_source_configs");
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Code).HasMaxLength(30);
+            b.Property(e => e.Label).HasMaxLength(100);
+            b.Property(e => e.Description).HasMaxLength(500);
+            b.HasIndex(e => new { e.TenantId, e.Code }).IsUnique();
+            b.HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
+        });
+
+        modelBuilder.Entity<ScoringConfig>(b =>
+        {
+            b.ToTable("scoring_configs");
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Name).HasMaxLength(100);
+            b.HasIndex(e => new { e.TenantId, e.IsActive });
+            b.HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
+        });
+
+        modelBuilder.Entity<TaskTypeConfig>(b =>
+        {
+            b.ToTable("task_type_configs");
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Code).HasMaxLength(30);
+            b.Property(e => e.Label).HasMaxLength(100);
+            b.Property(e => e.Description).HasMaxLength(500);
+            b.HasIndex(e => new { e.TenantId, e.Code }).IsUnique();
+            b.HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
+        });
+
+        modelBuilder.Entity<PipelineStageConfig>(b =>
+        {
+            b.ToTable("pipeline_stage_configs");
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Code).HasMaxLength(30);
+            b.Property(e => e.Label).HasMaxLength(100);
+            b.Property(e => e.Description).HasMaxLength(500);
+            b.Property(e => e.Color).HasMaxLength(7);
+            b.HasIndex(e => new { e.TenantId, e.Code }).IsUnique();
+            b.HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
+        });
+
+        modelBuilder.Entity<SlaConfig>(b =>
+        {
+            b.ToTable("sla_configs");
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Name).HasMaxLength(100);
+            b.HasIndex(e => new { e.TenantId, e.AgencyId, e.IsActive });
+            b.HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
         });
     }
 

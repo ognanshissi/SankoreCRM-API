@@ -225,6 +225,38 @@ public static class Permissions
     public static readonly PermissionItem CanManageTaskGenerationRules =
         new("lead:task-rule:manage", "Configure Task Generation Rules", ApplicationModules.Leads, "task-rule:manage");
 
+    // ── Lead configuration (US-M13-190..197) ────────────────────────────
+
+    public static readonly PermissionItem CanManageLeadSources =
+        new("lead:source:manage", "Create and Update Lead Sources", ApplicationModules.Leads, "source:manage");
+
+    public static readonly PermissionItem CanReadLeadSources =
+        new("lead:source:read", "Read Lead Sources", ApplicationModules.Leads, "source:read");
+
+    public static readonly PermissionItem CanManageScoringConfigs =
+        new("lead:scoring-config:manage", "Create and Activate Scoring Configurations", ApplicationModules.Leads, "scoring-config:manage");
+
+    public static readonly PermissionItem CanReadScoringConfigs =
+        new("lead:scoring-config:read", "Read Scoring Configurations", ApplicationModules.Leads, "scoring-config:read");
+
+    public static readonly PermissionItem CanManageTaskTypes =
+        new("lead:task-type:manage", "Create and Update Task Types", ApplicationModules.Leads, "task-type:manage");
+
+    public static readonly PermissionItem CanReadTaskTypes =
+        new("lead:task-type:read", "Read Task Types", ApplicationModules.Leads, "task-type:read");
+
+    public static readonly PermissionItem CanManagePipelineStages =
+        new("lead:pipeline-stage:manage", "Create and Update Pipeline Stage Configurations", ApplicationModules.Leads, "pipeline-stage:manage");
+
+    public static readonly PermissionItem CanReadPipelineStages =
+        new("lead:pipeline-stage:read", "Read Pipeline Stage Configurations", ApplicationModules.Leads, "pipeline-stage:read");
+
+    public static readonly PermissionItem CanManageSlaConfigs =
+        new("lead:sla-config:manage", "Create and Update SLA Configurations", ApplicationModules.Leads, "sla-config:manage");
+
+    public static readonly PermissionItem CanReadSlaConfigs =
+        new("lead:sla-config:read", "Read SLA Configurations", ApplicationModules.Leads, "sla-config:read");
+
     // ── Company info (Administration module) ──────────────────────────────
 
     public static readonly PermissionItem CanReadCompanyInfo =
@@ -344,5 +376,15 @@ public static class Permissions
         CanReadCrmTasks,
         CanManageCrmTasks,
         CanManageTaskGenerationRules,
+        CanManageLeadSources,
+        CanReadLeadSources,
+        CanManageScoringConfigs,
+        CanReadScoringConfigs,
+        CanManageTaskTypes,
+        CanReadTaskTypes,
+        CanManagePipelineStages,
+        CanReadPipelineStages,
+        CanManageSlaConfigs,
+        CanReadSlaConfigs,
     ];
 }

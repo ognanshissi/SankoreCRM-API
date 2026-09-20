@@ -209,8 +209,9 @@ public sealed class DispatchLeadHandlerTests : IDisposable
             stickyAssignment: new StickyAssignmentStrategy(new CompatibilityScoringStrategy()),
             cherryPicking: new CherryPickingStrategy(new CompatibilityScoringStrategy()));
 
+        var capacityService = new AgentCapacityService(db, null);
         return new DispatchLeadHandler(
-            db, usersModule, scorer, factory, publisher,
+            db, usersModule, scorer, factory, capacityService, publisher,
             NullLogger<DispatchLeadHandler>.Instance, TimeProvider.System);
     }
 }
