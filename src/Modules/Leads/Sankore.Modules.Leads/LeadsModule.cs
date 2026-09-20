@@ -53,6 +53,7 @@ using Sankore.Modules.Leads.Features.ScoringConfigs;
 using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Features.PipelineStages;
 using Sankore.Modules.Leads.Features.SlaConfigs;
+using Sankore.Modules.Leads.Features.GetPipeline;
 using Sankore.Modules.Leads.Features.ListActivities;
 using Sankore.Modules.Leads.Features.ListLeads;
 using Sankore.Modules.Leads.Features.LogActivity;
@@ -205,6 +206,9 @@ public static class LeadsModule
         // Phase 13 — CRM Tasks & Task Generation Rules (US-M13-080)
         group.MapTasksEndpoints();
         group.MapTaskGenerationRulesEndpoints();
+
+        // Pipeline Kanban view (US-M13-120)
+        group.MapGetPipeline();
 
         // Phase 14 — Configuration (US-M13-190..197)
         group.MapLeadSourcesEndpoints();
