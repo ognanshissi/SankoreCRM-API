@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.Tasks.DispatchTask;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using MassTransit;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
@@ -28,6 +29,7 @@ internal sealed class DispatchTaskHandler(
     DispatchingStrategyFactory strategyFactory,
     AgentCapacityService capacityService,
     AgentExclusionService exclusionService,
+    IBus bus,
     ILogger<DispatchTaskHandler> logger)
     : IRequestHandler<DispatchTaskCommand, Result<DispatchTaskResult>>
 {
@@ -139,6 +141,14 @@ internal sealed class DispatchTaskHandler(
 
         // Invalidate capacity for the winning agent — they now hold one more open task.
         await capacityService.InvalidateAsync(cmd.TenantId, winner.Agent.Id, ct);
+
+        await bus.Publish(new Events.TaskAssignedIntegrationEvent(
+            TaskId:   task.Id,
+            TenantId: cmd.TenantId,
+            AgentId:  winner.Agent.Id,
+            Title:    task.Title,
+            DueAt:    task.DueAt,
+            LeadId:   task.LeadId), ct);
 
         logger.LogInformation(
             "Task {TaskId} dispatched to agent {AgentId} (score={Score}, strategy={Strategy})",

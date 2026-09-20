@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Features.Tasks.ReassignTask;
 
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,7 @@ internal sealed class ReassignTaskHandler(
     LeadsDbContext db,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     AgentCapacityService capacityService,
+    IBus bus,
     ILogger<ReassignTaskHandler> logger)
     : IRequestHandler<ReassignTaskCommand, Result>
 {
@@ -71,6 +73,14 @@ internal sealed class ReassignTaskHandler(
         if (previousAgentId.HasValue)
             await capacityService.InvalidateAsync(task.TenantId, previousAgentId.Value, ct);
         await capacityService.InvalidateAsync(task.TenantId, cmd.NewAgentId, ct);
+
+        await bus.Publish(new Tasks.Events.TaskAssignedIntegrationEvent(
+            TaskId:   task.Id,
+            TenantId: task.TenantId,
+            AgentId:  cmd.NewAgentId,
+            Title:    task.Title,
+            DueAt:    task.DueAt,
+            LeadId:   task.LeadId), ct);
 
         logger.LogInformation(
             "Task {TaskId} reassigned from {PreviousAgent} to {NewAgent} by {Actor} (reason: {Reason})",
