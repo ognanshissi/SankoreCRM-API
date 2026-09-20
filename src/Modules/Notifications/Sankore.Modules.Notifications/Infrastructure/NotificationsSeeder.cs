@@ -15,6 +15,8 @@ internal static class NotificationsSeeder
     {
         await SeedUserActivationAsync(db, logger, ct);
         await SeedPasswordForgotAsync(db, logger, ct);
+        await SeedTaskAssignedAsync(db, logger, ct);
+        await SeedLeadSlaBreachAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -38,6 +40,7 @@ internal static class NotificationsSeeder
                 templateKey: key,
                 locale: "fr",
                 version: 1,
+                isSystem: true,
                 subject: "Activez votre compte {{ company_name }}",
                 htmlBody: """
                     <!DOCTYPE html>
@@ -73,6 +76,7 @@ internal static class NotificationsSeeder
                 templateKey: key,
                 locale: "en",
                 version: 1,
+                isSystem: true,
                 subject: "Activate your {{ company_name }} account",
                 htmlBody: """
                     <!DOCTYPE html> 
@@ -122,6 +126,7 @@ internal static class NotificationsSeeder
                 templateKey: key,
                 locale: "fr",
                 version: 1,
+                isSystem: true,
                 subject: "Réinitialisation de votre mot de passe {{ company_name }}",
                 htmlBody: """
                     <!DOCTYPE html>
@@ -160,6 +165,7 @@ internal static class NotificationsSeeder
                 templateKey: key,
                 locale: "en",
                 version: 1,
+                isSystem: true,
                 subject: "Reset your {{ company_name }} password",
                 htmlBody: """
                     <!DOCTYPE html>
@@ -184,6 +190,160 @@ internal static class NotificationsSeeder
                         This link is valid for 24 hours.<br>
                         If you did not request a password reset, you can safely ignore this email — your password will not change.
                       </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── task.assigned ─────────────────────────────────────────────────────────
+    // Variables: {{ agent_name }}, {{ task_title }}, {{ task_id }}, {{ due_at }}, {{ lead_id }}
+
+    private static async Task SeedTaskAssignedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "task.assigned";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Nouvelle tâche assignée : {{ task_title }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Nouvelle tâche assignée</h2>
+                      <p>Bonjour {{ agent_name }},</p>
+                      <p>Une nouvelle tâche vous a été assignée :</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Titre</td><td style="padding:8px;border:1px solid #eee">{{ task_title }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Échéance</td><td style="padding:8px;border:1px solid #eee">{{ due_at }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_id }}</td></tr>
+                      </table>
+                      <p>Connectez-vous à la plateforme pour consulter les détails et démarrer la tâche.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Réf. tâche : {{ task_id }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "New task assigned: {{ task_title }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>New task assigned</h2>
+                      <p>Hello {{ agent_name }},</p>
+                      <p>A new task has been assigned to you:</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Title</td><td style="padding:8px;border:1px solid #eee">{{ task_title }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Due</td><td style="padding:8px;border:1px solid #eee">{{ due_at }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_id }}</td></tr>
+                      </table>
+                      <p>Log in to the platform to view details and start the task.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Task ref: {{ task_id }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── lead.sla-breach ──────────────────────────────────────────────────────
+    // Variables: {{ lead_name }}, {{ lead_id }}, {{ agent_name }}, {{ sla_deadline }}, {{ breach_hours }}
+
+    private static async Task SeedLeadSlaBreachAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "lead.sla-breach";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "⚠ Dépassement SLA — Lead {{ lead_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#dc2626">Alerte SLA dépassé</h2>
+                      <p>Bonjour {{ agent_name }},</p>
+                      <p>Le délai de premier contact pour le lead suivant a été dépassé :</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_name }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Échéance SLA</td><td style="padding:8px;border:1px solid #eee">{{ sla_deadline }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Retard</td><td style="padding:8px;border:1px solid #eee">{{ breach_hours }} heure(s)</td></tr>
+                      </table>
+                      <p>Veuillez contacter ce lead dans les plus brefs délais.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Réf. lead : {{ lead_id }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "⚠ SLA breach — Lead {{ lead_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#dc2626">SLA breach alert</h2>
+                      <p>Hello {{ agent_name }},</p>
+                      <p>The first-contact deadline for the following lead has been exceeded:</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_name }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">SLA deadline</td><td style="padding:8px;border:1px solid #eee">{{ sla_deadline }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Overdue by</td><td style="padding:8px;border:1px solid #eee">{{ breach_hours }} hour(s)</td></tr>
+                      </table>
+                      <p>Please contact this lead as soon as possible.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Lead ref: {{ lead_id }}</p>
                     </body>
                     </html>
                     """));

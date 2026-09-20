@@ -34,7 +34,7 @@ internal sealed class ListEmailTemplatesHandler(
             .ThenBy(t => t.Locale)
             .ThenBy(t => t.Version)
             .Select(t => new EmailTemplateDto(
-                t.Id, t.TenantId, t.TemplateKey, t.Locale, t.Version, t.Subject, t.IsActive, t.CreatedAt))
+                t.Id, t.TenantId, t.TemplateKey, t.Locale, t.Version, t.Subject, t.IsActive, t.IsSystem, t.CreatedAt))
             .ToListAsync(ct);
 
         return Result<List<EmailTemplateDto>>.Ok(list);

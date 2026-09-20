@@ -16,6 +16,8 @@ internal sealed class EmailTemplateConfiguration
         b.Property(t => t.Locale).HasMaxLength(10).IsRequired();
         b.Property(t => t.Subject).HasMaxLength(500).IsRequired();
 
+        b.Property(t => t.IsSystem).HasDefaultValue(false);
+
         // Only one active version per (TenantId, TemplateKey, Locale) combo enforced in application logic.
         b.HasIndex(t => new { t.TenantId, t.TemplateKey, t.Locale, t.Version }).IsUnique();
         b.HasIndex(t => new { t.TemplateKey, t.Locale, t.IsActive });

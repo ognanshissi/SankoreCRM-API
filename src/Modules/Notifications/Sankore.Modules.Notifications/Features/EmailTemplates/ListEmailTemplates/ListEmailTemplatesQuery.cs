@@ -17,4 +17,5 @@ internal sealed record EmailTemplateDto(
     int Version,
     string Subject,
     bool IsActive,
+    bool IsSystem,
     DateTimeOffset CreatedAt);

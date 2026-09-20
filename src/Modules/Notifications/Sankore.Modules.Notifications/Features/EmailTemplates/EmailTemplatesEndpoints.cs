@@ -8,6 +8,7 @@ using Sankore.Modules.Notifications.Features.EmailTemplates.ActivateEmailTemplat
 using Sankore.Modules.Notifications.Features.EmailTemplates.CreateEmailTemplate;
 using Sankore.Modules.Notifications.Features.EmailTemplates.GetEmailTemplate;
 using Sankore.Modules.Notifications.Features.EmailTemplates.ListEmailTemplates;
+using Sankore.Modules.Notifications.Features.EmailTemplates.ForkEmailTemplate;
 using Sankore.Modules.Notifications.Features.EmailTemplates.UpdateEmailTemplate;
 using Sankore.Shared.Kernel;
 
@@ -61,6 +62,20 @@ internal static class EmailTemplatesEndpoints
             return result.IsSuccess
                 ? Results.Ok(new { id = result.Value })
                 : Results.UnprocessableEntity(result.Error);
+        })
+        .RequireAuthorization(Permissions.CanManageEmailTemplates.Code);
+
+        // POST /email-templates/{id}/fork — copy a system template into the tenant scope
+        group.MapPost("{id:guid}/fork", async (Guid id, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new ForkEmailTemplateCommand(id), ct);
+            return result.IsSuccess
+                ? Results.Created($"/api/v1/email-templates/{result.Value}", new { id = result.Value })
+                : result.Error switch
+                {
+                    "EMAIL_TEMPLATE_NOT_FOUND" => Results.NotFound(result.Error),
+                    _ => Results.UnprocessableEntity(result.Error)
+                };
         })
         .RequireAuthorization(Permissions.CanManageEmailTemplates.Code);
 

@@ -25,6 +25,6 @@ internal sealed class GetEmailTemplateHandler(
 
         return Result<EmailTemplateDetailDto>.Ok(new EmailTemplateDetailDto(
             t.Id, t.TenantId, t.TemplateKey, t.Locale, t.Version,
-            t.Subject, t.HtmlBody, t.TextBody, t.IsActive, t.CreatedAt));
+            t.Subject, t.HtmlBody, t.TextBody, t.IsActive, t.IsSystem, t.CreatedAt));
     }
 }

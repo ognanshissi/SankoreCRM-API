@@ -15,4 +15,5 @@ internal sealed record EmailTemplateDetailDto(
     string HtmlBody,
     string? TextBody,
     bool IsActive,
+    bool IsSystem,
     DateTimeOffset CreatedAt);

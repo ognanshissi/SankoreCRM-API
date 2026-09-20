@@ -25,6 +25,9 @@ internal sealed class UpdateEmailTemplateHandler(
         if (source is null)
             return Result<Guid>.Fail("EMAIL_TEMPLATE_NOT_FOUND");
 
+        if (source.IsSystem)
+            return Result<Guid>.Fail("SYSTEM_TEMPLATE_READONLY");
+
         // Compute next version
         var nextVersion = await db.EmailTemplates
             .IgnoreQueryFilters()

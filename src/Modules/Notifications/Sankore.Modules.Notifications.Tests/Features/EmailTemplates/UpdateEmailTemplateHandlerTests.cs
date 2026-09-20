@@ -60,6 +60,23 @@ public sealed class UpdateEmailTemplateHandlerTests : IDisposable
     }
 
     [Fact]
+    public async void Cannot_update_system_template()
+    {
+        await using var db = _factory.CreateContext();
+        var system = EmailTemplate.Create(null, "user.activation", "fr", 1, "Sub", "<p>body</p>", isSystem: true);
+        db.EmailTemplates.Add(system);
+        await db.SaveChangesAsync();
+
+        var handler = new UpdateEmailTemplateHandler(db, _currentUser);
+        var result = await handler.Handle(
+            new UpdateEmailTemplateCommand(system.Id, "New Sub", "<p>new</p>", null),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("SYSTEM_TEMPLATE_READONLY");
+    }
+
+    [Fact]
     public async void Cannot_update_another_tenants_template()
     {
         var otherTenantId = Guid.NewGuid();
