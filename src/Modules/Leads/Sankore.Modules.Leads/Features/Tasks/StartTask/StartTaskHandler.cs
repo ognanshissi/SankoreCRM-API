@@ -4,13 +4,13 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
-// StartTask moves a task from Pending → InProgress; the open task count
-// does not change (both statuses count as open) so no cache invalidation is
-// needed. The handler is still injected with AgentCapacityService to maintain
-// consistent constructor signatures across all task handlers.
-internal sealed class StartTaskHandler(LeadsDbContext db, AgentCapacityService capacityService)
+internal sealed class StartTaskHandler(
+    LeadsDbContext db,
+    AgentCapacityService capacityService,
+    ICurrentUser currentUser)
     : IRequestHandler<StartTaskCommand, Result>
 {
     public async Task<Result> Handle(StartTaskCommand cmd, CancellationToken ct)
@@ -21,10 +21,22 @@ internal sealed class StartTaskHandler(LeadsDbContext db, AgentCapacityService c
         if (task is null)
             return Result.Fail("TASK_NOT_FOUND");
 
+        // Ownership guard: only the assigned agent or a supervisor can start
+        if (task.AssignedAgentId.HasValue
+            && task.AssignedAgentId.Value != currentUser.Id
+            && !IsSupervisor())
+        {
+            return Result.Fail("NOT_TASK_OWNER");
+        }
+
         var result = task.StartProgress();
         if (result.IsFailure) return result;
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }
+
+    private bool IsSupervisor() =>
+        currentUser.Roles.Any(r =>
+            r is "System" or "Administrator" or "SalesManager" or "BranchManager");
 }

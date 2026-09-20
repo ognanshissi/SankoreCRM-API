@@ -10,10 +10,14 @@ internal sealed class CreateDispatchingRuleValidator : AbstractValidator<CreateD
         RuleFor(x => x.MaxLeadsPerAgent).GreaterThan(0);
         RuleFor(x => x.AntiMonopolyThreshold).GreaterThan(0);
         RuleFor(x => x.FirstContactSla).GreaterThan(TimeSpan.Zero);
-        RuleFor(x => x.Weights.Language).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.Weights.Product).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.Weights.Geography).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.Weights.Workload).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.Weights.Performance).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.Weights).NotNull();
+        When(x => x.Weights is not null, () =>
+        {
+            RuleFor(x => x.Weights.Language).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.Weights.Product).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.Weights.Geography).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.Weights.Workload).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.Weights.Performance).GreaterThanOrEqualTo(0);
+        });
     }
 }

@@ -25,6 +25,12 @@ public interface IAdministrationModule
     Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct);
 
     /// <summary>
+    /// Returns the IDs of agents managed by the given supervisor (same agency or sub-agencies).
+    /// Used for task visibility scoping (US-M13-090).
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetTeamAgentIdsAsync(Guid tenantId, Guid supervisorId, CancellationToken ct);
+
+    /// <summary>
     /// Returns the email provider configuration for a tenant so that the
     /// Notifications module can resolve the correct provider at send time.
     /// Returns null when no custom config exists (use platform default).

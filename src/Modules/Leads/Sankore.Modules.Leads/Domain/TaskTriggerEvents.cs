@@ -9,4 +9,5 @@ public static class TaskTriggerEvents
     public const string LeadDispatched             = "LeadDispatched";
     public const string LeadDispatchingFailed      = "LeadDispatchingFailed";
     public const string LeadScoreCriticallyChanged = "LeadScoreCriticallyChanged";
+    public const string TaskCompleted              = "TaskCompleted";
 }

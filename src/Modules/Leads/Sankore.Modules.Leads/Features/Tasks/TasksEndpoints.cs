@@ -15,6 +15,7 @@ using Sankore.Modules.Leads.Features.Tasks.ListTasks;
 using Sankore.Modules.Leads.Features.Tasks.DeclineTask;
 using Sankore.Modules.Leads.Features.Tasks.ReassignTask;
 using Sankore.Modules.Leads.Features.Tasks.StartTask;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 public static class TasksEndpoints
@@ -122,11 +123,13 @@ public static class TasksEndpoints
     }
 
     private static async Task<IResult> ListTasks(
-        ISender sender, CancellationToken ct,
+        ISender sender, ICurrentUser currentUser, CancellationToken ct,
         Guid? leadId = null, Guid? agentId = null,
         CrmTaskStatus? status = null, CrmTaskType? type = null)
     {
-        var result = await sender.Send(new ListTasksQuery(leadId, agentId, status, type), ct);
+        var result = await sender.Send(new ListTasksQuery(
+            leadId, agentId, status, type,
+            currentUser.Id, currentUser.Roles), ct);
         return Results.Ok(result.Value);
     }
 
