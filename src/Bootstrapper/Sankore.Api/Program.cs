@@ -249,6 +249,12 @@ builder.Services.AddLeadsModule(builder.Configuration);
 builder.Services.AddWorkflowModule(builder.Configuration);
 builder.Services.AddNotificationsModule(builder.Configuration);
 // builder.Services.AddCustomersModule(builder.Configuration);   // M01 — same pattern
+
+// Stub registrations for modules not yet scaffolded (US-M13-171/172)
+builder.Services.AddScoped<Sankore.Modules.Customer360.PublicApi.ICustomerModule,
+    Sankore.Api.Stubs.StubCustomerModule>();
+builder.Services.AddScoped<Sankore.Modules.Kyc.PublicApi.IKycModule,
+    Sankore.Api.Stubs.StubKycModule>();
 // builder.Services.AddKycModule(builder.Configuration);         // M02 — same pattern
 // builder.Services.AddLoansModule(builder.Configuration);       // M04 — same pattern
 

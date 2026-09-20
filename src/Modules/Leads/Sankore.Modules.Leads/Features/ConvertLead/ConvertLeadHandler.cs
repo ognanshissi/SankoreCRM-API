@@ -3,15 +3,20 @@ namespace Sankore.Modules.Leads.Features.ConvertLead;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Sankore.Modules.Customer360.PublicApi;
+using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.ConvertLead.Events;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 
 internal sealed class ConvertLeadHandler(
     LeadsDbContext db,
+    ICurrentUser currentUser,
+    ICustomerModule customerModule,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<ConvertLeadCommand, Result<ConvertLeadResult>>
 {
@@ -25,9 +30,17 @@ internal sealed class ConvertLeadHandler(
         if (lead is null)
             return Result.Fail<ConvertLeadResult>("LEAD_NOT_FOUND");
 
-        // ── Duplicate gate before conversion ─────────────────────────────────
-        // Checks for other active leads with the same identity at a higher
-        // confidence threshold than capture (default 70 = Probable).
+        // ── US-M13-171: Validate existing customer if provided ──────────
+        if (cmd.CustomerId.HasValue)
+        {
+            var exists = await customerModule.ExistsAsync(
+                lead.TenantId, cmd.CustomerId.Value, ct);
+
+            if (!exists)
+                return Result.Fail<ConvertLeadResult>("CUSTOMER_NOT_FOUND");
+        }
+
+        // ── Duplicate gate before conversion ─────────────────────────────
         if (!cmd.Force)
         {
             var probe = MatchProbe.From(
@@ -42,17 +55,16 @@ internal sealed class ConvertLeadHandler(
             var nationalId  = probe.NationalId;
             var customerRef = probe.CustomerReference;
 
-            // Only search if at least one strong identifier is available.
             if (phoneDigits is not null || emailNorm is not null
                 || nationalId is not null || customerRef is not null)
             {
                 var candidates = await db.Leads
                     .Where(l =>
-                        l.Id != cmd.LeadId &&                       // exclude itself
+                        l.Id != cmd.LeadId &&
                         l.Status != LeadStatus.Lost &&
                         l.Status != LeadStatus.Archived &&
                         l.Status != LeadStatus.Disqualified &&
-                        l.Status != LeadStatus.Converted &&         // already-converted are not a risk
+                        l.Status != LeadStatus.Converted &&
                         ((phoneDigits != null && l.PhoneNumber.EndsWith(phoneDigits)) ||
                          (emailNorm != null && l.Email != null && l.Email.ToLower() == emailNorm) ||
                          (nationalId != null && l.NationalId != null && l.NationalId.ToLower() == nationalId.ToLower()) ||
@@ -61,7 +73,6 @@ internal sealed class ConvertLeadHandler(
 
                 if (candidates.Count > 0)
                 {
-                    // Exclude pairs that have already been dismissed by the user.
                     var candidateIds  = candidates.Select(l => l.Id).ToList();
                     var dismissedIds  = await db.DuplicateDismissals
                         .Where(d =>
@@ -86,7 +97,6 @@ internal sealed class ConvertLeadHandler(
 
                     if (matches.Count > 0)
                     {
-                        // Conversion would risk creating a duplicate customer.
                         return Result.Ok(new ConvertLeadResult(
                             LeadId:              cmd.LeadId,
                             CustomerId:          Guid.Empty,
@@ -98,19 +108,14 @@ internal sealed class ConvertLeadHandler(
             }
         }
 
-        // ── Proceed with conversion ───────────────────────────────────────────
-        // If the caller didn't supply a CustomerId we generate one here.
-        // The Customers module will use this same Guid when it creates the
-        // customer record in response to the LeadConvertedIntegrationEvent.
+        // ── Proceed with conversion ─────────────────────────────────────
         var customerId = cmd.CustomerId ?? Guid.NewGuid();
 
         var convertResult = lead.Convert(customerId);
         if (convertResult.IsFailure)
             return Result.Fail<ConvertLeadResult>(convertResult.Error!);
 
-        // Publish the integration event atomically with the lead state change.
-        // OutboxEventPublisher writes the row into THIS DbContext instance
-        // (no SaveChangesAsync inside), so both rows land in the same commit.
+        // Publish LeadConverted integration event atomically via outbox
         await publisher.PublishAsync(
             new LeadConvertedIntegrationEvent(
                 LeadId:      lead.Id,
@@ -120,6 +125,20 @@ internal sealed class ConvertLeadHandler(
                 PhoneNumber: lead.PhoneNumber,
                 Email:       lead.Email,
                 ConvertedAt: lead.ConvertedAt!.Value),
+            ct);
+
+        // ── US-M13-172: Publish KycRequested event via outbox ───────────
+        await publisher.PublishAsync(
+            new KycRequestedIntegrationEvent(
+                TenantId:         lead.TenantId,
+                CustomerEntityId: customerId,
+                LeadId:           lead.Id,
+                FullName:         lead.FullName,
+                PhoneNumber:      lead.PhoneNumber,
+                Email:            lead.Email,
+                NationalId:       lead.NationalId,
+                DateOfBirth:      lead.DateOfBirth,
+                RequestedBy:      currentUser.Id),
             ct);
 
         await db.SaveChangesAsync(ct);

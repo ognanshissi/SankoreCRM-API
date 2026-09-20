@@ -3,23 +3,52 @@ namespace Sankore.Modules.Leads.Features.UpdateLeadOwner;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.UpdateLeadOwner.Events;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 
 internal sealed class UpdateLeadOwnerHandler(
     LeadsDbContext db,
+    ICurrentUser currentUser,
+    IAdministrationModule admin,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<UpdateLeadOwnerCommand, Result>
 {
+    private static readonly HashSet<string> SupervisorRoles =
+        ["System", "Administrator", "SalesManager", "BranchManager"];
+
     public async Task<Result> Handle(UpdateLeadOwnerCommand cmd, CancellationToken ct)
     {
         var lead = await db.Leads.AsTracking().FirstOrDefaultAsync(l => l.Id == cmd.LeadId, ct);
 
         if (lead is null)
             return Result.Fail("LEAD_NOT_FOUND");
+
+        // ── US-M13-173: PermissionAttribution scope check ───────────────
+        // Only supervisors or the current owner can reassign.
+        var isSupervisor = currentUser.Roles.Any(r => SupervisorRoles.Contains(r));
+
+        if (!isSupervisor && lead.OwnerId.HasValue && lead.OwnerId.Value != currentUser.Id)
+            return Result.Fail("NOT_AUTHORIZED_TO_TRANSFER");
+
+        // Supervisors can only transfer within their team scope
+        if (isSupervisor && !currentUser.Roles.Contains("System"))
+        {
+            var teamIds = await admin.GetTeamAgentIdsAsync(
+                lead.TenantId, currentUser.Id, ct);
+
+            if (!teamIds.Contains(cmd.OwnerId))
+                return Result.Fail("NEW_OWNER_NOT_IN_TEAM");
+        }
+
+        // ── Validate new owner exists ───────────────────────────────────
+        var newOwner = await admin.GetAgentAsync(cmd.OwnerId, ct);
+        if (newOwner is null)
+            return Result.Fail("NEW_OWNER_NOT_FOUND");
 
         var previousOwnerId = lead.OwnerId;
 

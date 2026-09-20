@@ -27,6 +27,10 @@
     <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
     <!-- Cross-module dependency: Notifications PublicApi for SLA alert delivery (US-M13-141) -->
     <ProjectReference Include="..\..\Notifications\Sankore.Modules.Notifications.PublicApi\Sankore.Modules.Notifications.PublicApi.csproj" />
+    <!-- Cross-module dependency: Customer360 PublicApi for convert-to-existing validation (US-M13-171) -->
+    <ProjectReference Include="..\..\Customer360\Sankore.Modules.Customer360.PublicApi\Sankore.Modules.Customer360.PublicApi.csproj" />
+    <!-- Cross-module dependency: KYC PublicApi for KycRequested event (US-M13-172) -->
+    <ProjectReference Include="..\..\Kyc\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
   </ItemGroup>
 
   <ItemGroup>
