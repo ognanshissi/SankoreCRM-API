@@ -33,6 +33,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<TaskTypeConfig> TaskTypeConfigs => Set<TaskTypeConfig>();
     public DbSet<PipelineStageConfig> PipelineStageConfigs => Set<PipelineStageConfig>();
     public DbSet<SlaConfig> SlaConfigs => Set<SlaConfig>();
+    public DbSet<Opportunity> Opportunities => Set<Opportunity>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -77,6 +78,31 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
             b.ToTable("outbox_messages");
             b.HasKey(m => m.Id);
             b.HasIndex(m => new { m.ProcessedAt, m.OccurredAt });
+        });
+
+        modelBuilder.Entity<Opportunity>(b =>
+        {
+            b.ToTable("opportunities");
+            b.HasKey(o => o.Id);
+            b.Property(o => o.Title).HasMaxLength(200).IsRequired();
+            b.Property(o => o.Description).HasMaxLength(2000);
+            b.Property(o => o.Product).HasMaxLength(100).IsRequired();
+            b.Property(o => o.CustomerEntityType).HasMaxLength(50);
+            b.Property(o => o.CloseReason).HasMaxLength(500);
+            b.Property(o => o.Stage)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+            b.OwnsOne(o => o.EstimatedAmount, m =>
+            {
+                m.Property(p => p.Amount).HasColumnName("estimated_amount").HasPrecision(18, 4);
+                m.Property(p => p.Currency).HasColumnName("estimated_currency").HasMaxLength(3);
+            });
+            b.HasIndex(o => new { o.TenantId, o.LeadId });
+            b.HasIndex(o => new { o.TenantId, o.CustomerEntityId })
+                .HasFilter("customer_entity_id IS NOT NULL");
+            b.HasIndex(o => new { o.TenantId, o.Stage });
+            b.Ignore(o => o.DomainEvents);
+            b.HasQueryFilter(o => o.TenantId == tenant.CurrentTenantId);
         });
 
         // Multi-tenant defense in depth: applied at the ORM level so that

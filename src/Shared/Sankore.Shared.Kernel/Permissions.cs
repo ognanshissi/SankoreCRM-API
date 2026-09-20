@@ -257,6 +257,14 @@ public static class Permissions
     public static readonly PermissionItem CanReadSlaConfigs =
         new("lead:sla-config:read", "Read SLA Configurations", ApplicationModules.Leads, "sla-config:read");
 
+    // ── Opportunities (US-M13-130/131) ────────────────────────────────────
+
+    public static readonly PermissionItem CanManageOpportunities =
+        new("lead:opportunity:manage", "Create and Update Opportunities", ApplicationModules.Leads, "opportunity:manage");
+
+    public static readonly PermissionItem CanReadOpportunities =
+        new("lead:opportunity:read", "Read Opportunities", ApplicationModules.Leads, "opportunity:read");
+
     // ── Company info (Administration module) ──────────────────────────────
 
     public static readonly PermissionItem CanReadCompanyInfo =
@@ -386,5 +394,7 @@ public static class Permissions
         CanReadPipelineStages,
         CanManageSlaConfigs,
         CanReadSlaConfigs,
+        CanManageOpportunities,
+        CanReadOpportunities,
     ];
 }

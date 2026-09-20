@@ -36,3 +36,6 @@ public sealed record ConsentRecordedDomainEvent(
 
 public sealed record ConsentWithdrawnDomainEvent(
     Guid LeadId, Guid ConsentId, string ConsentType) : DomainEventBase;
+
+public sealed record SlaEscalatedDomainEvent(
+    Guid LeadId, Guid AssignmentId, Guid AgentId, int EscalationDepth) : DomainEventBase;

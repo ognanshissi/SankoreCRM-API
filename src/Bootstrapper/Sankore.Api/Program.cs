@@ -284,6 +284,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
     app.UseHangfireDashboard("/hangfire");
+
+    // SLA breach monitoring — runs every 15 minutes (US-M13-141/142).
+    // In a multi-tenant deployment, register one job per tenant from a tenant registry.
+    // For now, a single job that must be parameterized per tenant at startup.
+    Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.SlaMonitoring.CheckSlaBreachesJob>(
+        "sla-breach-check",
+        job => job.ExecuteAsync(Guid.Empty),
+        "*/15 * * * *");
 }
 
 app.UseExceptionHandler();

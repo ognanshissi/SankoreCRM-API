@@ -458,6 +458,10 @@ public sealed class Lead : AggregateRoot
     internal void RaiseConsentWithdrawnEvent(Guid consentId, string consentType)
         => RaiseDomainEvent(new Events.ConsentWithdrawnDomainEvent(Id, consentId, consentType));
 
+    /// <summary>Raises <see cref="Events.SlaEscalatedDomainEvent"/>. Called by <c>CheckSlaBreachesJob</c>.</summary>
+    internal void RaiseSlaEscalatedEvent(Guid assignmentId, Guid agentId, int escalationDepth)
+        => RaiseDomainEvent(new Events.SlaEscalatedDomainEvent(Id, assignmentId, agentId, escalationDepth));
+
     /// <summary>
     /// Transitions a New lead to Open — signals the first manual or system
     /// action has been taken on this lead.

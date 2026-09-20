@@ -25,6 +25,8 @@
     <ProjectReference Include="..\Sankore.Modules.Leads.PublicApi\Sankore.Modules.Leads.PublicApi.csproj" />
     <!-- Cross-module dependency: ONLY the Administration PublicApi, never Sankore.Modules.Users itself -->
     <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
+    <!-- Cross-module dependency: Notifications PublicApi for SLA alert delivery (US-M13-141) -->
+    <ProjectReference Include="..\..\Notifications\Sankore.Modules.Notifications.PublicApi\Sankore.Modules.Notifications.PublicApi.csproj" />
   </ItemGroup>
 
   <ItemGroup>

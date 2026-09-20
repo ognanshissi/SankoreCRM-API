@@ -54,6 +54,8 @@ using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Features.PipelineStages;
 using Sankore.Modules.Leads.Features.SlaConfigs;
 using Sankore.Modules.Leads.Features.GetPipeline;
+using Sankore.Modules.Leads.Features.Opportunities;
+using Sankore.Modules.Leads.Features.SlaMonitoring;
 using Sankore.Modules.Leads.Features.ListActivities;
 using Sankore.Modules.Leads.Features.ListLeads;
 using Sankore.Modules.Leads.Features.LogActivity;
@@ -118,6 +120,9 @@ public static class LeadsModule
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
         services.Configure<LeadModuleSettings>(config.GetSection("Leads"));
+
+        // SLA monitoring — Hangfire recurring job (US-M13-141/142)
+        services.AddSlaMonitoring();
 
         // Import — file storage for uploaded CSV files
         services.AddSingleton<IImportFileStore, LocalImportFileStore>();
@@ -209,6 +214,9 @@ public static class LeadsModule
 
         // Pipeline Kanban view (US-M13-120)
         group.MapGetPipeline();
+
+        // Opportunities (US-M13-130/131)
+        group.MapOpportunitiesEndpoints();
 
         // Phase 14 — Configuration (US-M13-190..197)
         group.MapLeadSourcesEndpoints();
