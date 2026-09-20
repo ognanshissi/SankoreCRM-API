@@ -520,4 +520,20 @@ public sealed class Lead : AggregateRoot
         RaiseDomainEvent(new LeadStatusChangedDomainEvent(Id, previous, Status));
         return Result.Ok();
     }
+
+    /// <summary>
+    /// Reactivates a Recycled lead back into the Open state so it re-enters
+    /// the qualification/scoring pipeline (US-M13-161).
+    /// </summary>
+    public Result Reactivate()
+    {
+        if (Status != LeadStatus.Recycled)
+            return Result.Fail("ONLY_RECYCLED_LEADS_CAN_BE_REACTIVATED");
+
+        var previous = Status;
+        Status    = LeadStatus.Open;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        RaiseDomainEvent(new LeadStatusChangedDomainEvent(Id, previous, Status));
+        return Result.Ok();
+    }
 }

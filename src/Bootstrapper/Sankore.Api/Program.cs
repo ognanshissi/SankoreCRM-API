@@ -297,6 +297,12 @@ if (app.Environment.IsDevelopment())
         "nurturing-execution",
         job => job.ExecuteAsync(Guid.Empty),
         "*/10 * * * *");
+
+    // Recycled lead reactivation — daily at 03:00 (US-M13-160/161)
+    Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.ReactivateRecycledLeads.ReactivateRecycledLeadsJob>(
+        "reactivate-recycled-leads",
+        job => job.ExecuteAsync(Guid.Empty),
+        "0 3 * * *");
 }
 
 app.UseExceptionHandler();

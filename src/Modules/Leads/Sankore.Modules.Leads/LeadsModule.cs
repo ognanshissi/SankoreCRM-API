@@ -57,6 +57,7 @@ using Sankore.Modules.Leads.Features.GetPipeline;
 using Sankore.Modules.Leads.Features.Opportunities;
 using Sankore.Modules.Leads.Features.SlaMonitoring;
 using Sankore.Modules.Leads.Features.NurturingExecution;
+using Sankore.Modules.Leads.Features.ReactivateRecycledLeads;
 using Sankore.Modules.Leads.Features.ListActivities;
 using Sankore.Modules.Leads.Features.ListLeads;
 using Sankore.Modules.Leads.Features.LogActivity;
@@ -128,6 +129,9 @@ public static class LeadsModule
 
         // Nurturing execution — Hangfire recurring job (US-M13-151)
         services.AddTransient<ExecuteNurturingJob>();
+
+        // Recycled lead reactivation — Hangfire recurring job (US-M13-160/161)
+        services.AddTransient<ReactivateRecycledLeadsJob>();
 
         // Import — file storage for uploaded CSV files
         services.AddSingleton<IImportFileStore, LocalImportFileStore>();

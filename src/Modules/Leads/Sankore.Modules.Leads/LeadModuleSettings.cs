@@ -33,4 +33,16 @@ public sealed class LeadModuleSettings
     /// Default: [40, 60] — the Disqualify / Qualify boundaries.
     /// </summary>
     public int[] CriticalScoreThresholds { get; init; } = [40, 60];
+
+    /// <summary>
+    /// Number of days a recycled lead must wait before automatic reactivation.
+    /// Default: 30 days.
+    /// </summary>
+    public int RecycledLeadReactivationDays { get; init; } = 30;
+
+    /// <summary>
+    /// Number of days of dormancy (no activity) after which consent must be
+    /// re-verified before reactivation (US-M13-161). Default: 90 days.
+    /// </summary>
+    public int ConsentReverificationDormancyDays { get; init; } = 90;
 }
