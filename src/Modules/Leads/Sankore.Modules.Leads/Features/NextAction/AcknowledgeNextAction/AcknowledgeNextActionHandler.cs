@@ -1,3 +1,5 @@
+using Sankore.Shared.Infrastructure.Auth;
+
 namespace Sankore.Modules.Leads.Features.NextAction.AcknowledgeNextAction;
 
 using MediatR;
@@ -7,10 +9,11 @@ using Sankore.Modules.Leads.Features.NextAction.GetNextAction;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class AcknowledgeNextActionHandler(LeadsDbContext db, ISender sender)
+internal sealed class AcknowledgeNextActionHandler(LeadsDbContext db, ICurrentUser currentUser, ISender sender)
     : IRequestHandler<AcknowledgeNextActionCommand, Result<AcknowledgeNextActionResult>>
 {
     public async Task<Result<AcknowledgeNextActionResult>> Handle(
+        
         AcknowledgeNextActionCommand cmd, CancellationToken ct)
     {
         // Validate lead exists and is active.
@@ -57,7 +60,7 @@ internal sealed class AcknowledgeNextActionHandler(LeadsDbContext db, ISender se
             tenantId:  lead.TenantId,
             leadId:    lead.Id,
             title:     suggestion.Title,
-            createdBy: cmd.AcknowledgedBy,
+            createdBy: currentUser.Id,
             dueAt:     dueAt,
             notes:     suggestion.Detail);
 

@@ -1,3 +1,5 @@
+using Sankore.Shared.Infrastructure.Auth;
+
 namespace Sankore.Modules.Leads.Features.NextAction;
 
 using MediatR;
@@ -57,14 +59,13 @@ public static class NextActionEndpoints
         Guid leadId,
         AcknowledgeNextActionRequest req,
         ISender sender,
-        HttpContext http,
+        ICurrentUser currentUser,
         CancellationToken ct)
     {
-        var acknowledgedBy = http.User.GetUserId();
+        var acknowledgedBy = currentUser.Id;
         var result = await sender.Send(
             new AcknowledgeNextActionCommand(
                 LeadId:          leadId,
-                AcknowledgedBy:  acknowledgedBy,
                 Action:          req.Action,
                 RescheduledAt:   req.RescheduledAt), ct);
 

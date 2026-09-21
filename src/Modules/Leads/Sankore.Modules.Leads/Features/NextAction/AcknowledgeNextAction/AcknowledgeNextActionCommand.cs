@@ -16,7 +16,6 @@ public enum NextActionAcknowledgement
 
 internal sealed record AcknowledgeNextActionCommand(
     Guid LeadId,
-    Guid AcknowledgedBy,
     NextActionAcknowledgement Action,
     DateTimeOffset? RescheduledAt = null
 ) : IRequest<Result<AcknowledgeNextActionResult>>, ICommand, IResourceCommand
