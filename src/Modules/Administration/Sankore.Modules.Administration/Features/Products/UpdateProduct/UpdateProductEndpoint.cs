@@ -13,14 +13,10 @@ internal static class UpdateProductEndpoint
     {
         app.MapPut("{id:guid}", Handle)
             .WithName("UpdateProduct")
-            .WithSummary("Update a product speciality")
-            .WithDescription("Updates name and description. Code is immutable after creation. Requires permission: product:update.")
+            .WithSummary("Update a financial product")
             .RequireAuthorization(Permissions.CanUpdateProduct.Code)
             .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden)
             .WithOpenApi()
             .WithTenantHeader();
 
@@ -33,18 +29,21 @@ internal static class UpdateProductEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var result = await sender.Send(new UpdateProductCommand(id, req.Name, req.Description), ct);
+        var result = await sender.Send(new UpdateProductCommand(
+            id, req.Name, req.Description, req.ParametersJson,
+            req.BusinessProductId, req.BusinessPlatformName), ct);
 
-        if (!result.IsSuccess)
-        {
-            var isNotFound = result.Error!.Contains("NOT_FOUND", StringComparison.OrdinalIgnoreCase);
-            return isNotFound
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error!.Contains("NOT_FOUND")
                 ? Results.NotFound(new { error = result.Error })
                 : Results.Problem(result.Error, statusCode: StatusCodes.Status400BadRequest);
-        }
-
-        return Results.NoContent();
     }
 }
 
-internal sealed record UpdateProductRequest(string Name, string? Description);
+internal sealed record UpdateProductRequest(
+    string Name,
+    string? Description = null,
+    string? ParametersJson = null,
+    string? BusinessProductId = null,
+    string? BusinessPlatformName = null);

@@ -69,6 +69,12 @@ public sealed class ProductSpeciality
         BusinessPlatformName = businessPlatformName ?? string.Empty;
     }
 
+    public void LinkToCbs(string businessPlatformName, string? businessProductId)
+    {
+        BusinessPlatformName = businessPlatformName;
+        BusinessProductId = businessProductId;
+    }
+
     /// <summary>
     /// Retires the product from the catalogue. Existing contracts are NOT affected —
     /// the product simply stops appearing in new simulations/offers.

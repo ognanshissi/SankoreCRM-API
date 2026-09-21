@@ -15,7 +15,8 @@ internal sealed class GetProductHandler(AdministrationDbContext db)
             .Select(p => new ProductDto(
                 p.Id, p.Name, p.Code, p.Category,
                 p.Description, p.ParametersJson,
-                p.IsActive, p.EffectiveFrom, p.EffectiveTo))
+                p.IsActive, p.EffectiveFrom, p.EffectiveTo,
+                p.BusinessProductId, p.BusinessPlatformName))
             .FirstOrDefaultAsync(ct);
 
         if (product is null)

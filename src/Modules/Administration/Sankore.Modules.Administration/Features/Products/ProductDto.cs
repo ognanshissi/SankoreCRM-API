@@ -11,4 +11,6 @@ internal sealed record ProductDto(
     string? ParametersJson,
     bool IsActive,
     DateOnly? EffectiveFrom,
-    DateOnly? EffectiveTo);
+    DateOnly? EffectiveTo,
+    string? BusinessProductId,
+    string BusinessPlatformName);

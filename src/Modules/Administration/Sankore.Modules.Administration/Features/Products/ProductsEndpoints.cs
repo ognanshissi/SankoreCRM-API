@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Administration.Features.Products.CreateProduct;
 using Sankore.Modules.Administration.Features.Products.DeleteProduct;
 using Sankore.Modules.Administration.Features.Products.GetProduct;
+using Sankore.Modules.Administration.Features.Products.LinkProductToCbs;
 using Sankore.Modules.Administration.Features.Products.ListProducts;
 using Sankore.Modules.Administration.Features.Products.UpdateProduct;
 
@@ -19,6 +20,7 @@ internal static class ProductsEndpoints
         group.MapCreateProduct();
         group.MapUpdateProduct();
         group.MapDeleteProduct();
+        group.MapLinkProductToCbs();
         return app;
     }
 }
