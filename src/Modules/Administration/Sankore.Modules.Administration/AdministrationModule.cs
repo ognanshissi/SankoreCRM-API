@@ -22,6 +22,7 @@ using Sankore.Modules.Administration.Features.Products;
 using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;
 using Sankore.Modules.Administration.Features.Users;
+using Sankore.Modules.Administration.Features.ImportUsers;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Modules.Administration.PublicApi;
@@ -71,6 +72,16 @@ public static class AdministrationModule
         services.AddOutboxForModule<AdministrationDbContext>();
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
+        // User import — multi-source (CSV, Excel, Google Sheets, Google Contacts)
+        services.AddSingleton<Features.ImportUsers.IUserImportFileStore,
+                              Features.ImportUsers.LocalUserImportFileStore>();
+        services.AddTransient<Features.ImportUsers.ProcessUserImportJob>();
+        services.AddTransient<Features.ImportUsers.Readers.FileImportReader>();
+        services.AddTransient<Features.ImportUsers.Readers.GoogleSheetsImportReader>();
+        services.AddTransient<Features.ImportUsers.Readers.GoogleContactsImportReader>();
+        services.Configure<Features.ImportUsers.GoogleImportSettings>(
+            config.GetSection("GoogleImport"));
+
         return services;
     }
 
@@ -102,6 +113,7 @@ public static class AdministrationModule
         app.MapProductsEndpoints();
         app.MapNotificationSettingsEndpoints();
         app.MapCompanyInfoEndpoints();
+        app.MapImportUsersEndpoints();
         return app;
     }
 }

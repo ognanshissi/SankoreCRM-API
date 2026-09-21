@@ -24,6 +24,7 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<TenantNotificationSettings> TenantNotificationSettings => Set<TenantNotificationSettings>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<CompanyInfo> CompanyInfos => Set<CompanyInfo>();
+    public DbSet<UserImportJob> UserImportJobs => Set<UserImportJob>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -93,7 +94,20 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<TenantNotificationSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
-        
+
+        modelBuilder.Entity<UserImportJob>(b =>
+        {
+            b.ToTable("user_import_jobs");
+            b.HasKey(j => j.Id);
+            b.Property(j => j.SourceType).HasConversion<string>().HasMaxLength(20);
+            b.Property(j => j.Status).HasConversion<string>().HasMaxLength(20);
+            b.Property(j => j.SourceReference).HasMaxLength(500);
+            b.Property(j => j.OriginalFileName).HasMaxLength(300);
+            b.Property(j => j.ErrorMessage).HasMaxLength(2000);
+            b.Property(j => j.FailureDetailsJson).HasColumnType("jsonb");
+            b.HasQueryFilter(j => j.TenantId == tenant.CurrentTenantId);
+        });
+
         // Sequence creation
         modelBuilder.HasSequence<int>("GeneratedIncrementalNo", schema: "shared")
             .StartsAt(1000)

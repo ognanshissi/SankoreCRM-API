@@ -21,6 +21,11 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Hangfire.Core" />
+    <PackageReference Include="CsvHelper" />
+    <PackageReference Include="ClosedXML" />
+    <PackageReference Include="Google.Apis.Sheets.v4" />
+    <PackageReference Include="Google.Apis.PeopleService.v1" />
   </ItemGroup>
 
   <ItemGroup>

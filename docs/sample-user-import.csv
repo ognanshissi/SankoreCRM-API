@@ -1,0 +1,11 @@
+FirstName,LastName,Email,AgencyCode,RoleCode,DefaultLanguage,SpokenLanguages,Specialties
+Jean,Dupont,jean.dupont@sankore-imf.com,HQ,Agent,fr,"fr,en","Crédit Agricole,Épargne"
+Marie,Koné,marie.kone@sankore-imf.com,HQ,CommercialAgent,fr,"fr,bm",Crédit Individuel
+Amadou,Traoré,amadou.traore@sankore-imf.com,HQ,SalesManager,fr,"fr,en,bm","Crédit Agricole,Tontine"
+Fatou,Diallo,fatou.diallo@sankore-imf.com,HQ,Agent,fr,fr,Épargne
+Ibrahim,Coulibaly,ibrahim.coulibaly@sankore-imf.com,HQ,CommercialAgent,en,"en,fr",Crédit Individuel
+Awa,Sangaré,awa.sangare@sankore-imf.com,HQ,Cashier,fr,fr,
+Moussa,Keïta,moussa.keita@sankore-imf.com,HQ,BranchManager,fr,"fr,bm","Crédit Agricole,Crédit Individuel"
+Oumou,Sidibé,oumou.sidibe@sankore-imf.com,HQ,Agent,fr,fr,Tontine
+Sékou,Bamba,sekou.bamba@sankore-imf.com,HQ,CommercialAgent,fr,"fr,en",Épargne
+Aminata,Cissé,aminata.cisse@sankore-imf.com,HQ,Agent,fr,fr,"Crédit Agricole,Épargne"
