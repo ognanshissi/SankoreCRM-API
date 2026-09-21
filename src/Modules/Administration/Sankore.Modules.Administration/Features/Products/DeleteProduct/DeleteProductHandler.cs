@@ -15,11 +15,15 @@ internal sealed class DeleteProductHandler(AdministrationDbContext db)
             .FirstOrDefaultAsync(p => p.Id == request.ProductId, ct);
 
         if (product is null)
-            return Result.Fail("PRODUCT_NOT_FOUND: Product not found.");
+            return Result.Fail("PRODUCT_NOT_FOUND");
 
-        db.ProductSpecialities.Remove(product);
+        var effectiveTo = request.EffectiveTo ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var result = product.Retire(effectiveTo);
+
+        if (result.IsFailure)
+            return result;
+
         await db.SaveChangesAsync(ct);
-
         return Result.Ok();
     }
 }

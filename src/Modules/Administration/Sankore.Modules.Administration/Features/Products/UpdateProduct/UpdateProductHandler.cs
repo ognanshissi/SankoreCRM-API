@@ -15,11 +15,16 @@ internal sealed class UpdateProductHandler(AdministrationDbContext db)
             .FirstOrDefaultAsync(p => p.Id == request.ProductId, ct);
 
         if (product is null)
-            return Result.Fail("PRODUCT_NOT_FOUND: Product not found.");
+            return Result.Fail("PRODUCT_NOT_FOUND");
 
-        product.Update(request.Name, request.Description, string.Empty, string.Empty);
+        product.Update(
+            request.Name,
+            request.Description,
+            request.ParametersJson,
+            request.BusinessProductId,
+            request.BusinessPlatformName);
+
         await db.SaveChangesAsync(ct);
-
         return Result.Ok();
     }
 }

@@ -18,13 +18,16 @@ internal sealed class CreateProductHandler(
             .AnyAsync(p => p.Code == codeNormalized, ct);
 
         if (exists)
-            return Result.Fail<Guid>($"PRODUCT_CODE_TAKEN: A product with code '{codeNormalized}' already exists.");
+            return Result.Fail<Guid>("PRODUCT_CODE_TAKEN");
 
         var product = ProductSpeciality.Create(
             tenant.CurrentTenantId,
             request.Name,
             request.Code,
-            request.Description);
+            request.Category,
+            request.Description,
+            request.ParametersJson,
+            request.EffectiveFrom);
 
         await db.ProductSpecialities.AddAsync(product, ct);
         await db.SaveChangesAsync(ct);

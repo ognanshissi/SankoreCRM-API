@@ -12,6 +12,7 @@ internal sealed class CreateProductValidator : AbstractValidator<CreateProductCo
         RuleFor(x => x.Code).NotEmpty().MaximumLength(50)
             .Matches("^[A-Za-z0-9_-]+$")
             .WithMessage(_ => localizer["Product.Code.Format"]);
+        RuleFor(x => x.Category).IsInEnum();
         RuleFor(x => x.Description).MaximumLength(500);
     }
 }

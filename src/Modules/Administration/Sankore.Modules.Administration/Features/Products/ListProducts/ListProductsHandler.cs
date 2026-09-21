@@ -10,9 +10,18 @@ internal sealed class ListProductsHandler(AdministrationDbContext db)
 {
     public async Task<Result<IReadOnlyList<ProductDto>>> Handle(ListProductsQuery request, CancellationToken ct)
     {
-        var products = await db.ProductSpecialities
-            .OrderBy(p => p.Name)
-            .Select(p => new ProductDto(p.Id, p.Name, p.Code, p.Description))
+        var q = db.ProductSpecialities.AsQueryable();
+
+        if (request.ActiveOnly == true)
+            q = q.Where(p => p.IsActive);
+
+        var products = await q
+            .OrderBy(p => p.Category)
+            .ThenBy(p => p.Name)
+            .Select(p => new ProductDto(
+                p.Id, p.Name, p.Code, p.Category,
+                p.Description, p.ParametersJson,
+                p.IsActive, p.EffectiveFrom, p.EffectiveTo))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<ProductDto>>(products);

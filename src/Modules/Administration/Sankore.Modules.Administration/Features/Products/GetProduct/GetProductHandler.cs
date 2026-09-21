@@ -12,11 +12,14 @@ internal sealed class GetProductHandler(AdministrationDbContext db)
     {
         var product = await db.ProductSpecialities
             .Where(p => p.Id == request.ProductId)
-            .Select(p => new ProductDto(p.Id, p.Name, p.Code, p.Description))
+            .Select(p => new ProductDto(
+                p.Id, p.Name, p.Code, p.Category,
+                p.Description, p.ParametersJson,
+                p.IsActive, p.EffectiveFrom, p.EffectiveTo))
             .FirstOrDefaultAsync(ct);
 
         if (product is null)
-            return Result.Fail<ProductDto>("PRODUCT_NOT_FOUND: Product not found.");
+            return Result.Fail<ProductDto>("PRODUCT_NOT_FOUND");
 
         return Result.Ok(product);
     }

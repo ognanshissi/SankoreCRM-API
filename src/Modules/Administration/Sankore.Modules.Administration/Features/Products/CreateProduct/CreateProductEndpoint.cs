@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
@@ -13,13 +14,10 @@ internal static class CreateProductEndpoint
     {
         app.MapPost("", Handle)
             .WithName("CreateProduct")
-            .WithSummary("Create a product speciality")
-            .WithDescription("Creates a new product speciality for the tenant. Code must be unique per tenant. Requires permission: product:create.")
+            .WithSummary("Create a financial product")
             .RequireAuthorization(Permissions.CanCreateProduct.Code)
             .Produces<Guid>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden)
             .WithOpenApi()
             .WithTenantHeader();
 
@@ -31,7 +29,9 @@ internal static class CreateProductEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var result = await sender.Send(new CreateProductCommand(req.Name, req.Code, req.Description), ct);
+        var result = await sender.Send(new CreateProductCommand(
+            req.Name, req.Code, req.Category,
+            req.Description, req.ParametersJson, req.EffectiveFrom), ct);
 
         return result.IsSuccess
             ? Results.Created($"/api/v1/products/{result.Value}", result.Value)
@@ -39,4 +39,10 @@ internal static class CreateProductEndpoint
     }
 }
 
-internal sealed record CreateProductRequest(string Name, string Code, string? Description);
+internal sealed record CreateProductRequest(
+    string Name,
+    string Code,
+    ProductCategory Category,
+    string? Description = null,
+    string? ParametersJson = null,
+    DateOnly? EffectiveFrom = null);

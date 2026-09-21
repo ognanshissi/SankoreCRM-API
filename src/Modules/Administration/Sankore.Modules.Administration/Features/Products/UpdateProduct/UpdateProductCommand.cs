@@ -7,5 +7,8 @@ namespace Sankore.Modules.Administration.Features.Products.UpdateProduct;
 internal sealed record UpdateProductCommand(
     Guid ProductId,
     string Name,
-    string? Description
+    string? Description = null,
+    string? ParametersJson = null,
+    string? BusinessProductId = null,
+    string? BusinessPlatformName = null
 ) : IRequest<Result>, ICommand;

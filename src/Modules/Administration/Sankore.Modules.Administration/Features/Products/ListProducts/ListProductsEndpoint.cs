@@ -13,20 +13,19 @@ internal static class ListProductsEndpoint
     {
         app.MapGet("", Handle)
             .WithName("ListProducts")
-            .WithSummary("List all product specialities for the tenant")
+            .WithSummary("List financial products for the tenant")
             .RequireAuthorization(Permissions.CanReadProduct.Code)
             .Produces<IReadOnlyList<ProductDto>>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden)
             .WithOpenApi()
             .WithTenantHeader();
 
         return app;
     }
 
-    private static async Task<IResult> Handle(ISender sender, CancellationToken ct)
+    private static async Task<IResult> Handle(
+        ISender sender, CancellationToken ct, bool? activeOnly = null)
     {
-        var result = await sender.Send(new ListProductsQuery(), ct);
+        var result = await sender.Send(new ListProductsQuery(activeOnly), ct);
         return Results.Ok(result.Value);
     }
 }
