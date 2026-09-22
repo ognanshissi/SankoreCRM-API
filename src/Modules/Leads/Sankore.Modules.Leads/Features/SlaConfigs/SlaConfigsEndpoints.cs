@@ -151,12 +151,12 @@ public static class SlaConfigsEndpoints
 }
 
 public sealed record CreateSlaConfigRequest(
-    Guid? AgencyId,
     string Name,
     TimeSpan FirstContactDeadline,
     TimeSpan QualificationDeadline,
     TimeSpan FollowUpDeadline,
-    TimeSpan EscalationDeadline);
+    TimeSpan EscalationDeadline,
+    Guid? AgencyId = null);
 
 public sealed record UpdateSlaConfigRequest(
     string Name,

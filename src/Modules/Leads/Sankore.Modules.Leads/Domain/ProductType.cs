@@ -12,5 +12,7 @@ public enum ProductType
     /// <summary>Rotating savings group (Tontine).</summary>
     Tontine,
     /// <summary>Agricultural financing products (Agriculture).</summary>
-    Agriculture
+    Agriculture,
+    /// <summary> Insurance product (Assurance). </summary>
+    Insurance,
 }

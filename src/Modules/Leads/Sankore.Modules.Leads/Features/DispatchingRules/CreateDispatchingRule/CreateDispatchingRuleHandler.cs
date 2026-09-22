@@ -8,23 +8,28 @@ using Sankore.Shared.Kernel;
 internal sealed class CreateDispatchingRuleHandler(LeadsDbContext db)
     : IRequestHandler<CreateDispatchingRuleCommand, Result<Guid>>
 {
+    private static readonly HashSet<DispatchingStrategy> WeightsRequired =
+        [DispatchingStrategy.CompatibilityScoring, DispatchingStrategy.CherryPicking, DispatchingStrategy.StickyAssignment];
+
     public async Task<Result<Guid>> Handle(
         CreateDispatchingRuleCommand cmd, CancellationToken ct)
     {
-        if (cmd.Weights is null)
+        var needsWeights = WeightsRequired.Contains(cmd.Strategy);
+
+        if (needsWeights && cmd.Weights is null)
             return Result.Fail<Guid>("WEIGHTS_REQUIRED");
+
+        var weights = cmd.Weights is not null
+            ? new ScoringWeights(
+                  cmd.Weights.Language, cmd.Weights.Product, cmd.Weights.Geography,
+                  cmd.Weights.Workload, cmd.Weights.Performance, cmd.Weights.Agency)
+            : new ScoringWeights(0, 0, 0, 0, 0, 0);
 
         var rule = DispatchingRule.Create(
             tenantId:             cmd.TenantId,
             name:                 cmd.Name,
             strategy:             cmd.Strategy,
-            weights:              new ScoringWeights(
-                                      cmd.Weights.Language,
-                                      cmd.Weights.Product,
-                                      cmd.Weights.Geography,
-                                      cmd.Weights.Workload,
-                                      cmd.Weights.Performance,
-                                      cmd.Weights.Agency),
+            weights:              weights,
             maxLeadsPerAgent:      cmd.MaxLeadsPerAgent,
             antiMonopolyThreshold: cmd.AntiMonopolyThreshold,
             firstContactSla:       cmd.FirstContactSla,

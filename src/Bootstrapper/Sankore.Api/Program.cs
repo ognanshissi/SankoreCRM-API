@@ -40,8 +40,14 @@ builder.Services.AddProblemDetails();
 // Serialize enums as their string names in all HTTP JSON responses and requests.
 // This keeps the wire format human-readable and consistent with the Swagger schema.
 builder.Services.ConfigureHttpJsonOptions(opts =>
+{
     opts.SerializerOptions.Converters.Add(
-        new System.Text.Json.Serialization.JsonStringEnumConverter()));
+        new System.Text.Json.Serialization.JsonStringEnumConverter());
+    opts.SerializerOptions.Converters.Add(
+        new Sankore.Api.Infrastructure.NullableGuidConverter());
+    opts.SerializerOptions.Converters.Add(
+        new Sankore.Api.Infrastructure.TimeSpanConverter());
+});
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 
