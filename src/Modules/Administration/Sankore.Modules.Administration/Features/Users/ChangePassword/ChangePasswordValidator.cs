@@ -8,6 +8,9 @@ internal sealed class ChangePasswordValidator : AbstractValidator<ChangePassword
 {
     public ChangePasswordValidator(IStringLocalizer<AdministrationErrors> localizer)
     {
+        RuleFor(x => x.CurrentPassword)
+            .NotEmpty().WithMessage("Current password is required.");
+
         RuleFor(x => x.NewPassword)
             .NotEmpty().WithMessage(_ => localizer["Auth.Password.Required"])
             .MinimumLength(8).WithMessage(_ => localizer["Auth.Password.MinLength"])

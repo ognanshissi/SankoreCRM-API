@@ -45,7 +45,7 @@ public static class NotificationsModule
         services.AddScoped<ITemplateRenderer, ScribanTemplateRenderer>();
 
         // Email transport: keyed senders per provider type, routed by CompositeEmailSender
-        services.AddKeyedSingleton<IEmailSender, StubEmailSender>("stub");
+        // services.AddKeyedSingleton<IEmailSender, StubEmailSender>("stub");
         services.AddKeyedSingleton<IEmailSender, SmtpEmailSender>("smtp");
         services.AddSingleton<IEmailSender, CompositeEmailSender>();
 

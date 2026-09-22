@@ -25,6 +25,7 @@ using Sankore.Modules.Administration.Features.Users;
 using Sankore.Modules.Administration.Features.ImportUsers;
 using Sankore.Modules.Administration.Features.ImportUsers.ValidateImport;
 using Sankore.Modules.Administration.Features.Users.GetCurrentUser;
+using Sankore.Modules.Administration.Features.Users.GetLoginHistory;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Modules.Administration.PublicApi;
@@ -110,6 +111,7 @@ public static class AdministrationModule
         app.MapForgotPassword();
         app.MapAccountActivation();
         app.MapGetCurrentUser();
+        app.MapGetLoginHistory();
         app.MapUsersEndpoints();
         app.MapTerritoriesEndpoints();
         app.MapAgenciesEndpoints();

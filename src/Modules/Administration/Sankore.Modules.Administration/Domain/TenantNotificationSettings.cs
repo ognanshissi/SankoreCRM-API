@@ -57,7 +57,7 @@ public sealed class TenantNotificationSettings
         UpdatedBy = createdBy
     };
 
-    public static readonly string[] AllowedProviders = ["Default", "Ses", "Postmark", "SendGrid"];
+    public static readonly string[] AllowedProviders = ["Default", "Smtp", "Ses", "Postmark", "SendGrid"];
 
     public void UpdateProvider(
         string providerType,
@@ -69,7 +69,7 @@ public sealed class TenantNotificationSettings
         Guid updatedBy)
     {
         ProviderType = providerType;
-        UseDefaultPlatformProvider = providerType == "Default";
+        UseDefaultPlatformProvider = providerType == "Smtp";
         FromEmail = fromEmail;
         FromName = fromName;
         ReplyToEmail = replyToEmail;
@@ -81,7 +81,7 @@ public sealed class TenantNotificationSettings
 
     public void ResetToDefault(Guid updatedBy)
     {
-        ProviderType = "Default";
+        ProviderType = "Smtp";
         UseDefaultPlatformProvider = true;
         // CredentialVaultPath intentionally kept for audit trail
         UpdatedAt = DateTimeOffset.UtcNow;

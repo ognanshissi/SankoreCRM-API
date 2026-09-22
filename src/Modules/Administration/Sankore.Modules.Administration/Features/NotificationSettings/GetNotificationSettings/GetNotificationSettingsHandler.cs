@@ -22,7 +22,7 @@ internal sealed class GetNotificationSettingsHandler(
         if (settings is null)
         {
             return Result.Ok(new NotificationSettingsDto(
-                ProviderType: "Default",
+                ProviderType: "Smtp",
                 UseDefaultPlatformProvider: true,
                 FromEmail: null,
                 FromName: null,

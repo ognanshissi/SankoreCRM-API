@@ -1,11 +1,11 @@
 namespace Sankore.Modules.Administration.Features.ImportUsers.ValidateImport;
 
+using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Sankore.Modules.Administration.Features.ImportUsers.Readers;
-using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.FileStore;
 using Sankore.Shared.Kernel;
 
 public static class ValidateImportEndpoint
@@ -29,10 +29,9 @@ public static class ValidateImportEndpoint
 
     private static async Task<IResult> Handle(
         IFormFile file,
-        AdministrationDbContext db,
         IFileStore fileStore,
-        FileImportReader reader,
         ITenantContext tenant,
+        ISender sender,
         CancellationToken ct)
     {
         if (file.Length == 0)
@@ -42,25 +41,18 @@ public static class ValidateImportEndpoint
         if (ext is not (".csv" or ".xlsx"))
             return Results.Problem("Only .csv and .xlsx files are supported.", statusCode: 400);
 
-        // Store temporarily to reuse the same FileImportReader
         await using var stream = file.OpenReadStream();
         var fileRef = await fileStore.StoreAsync(stream, file.FileName, ct);
 
         try
         {
-            var rows = await reader.ReadAsync(fileRef, ct);
+            var result = await sender.Send(
+                new ValidateImportCommand(tenant.CurrentTenantId, fileRef), ct);
 
-            if (rows.Count == 0)
-                return Results.Ok(new ValidateImportResponse(0, 0, 0, []));
-
-            var validator = new ImportValidator(db);
-            var result = await validator.ValidateAsync(rows, tenant.CurrentTenantId, ct);
-
-            return Results.Ok(result);
+            return Results.Ok(result.Value);
         }
         finally
         {
-            // Clean up temp file — validation only, not persisted
             await fileStore.DeleteAsync(fileRef, ct);
         }
     }

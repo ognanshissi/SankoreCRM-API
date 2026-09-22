@@ -1,14 +1,16 @@
 namespace Sankore.Modules.Administration.Features.ImportUsers;
 
-using Hangfire;
+using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
-using Sankore.Modules.Administration.Domain;
-using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.Features.ImportUsers.GetImportStatus;
+using Sankore.Modules.Administration.Features.ImportUsers.ImportFromFile;
+using Sankore.Modules.Administration.Features.ImportUsers.ImportFromGoogleContacts;
+using Sankore.Modules.Administration.Features.ImportUsers.ImportFromGoogleSheet;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.FileStore;
 using Sankore.Shared.Kernel;
 
 public static class ImportUsersEndpoints
@@ -17,7 +19,6 @@ public static class ImportUsersEndpoints
     {
         var group = app.MapGroup("users/import").WithTags("User Import");
 
-        // POST /users/import/file (CSV or Excel upload)
         group.MapPost("file", ImportFromFile)
             .WithName("ImportUsersFromFile")
             .RequireAuthorization(Permissions.CanCreateUser.Code)
@@ -27,24 +28,21 @@ public static class ImportUsersEndpoints
             .WithTenantHeader()
             .DisableAntiforgery();
 
-        // POST /users/import/google-sheet
-        group.MapPost("google-sheet", ImportFromGoogleSheet)
+        group.MapPost("google-sheet", ImportFromGoogleSheetEndpoint)
             .WithName("ImportUsersFromGoogleSheet")
             .RequireAuthorization(Permissions.CanCreateUser.Code)
             .Produces<ImportJobCreatedResult>(StatusCodes.Status202Accepted)
             .WithOpenApi()
             .WithTenantHeader();
 
-        // POST /users/import/google-contacts
-        group.MapPost("google-contacts", ImportFromGoogleContacts)
+        group.MapPost("google-contacts", ImportFromGoogleContactsEndpoint)
             .WithName("ImportUsersFromGoogleContacts")
             .RequireAuthorization(Permissions.CanCreateUser.Code)
             .Produces<ImportJobCreatedResult>(StatusCodes.Status202Accepted)
             .WithOpenApi()
             .WithTenantHeader();
 
-        // GET /users/import/{id}/status
-        group.MapGet("{id:guid}/status", GetImportStatus)
+        group.MapGet("{id:guid}/status", GetImportStatusEndpoint)
             .WithName("GetUserImportStatus")
             .RequireAuthorization(Permissions.CanCreateUser.Code)
             .Produces<UserImportStatusDto>()
@@ -57,12 +55,10 @@ public static class ImportUsersEndpoints
 
     private static async Task<IResult> ImportFromFile(
         IFormFile file,
-        AdministrationDbContext db,
         IFileStore fileStore,
         ICurrentUser currentUser,
         ITenantContext tenant,
-        IBackgroundJobClient hangfire,
-        TimeProvider clock,
+        ISender sender,
         CancellationToken ct)
     {
         if (file.Length == 0)
@@ -75,95 +71,53 @@ public static class ImportUsersEndpoints
         await using var stream = file.OpenReadStream();
         var fileRef = await fileStore.StoreAsync(stream, file.FileName, ct);
 
-        var job = UserImportJob.Create(
-            tenant.CurrentTenantId, currentUser.Id,
-            UserImportSourceType.File, fileRef, clock, file.FileName);
+        var result = await sender.Send(new ImportFromFileCommand(
+            tenant.CurrentTenantId, currentUser.Id, fileRef, file.FileName), ct);
 
-        db.UserImportJobs.Add(job);
-        await db.SaveChangesAsync(ct);
-
-        hangfire.Enqueue<ProcessUserImportJob>(
-            j => j.ExecuteAsync(job.Id, tenant.CurrentTenantId, currentUser.Id));
-
-        return Results.Accepted(
-            $"users/import/{job.Id}/status",
-            new ImportJobCreatedResult(job.Id));
+        return result.IsSuccess
+            ? Results.Accepted($"users/import/{result.Value}/status", new ImportJobCreatedResult(result.Value))
+            : Results.Problem(result.Error, statusCode: 422);
     }
 
-    private static async Task<IResult> ImportFromGoogleSheet(
+    private static async Task<IResult> ImportFromGoogleSheetEndpoint(
         GoogleSheetImportRequest req,
-        AdministrationDbContext db,
         ICurrentUser currentUser,
         ITenantContext tenant,
-        IBackgroundJobClient hangfire,
-        TimeProvider clock,
+        ISender sender,
         CancellationToken ct)
     {
-        var job = UserImportJob.Create(
-            tenant.CurrentTenantId, currentUser.Id,
-            UserImportSourceType.GoogleSheet, req.SpreadsheetUrl, clock);
+        var result = await sender.Send(new ImportFromGoogleSheetCommand(
+            tenant.CurrentTenantId, currentUser.Id, req.SpreadsheetUrl), ct);
 
-        db.UserImportJobs.Add(job);
-        await db.SaveChangesAsync(ct);
-
-        hangfire.Enqueue<ProcessUserImportJob>(
-            j => j.ExecuteAsync(job.Id, tenant.CurrentTenantId, currentUser.Id));
-
-        return Results.Accepted(
-            $"users/import/{job.Id}/status",
-            new ImportJobCreatedResult(job.Id));
+        return result.IsSuccess
+            ? Results.Accepted($"users/import/{result.Value}/status", new ImportJobCreatedResult(result.Value))
+            : Results.Problem(result.Error, statusCode: 422);
     }
 
-    private static async Task<IResult> ImportFromGoogleContacts(
-        AdministrationDbContext db,
+    private static async Task<IResult> ImportFromGoogleContactsEndpoint(
         ICurrentUser currentUser,
         ITenantContext tenant,
-        IBackgroundJobClient hangfire,
-        TimeProvider clock,
+        ISender sender,
         CancellationToken ct)
     {
-        var job = UserImportJob.Create(
-            tenant.CurrentTenantId, currentUser.Id,
-            UserImportSourceType.GoogleContacts, "google-contacts", clock);
+        var result = await sender.Send(new ImportFromGoogleContactsCommand(
+            tenant.CurrentTenantId, currentUser.Id), ct);
 
-        db.UserImportJobs.Add(job);
-        await db.SaveChangesAsync(ct);
-
-        hangfire.Enqueue<ProcessUserImportJob>(
-            j => j.ExecuteAsync(job.Id, tenant.CurrentTenantId, currentUser.Id));
-
-        return Results.Accepted(
-            $"users/import/{job.Id}/status",
-            new ImportJobCreatedResult(job.Id));
+        return result.IsSuccess
+            ? Results.Accepted($"users/import/{result.Value}/status", new ImportJobCreatedResult(result.Value))
+            : Results.Problem(result.Error, statusCode: 422);
     }
 
-    private static async Task<IResult> GetImportStatus(
-        Guid id, AdministrationDbContext db, CancellationToken ct)
+    private static async Task<IResult> GetImportStatusEndpoint(
+        Guid id, ISender sender, CancellationToken ct)
     {
-        var job = await db.UserImportJobs
-            .Where(j => j.Id == id)
-            .Select(j => new UserImportStatusDto(
-                j.Id, j.SourceType, j.Status,
-                j.TotalRows, j.Succeeded, j.Skipped, j.Failed,
-                j.ErrorMessage, j.CreatedAt, j.CompletedAt))
-            .FirstOrDefaultAsync(ct);
+        var result = await sender.Send(new GetImportStatusQuery(id), ct);
 
-        return job is null ? Results.NotFound() : Results.Ok(job);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.NotFound();
     }
 }
 
 public sealed record ImportJobCreatedResult(Guid ImportJobId);
-
 public sealed record GoogleSheetImportRequest(string SpreadsheetUrl);
-
-public sealed record UserImportStatusDto(
-    Guid Id,
-    UserImportSourceType SourceType,
-    UserImportStatus Status,
-    int TotalRows,
-    int Succeeded,
-    int Skipped,
-    int Failed,
-    string? ErrorMessage,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset? CompletedAt);

@@ -15,7 +15,7 @@ internal static class ChangePasswordEndpoint
             CancellationToken ct) =>
         {
             var result = await sender.Send(
-                new ChangePasswordCommand(req.NewPassword, req.ConfirmPassword), ct);
+                new ChangePasswordCommand(req.CurrentPassword, req.NewPassword, req.ConfirmPassword), ct);
 
             return result.IsSuccess
                 ? Results.NoContent()
@@ -33,4 +33,4 @@ internal static class ChangePasswordEndpoint
     }
 }
 
-internal sealed record ChangePasswordRequest(string NewPassword, string ConfirmPassword);
+internal sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword, string ConfirmPassword);

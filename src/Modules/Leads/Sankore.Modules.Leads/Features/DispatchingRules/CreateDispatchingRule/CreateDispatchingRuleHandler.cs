@@ -11,6 +11,9 @@ internal sealed class CreateDispatchingRuleHandler(LeadsDbContext db)
     public async Task<Result<Guid>> Handle(
         CreateDispatchingRuleCommand cmd, CancellationToken ct)
     {
+        if (cmd.Weights is null)
+            return Result.Fail<Guid>("WEIGHTS_REQUIRED");
+
         var rule = DispatchingRule.Create(
             tenantId:             cmd.TenantId,
             name:                 cmd.Name,

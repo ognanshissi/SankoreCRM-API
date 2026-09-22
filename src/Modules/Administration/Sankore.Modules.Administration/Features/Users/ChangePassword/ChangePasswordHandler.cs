@@ -29,6 +29,11 @@ internal sealed class ChangePasswordHandler(
         if (user.Status != UserStatus.Active)
             return Result.Fail("Password change is not available for this account.");
 
+        // Verify current password before allowing change
+        var checkResult = await userManager.CheckPasswordAsync(user, request.CurrentPassword);
+        if (!checkResult)
+            return Result.Fail("CURRENT_PASSWORD_INCORRECT");
+
         // Check password-reuse policy against the last N hashes.
         var recentHashes = await db.PasswordHistories
             .Where(p => p.UserId == user.Id)
