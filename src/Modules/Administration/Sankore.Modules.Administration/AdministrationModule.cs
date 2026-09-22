@@ -23,10 +23,14 @@ using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;
 using Sankore.Modules.Administration.Features.Users;
 using Sankore.Modules.Administration.Features.ImportUsers;
+using Sankore.Modules.Administration.Features.ImportUsers.ValidateImport;
+using Sankore.Modules.Administration.Features.Users.GetCurrentUser;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.FileStore;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration;
 
@@ -73,8 +77,8 @@ public static class AdministrationModule
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
         // User import — multi-source (CSV, Excel, Google Sheets, Google Contacts)
-        services.AddSingleton<Features.ImportUsers.IUserImportFileStore,
-                              Features.ImportUsers.LocalUserImportFileStore>();
+        services.AddSingleton<IFileStore,
+                              LocalFileStore>();
         services.AddTransient<Features.ImportUsers.ProcessUserImportJob>();
         services.AddTransient<Features.ImportUsers.Readers.FileImportReader>();
         services.AddTransient<Features.ImportUsers.Readers.GoogleSheetsImportReader>();
@@ -105,6 +109,7 @@ public static class AdministrationModule
         app.MapVerifyToken();
         app.MapForgotPassword();
         app.MapAccountActivation();
+        app.MapGetCurrentUser();
         app.MapUsersEndpoints();
         app.MapTerritoriesEndpoints();
         app.MapAgenciesEndpoints();
@@ -114,6 +119,7 @@ public static class AdministrationModule
         app.MapNotificationSettingsEndpoints();
         app.MapCompanyInfoEndpoints();
         app.MapImportUsersEndpoints();
+        app.MapValidateImport();
         return app;
     }
 }

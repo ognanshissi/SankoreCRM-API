@@ -58,7 +58,7 @@ public static class ImportUsersEndpoints
     private static async Task<IResult> ImportFromFile(
         IFormFile file,
         AdministrationDbContext db,
-        IUserImportFileStore fileStore,
+        IFileStore fileStore,
         ICurrentUser currentUser,
         ITenantContext tenant,
         IBackgroundJobClient hangfire,

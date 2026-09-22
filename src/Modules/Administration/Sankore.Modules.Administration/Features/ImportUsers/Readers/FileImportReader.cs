@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel;
+
 namespace Sankore.Modules.Administration.Features.ImportUsers.Readers;
 
 using System.Globalization;
@@ -8,7 +10,7 @@ using CsvHelper.Configuration;
 /// <summary>
 /// Reads user rows from a CSV or Excel (.xlsx) file stored via IImportFileStore.
 /// </summary>
-public sealed class FileImportReader(IUserImportFileStore fileStore) : IUserImportSourceReader
+public sealed class FileImportReader(IFileStore fileStore) : IUserImportSourceReader
 {
     public async Task<List<ImportUserRow>> ReadAsync(string sourceReference, CancellationToken ct)
     {

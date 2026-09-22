@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel;
+
 namespace Sankore.Modules.Administration.Features.ImportUsers;
 
 using System.Text.Json;
@@ -41,6 +43,7 @@ public sealed class ProcessUserImportJob(IServiceScopeFactory scopeFactory)
         }
 
         importJob.MarkProcessing();
+        db.UserImportJobs.Update(importJob);
         await db.SaveChangesAsync();
 
         try
@@ -129,6 +132,7 @@ public sealed class ProcessUserImportJob(IServiceScopeFactory scopeFactory)
                 : null;
 
             importJob.Complete(rows.Count, succeeded, skipped, failures.Count, failureJson, clock);
+            
             await db.SaveChangesAsync();
 
             logger.LogInformation(
@@ -138,7 +142,7 @@ public sealed class ProcessUserImportJob(IServiceScopeFactory scopeFactory)
             // Clean up file if applicable
             if (importJob.SourceType == UserImportSourceType.File)
             {
-                var fileStore = sp.GetRequiredService<IUserImportFileStore>();
+                var fileStore = sp.GetRequiredService<IFileStore>();
                 await fileStore.DeleteAsync(importJob.SourceReference, CancellationToken.None);
             }
         }

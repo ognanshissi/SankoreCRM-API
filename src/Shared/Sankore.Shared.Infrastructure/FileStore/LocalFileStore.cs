@@ -1,12 +1,11 @@
-namespace Sankore.Modules.Administration.Features.ImportUsers;
+using Sankore.Shared.Kernel;
 
-/// <summary>
-/// Local filesystem implementation for development. Replace with S3/Azure Blob in production.
-/// </summary>
-public sealed class LocalUserImportFileStore : IUserImportFileStore
+namespace Sankore.Shared.Infrastructure.FileStore;
+
+public class LocalFileStore: IFileStore
 {
     private static readonly string BasePath = Path.Combine(
-        Path.GetTempPath(), "sankore-crm", "user-imports");
+        Path.GetTempPath(), "sankore-crm", "storage");
 
     public async Task<string> StoreAsync(Stream content, string originalFileName, CancellationToken ct)
     {
