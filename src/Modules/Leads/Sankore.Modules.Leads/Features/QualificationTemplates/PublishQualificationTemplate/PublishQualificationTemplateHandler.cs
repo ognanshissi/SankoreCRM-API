@@ -24,15 +24,15 @@ internal sealed class PublishQualificationTemplateHandler(LeadsDbContext db, Tim
         if (result.IsFailure)
             return result;
 
-        // Auto-archive the previous Published template for this product type (if any).
-        // Ensures at most one Published template per (TenantId, ProductType).
-        if (template.ProductType.HasValue)
+        // Auto-archive the previous Published template for this product category (if any).
+        // Ensures at most one Published template per (TenantId, ProductCategory).
+        if (template.ProductCategory is not null)
         {
             var superseded = await db.QualificationTemplates
                 .AsTracking()
                 .Where(t => t.Id != cmd.TemplateId
                             && t.TenantId == template.TenantId
-                            && t.ProductType == template.ProductType
+                            && t.ProductCategory == template.ProductCategory
                             && t.Status == TemplateStatus.Published)
                 .ToListAsync(ct);
 

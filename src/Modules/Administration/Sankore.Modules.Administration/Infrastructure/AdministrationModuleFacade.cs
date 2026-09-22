@@ -52,6 +52,17 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db, Use
             s.MonthlyQuotaLimit);
     }
 
+    public async Task<string?> GetProductCategoryAsync(
+        Guid tenantId, string productCode, CancellationToken ct)
+    {
+        var product = await db.ProductSpecialities
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.TenantId == tenantId
+                                   && p.Code == productCode.ToUpperInvariant(), ct);
+
+        return product?.Category.ToString();
+    }
+
     public async Task<IReadOnlyList<Guid>> GetTeamAgentIdsAsync(
         Guid tenantId, Guid supervisorId, CancellationToken ct)
     {

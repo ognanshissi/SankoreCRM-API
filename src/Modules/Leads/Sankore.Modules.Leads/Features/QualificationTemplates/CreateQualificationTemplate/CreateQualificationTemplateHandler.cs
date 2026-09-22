@@ -16,7 +16,8 @@ internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, Time
             name:        cmd.Name,
             now:         clock.GetUtcNow(),
             description:  cmd.Description,
-            productType:  cmd.ProductType);
+            productCategory:  cmd.ProductCategory,
+            productCode:  cmd.ProductCode);
 
         var buildResult = BuildQuestionsAndSections(template, cmd.Sections, cmd.Questions);
         if (buildResult.IsFailure)

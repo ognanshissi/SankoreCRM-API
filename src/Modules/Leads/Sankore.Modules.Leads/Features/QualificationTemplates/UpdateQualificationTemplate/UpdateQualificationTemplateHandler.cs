@@ -20,7 +20,7 @@ internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db)
         if (template is null)
             return Result.Fail("TEMPLATE_NOT_FOUND");
 
-        var detailsResult = template.UpdateDetails(cmd.Name, cmd.Description, cmd.ProductType);
+        var detailsResult = template.UpdateDetails(cmd.Name, cmd.Description, cmd.ProductCategory, cmd.ProductCode);
         if (detailsResult.IsFailure)
             return detailsResult;
 

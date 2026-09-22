@@ -31,6 +31,13 @@ public interface IAdministrationModule
     Task<IReadOnlyList<Guid>> GetTeamAgentIdsAsync(Guid tenantId, Guid supervisorId, CancellationToken ct);
 
     /// <summary>
+    /// Returns the product category (Loan, Savings, Tontine) for a given product code.
+    /// Used by Leads module for qualification template resolution.
+    /// Returns null if the product code is not found.
+    /// </summary>
+    Task<string?> GetProductCategoryAsync(Guid tenantId, string productCode, CancellationToken ct);
+
+    /// <summary>
     /// Returns the email provider configuration for a tenant so that the
     /// Notifications module can resolve the correct provider at send time.
     /// Returns null when no custom config exists (use platform default).

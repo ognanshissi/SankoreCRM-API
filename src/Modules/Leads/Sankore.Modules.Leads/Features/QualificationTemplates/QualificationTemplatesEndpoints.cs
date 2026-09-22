@@ -1,3 +1,5 @@
+using Sankore.Modules.Leads.Features.QualificationTemplates.CreateQualificationTemplate;
+
 namespace Sankore.Modules.Leads.Features.QualificationTemplates;
 
 using MediatR;
@@ -8,6 +10,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.QualificationTemplates.ArchiveQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.CreateQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.GetActiveTemplateForProduct;
+using Sankore.Modules.Leads.Features.QualificationTemplates.ResolveQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.GetQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.ListQualificationTemplates;
 using Sankore.Modules.Leads.Features.QualificationTemplates.PublishQualificationTemplate;
@@ -37,7 +40,7 @@ public static class QualificationTemplatesEndpoints
             .Produces<IReadOnlyList<QualificationTemplateDto>>(StatusCodes.Status200OK)
             .WithOpenApi();
 
-        group.MapGet("active/{productType}", GetActiveTemplate)
+        group.MapGet("active/{productCategory}", GetActiveTemplate)
             .WithName("GetActiveTemplateForProduct")
             .WithTags("Leads")
             .RequireAuthorization(Permissions.CanQualifyLead.Code)
@@ -71,6 +74,15 @@ public static class QualificationTemplatesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        group.MapGet("resolve", ResolveTemplate)
+            .WithName("ResolveQualificationTemplate")
+            .WithTags("Leads")
+            .WithSummary("Resolve the best qualification template for a product code (3-level fallback)")
+            .RequireAuthorization(Permissions.CanQualifyLead.Code)
+            .Produces<QualificationTemplateDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
         group.MapPost("{templateId:guid}/archive", ArchiveTemplate)
             .WithName("ArchiveQualificationTemplate")
             .WithTags("Leads")
@@ -95,7 +107,8 @@ public static class QualificationTemplatesEndpoints
             TenantId:    tenantId,
             Name:        req.Name,
             Description: req.Description,
-            ProductType: req.ProductType,
+            ProductCategory: req.ProductCategory,
+            ProductCode: req.ProductCode,
             Questions:   req.Questions,
             Sections:    req.Sections), ct);
 
@@ -107,22 +120,22 @@ public static class QualificationTemplatesEndpoints
 
     private static async Task<IResult> ListTemplates(
         TemplateStatus? status,
-        ProductType? productType,
+        string? productCategory,
         ISender sender,
         CancellationToken ct)
     {
         var result = await sender.Send(new ListQualificationTemplatesQuery(
-            Status:      status ?? TemplateStatus.Published,
-            ProductType: productType), ct);
+            Status:      status,
+            ProductCategory: productCategory), ct);
         return Results.Ok(result.Value);
     }
 
     private static async Task<IResult> GetActiveTemplate(
-        ProductType productType,
+        string productCategory,
         ISender sender,
         CancellationToken ct)
     {
-        var result = await sender.Send(new GetActiveTemplateForProductQuery(productType), ct);
+        var result = await sender.Send(new GetActiveTemplateForProductQuery(productCategory), ct);
         return result.IsSuccess
             ? Results.Ok(result.Value)
             : Results.NotFound(new { error = result.Error });
@@ -149,7 +162,8 @@ public static class QualificationTemplatesEndpoints
             TemplateId:  templateId,
             Name:        req.Name,
             Description: req.Description,
-            ProductType: req.ProductType,
+            ProductCategory: req.ProductCategory,
+            ProductCode: req.ProductCode,
             Questions:   req.Questions,
             Sections:    req.Sections), ct);
 
@@ -185,21 +199,31 @@ public static class QualificationTemplatesEndpoints
                 ? Results.NotFound(new { error = result.Error })
                 : Results.Problem(title: "Archive template failed", detail: result.Error, statusCode: 422);
     }
+
+    private static async Task<IResult> ResolveTemplate(
+        string productCode,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(new ResolveQualificationTemplateQuery(productCode), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.NotFound(new { error = result.Error });
+    }
 }
 
-/// <param name="ProductType">Product category this template applies to (Loan, Savings, GroupCredit, Tontine, Agriculture). Null = generic template.</param>
-/// <param name="Questions">Flat question list. Provide either this or <paramref name="Sections"/>, not both.</param>
-/// <param name="Sections">Section-grouped questions. Provide either this or <paramref name="Questions"/>, not both.</param>
 public sealed record CreateQualificationTemplateRequest(
     string Name,
     string? Description,
-    ProductType? ProductType = null,
+    string? ProductCategory = null,
+    string? ProductCode = null,
     IReadOnlyList<QuestionInput>? Questions = null,
     IReadOnlyList<SectionInput>? Sections = null);
 
 public sealed record UpdateQualificationTemplateRequest(
     string Name,
     string? Description,
-    ProductType? ProductType = null,
+    string? ProductCategory = null,
+    string? ProductCode = null,
     IReadOnlyList<QuestionInput>? Questions = null,
     IReadOnlyList<SectionInput>? Sections = null);

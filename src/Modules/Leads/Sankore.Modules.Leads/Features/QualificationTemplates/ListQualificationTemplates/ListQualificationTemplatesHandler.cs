@@ -20,8 +20,8 @@ internal sealed class ListQualificationTemplatesHandler(LeadsDbContext db)
         if (query.Status.HasValue)
             templatesQuery = templatesQuery.Where(t => t.Status == query.Status.Value);
 
-        if (query.ProductType.HasValue)
-            templatesQuery = templatesQuery.Where(t => t.ProductType == query.ProductType.Value);
+        if (query.ProductCategory is not null)
+            templatesQuery = templatesQuery.Where(t => t.ProductCategory == query.ProductCategory);
 
         var templates = await templatesQuery
             .OrderBy(t => t.Name)

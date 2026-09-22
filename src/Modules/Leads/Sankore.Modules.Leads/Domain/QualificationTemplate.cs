@@ -6,7 +6,7 @@ using Sankore.Shared.Kernel;
 /// Tenant-configurable qualification questionnaire scoped to a financial product.
 /// Lifecycle: Draft → Published → Archived.
 /// Only one <see cref="TemplateStatus.Published"/> template can exist per
-/// <see cref="ProductType"/> per tenant at any time.
+/// <see cref="ProductCategory"/> per tenant at any time.
 /// </summary>
 public sealed class QualificationTemplate : AggregateRoot
 {
@@ -14,8 +14,11 @@ public sealed class QualificationTemplate : AggregateRoot
     public string Name { get; private set; } = default!;
     public string? Description { get; private set; }
 
-    /// <summary>Financial product this template is scoped to. Null = generic (not product-specific).</summary>
-    public ProductType? ProductType { get; private set; }
+    /// <summary>Financial product category this template is scoped to. Null = generic (not product-specific).</summary>
+    public string? ProductCategory { get; private set; }
+
+    /// <summary>Specific product code (e.g. "CRED-AGRI-01"). Null = category-level or generic template.</summary>
+    public string? ProductCode { get; private set; }
 
     public TemplateStatus Status { get; private set; }
 
@@ -38,14 +41,16 @@ public sealed class QualificationTemplate : AggregateRoot
         string name,
         DateTimeOffset now,
         string? description = null,
-        ProductType? productType = null)
+        string? productCategory = null,
+        string? productCode = null)
         => new()
         {
             Id          = Guid.NewGuid(),
             TenantId    = tenantId,
             Name        = name.Trim(),
             Description = description?.Trim(),
-            ProductType = productType,
+            ProductCategory = productCategory,
+            ProductCode = productCode?.Trim().ToUpperInvariant(),
             Status      = TemplateStatus.Draft,
             Version     = 0,
             CreatedAt   = now
@@ -84,14 +89,15 @@ public sealed class QualificationTemplate : AggregateRoot
     // ── Editing (Draft only) ───────────────────────────────────────────────
 
     /// <summary>Updates the template's display fields. Only allowed in <see cref="TemplateStatus.Draft"/>.</summary>
-    public Result UpdateDetails(string name, string? description, ProductType? productType)
+    public Result UpdateDetails(string name, string? description, string? productCategory, string? productCode = null)
     {
         if (Status != TemplateStatus.Draft)
             return Result.Fail("TEMPLATE_NOT_IN_DRAFT_STATUS");
 
         Name        = name.Trim();
         Description = description?.Trim();
-        ProductType = productType;
+        ProductCategory = productCategory;
+        ProductCode = productCode?.Trim().ToUpperInvariant();
         return Result.Ok();
     }
 

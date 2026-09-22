@@ -13,7 +13,8 @@ internal sealed class QualificationTemplateConfiguration : IEntityTypeConfigurat
 
         builder.Property(t => t.Name).HasMaxLength(200).IsRequired();
         builder.Property(t => t.Description).HasMaxLength(1000);
-        builder.Property(t => t.ProductType).HasConversion<string>().HasMaxLength(30);
+        builder.Property(t => t.ProductCategory).HasMaxLength(30);
+        builder.Property(t => t.ProductCode).HasMaxLength(50);
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(t => t.Version).IsRequired();
         builder.Property(t => t.PublishedAt);
@@ -36,9 +37,9 @@ internal sealed class QualificationTemplateConfiguration : IEntityTypeConfigurat
         builder.HasIndex(t => new { t.TenantId, t.Status });
 
         // Enforces exactly one Published template per product type per tenant at the DB level.
-        builder.HasIndex(t => new { t.TenantId, t.ProductType })
+        builder.HasIndex(t => new { t.TenantId, t.ProductCategory })
                .IsUnique()
-               .HasFilter("product_type IS NOT NULL AND status = 'Published'");
+               .HasFilter("product_category IS NOT NULL AND status = 'Published'");
     }
 }
 

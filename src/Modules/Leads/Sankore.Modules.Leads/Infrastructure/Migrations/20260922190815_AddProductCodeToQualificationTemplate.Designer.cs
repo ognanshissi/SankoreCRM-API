@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sankore.Modules.Leads.Infrastructure;
@@ -11,9 +12,11 @@ using Sankore.Modules.Leads.Infrastructure;
 namespace Sankore.Modules.Leads.Infrastructure.Migrations
 {
     [DbContext(typeof(LeadsDbContext))]
-    partial class LeadsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922190815_AddProductCodeToQualificationTemplate")]
+    partial class AddProductCodeToQualificationTemplate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1501,15 +1504,15 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
 
-                    b.Property<string>("ProductCategory")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("product_category");
-
                     b.Property<string>("ProductCode")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("product_code");
+
+                    b.Property<string>("ProductType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("product_type");
 
                     b.Property<DateTimeOffset?>("PublishedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1532,10 +1535,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_qualification_templates");
 
-                    b.HasIndex("TenantId", "ProductCategory")
+                    b.HasIndex("TenantId", "ProductType")
                         .IsUnique()
-                        .HasDatabaseName("ix_qualification_templates_tenant_id_product_category")
-                        .HasFilter("product_category IS NOT NULL AND status = 'Published'");
+                        .HasDatabaseName("ix_qualification_templates_tenant_id_product_type")
+                        .HasFilter("product_type IS NOT NULL AND status = 'Published'");
 
                     b.HasIndex("TenantId", "Status")
                         .HasDatabaseName("ix_qualification_templates_tenant_id_status");

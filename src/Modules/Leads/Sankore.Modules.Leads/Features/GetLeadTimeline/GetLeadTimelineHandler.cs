@@ -56,7 +56,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
                 r.AnsweredAt,
                 r.ComputedScore,
                 TemplateName = t.Name,
-                t.ProductType
+                t.ProductCategory
             }).ToListAsync(ct);
 
         var events = new List<TimelineEvent>();
@@ -93,7 +93,7 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
         // Qualification form submissions
         foreach (var q in qualifications)
         {
-            var product = q.ProductType.HasValue ? $" ({q.ProductType})" : string.Empty;
+            var product = q.ProductCategory is not null ? $" ({q.ProductCategory})" : string.Empty;
             events.Add(new TimelineEvent(
                 OccurredAt: q.AnsweredAt,
                 Kind:        TimelineEventKind.Qualification,

@@ -9,7 +9,8 @@ internal sealed record CreateQualificationTemplateCommand(
     Guid TenantId,
     string Name,
     string? Description,
-    ProductType? ProductType,
+    string? ProductCategory,
+    string? ProductCode,
     /// <summary>Flat question list. Mutually exclusive with <see cref="Sections"/>.</summary>
     IReadOnlyList<QuestionInput>? Questions,
     /// <summary>Section-grouped questions. Mutually exclusive with <see cref="Questions"/>.</summary>
