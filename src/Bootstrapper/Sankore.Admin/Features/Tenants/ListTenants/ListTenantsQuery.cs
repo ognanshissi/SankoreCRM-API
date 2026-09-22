@@ -5,13 +5,20 @@ using Sankore.Admin.Infrastructure;
 
 namespace Sankore.Admin.Features.Tenants.ListTenants;
 
-public record ListTenantsQuery : IRequest<List<TenantResponse>>;
+public record ListTenantsQuery(bool? ActiveOnly) : IRequest<List<TenantResponse>>;
 
 internal sealed class ListTenantsHandler(AdminDbContext db) : IRequestHandler<ListTenantsQuery, List<TenantResponse>>
 {
     public async Task<List<TenantResponse>> Handle(ListTenantsQuery request, CancellationToken ct)
     {
-        return await db.Tenants
+        var query = db.Tenants.AsQueryable();
+
+        if (request.ActiveOnly.HasValue)
+        {
+            query = query.Where(a => a.IsActive == request.ActiveOnly.Value);
+        }
+        
+        return await query
             .AsNoTracking()
             .OrderBy(t => t.Name)
             .Select(t => new TenantResponse(

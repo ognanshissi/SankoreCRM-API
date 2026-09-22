@@ -120,7 +120,7 @@ public static class QualificationTemplatesEndpoints
 
     private static async Task<IResult> ListTemplates(
         TemplateStatus? status,
-        string? productCategory,
+        ProductCategory? productCategory,
         ISender sender,
         CancellationToken ct)
     {
@@ -131,7 +131,7 @@ public static class QualificationTemplatesEndpoints
     }
 
     private static async Task<IResult> GetActiveTemplate(
-        string productCategory,
+        ProductCategory productCategory,
         ISender sender,
         CancellationToken ct)
     {
@@ -215,7 +215,7 @@ public static class QualificationTemplatesEndpoints
 public sealed record CreateQualificationTemplateRequest(
     string Name,
     string? Description,
-    string? ProductCategory = null,
+    ProductCategory? ProductCategory = null,
     string? ProductCode = null,
     IReadOnlyList<QuestionInput>? Questions = null,
     IReadOnlyList<SectionInput>? Sections = null);
@@ -223,7 +223,7 @@ public sealed record CreateQualificationTemplateRequest(
 public sealed record UpdateQualificationTemplateRequest(
     string Name,
     string? Description,
-    string? ProductCategory = null,
+    ProductCategory? ProductCategory = null,
     string? ProductCode = null,
     IReadOnlyList<QuestionInput>? Questions = null,
     IReadOnlyList<SectionInput>? Sections = null);

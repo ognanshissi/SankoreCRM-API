@@ -29,6 +29,9 @@ internal sealed class CachedTenantStore(
     public Task<TenantInfo?> GetByFqdnAsync(string fqdn, CancellationToken ct = default)
         => GetOrCache(FqdnKey(fqdn), options.Value.FqdnCacheTtl, () => inner.GetByFqdnAsync(fqdn, ct), ct);
 
+    public Task<IReadOnlyList<TenantInfo>> GetAllActiveAsync(CancellationToken ct = default)
+        => inner.GetAllActiveAsync(ct);
+
     private async Task<TenantInfo?> GetOrCache(
         string cacheKey,
         TimeSpan ttl,

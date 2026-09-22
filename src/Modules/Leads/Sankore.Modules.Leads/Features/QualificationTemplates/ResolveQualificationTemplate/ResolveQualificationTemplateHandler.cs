@@ -39,7 +39,7 @@ internal sealed class ResolveQualificationTemplateHandler(
                 .Include(t => t.Sections)
                 .Include(t => t.Questions)
                 .FirstOrDefaultAsync(
-                    t => t.ProductCategory == categoryStr
+                    t => t.ProductCategory.ToString() == categoryStr
                       && t.ProductCode == null
                       && t.Status == TemplateStatus.Published, ct);
 

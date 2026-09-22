@@ -9,5 +9,5 @@ using Sankore.Shared.Kernel;
 /// <param name="ProductCategory">Optional product category filter.</param>
 internal sealed record ListQualificationTemplatesQuery(
     TemplateStatus? Status,
-    string? ProductCategory = null)
+    ProductCategory? ProductCategory = null)
     : IRequest<Result<IReadOnlyList<QualificationTemplateDto>>>;

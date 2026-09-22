@@ -19,6 +19,10 @@ internal sealed class TenantNotificationSettingsChangedConsumer(
     public async Task Consume(ConsumeContext<TenantNotificationSettingsChangedEvent> context)
     {
         var tenantId = context.Message.TenantId;
+
+        if (tenantId == Guid.Empty)
+            return;
+
         await cache.RemoveAsync(CachedEmailProviderResolver.CacheKey(tenantId), context.CancellationToken);
         logger.LogInformation(
             "Notification provider cache invalidated for tenant {TenantId} via integration event",

@@ -95,10 +95,3 @@ public sealed class ProductSpeciality
         EffectiveTo = null;
     }
 }
-
-public enum ProductCategory
-{
-    Loan,
-    Savings,
-    Tontine
-}

@@ -1,3 +1,5 @@
+using Sankore.Shared.Kernel;
+
 namespace Sankore.Modules.Administration.Features.Products;
 
 using Sankore.Modules.Administration.Domain;

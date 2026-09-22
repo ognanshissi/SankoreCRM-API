@@ -9,7 +9,7 @@ internal sealed record UpdateQualificationTemplateCommand(
     Guid TemplateId,
     string Name,
     string? Description,
-    string? ProductCategory,
+    ProductCategory? ProductCategory,
     string? ProductCode,
     IReadOnlyList<QuestionInput>? Questions,
     IReadOnlyList<SectionInput>? Sections

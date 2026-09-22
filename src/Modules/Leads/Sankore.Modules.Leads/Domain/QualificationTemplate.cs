@@ -15,7 +15,7 @@ public sealed class QualificationTemplate : AggregateRoot
     public string? Description { get; private set; }
 
     /// <summary>Financial product category this template is scoped to. Null = generic (not product-specific).</summary>
-    public string? ProductCategory { get; private set; }
+    public ProductCategory? ProductCategory { get; private set; }
 
     /// <summary>Specific product code (e.g. "CRED-AGRI-01"). Null = category-level or generic template.</summary>
     public string? ProductCode { get; private set; }
@@ -41,7 +41,7 @@ public sealed class QualificationTemplate : AggregateRoot
         string name,
         DateTimeOffset now,
         string? description = null,
-        string? productCategory = null,
+        ProductCategory? productCategory = null,
         string? productCode = null)
         => new()
         {
@@ -89,7 +89,7 @@ public sealed class QualificationTemplate : AggregateRoot
     // ── Editing (Draft only) ───────────────────────────────────────────────
 
     /// <summary>Updates the template's display fields. Only allowed in <see cref="TemplateStatus.Draft"/>.</summary>
-    public Result UpdateDetails(string name, string? description, string? productCategory, string? productCode = null)
+    public Result UpdateDetails(string name, string? description, ProductCategory? productCategory, string? productCode = null)
     {
         if (Status != TemplateStatus.Draft)
             return Result.Fail("TEMPLATE_NOT_IN_DRAFT_STATUS");

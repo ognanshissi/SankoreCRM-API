@@ -297,24 +297,30 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
     app.UseHangfireDashboard("/hangfire");
 
-    // SLA breach monitoring — runs every 15 minutes (US-M13-141/142).
-    // In a multi-tenant deployment, register one job per tenant from a tenant registry.
-    // For now, a single job that must be parameterized per tenant at startup.
-    Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.SlaMonitoring.CheckSlaBreachesJob>(
-        "sla-breach-check",
-        job => job.ExecuteAsync(Guid.Empty),
-        "*/15 * * * *");
+    // Register per-tenant recurring Hangfire jobs from the tenant registry.
+    var tenantStore = app.Services.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>();
+    var activeTenants = tenantStore.GetAllActiveAsync(CancellationToken.None).GetAwaiter().GetResult();
 
-    Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.NurturingExecution.ExecuteNurturingJob>(
-        "nurturing-execution",
-        job => job.ExecuteAsync(Guid.Empty),
-        "*/10 * * * *");
+    foreach (var t in activeTenants)
+    {
+        var tenantId = t.Id;
+        var suffix = tenantId.ToString()[..8];
 
-    // Recycled lead reactivation — daily at 03:00 (US-M13-160/161)
-    Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.ReactivateRecycledLeads.ReactivateRecycledLeadsJob>(
-        "reactivate-recycled-leads",
-        job => job.ExecuteAsync(Guid.Empty),
-        "0 3 * * *");
+        Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.SlaMonitoring.CheckSlaBreachesJob>(
+            $"sla-breach-check-{t.Fqdn}",
+            job => job.ExecuteAsync(tenantId),
+            "*/15 * * * *");
+
+        Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.NurturingExecution.ExecuteNurturingJob>(
+            $"nurturing-execution-{t.Fqdn}",
+            job => job.ExecuteAsync(tenantId),
+            "*/10 * * * *");
+
+        Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.ReactivateRecycledLeads.ReactivateRecycledLeadsJob>(
+            $"reactivate-recycled-leads-{t.Fqdn}",
+            job => job.ExecuteAsync(tenantId),
+            "0 3 * * *");
+    }
 }
 
 app.UseExceptionHandler();

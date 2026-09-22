@@ -5,5 +5,5 @@ using Sankore.Modules.Leads.Features.QualificationTemplates;
 using Sankore.Shared.Kernel;
 
 /// <summary>Returns the single Published template for the given product category within the current tenant.</summary>
-internal sealed record GetActiveTemplateForProductQuery(string ProductCategory)
+internal sealed record GetActiveTemplateForProductQuery(ProductCategory ProductCategory)
     : IRequest<Result<QualificationTemplateDto>>;

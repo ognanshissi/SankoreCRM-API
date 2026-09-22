@@ -33,6 +33,26 @@ internal sealed class HttpTenantStore(
             $"fqdn {fqdn}",
             ct);
 
+    public async Task<IReadOnlyList<TenantInfo>> GetAllActiveAsync(CancellationToken ct = default)
+    {
+        var client = httpClientFactory.CreateClient(ClientName);
+        try
+        {
+            var response = await client.GetAsync("api/v1/tenants?activeOnly=true", ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Tenant store returned {Status} for GetAllActive", (int)response.StatusCode);
+                return [];
+            }
+            return await response.Content.ReadFromJsonAsync<List<TenantInfo>>(JsonOpts, ct) ?? [];
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to reach tenant store for GetAllActive");
+            return [];
+        }
+    }
+
     private async Task<TenantInfo?> FetchAsync(
         Func<HttpClient, Task<HttpResponseMessage>> request,
         string context,
