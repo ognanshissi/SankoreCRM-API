@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.Extensions.Localization" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Hangfire.Core" />
+    <PackageReference Include="Newtonsoft.Json" />
     <PackageReference Include="CsvHelper" />
   </ItemGroup>
 

@@ -47,10 +47,13 @@
   <ItemGroup Label="CsvHelper">
     <PackageVersion Include="CsvHelper" Version="33.0.1" />
   </ItemGroup>
+  <ItemGroup Label="SecurityOverrides">
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
   <ItemGroup Label="Google">
     <PackageVersion Include="ClosedXML" Version="0.104.2" />
-    <PackageVersion Include="Google.Apis.Sheets.v4" Version="1.68.0.3684" />
-    <PackageVersion Include="Google.Apis.PeopleService.v1" Version="1.68.0.3731" />
+    <PackageVersion Include="Google.Apis.Sheets.v4" Version="1.69.0.3694" />
+    <PackageVersion Include="Google.Apis.PeopleService.v1" Version="1.69.0.3785" />
   </ItemGroup>
   <ItemGroup Label="Extensions">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />

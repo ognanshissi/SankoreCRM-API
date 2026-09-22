@@ -47,6 +47,10 @@ builder.Services.ConfigureHttpJsonOptions(opts =>
         new Sankore.Api.Infrastructure.NullableGuidConverter());
     opts.SerializerOptions.Converters.Add(
         new Sankore.Api.Infrastructure.TimeSpanConverter());
+    opts.SerializerOptions.Converters.Add(
+        new Sankore.Api.Infrastructure.DateOnlyConverter());
+    opts.SerializerOptions.Converters.Add(
+        new Sankore.Api.Infrastructure.NullableDateOnlyConverter());
 });
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();

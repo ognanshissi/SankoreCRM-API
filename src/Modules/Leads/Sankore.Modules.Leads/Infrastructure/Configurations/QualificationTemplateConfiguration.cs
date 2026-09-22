@@ -16,6 +16,7 @@ internal sealed class QualificationTemplateConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.ProductCategory).HasMaxLength(30);
         builder.Property(t => t.ProductCode).HasMaxLength(50);
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(t => t.ProductCategory).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(t => t.Version).IsRequired();
         builder.Property(t => t.PublishedAt);
 
