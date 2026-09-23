@@ -23,6 +23,9 @@ public static class TenantStoreServiceCollectionExtensions
         {
             var opts = config.GetSection(TenantStoreOptions.Section).Get<TenantStoreOptions>()!;
             client.BaseAddress = new Uri(opts.BaseUrl.TrimEnd('/') + "/");
+
+            if (!string.IsNullOrWhiteSpace(opts.ApiKey))
+                client.DefaultRequestHeaders.Add("X-Api-Key", opts.ApiKey);
         });
 
         // Inner (HTTP) implementation, then wrapped by the caching decorator.

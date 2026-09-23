@@ -4,6 +4,7 @@ using Microsoft.OpenApi.Models;
 using Sankore.Admin.Features.TenantDomains;
 using Sankore.Admin.Features.Tenants;
 using Sankore.Admin.Infrastructure;
+using Sankore.Shared.Infrastructure.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -80,6 +81,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// API key validation for service-to-service calls from SankoreApi
+app.UseApiKeyAuth();
 
 app.MapTenantEndpoints();
 app.MapTenantDomainEndpoints();

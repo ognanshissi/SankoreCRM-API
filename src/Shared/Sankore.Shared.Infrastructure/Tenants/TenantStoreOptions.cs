@@ -17,4 +17,10 @@ public sealed class TenantStoreOptions
     /// Defaults to 24 hours.
     /// </summary>
     public TimeSpan FqdnCacheTtl { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Shared API key sent as X-Api-Key header for service-to-service authentication
+    /// with SankoreAdmin. Required in production.
+    /// </summary>
+    public string? ApiKey { get; set; }
 }
