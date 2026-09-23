@@ -64,6 +64,25 @@ internal sealed class LeadConfiguration : IEntityTypeConfiguration<Lead>
                 .HasMaxLength(3);
         });
 
+        // Acquisition cost — snapshot from source at capture time
+        builder.OwnsOne(l => l.AcquisitionCost, m =>
+        {
+            m.Property(p => p.Amount).HasColumnName("acquisition_cost").HasPrecision(18, 4);
+            m.Property(p => p.Currency).HasColumnName("acquisition_currency").HasMaxLength(3);
+        });
+
+        // Attribution & UTM
+        builder.Property(l => l.UtmSource).HasMaxLength(200);
+        builder.Property(l => l.UtmMedium).HasMaxLength(100);
+        builder.Property(l => l.UtmCampaign).HasMaxLength(200);
+        builder.Property(l => l.UtmContent).HasMaxLength(200);
+        builder.Property(l => l.UtmTerm).HasMaxLength(200);
+        builder.Property(l => l.LandingPage).HasMaxLength(2000);
+        builder.Property(l => l.Referrer).HasMaxLength(2000);
+        builder.Property(l => l.ExternalId).HasMaxLength(200);
+        builder.Property(l => l.SocialPublicationId).HasMaxLength(200);
+        builder.Property(l => l.SocialInteractionId).HasMaxLength(200);
+
         // Owned value object
         builder.OwnsOne(l => l.Location, loc =>
         {

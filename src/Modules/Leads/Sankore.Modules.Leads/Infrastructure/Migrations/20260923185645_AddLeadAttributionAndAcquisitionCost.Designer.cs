@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sankore.Modules.Leads.Infrastructure;
@@ -11,9 +12,11 @@ using Sankore.Modules.Leads.Infrastructure;
 namespace Sankore.Modules.Leads.Infrastructure.Migrations
 {
     [DbContext(typeof(LeadsDbContext))]
-    partial class LeadsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260923185645_AddLeadAttributionAndAcquisitionCost")]
+    partial class AddLeadAttributionAndAcquisitionCost
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -823,64 +826,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("lead_import_jobs", "leads");
                 });
 
-            modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadIngestion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("IngestedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ingested_at");
-
-                    b.Property<Guid>("LeadId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("lead_id");
-
-                    b.Property<string>("RawPayloadJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("raw_payload_json");
-
-                    b.Property<string>("RejectionReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("rejection_reason");
-
-                    b.Property<Guid?>("RunId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("run_id");
-
-                    b.Property<Guid>("SourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("source_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("status");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_lead_ingestions");
-
-                    b.HasIndex("RunId")
-                        .HasDatabaseName("ix_lead_ingestions_run_id")
-                        .HasFilter("run_id IS NOT NULL");
-
-                    b.HasIndex("TenantId", "LeadId")
-                        .HasDatabaseName("ix_lead_ingestions_tenant_id_lead_id");
-
-                    b.HasIndex("TenantId", "SourceId")
-                        .HasDatabaseName("ix_lead_ingestions_tenant_id_source_id");
-
-                    b.ToTable("lead_ingestions", "leads");
-                });
-
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadMerge", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1115,12 +1060,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
                     b.HasKey("Id")
                         .HasName("pk_lead_source_configs");
 
@@ -1138,65 +1077,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasFilter("mode = 'ScheduledPull' AND status = 'Active'");
 
                     b.ToTable("lead_source_configs", "leads");
-                });
-
-            modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadSourceRun", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<int>("DuplicateCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("duplicate_count");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("error_message");
-
-                    b.Property<int>("FetchedCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("fetched_count");
-
-                    b.Property<int>("IngestedCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("ingested_count");
-
-                    b.Property<int>("RejectedCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("rejected_count");
-
-                    b.Property<Guid>("SourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("source_id");
-
-                    b.Property<DateTimeOffset>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("status");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_lead_source_runs");
-
-                    b.HasIndex("TenantId", "SourceId", "StartedAt")
-                        .HasDatabaseName("ix_lead_source_runs_tenant_id_source_id_started_at");
-
-                    b.ToTable("lead_source_runs", "leads");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadTag", b =>
@@ -2375,15 +2255,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_lead_assignments_leads_lead_id");
-                });
-
-            modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadIngestion", b =>
-                {
-                    b.HasOne("Sankore.Modules.Leads.Domain.LeadSourceRun", null)
-                        .WithMany()
-                        .HasForeignKey("RunId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_lead_ingestions_lead_source_runs_run_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadOwnerAssignmentHistory", b =>

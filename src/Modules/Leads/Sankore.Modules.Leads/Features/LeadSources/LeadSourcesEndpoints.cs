@@ -4,10 +4,15 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.LeadSources.ActivateLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.CreateLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.DeactivateLeadSource;
+using Sankore.Modules.Leads.Features.LeadSources.GetSourceMetadata;
+using Sankore.Modules.Leads.Features.LeadSources.GetLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.ListLeadSources;
+using Sankore.Modules.Leads.Features.LeadSources.PauseLeadSource;
+using Sankore.Modules.Leads.Features.LeadSources.PreviewMapping;
 using Sankore.Modules.Leads.Features.LeadSources.UpdateLeadSource;
 using Sankore.Shared.Kernel;
 
@@ -18,15 +23,21 @@ public static class LeadSourcesEndpoints
     {
         var group = app.MapGroup("lead-sources");
 
-        // GET /lead-sources
         group.MapGet("", ListSources)
             .WithName("ListLeadSources")
             .WithTags("LeadSources")
             .RequireAuthorization(Permissions.CanReadLeadSources.Code)
-            .Produces<IReadOnlyList<LeadSourceDto>>()
+            .Produces<PagedResult<LeadSourceListDto>>()
             .WithOpenApi();
 
-        // POST /lead-sources
+        group.MapGet("{id:guid}", GetSource)
+            .WithName("GetLeadSource")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanReadLeadSources.Code)
+            .Produces<LeadSourceDetailDto>()
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
         group.MapPost("", CreateSource)
             .WithName("CreateLeadSource")
             .WithTags("LeadSources")
@@ -35,16 +46,15 @@ public static class LeadSourcesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
-        // PUT /lead-sources/{id}
         group.MapPut("{id:guid}", UpdateSource)
             .WithName("UpdateLeadSource")
             .WithTags("LeadSources")
             .RequireAuthorization(Permissions.CanManageLeadSources.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
             .WithOpenApi();
 
-        // POST /lead-sources/{id}/activate
         group.MapPost("{id:guid}/activate", ActivateSource)
             .WithName("ActivateLeadSource")
             .WithTags("LeadSources")
@@ -53,7 +63,14 @@ public static class LeadSourcesEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
-        // POST /lead-sources/{id}/deactivate
+        group.MapPost("{id:guid}/pause", PauseSource)
+            .WithName("PauseLeadSource")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSources.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
         group.MapPost("{id:guid}/deactivate", DeactivateSource)
             .WithName("DeactivateLeadSource")
             .WithTags("LeadSources")
@@ -63,14 +80,43 @@ public static class LeadSourcesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        // POST /lead-sources/{id}/mapping/preview — dry-run mapping against sample payload
+        group.MapPost("{id:guid}/mapping/preview", PreviewMapping)
+            .WithName("PreviewLeadSourceMapping")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSources.Code)
+            .Produces<PreviewMappingResult>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // Metadata — channels, modes, allowed combinations
+        app.MapGetSourceMetadata();
+
         return app;
     }
 
     private static async Task<IResult> ListSources(
-        ISender sender, CancellationToken ct, bool? activeOnly = null)
+        ISender sender, CancellationToken ct,
+        LeadChannelType? channelType = null,
+        IntegrationMode? mode = null,
+        LeadSourceStatus? status = null,
+        string? q = null,
+        int page = 1,
+        int pageSize = 20)
     {
-        var result = await sender.Send(new ListLeadSourcesQuery(activeOnly), ct);
+        var result = await sender.Send(
+            new ListLeadSourcesQuery(channelType, mode, status, q, page, pageSize), ct);
         return Results.Ok(result.Value);
+    }
+
+    private static async Task<IResult> GetSource(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetLeadSourceQuery(id), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.NotFound(new { error = result.Error });
     }
 
     private static async Task<IResult> CreateSource(
@@ -80,11 +126,18 @@ public static class LeadSourcesEndpoints
         CancellationToken ct)
     {
         var result = await sender.Send(new CreateLeadSourceCommand(
-            TenantId:     tenant.CurrentTenantId,
-            Code:         req.Code,
-            Label:        req.Label,
-            DisplayOrder: req.DisplayOrder,
-            Description:  req.Description), ct);
+            TenantId:        tenant.CurrentTenantId,
+            Code:            req.Code,
+            Label:           req.Label,
+            ChannelType:     req.ChannelType,
+            DisplayOrder:    req.DisplayOrder,
+            IntegrationMode: req.IntegrationMode,
+            Description:     req.Description,
+            Settings:        req.Settings,
+            PlatformConnectionId: req.PlatformConnectionId,
+            DedupWindowDays: req.DedupWindowDays,
+            CostPerLead:     req.CostPerLead,
+            CostCurrency:    req.CostCurrency), ct);
 
         return result.IsSuccess
             ? Results.Created($"lead-sources/{result.Value}", result.Value)
@@ -92,37 +145,58 @@ public static class LeadSourcesEndpoints
     }
 
     private static async Task<IResult> UpdateSource(
-        Guid id,
-        UpdateLeadSourceRequest req,
-        ISender sender,
-        CancellationToken ct)
+        Guid id, UpdateLeadSourceRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new UpdateLeadSourceCommand(
-            SourceId:     id,
-            Code:         req.Code,
-            Label:        req.Label,
-            DisplayOrder: req.DisplayOrder,
-            Description:  req.Description), ct);
+            SourceId:        id,
+            ExpectedVersion: req.Version,
+            Label:           req.Label,
+            DisplayOrder:    req.DisplayOrder,
+            Description:     req.Description,
+            Settings:        req.Settings,
+            PlatformConnectionId: req.PlatformConnectionId,
+            DedupWindowDays: req.DedupWindowDays,
+            CostPerLead:     req.CostPerLead,
+            CostCurrency:    req.CostCurrency), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
-            : result.Error == "LEAD_SOURCE_NOT_FOUND"
-                ? Results.NotFound()
-                : Results.Problem(detail: result.Error, statusCode: 422);
+            : result.Error switch
+            {
+                "LEAD_SOURCE_NOT_FOUND" => Results.NotFound(),
+                "CONFLICT" => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(detail: result.Error, statusCode: 422)
+            };
     }
 
-    private static async Task<IResult> ActivateSource(
-        Guid id, ISender sender, CancellationToken ct)
+    private static async Task<IResult> ActivateSource(Guid id, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new ActivateLeadSourceCommand(id), ct);
         return result.IsSuccess ? Results.NoContent() : Results.NotFound();
     }
 
-    private static async Task<IResult> DeactivateSource(
-        Guid id, ISender sender, CancellationToken ct)
+    private static async Task<IResult> PauseSource(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new PauseLeadSourceCommand(id), ct);
+        return result.IsSuccess ? Results.NoContent() : Results.NotFound();
+    }
+
+    private static async Task<IResult> PreviewMapping(
+        Guid id, PreviewMappingRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new PreviewMappingQuery(id, req.SamplePayloadJson), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error switch
+            {
+                "SOURCE_NOT_FOUND" => Results.NotFound(new { error = result.Error }),
+                _ => Results.UnprocessableEntity(new { error = result.Error })
+            };
+    }
+
+    private static async Task<IResult> DeactivateSource(Guid id, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new DeactivateLeadSourceCommand(id), ct);
-
         return result.IsSuccess
             ? Results.NoContent()
             : result.Error == "CANNOT_DEACTIVATE_SYSTEM_SOURCE"
@@ -134,11 +208,25 @@ public static class LeadSourcesEndpoints
 public sealed record CreateLeadSourceRequest(
     string Code,
     string Label,
+    LeadChannelType ChannelType,
     int DisplayOrder,
-    string? Description = null);
+    IntegrationMode? IntegrationMode = null,
+    string? Description = null,
+    SourceSettings? Settings = null,
+    string? PlatformConnectionId = null,
+    int DedupWindowDays = 30,
+    decimal? CostPerLead = null,
+    string? CostCurrency = null);
 
 public sealed record UpdateLeadSourceRequest(
-    string Code,
+    uint Version,
     string Label,
     int DisplayOrder,
-    string? Description = null);
+    string? Description = null,
+    SourceSettings? Settings = null,
+    string? PlatformConnectionId = null,
+    int? DedupWindowDays = null,
+    decimal? CostPerLead = null,
+    string? CostCurrency = null);
+
+public sealed record PreviewMappingRequest(string SamplePayloadJson);

@@ -73,6 +73,21 @@ public sealed class Lead : AggregateRoot
     public Guid? AgentCollectedLeadId { get; private set; }
     public Guid? CurrentAssignmentId { get; private set; }
 
+    // ── Attribution & UTM (F13.37-BE-04) ───────────────────────────────────
+    public string? UtmSource { get; private set; }
+    public string? UtmMedium { get; private set; }
+    public string? UtmCampaign { get; private set; }
+    public string? UtmContent { get; private set; }
+    public string? UtmTerm { get; private set; }
+    public string? LandingPage { get; private set; }
+    public string? Referrer { get; private set; }
+    public string? ExternalId { get; private set; }
+    public string? SocialPublicationId { get; private set; }
+    public string? SocialInteractionId { get; private set; }
+
+    /// <summary>Snapshot of the source's CostPerLead at capture time. Never recalculated.</summary>
+    public Money? AcquisitionCost { get; private set; }
+
     // ── Lifecycle tracking ───────────────────────────────────────────────────
     public DateTimeOffset? LastActivityAt { get; private set; }
     public string? LossReason { get; private set; }
@@ -110,7 +125,18 @@ public sealed class Lead : AggregateRoot
         LeadType prospectType = LeadType.Individual,
         string? nationalId = null,
         string? customerReference = null,
-        string? phoneBlindIndex = null)
+        string? phoneBlindIndex = null,
+        string? utmSource = null,
+        string? utmMedium = null,
+        string? utmCampaign = null,
+        string? utmContent = null,
+        string? utmTerm = null,
+        string? landingPage = null,
+        string? referrer = null,
+        string? externalId = null,
+        string? socialPublicationId = null,
+        string? socialInteractionId = null,
+        Money? acquisitionCost = null)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Lead must have a name.");
@@ -160,6 +186,17 @@ public sealed class Lead : AggregateRoot
             CompanyEmail = "",
             CompanyName = "",
             CompanyPhone = "",
+            UtmSource             = utmSource?.Trim(),
+            UtmMedium             = utmMedium?.Trim(),
+            UtmCampaign           = utmCampaign?.Trim(),
+            UtmContent            = utmContent?.Trim(),
+            UtmTerm               = utmTerm?.Trim(),
+            LandingPage           = landingPage?.Trim(),
+            Referrer              = referrer?.Trim(),
+            ExternalId            = externalId?.Trim(),
+            SocialPublicationId   = socialPublicationId?.Trim(),
+            SocialInteractionId   = socialInteractionId?.Trim(),
+            AcquisitionCost       = acquisitionCost,
         };
 
         lead.RaiseDomainEvent(new LeadCapturedDomainEvent(lead.Id));
