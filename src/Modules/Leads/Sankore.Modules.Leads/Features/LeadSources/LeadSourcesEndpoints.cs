@@ -11,8 +11,10 @@ using Sankore.Modules.Leads.Features.LeadSources.DeactivateLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.GetSourceMetadata;
 using Sankore.Modules.Leads.Features.LeadSources.GetLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.ListLeadSources;
+using Sankore.Modules.Leads.Features.LeadSources.MarkErrorLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.PauseLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.PreviewMapping;
+using Sankore.Modules.Leads.Features.LeadSources.StartTestingLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.UpdateLeadSource;
 using Sankore.Shared.Kernel;
 
@@ -55,12 +57,22 @@ public static class LeadSourcesEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .WithOpenApi();
 
+        group.MapPost("{id:guid}/start-testing", StartTestingSource)
+            .WithName("StartTestingLeadSource")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSources.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         group.MapPost("{id:guid}/activate", ActivateSource)
             .WithName("ActivateLeadSource")
             .WithTags("LeadSources")
             .RequireAuthorization(Permissions.CanManageLeadSources.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
         group.MapPost("{id:guid}/pause", PauseSource)
@@ -69,10 +81,20 @@ public static class LeadSourcesEndpoints
             .RequireAuthorization(Permissions.CanManageLeadSources.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
-        group.MapPost("{id:guid}/deactivate", DeactivateSource)
-            .WithName("DeactivateLeadSource")
+        group.MapPost("{id:guid}/mark-error", MarkErrorSource)
+            .WithName("MarkErrorLeadSource")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSources.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        group.MapPost("{id:guid}/archive", ArchiveSource)
+            .WithName("ArchiveLeadSource")
             .WithTags("LeadSources")
             .RequireAuthorization(Permissions.CanManageLeadSources.Code)
             .Produces(StatusCodes.Status204NoContent)
@@ -169,17 +191,20 @@ public static class LeadSourcesEndpoints
             };
     }
 
+    private static async Task<IResult> StartTestingSource(Guid id, ISender sender, CancellationToken ct)
+        => await LifecycleTransition(sender.Send(new StartTestingLeadSourceCommand(id), ct));
+
     private static async Task<IResult> ActivateSource(Guid id, ISender sender, CancellationToken ct)
-    {
-        var result = await sender.Send(new ActivateLeadSourceCommand(id), ct);
-        return result.IsSuccess ? Results.NoContent() : Results.NotFound();
-    }
+        => await LifecycleTransition(sender.Send(new ActivateLeadSourceCommand(id), ct));
 
     private static async Task<IResult> PauseSource(Guid id, ISender sender, CancellationToken ct)
-    {
-        var result = await sender.Send(new PauseLeadSourceCommand(id), ct);
-        return result.IsSuccess ? Results.NoContent() : Results.NotFound();
-    }
+        => await LifecycleTransition(sender.Send(new PauseLeadSourceCommand(id), ct));
+
+    private static async Task<IResult> MarkErrorSource(Guid id, ISender sender, CancellationToken ct)
+        => await LifecycleTransition(sender.Send(new MarkErrorLeadSourceCommand(id), ct));
+
+    private static async Task<IResult> ArchiveSource(Guid id, ISender sender, CancellationToken ct)
+        => await LifecycleTransition(sender.Send(new DeactivateLeadSourceCommand(id), ct));
 
     private static async Task<IResult> PreviewMapping(
         Guid id, PreviewMappingRequest req, ISender sender, CancellationToken ct)
@@ -194,14 +219,14 @@ public static class LeadSourcesEndpoints
             };
     }
 
-    private static async Task<IResult> DeactivateSource(Guid id, ISender sender, CancellationToken ct)
+    private static async Task<IResult> LifecycleTransition(Task<Result> task)
     {
-        var result = await sender.Send(new DeactivateLeadSourceCommand(id), ct);
+        var result = await task;
         return result.IsSuccess
             ? Results.NoContent()
-            : result.Error == "CANNOT_DEACTIVATE_SYSTEM_SOURCE"
-                ? Results.Problem(detail: result.Error, statusCode: 422)
-                : Results.NotFound();
+            : result.Error == "LEAD_SOURCE_NOT_FOUND"
+                ? Results.NotFound()
+                : Results.Problem(detail: result.Error, statusCode: 422);
     }
 }
 

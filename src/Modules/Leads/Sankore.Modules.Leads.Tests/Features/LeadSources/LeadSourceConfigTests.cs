@@ -78,9 +78,20 @@ public sealed class LeadSourceConfigTests
     [Fact]
     public void Update_rejects_PlatformConnectionId_change_on_Active_source()
     {
+        var settings = new PlatformSettings
+        {
+            PlatformName = "facebook",
+            OAuthCredentialVaultRef = "vault-ref",
+            FieldMapping = new Dictionary<string, string>
+            {
+                ["$.phone"] = "phoneNumber",
+                ["$.name"]  = "fullName"
+            }
+        };
         var source = LeadSourceConfig.Create(_tenantId, "FB", "Facebook",
             LeadChannelType.FacebookLeadAds, 0, IntegrationMode.PlatformConnection,
-            platformConnectionId: "conn-1");
+            platformConnectionId: "conn-1", settings: settings);
+        source.StartTesting();
         source.Activate();
 
         var act = () => source.Update(

@@ -77,7 +77,7 @@ internal sealed class ListLeadSourcesHandler(LeadsDbContext db, TimeProvider clo
     internal static SourceHealth ComputeHealth(
         LeadSourceStatus status, DateTimeOffset? lastReceived, DateTimeOffset now)
     {
-        if (status == LeadSourceStatus.Disabled)
+        if (status is LeadSourceStatus.Error or LeadSourceStatus.Archived)
             return SourceHealth.Error;
 
         if (status == LeadSourceStatus.Active && lastReceived.HasValue

@@ -167,23 +167,122 @@ public sealed class LeadSourceConfig : ITenant
         return changed;
     }
 
-    public void Activate() => Status = LeadSourceStatus.Active;
-    public void Pause()    => Status = LeadSourceStatus.Paused;
+    // ── State machine ──────────────────────────────────────────────────────
+    // Draft → Testing → Active ⇄ Paused
+    // Active → Error → Active
+    // Any non-system → Archived
 
-    public void Deactivate()
+    /// <summary>Transition to Testing. Only from Draft.</summary>
+    public void StartTesting()
+    {
+        EnsureTransition(LeadSourceStatus.Testing, LeadSourceStatus.Draft);
+        Status = LeadSourceStatus.Testing;
+    }
+
+    /// <summary>
+    /// Transition to Active. Only from Testing, Paused, or Error.
+    /// Returns activation prerequisite violations (empty = OK).
+    /// </summary>
+    public IReadOnlyList<string> Activate()
+    {
+        EnsureTransition(LeadSourceStatus.Active,
+            LeadSourceStatus.Testing, LeadSourceStatus.Paused, LeadSourceStatus.Error);
+
+        var missing = CheckActivationPrerequisites();
+        if (missing.Count > 0) return missing;
+
+        Status = LeadSourceStatus.Active;
+        return [];
+    }
+
+    /// <summary>Transition to Paused. Only from Active.</summary>
+    public void Pause()
+    {
+        EnsureTransition(LeadSourceStatus.Paused, LeadSourceStatus.Active);
+        Status = LeadSourceStatus.Paused;
+    }
+
+    /// <summary>Transition to Error. Only from Active.</summary>
+    public void MarkError()
+    {
+        EnsureTransition(LeadSourceStatus.Error, LeadSourceStatus.Active);
+        Status = LeadSourceStatus.Error;
+    }
+
+    /// <summary>Transition to Archived. Any non-system status except Archived.</summary>
+    public void Archive()
     {
         if (IsSystem)
-            throw new DomainException("Cannot deactivate a system lead source.");
-        Status = LeadSourceStatus.Disabled;
+            throw new DomainException("CANNOT_ARCHIVE_SYSTEM_SOURCE");
+        if (Status == LeadSourceStatus.Archived)
+            throw new DomainException("INVALID_TRANSITION");
+        Status = LeadSourceStatus.Archived;
     }
 
     public void RotatePublicKey(string newKey) => PublicKey = newKey;
+
+    // ── Activation prerequisites ────────────────────────────────────────
+
+    private IReadOnlyList<string> CheckActivationPrerequisites()
+    {
+        var missing = new List<string>();
+
+        // Push modes require a PublicKey (secret)
+        if (PublicKeyModes.Contains(Mode) && string.IsNullOrEmpty(PublicKey))
+            missing.Add("SecretMissing");
+
+        // PlatformConnection requires a connection reference
+        if (Mode == IntegrationMode.PlatformConnection && string.IsNullOrEmpty(PlatformConnectionId))
+            missing.Add("ConnectionNotConnected");
+
+        // Webhook/Pull with vault credentials — check settings
+        switch (Settings)
+        {
+            case ServerWebhookSettings { SignatureAlgorithm: not null, SignatureCredentialVaultRef: null }:
+                missing.Add("SecretMissing");
+                break;
+            case ScheduledPullSettings { EndpointUrl: "" or null }:
+                missing.Add("NoEndpointConfigured");
+                break;
+            case ScheduledPullSettings { AuthCredentialVaultRef: null }:
+                missing.Add("SecretMissing");
+                break;
+            case PlatformSettings { OAuthCredentialVaultRef: null }:
+                missing.Add("SecretMissing");
+                break;
+        }
+
+        // Modes that need field mapping must have at least phoneNumber + fullName mapped
+        if (Mode is not IntegrationMode.Internal and not IntegrationMode.EmbeddedScript)
+        {
+            var fieldMapping = Settings switch
+            {
+                ServerWebhookSettings wh => wh.FieldMapping,
+                ScheduledPullSettings pull => pull.FieldMapping,
+                PlatformSettings plat => plat.FieldMapping,
+                _ => null
+            };
+
+            if (fieldMapping is null || fieldMapping.Count == 0)
+                missing.Add("NoFieldMappingConfigured");
+        }
+
+        return missing;
+    }
+
+    private void EnsureTransition(LeadSourceStatus target, params LeadSourceStatus[] allowedFrom)
+    {
+        if (!allowedFrom.Contains(Status))
+            throw new DomainException("INVALID_TRANSITION");
+    }
 }
 
 public enum LeadSourceStatus
 {
     Draft,
+    Testing,
     Active,
     Paused,
-    Disabled
+    Error,
+    Archived
 }

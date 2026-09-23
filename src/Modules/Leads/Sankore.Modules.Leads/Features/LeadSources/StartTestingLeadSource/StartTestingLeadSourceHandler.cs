@@ -1,14 +1,14 @@
-namespace Sankore.Modules.Leads.Features.LeadSources.PauseLeadSource;
+namespace Sankore.Modules.Leads.Features.LeadSources.StartTestingLeadSource;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class PauseLeadSourceHandler(LeadsDbContext db)
-    : IRequestHandler<PauseLeadSourceCommand, Result>
+internal sealed class StartTestingLeadSourceHandler(LeadsDbContext db)
+    : IRequestHandler<StartTestingLeadSourceCommand, Result>
 {
-    public async Task<Result> Handle(PauseLeadSourceCommand cmd, CancellationToken ct)
+    public async Task<Result> Handle(StartTestingLeadSourceCommand cmd, CancellationToken ct)
     {
         var source = await db.LeadSourceConfigs.AsTracking()
             .FirstOrDefaultAsync(s => s.Id == cmd.SourceId, ct);
@@ -18,7 +18,7 @@ internal sealed class PauseLeadSourceHandler(LeadsDbContext db)
 
         try
         {
-            source.Pause();
+            source.StartTesting();
         }
         catch (DomainException ex)
         {

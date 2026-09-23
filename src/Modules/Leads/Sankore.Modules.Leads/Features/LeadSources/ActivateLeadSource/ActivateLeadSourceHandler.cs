@@ -16,7 +16,10 @@ internal sealed class ActivateLeadSourceHandler(LeadsDbContext db)
         if (source is null)
             return Result.Fail("LEAD_SOURCE_NOT_FOUND");
 
-        source.Activate();
+        var missing = source.Activate();
+        if (missing.Count > 0)
+            return Result.Fail($"ACTIVATION_PREREQUISITES_NOT_MET:{string.Join(",", missing)}");
+
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

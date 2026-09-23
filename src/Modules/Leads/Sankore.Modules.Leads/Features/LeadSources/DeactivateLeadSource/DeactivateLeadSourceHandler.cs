@@ -16,10 +16,15 @@ internal sealed class DeactivateLeadSourceHandler(LeadsDbContext db)
         if (source is null)
             return Result.Fail("LEAD_SOURCE_NOT_FOUND");
 
-        if (source.IsSystem)
-            return Result.Fail("CANNOT_DEACTIVATE_SYSTEM_SOURCE");
+        try
+        {
+            source.Archive();
+        }
+        catch (DomainException ex)
+        {
+            return Result.Fail(ex.Message);
+        }
 
-        source.Deactivate();
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }
