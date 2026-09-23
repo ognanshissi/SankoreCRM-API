@@ -31,6 +31,8 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
         base.OnConfiguring(optionsBuilder);
         optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         optionsBuilder.EnableSensitiveDataLogging();
+        optionsBuilder.ConfigureWarnings(w =>
+            w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning));
     }
 
 protected override void OnModelCreating(ModelBuilder modelBuilder)

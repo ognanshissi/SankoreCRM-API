@@ -15,6 +15,9 @@ internal sealed class ListProductsHandler(AdministrationDbContext db)
         if (request.ActiveOnly == true)
             q = q.Where(p => p.IsActive);
 
+        if (request.Category.HasValue)
+            q = q.Where(p => p.Category == request.Category.Value);
+
         var products = await q
             .OrderBy(p => p.Category)
             .ThenBy(p => p.Name)

@@ -44,6 +44,8 @@ builder.Services.ConfigureHttpJsonOptions(opts =>
     opts.SerializerOptions.Converters.Add(
         new System.Text.Json.Serialization.JsonStringEnumConverter());
     opts.SerializerOptions.Converters.Add(
+        new Sankore.Api.Infrastructure.GuidConverter());
+    opts.SerializerOptions.Converters.Add(
         new Sankore.Api.Infrastructure.NullableGuidConverter());
     opts.SerializerOptions.Converters.Add(
         new Sankore.Api.Infrastructure.TimeSpanConverter());
@@ -311,17 +313,17 @@ if (app.Environment.IsDevelopment())
         var suffix = tenantId.ToString()[..8];
 
         Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.SlaMonitoring.CheckSlaBreachesJob>(
-            $"sla-breach-check-{t.Fqdn}",
+            $"sla-breach-check-{suffix}",
             job => job.ExecuteAsync(tenantId),
             "*/15 * * * *");
 
         Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.NurturingExecution.ExecuteNurturingJob>(
-            $"nurturing-execution-{t.Fqdn}",
+            $"nurturing-execution-{suffix}",
             job => job.ExecuteAsync(tenantId),
             "*/10 * * * *");
 
         Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.ReactivateRecycledLeads.ReactivateRecycledLeadsJob>(
-            $"reactivate-recycled-leads-{t.Fqdn}",
+            $"reactivate-recycled-leads-{suffix}",
             job => job.ExecuteAsync(tenantId),
             "0 3 * * *");
     }

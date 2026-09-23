@@ -265,5 +265,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
         
         optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         optionsBuilder.EnableSensitiveDataLogging();
+        optionsBuilder.ConfigureWarnings(w =>
+            w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning));
     }
 }

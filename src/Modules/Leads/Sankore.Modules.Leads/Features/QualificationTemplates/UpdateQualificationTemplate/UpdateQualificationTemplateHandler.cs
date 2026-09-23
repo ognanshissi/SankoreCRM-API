@@ -20,6 +20,9 @@ internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db)
         if (template is null)
             return Result.Fail("TEMPLATE_NOT_FOUND");
 
+        if (template.Status == TemplateStatus.Archived)
+            return Result.Fail("TEMPLATE_ALREADY_ARCHIVED");
+
         var detailsResult = template.UpdateDetails(cmd.Name, cmd.Description, cmd.ProductCategory, cmd.ProductCode);
         if (detailsResult.IsFailure)
             return detailsResult;
@@ -39,7 +42,11 @@ internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db)
             template, cmd.Sections, cmd.Questions);
         if (buildResult.IsFailure)
             return buildResult;
-        
+
+        var built = buildResult.Value;
+        db.Set<QualificationSection>().AddRange(built.Sections);
+        db.Set<QualificationQuestion>().AddRange(built.Questions);
+
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

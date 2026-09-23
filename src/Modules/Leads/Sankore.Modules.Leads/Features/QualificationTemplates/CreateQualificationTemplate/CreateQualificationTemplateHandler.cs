@@ -29,7 +29,7 @@ internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, Time
         return Result.Ok(template.Id);
     }
 
-    internal static Result BuildQuestionsAndSections(
+    internal static Result<QualificationTemplate> BuildQuestionsAndSections(
         QualificationTemplate template,
         IReadOnlyList<SectionInput>? sections,
         IReadOnlyList<QuestionInput>? questions)
@@ -40,7 +40,7 @@ internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, Time
             {
                 var sectionResult = template.AddSection(sectionInput.Title, sectionInput.Description);
                 if (sectionResult.IsFailure)
-                    return Result.Fail(sectionResult.Error!);
+                    return Result.Fail<QualificationTemplate>(sectionResult.Error!);
 
                 foreach (var q in sectionInput.Questions ?? [])
                 {
@@ -53,7 +53,7 @@ internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, Time
                         minValue: q.MinValue, maxValue: q.MaxValue,
                         rules: rules);
                     if (qResult.IsFailure)
-                        return Result.Fail(qResult.Error!);
+                        return Result.Fail<QualificationTemplate>(qResult.Error!);
                 }
             }
         }
@@ -69,11 +69,12 @@ internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, Time
                     minValue: q.MinValue, maxValue: q.MaxValue,
                     rules: rules);
                 if (qResult.IsFailure)
-                    return Result.Fail(qResult.Error!);
+                    return Result.Fail<QualificationTemplate>(qResult.Error!);
+                
             }
         }
 
-        return Result.Ok();
+        return Result.Ok(template);
     }
 
     private static IReadOnlyList<(Guid, string, QuestionRuleAction)>? MapRules(

@@ -76,6 +76,13 @@ public sealed class QualificationTemplate : AggregateRoot
         return Result.Ok();
     }
 
+    /// <summary>Reverts a Published template back to Draft for editing. Must be re-published after.</summary>
+    public void RevertToDraft()
+    {
+        if (Status != TemplateStatus.Archived)
+            Status = TemplateStatus.Draft;
+    }
+
     /// <summary>Retires the template. Existing qualification responses are preserved.</summary>
     public Result Archive()
     {

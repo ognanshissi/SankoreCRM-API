@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
@@ -13,7 +14,7 @@ internal static class ListProductsEndpoint
     {
         app.MapGet("", Handle)
             .WithName("ListProducts")
-            .WithSummary("List financial products for the tenant")
+            .WithSummary("List financial products for the tenant, optionally filtered by category")
             .RequireAuthorization(Permissions.CanReadProduct.Code)
             .Produces<IReadOnlyList<ProductDto>>(StatusCodes.Status200OK)
             .WithOpenApi()
@@ -23,9 +24,10 @@ internal static class ListProductsEndpoint
     }
 
     private static async Task<IResult> Handle(
-        ISender sender, CancellationToken ct, bool? activeOnly = null)
+        ISender sender, CancellationToken ct,
+        bool? activeOnly = null, ProductCategory? category = null)
     {
-        var result = await sender.Send(new ListProductsQuery(activeOnly), ct);
+        var result = await sender.Send(new ListProductsQuery(activeOnly, category), ct);
         return Results.Ok(result.Value);
     }
 }
