@@ -152,6 +152,21 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0,
         });
     });
+
+    // Web ingest: 10 req/min per IP+key (US-F13.37-BE-12)
+    options.AddPolicy("ingest-key", ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var key = ctx.Request.RouteValues["publicKey"]?.ToString() ?? "none";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"ingest:{ip}:{key}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 10,
+                QueueLimit = 0,
+            });
+    });
 });
 
 // MediatR — register Bootstrapper's own handlers (audit query, etc.)
@@ -372,6 +387,9 @@ appVersion1.MapNotificationsModuleEndpoints();
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 
 app.MapBootstrapEndpoints();
+
+// Public (unauthenticated) ingest endpoints — outside api/v1, own rate limiting
+app.MapPublicIngestEndpoints();
 
 // app.MapCustomersEndpoints();
 // app.MapKycEndpoints();

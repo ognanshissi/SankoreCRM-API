@@ -57,6 +57,7 @@ using Sankore.Modules.Leads.Features.GetPipeline;
 using Sankore.Modules.Leads.Features.Opportunities;
 using Sankore.Modules.Leads.Features.SlaMonitoring;
 using Sankore.Modules.Leads.Features.NurturingExecution;
+using Sankore.Modules.Leads.Features.Ingestion.Web;
 using Sankore.Modules.Leads.Features.Ingestions;
 using Sankore.Modules.Leads.Features.Ingestions.ReplayIngestion;
 using Sankore.Modules.Leads.Features.ReactivateRecycledLeads;
@@ -137,6 +138,9 @@ public static class LeadsModule
 
         // Ingestion replay — Hangfire on-demand job (F13.37-BE-11)
         services.AddTransient<ReplayIngestionJob>();
+
+        // Web ingest — captcha validator (stub MVP)
+        services.AddSingleton<ICaptchaValidator, StubCaptchaValidator>();
 
         // Import — file storage for uploaded CSV files
         services.AddSingleton<IImportFileStore, LocalImportFileStore>();
@@ -245,6 +249,17 @@ public static class LeadsModule
         // Ingestions (F13.37-BE-11)
         group.MapIngestionsEndpoints();
 
+        return app;
+    }
+
+    /// <summary>
+    /// Maps public (unauthenticated) ingest endpoints outside the api/v1 group.
+    /// Called directly from Program.cs BEFORE UseAuthentication.
+    /// </summary>
+    public static IEndpointRouteBuilder MapPublicIngestEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapWebIngestEndpoint();
+        app.MapWebIngestCorsEndpoint();
         return app;
     }
 }

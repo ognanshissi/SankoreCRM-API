@@ -37,6 +37,15 @@ public sealed record EmbeddedScriptSettings : SourceSettings
 
     /// <summary>Optional redirect URL after submission.</summary>
     public string? RedirectUrl { get; init; }
+
+    /// <summary>Captcha provider: "recaptcha", "turnstile", or null (disabled).</summary>
+    public string? CaptchaProvider { get; init; }
+
+    /// <summary>Minimum seconds between form load and submit (bot detection). 0 = disabled.</summary>
+    public int MinSubmitDelaySeconds { get; init; } = 3;
+
+    /// <summary>Name of the honeypot field (hidden, must be empty). Null = no honeypot.</summary>
+    public string? HoneypotFieldName { get; init; }
 }
 
 /// <summary>Settings for ServerWebhook mode (inbound HTTP POST).</summary>
