@@ -49,6 +49,12 @@ public sealed class LeadSourceConfig : ITenant
     /// <summary>Cost per lead for ROI tracking.</summary>
     public Money? CostPerLead { get; private set; }
 
+    /// <summary>Default agency for leads captured from this source. Null = no default.</summary>
+    public Guid? DefaultAgencyId { get; private set; }
+
+    /// <summary>Default dispatching rule for leads from this source. Null = use tenant default.</summary>
+    public Guid? DefaultDispatchingRuleId { get; private set; }
+
     public bool IsSystem { get; private set; }
     public int DisplayOrder { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -76,6 +82,8 @@ public sealed class LeadSourceConfig : ITenant
         string? platformConnectionId = null,
         int dedupWindowDays = 30,
         Money? costPerLead = null,
+        Guid? defaultAgencyId = null,
+        Guid? defaultDispatchingRuleId = null,
         bool isSystem = false)
     {
         var mode = integrationMode ?? ChannelModeMap.GetDefaultMode(channelType)
@@ -106,8 +114,10 @@ public sealed class LeadSourceConfig : ITenant
             Settings             = settings,
             PlatformConnectionId = platformConnectionId,
             DedupWindowDays      = dedupWindowDays,
-            CostPerLead          = costPerLead,
-            IsSystem             = isSystem,
+            CostPerLead              = costPerLead,
+            DefaultAgencyId          = defaultAgencyId,
+            DefaultDispatchingRuleId = defaultDispatchingRuleId,
+            IsSystem                 = isSystem,
             DisplayOrder         = displayOrder,
             CreatedAt            = DateTimeOffset.UtcNow,
         };
@@ -136,7 +146,9 @@ public sealed class LeadSourceConfig : ITenant
         SourceSettings? settings = null,
         string? platformConnectionId = null,
         int? dedupWindowDays = null,
-        Money? costPerLead = null)
+        Money? costPerLead = null,
+        Guid? defaultAgencyId = null,
+        Guid? defaultDispatchingRuleId = null)
     {
         // Active sources: PlatformConnectionId is immutable
         if (Status == LeadSourceStatus.Active && platformConnectionId != PlatformConnectionId)
@@ -151,13 +163,17 @@ public sealed class LeadSourceConfig : ITenant
         if (dedupWindowDays.HasValue && DedupWindowDays != dedupWindowDays.Value) changed.Add(nameof(DedupWindowDays));
         if (costPerLead != CostPerLead) changed.Add(nameof(CostPerLead));
         if (settings != Settings) changed.Add(nameof(Settings));
+        if (defaultAgencyId != DefaultAgencyId) changed.Add(nameof(DefaultAgencyId));
+        if (defaultDispatchingRuleId != DefaultDispatchingRuleId) changed.Add(nameof(DefaultDispatchingRuleId));
 
-        Label                = label.Trim();
-        Description          = description?.Trim();
-        DisplayOrder         = displayOrder;
-        PlatformConnectionId = platformConnectionId;
+        Label                    = label.Trim();
+        Description              = description?.Trim();
+        DisplayOrder             = displayOrder;
+        PlatformConnectionId     = platformConnectionId;
         if (dedupWindowDays.HasValue) DedupWindowDays = dedupWindowDays.Value;
-        CostPerLead = costPerLead;
+        CostPerLead              = costPerLead;
+        DefaultAgencyId          = defaultAgencyId;
+        DefaultDispatchingRuleId = defaultDispatchingRuleId;
 
         if (settings is not null)
             UpdateSettings(settings);
