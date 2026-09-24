@@ -156,6 +156,7 @@ public static class LeadsModule
                 opts.Retry.MaxRetryAttempts = 3;
                 opts.Retry.UseJitter = true;
                 opts.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
+                opts.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(120);
                 opts.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
             });
         services.AddScoped<Features.Ingestion.Pull.GenericRestPuller>();
@@ -269,6 +270,7 @@ public static class LeadsModule
         // Phase 14 — Configuration (US-M13-190..197)
         group.MapLeadSourcesEndpoints();
         group.MapProviderDocEndpoint();
+        group.MapSourceAnalyticsEndpoints();
         group.MapScoringConfigsEndpoints();
         group.MapTaskTypesEndpoints();
         group.MapPipelineStagesEndpoints();
