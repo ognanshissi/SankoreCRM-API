@@ -27,6 +27,7 @@ using Sankore.Shared.Infrastructure.BackgroundJobs;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Infrastructure.Logging;
 using Sankore.Shared.Infrastructure.Localization;
+using Sankore.Shared.Infrastructure.Secrets;
 using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
@@ -174,6 +175,14 @@ builder.Services.AddDbContextFactory<AuditDbContext>(opts =>
         .UseSnakeCaseNamingConvention());
 
 builder.Services.AddScoped<IAuditWriter, SqlAuditWriter>();
+
+// Secrets vault — AES-256-GCM encrypted, PostgreSQL-backed.
+builder.Services.Configure<SecretsOptions>(builder.Configuration.GetSection("Secrets"));
+builder.Services.AddDbContext<SecretsDbContext>(opts =>
+    opts.UseNpgsql(connectionString,
+        b => b.MigrationsHistoryTable("__EFMigrationsHistory", "secrets"))
+        .UseSnakeCaseNamingConvention());
+builder.Services.AddScoped<ISecretsModule, AesSecretsModule>();
 
 // Message bus (MassTransit). In-memory transport by default for local dev;
 // swap to RabbitMQ/Kafka via configuration for staging/production without

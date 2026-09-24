@@ -14,6 +14,9 @@ using Sankore.Modules.Leads.Features.LeadSources.ListLeadSources;
 using Sankore.Modules.Leads.Features.LeadSources.MarkErrorLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.PauseLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.PreviewMapping;
+using Sankore.Modules.Leads.Features.LeadSources.RotateHmacSecret;
+using Sankore.Modules.Leads.Features.LeadSources.RotatePublicKey;
+using Sankore.Modules.Leads.Features.LeadSources.SetSecret;
 using Sankore.Modules.Leads.Features.LeadSources.StartTestingLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.UpdateLeadSource;
 using Sankore.Shared.Kernel;
@@ -110,6 +113,31 @@ public static class LeadSourcesEndpoints
             .Produces<PreviewMappingResult>()
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // ── Secrets management (US-F13.37-BE-09) ──────────────────────────
+        group.MapPut("{id:guid}/secrets/{name}", SetSourceSecret)
+            .WithName("SetLeadSourceSecret")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSourceCredentials.Code)
+            .Produces<SecretHint>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        group.MapPost("{id:guid}/secrets/hmac/rotate", RotateHmac)
+            .WithName("RotateLeadSourceHmacSecret")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSourceCredentials.Code)
+            .Produces<RotateHmacSecretResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        group.MapPost("{id:guid}/public-key/rotate", RotateSourcePublicKey)
+            .WithName("RotateLeadSourcePublicKey")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSourceCredentials.Code)
+            .Produces<string>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
         // Metadata — channels, modes, allowed combinations
@@ -219,6 +247,32 @@ public static class LeadSourcesEndpoints
             };
     }
 
+    private static async Task<IResult> SetSourceSecret(
+        Guid id, string name, SetSecretRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new SetSecretCommand(id, name, req.Value, req.ExpiresAt), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error == "LEAD_SOURCE_NOT_FOUND" ? Results.NotFound() : Results.Problem(detail: result.Error, statusCode: 422);
+    }
+
+    private static async Task<IResult> RotateHmac(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new RotateHmacSecretCommand(id), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error == "LEAD_SOURCE_NOT_FOUND" ? Results.NotFound() : Results.Problem(detail: result.Error, statusCode: 422);
+    }
+
+    private static async Task<IResult> RotateSourcePublicKey(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new RotatePublicKeyCommand(id), ct);
+        return result.IsSuccess
+            ? Results.Ok(new { publicKey = result.Value })
+            : result.Error == "LEAD_SOURCE_NOT_FOUND" ? Results.NotFound() : Results.Problem(detail: result.Error, statusCode: 422);
+    }
+
     private static async Task<IResult> LifecycleTransition(Task<Result> task)
     {
         var result = await task;
@@ -255,3 +309,5 @@ public sealed record UpdateLeadSourceRequest(
     string? CostCurrency = null);
 
 public sealed record PreviewMappingRequest(string SamplePayloadJson);
+
+public sealed record SetSecretRequest(string Value, DateTimeOffset? ExpiresAt = null);

@@ -233,6 +233,9 @@ public static class Permissions
     public static readonly PermissionItem CanReadLeadSources =
         new("lead:source:read", "Read Lead Sources", ApplicationModules.Leads, "source:read");
 
+    public static readonly PermissionItem CanManageLeadSourceCredentials =
+        new("lead:source:credentials", "Manage Lead Source Secrets", ApplicationModules.Leads, "source:credentials");
+
     public static readonly PermissionItem CanManageScoringConfigs =
         new("lead:scoring-config:manage", "Create and Activate Scoring Configurations", ApplicationModules.Leads, "scoring-config:manage");
 
@@ -406,5 +409,6 @@ public static class Permissions
         CanReadOpportunities,
         CanManageNurturingSequences,
         CanReadNurturingSequences,
+        CanManageLeadSourceCredentials,
     ];
 }
