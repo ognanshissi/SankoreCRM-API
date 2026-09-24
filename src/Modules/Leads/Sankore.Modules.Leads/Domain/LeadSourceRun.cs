@@ -12,6 +12,7 @@ public sealed class LeadSourceRun : ITenant
     public Guid TenantId { get; private set; }
     public Guid SourceId { get; private set; }
 
+    public LeadSourceRunType RunType { get; private set; }
     public LeadSourceRunStatus Status { get; private set; }
     public DateTimeOffset StartedAt { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
@@ -25,12 +26,15 @@ public sealed class LeadSourceRun : ITenant
 
     private LeadSourceRun() { }
 
-    public static LeadSourceRun Start(Guid tenantId, Guid sourceId, TimeProvider clock)
+    public static LeadSourceRun Start(
+        Guid tenantId, Guid sourceId, TimeProvider clock,
+        LeadSourceRunType runType = LeadSourceRunType.Scheduled)
         => new()
         {
             Id        = Guid.NewGuid(),
             TenantId  = tenantId,
             SourceId  = sourceId,
+            RunType   = runType,
             Status    = LeadSourceRunStatus.Running,
             StartedAt = clock.GetUtcNow(),
         };
@@ -58,4 +62,12 @@ public enum LeadSourceRunStatus
     Running,
     Completed,
     Failed
+}
+
+public enum LeadSourceRunType
+{
+    Scheduled,
+    ManualPull,
+    DryRun,
+    InstallCheck
 }

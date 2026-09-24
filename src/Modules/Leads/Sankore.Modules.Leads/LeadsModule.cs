@@ -57,6 +57,7 @@ using Sankore.Modules.Leads.Features.GetPipeline;
 using Sankore.Modules.Leads.Features.Opportunities;
 using Sankore.Modules.Leads.Features.SlaMonitoring;
 using Sankore.Modules.Leads.Features.NurturingExecution;
+using Sankore.Modules.Leads.Features.Ingestion.Pull;
 using Sankore.Modules.Leads.Features.Ingestion.Web;
 using Sankore.Modules.Leads.Features.Ingestion.Webhook;
 using Sankore.Modules.Leads.Features.Ingestions;
@@ -272,6 +273,9 @@ public static class LeadsModule
         group.MapTaskTypesEndpoints();
         group.MapPipelineStagesEndpoints();
         group.MapSlaConfigsEndpoints();
+
+        // Pull dry-run & manual pull (F13.37-BE-22)
+        group.MapPullEndpoints();
 
         // Ingestions (F13.37-BE-11)
         group.MapIngestionsEndpoints();
