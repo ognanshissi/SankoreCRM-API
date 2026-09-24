@@ -158,6 +158,8 @@ public static class LeadsModule
                 opts.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
             });
         services.AddScoped<Features.Ingestion.Pull.GenericRestPuller>();
+        services.AddTransient<Features.Ingestion.Pull.LeadSourcePullOrchestratorJob>();
+        services.AddTransient<Features.Ingestion.Pull.PullLeadSourceJob>();
 
         // Web ingest — captcha validator (stub MVP)
         services.AddSingleton<ICaptchaValidator, StubCaptchaValidator>();

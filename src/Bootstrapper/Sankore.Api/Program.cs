@@ -351,6 +351,12 @@ if (app.Environment.IsDevelopment())
             job => job.ExecuteAsync(tenantId),
             "0 3 * * *");
     }
+
+    // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)
+    Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.Ingestion.Pull.LeadSourcePullOrchestratorJob>(
+        "lead-source-pull-orchestrator",
+        job => job.ExecuteAsync(),
+        "* * * * *");
 }
 
 app.UseExceptionHandler();

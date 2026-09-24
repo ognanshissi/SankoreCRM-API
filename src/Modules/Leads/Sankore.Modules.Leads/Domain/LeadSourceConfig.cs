@@ -55,6 +55,19 @@ public sealed class LeadSourceConfig : ITenant
     /// <summary>Default dispatching rule for leads from this source. Null = use tenant default.</summary>
     public Guid? DefaultDispatchingRuleId { get; private set; }
 
+    // ── Pull state (F13.37-BE-21) ──────────────────────────────────────────
+    /// <summary>Cursor/token persisted between pull runs for incremental fetching.</summary>
+    public string? LastPullCursor { get; private set; }
+
+    /// <summary>Timestamp of the last successful pull completion.</summary>
+    public DateTimeOffset? LastPullAt { get; private set; }
+
+    /// <summary>Number of consecutive failed runs. Reset to 0 on success. 3 → auto Error.</summary>
+    public int ConsecutiveFailures { get; private set; }
+
+    /// <summary>Last error message from a failed run.</summary>
+    public string? LastError { get; private set; }
+
     // ── Script installation detection (F13.37-BE-13) ──────────────────────
     /// <summary>Last successful ping timestamp from the embedded script.</summary>
     public DateTimeOffset? LastPingAt { get; private set; }
@@ -246,6 +259,41 @@ public sealed class LeadSourceConfig : ITenant
     }
 
     public void RotatePublicKey(string newKey) => PublicKey = newKey;
+
+    // ── Pull lifecycle (F13.37-BE-21) ───────────────────────────────────
+
+    /// <summary>Advances the cursor after a page is successfully ingested (persist before next page).</summary>
+    public void AdvanceCursor(string? cursor, DateTimeOffset now)
+    {
+        LastPullCursor = cursor;
+        LastPullAt = now;
+    }
+
+    /// <summary>Records a successful pull run. Resets consecutive failures.</summary>
+    public void RecordPullSuccess(DateTimeOffset now)
+    {
+        ConsecutiveFailures = 0;
+        LastError = null;
+        LastPullAt = now;
+    }
+
+    /// <summary>
+    /// Records a failed pull run. After 3 consecutive failures, auto-transitions to Error.
+    /// Returns true if the source transitioned to Error.
+    /// </summary>
+    public bool RecordPullFailure(string error)
+    {
+        ConsecutiveFailures++;
+        LastError = error;
+
+        if (ConsecutiveFailures >= 3 && Status == LeadSourceStatus.Active)
+        {
+            Status = LeadSourceStatus.Error;
+            return true;
+        }
+
+        return false;
+    }
 
     // ── Ping (F13.37-BE-13) ─────────────────────────────────────────────
 

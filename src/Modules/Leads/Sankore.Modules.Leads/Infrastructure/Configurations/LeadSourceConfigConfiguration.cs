@@ -25,6 +25,8 @@ public class LeadSourceConfigConfiguration: IEntityTypeConfiguration<LeadSourceC
             b.Property(e => e.PlatformConnectionId).HasMaxLength(100);
             b.Property(e => e.LastPingOrigin).HasMaxLength(500);
             b.Property(e => e.UnauthorizedOriginSeen).HasMaxLength(500);
+            b.Property(e => e.LastPullCursor).HasMaxLength(2000);
+            b.Property(e => e.LastError).HasMaxLength(2000);
             b.Property(e => e.Version).HasColumnName("xmin").HasColumnType("xid")
                 .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
             b.OwnsOne(e => e.CostPerLead, m =>
