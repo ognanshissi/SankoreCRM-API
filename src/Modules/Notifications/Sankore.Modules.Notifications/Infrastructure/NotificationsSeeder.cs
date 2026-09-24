@@ -17,6 +17,7 @@ internal static class NotificationsSeeder
         await SeedPasswordForgotAsync(db, logger, ct);
         await SeedTaskAssignedAsync(db, logger, ct);
         await SeedLeadSlaBreachAsync(db, logger, ct);
+        await SeedLeadSourceSnippetAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -344,6 +345,83 @@ internal static class NotificationsSeeder
                       <p>Please contact this lead as soon as possible.</p>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">Lead ref: {{ lead_id }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── lead-source.snippet ──────────────────────────────────────────────────
+    // Variables: {{ source_label }}, {{ snippet }}, {{ sdk_url }}, {{ sri_hash }}, {{ public_key }}, {{ container_id }}
+
+    private static async Task SeedLeadSourceSnippetAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "lead-source.snippet";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Script d'installation — {{ source_label }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Script d'installation</h2>
+                      <p>Voici le code à intégrer sur votre site pour la source <strong>{{ source_label }}</strong> :</p>
+                      <pre style="background:#f5f5f5;padding:16px;border-radius:6px;overflow-x:auto;font-size:13px"><code>{{ snippet }}</code></pre>
+                      <h3>Instructions</h3>
+                      <ol>
+                        <li>Copiez le code ci-dessus.</li>
+                        <li>Collez-le juste avant la balise <code>&lt;/body&gt;</code> de votre page.</li>
+                        <li>Le formulaire apparaîtra dans l'élément <code>#{{ container_id }}</code>.</li>
+                      </ol>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Clé publique : {{ public_key }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Installation script — {{ source_label }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Installation script</h2>
+                      <p>Here is the code to embed on your site for source <strong>{{ source_label }}</strong>:</p>
+                      <pre style="background:#f5f5f5;padding:16px;border-radius:6px;overflow-x:auto;font-size:13px"><code>{{ snippet }}</code></pre>
+                      <h3>Instructions</h3>
+                      <ol>
+                        <li>Copy the code above.</li>
+                        <li>Paste it just before the <code>&lt;/body&gt;</code> tag of your page.</li>
+                        <li>The form will render inside the <code>#{{ container_id }}</code> element.</li>
+                      </ol>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Public key: {{ public_key }}</p>
                     </body>
                     </html>
                     """));

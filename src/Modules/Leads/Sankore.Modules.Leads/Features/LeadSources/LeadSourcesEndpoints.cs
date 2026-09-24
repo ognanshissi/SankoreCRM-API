@@ -17,6 +17,7 @@ using Sankore.Modules.Leads.Features.LeadSources.PreviewMapping;
 using Sankore.Modules.Leads.Features.LeadSources.RotateHmacSecret;
 using Sankore.Modules.Leads.Features.LeadSources.RotatePublicKey;
 using Sankore.Modules.Leads.Features.LeadSources.SetSecret;
+using Sankore.Modules.Leads.Features.LeadSources.Snippet;
 using Sankore.Modules.Leads.Features.LeadSources.StartTestingLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.UpdateLeadSource;
 using Sankore.Shared.Kernel;
@@ -140,6 +141,24 @@ public static class LeadSourcesEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        // ── Snippet (US-F13.37-BE-14) ────────────────────────────────────
+        group.MapGet("{id:guid}/snippet", GetSnippet)
+            .WithName("GetLeadSourceSnippet")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSources.Code)
+            .Produces<SnippetResult>()
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        group.MapPost("{id:guid}/snippet/send", SendSnippetEmail)
+            .WithName("SendLeadSourceSnippet")
+            .WithTags("LeadSources")
+            .RequireAuthorization(Permissions.CanManageLeadSources.Code)
+            .Produces(StatusCodes.Status202Accepted)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         // Metadata — channels, modes, allowed combinations
         app.MapGetSourceMetadata();
 
@@ -217,6 +236,29 @@ public static class LeadSourcesEndpoints
                 "CONFLICT" => Results.Conflict(new { error = result.Error }),
                 _ => Results.Problem(detail: result.Error, statusCode: 422)
             };
+    }
+
+    private static async Task<IResult> GetSnippet(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetSnippetQuery(id), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error == "NOT_EMBEDDED_SCRIPT_MODE"
+                ? Results.NotFound()
+                : result.Error == "SOURCE_NOT_FOUND"
+                    ? Results.NotFound()
+                    : Results.Problem(detail: result.Error, statusCode: 422);
+    }
+
+    private static async Task<IResult> SendSnippetEmail(
+        Guid id, SendSnippetRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new SendSnippetCommand(id, req.Email), ct);
+        return result.IsSuccess
+            ? Results.Accepted()
+            : result.Error is "SOURCE_NOT_FOUND" or "NOT_EMBEDDED_SCRIPT_MODE"
+                ? Results.NotFound()
+                : Results.Problem(detail: result.Error, statusCode: 422);
     }
 
     private static async Task<IResult> StartTestingSource(Guid id, ISender sender, CancellationToken ct)
@@ -311,3 +353,5 @@ public sealed record UpdateLeadSourceRequest(
 public sealed record PreviewMappingRequest(string SamplePayloadJson);
 
 public sealed record SetSecretRequest(string Value, DateTimeOffset? ExpiresAt = null);
+
+public sealed record SendSnippetRequest(string Email);
