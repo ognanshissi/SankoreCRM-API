@@ -46,6 +46,46 @@ public sealed record EmbeddedScriptSettings : SourceSettings
 
     /// <summary>Name of the honeypot field (hidden, must be empty). Null = no honeypot.</summary>
     public string? HoneypotFieldName { get; init; }
+
+    /// <summary>Form field definitions shown to the visitor.</summary>
+    public IReadOnlyList<FormFieldDefinition>? FormFields { get; init; }
+
+    /// <summary>Consent text displayed below the form (e.g. GDPR notice).</summary>
+    public string? ConsentText { get; init; }
+
+    /// <summary>Consent text version for tracking changes.</summary>
+    public string? ConsentVersion { get; init; }
+
+    /// <summary>Visual theme name (e.g. "light", "dark", "branded").</summary>
+    public string? Theme { get; init; }
+
+    /// <summary>Submit button label.</summary>
+    public string? SubmitButtonLabel { get; init; }
+}
+
+/// <summary>Defines a single form field for the hosted web form.</summary>
+public sealed record FormFieldDefinition
+{
+    /// <summary>Internal field name mapped to Lead property (e.g. "fullName", "phoneNumber").</summary>
+    public string Name { get; init; } = default!;
+
+    /// <summary>Display label shown to the visitor.</summary>
+    public string Label { get; init; } = default!;
+
+    /// <summary>Input type: text, email, tel, select, textarea, checkbox.</summary>
+    public string Type { get; init; } = "text";
+
+    /// <summary>Whether the field is required.</summary>
+    public bool IsRequired { get; init; }
+
+    /// <summary>Placeholder text.</summary>
+    public string? Placeholder { get; init; }
+
+    /// <summary>Options for select fields.</summary>
+    public IReadOnlyList<string>? Options { get; init; }
+
+    /// <summary>Display order (1-based).</summary>
+    public int Order { get; init; }
 }
 
 /// <summary>Settings for ServerWebhook mode (inbound HTTP POST).</summary>

@@ -271,6 +271,7 @@ public static class LeadsModule
         app.MapWebIngestEndpoint();
         app.MapWebIngestCorsEndpoint();
         app.MapWebPingEndpoint();
+        app.MapWebFormEndpoint();
         app.MapSdkServeEndpoints();
         return app;
     }
