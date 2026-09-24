@@ -144,6 +144,17 @@ public static class LeadsModule
         // Ingestion replay — Hangfire on-demand job (F13.37-BE-11)
         services.AddTransient<ReplayIngestionJob>();
 
+        // Generic REST puller — HttpClient with Polly retry (F13.37-BE-19)
+        services.AddHttpClient("LeadPuller")
+            .AddStandardResilienceHandler(opts =>
+            {
+                opts.Retry.MaxRetryAttempts = 3;
+                opts.Retry.UseJitter = true;
+                opts.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
+                opts.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
+            });
+        services.AddScoped<Features.Ingestion.Pull.GenericRestPuller>();
+
         // Web ingest — captcha validator (stub MVP)
         services.AddSingleton<ICaptchaValidator, StubCaptchaValidator>();
 

@@ -120,7 +120,7 @@ public sealed record ScheduledPullSettings : SourceSettings
 {
     public override IntegrationMode ExpectedMode => IntegrationMode.ScheduledPull;
 
-    /// <summary>External API endpoint to poll.</summary>
+    /// <summary>URL template. Supports {{since}}, {{cursor}}, {{page}}, {{pageSize}}.</summary>
     public string EndpointUrl { get; init; } = string.Empty;
 
     /// <summary>HTTP method (GET or POST).</summary>
@@ -129,14 +129,90 @@ public sealed record ScheduledPullSettings : SourceSettings
     /// <summary>Cron expression for the pull schedule.</summary>
     public string CronSchedule { get; init; } = "0 */6 * * *";
 
-    /// <summary>Vault reference for the authentication credential.</summary>
+    // ── Authentication ──────────────────────────────────────────────────
+
+    public PullAuthType AuthType { get; init; } = PullAuthType.None;
+
+    /// <summary>Vault reference for the credential (API key, token, password, client secret).</summary>
     public string? AuthCredentialVaultRef { get; init; }
 
-    /// <summary>JSON path to the array of leads in the response.</summary>
-    public string? ResponseLeadsPath { get; init; }
+    /// <summary>Header name for ApiKeyHeader (e.g. "X-Api-Key").</summary>
+    public string? AuthHeaderName { get; init; }
 
-    /// <summary>Field mapping: external → Lead.</summary>
+    /// <summary>Query param name for ApiKeyQuery (e.g. "api_key").</summary>
+    public string? AuthQueryParamName { get; init; }
+
+    /// <summary>Username for Basic auth.</summary>
+    public string? BasicAuthUsername { get; init; }
+
+    /// <summary>OAuth token endpoint for OAuthClientCredentials.</summary>
+    public string? OAuthTokenUrl { get; init; }
+
+    /// <summary>OAuth client ID. Client secret in vault.</summary>
+    public string? OAuthClientId { get; init; }
+
+    /// <summary>OAuth scopes (space-separated).</summary>
+    public string? OAuthScopes { get; init; }
+
+    // ── Response parsing ────────────────────────────────────────────────
+
+    /// <summary>JSONPath to the items array (e.g. "$.data").</summary>
+    public string? ItemsPath { get; init; }
+
+    /// <summary>JSONPath to extract external ID per item.</summary>
+    public string? ExternalIdPath { get; init; }
+
+    /// <summary>Field mapping: external → Lead property.</summary>
     public IReadOnlyDictionary<string, string>? FieldMapping { get; init; }
+
+    // ── Pagination ──────────────────────────────────────────────────────
+
+    public PullPaginationStrategy Pagination { get; init; } = PullPaginationStrategy.None;
+
+    /// <summary>JSONPath to cursor/next token (Cursor strategy).</summary>
+    public string? CursorPath { get; init; }
+
+    /// <summary>JSONPath to total count (Page/Offset).</summary>
+    public string? TotalCountPath { get; init; }
+
+    public int PageSize { get; init; } = 100;
+
+    /// <summary>Max pages per run (safety). Default: 50.</summary>
+    public int MaxPagesPerRun { get; init; } = 50;
+
+    // ── Safety ──────────────────────────────────────────────────────────
+
+    /// <summary>Request timeout seconds (max 60).</summary>
+    public int TimeoutSeconds { get; init; } = 30;
+
+    /// <summary>Max response size bytes (max 5 MB).</summary>
+    public int MaxResponseBytes { get; init; } = 5 * 1024 * 1024;
+
+    /// <summary>POST body template. Supports {{since}}, {{cursor}}, etc.</summary>
+    public string? RequestBodyTemplate { get; init; }
+
+    /// <summary>Extra static headers.</summary>
+    public IReadOnlyDictionary<string, string>? ExtraHeaders { get; init; }
+}
+
+public enum PullAuthType
+{
+    None,
+    ApiKeyHeader,
+    ApiKeyQuery,
+    Bearer,
+    Basic,
+    OAuthClientCredentials
+}
+
+public enum PullPaginationStrategy
+{
+    None,
+    Page,
+    Offset,
+    Cursor,
+    LinkHeader,
+    Since
 }
 
 /// <summary>Settings for PlatformConnection mode (Facebook, Instagram, LinkedIn, WhatsApp).</summary>
