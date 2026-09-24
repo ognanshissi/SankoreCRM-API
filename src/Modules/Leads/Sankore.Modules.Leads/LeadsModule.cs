@@ -260,6 +260,7 @@ public static class LeadsModule
     {
         app.MapWebIngestEndpoint();
         app.MapWebIngestCorsEndpoint();
+        app.MapWebPingEndpoint();
         return app;
     }
 }

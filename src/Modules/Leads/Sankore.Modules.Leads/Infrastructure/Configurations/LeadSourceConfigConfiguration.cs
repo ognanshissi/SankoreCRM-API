@@ -23,6 +23,8 @@ public class LeadSourceConfigConfiguration: IEntityTypeConfiguration<LeadSourceC
                 .HasConversion(new Configurations.SourceSettingsConverter())
                 .Metadata.SetValueComparer(new Configurations.SourceSettingsComparer());
             b.Property(e => e.PlatformConnectionId).HasMaxLength(100);
+            b.Property(e => e.LastPingOrigin).HasMaxLength(500);
+            b.Property(e => e.UnauthorizedOriginSeen).HasMaxLength(500);
             b.Property(e => e.Version).HasColumnName("xmin").HasColumnType("xid")
                 .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
             b.OwnsOne(e => e.CostPerLead, m =>

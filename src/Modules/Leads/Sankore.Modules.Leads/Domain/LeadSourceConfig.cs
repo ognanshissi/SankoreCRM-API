@@ -55,6 +55,16 @@ public sealed class LeadSourceConfig : ITenant
     /// <summary>Default dispatching rule for leads from this source. Null = use tenant default.</summary>
     public Guid? DefaultDispatchingRuleId { get; private set; }
 
+    // ── Script installation detection (F13.37-BE-13) ──────────────────────
+    /// <summary>Last successful ping timestamp from the embedded script.</summary>
+    public DateTimeOffset? LastPingAt { get; private set; }
+
+    /// <summary>Origin domain of the last successful ping.</summary>
+    public string? LastPingOrigin { get; private set; }
+
+    /// <summary>Origin that attempted to ping but was not in AllowedOrigins.</summary>
+    public string? UnauthorizedOriginSeen { get; private set; }
+
     public bool IsSystem { get; private set; }
     public int DisplayOrder { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -236,6 +246,35 @@ public sealed class LeadSourceConfig : ITenant
     }
 
     public void RotatePublicKey(string newKey) => PublicKey = newKey;
+
+    // ── Ping (F13.37-BE-13) ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Records an authorized ping. Throttled to at most one write per minute.
+    /// If this is the first authorized ping on a Draft source, transitions to Testing.
+    /// Returns true if the state was updated (not throttled).
+    /// </summary>
+    public bool RecordPing(string origin, DateTimeOffset now)
+    {
+        // Throttle: skip if last ping was less than 1 minute ago
+        if (LastPingAt.HasValue && (now - LastPingAt.Value).TotalSeconds < 60)
+            return false;
+
+        LastPingAt     = now;
+        LastPingOrigin = origin;
+
+        // First authorized ping on Draft → auto-transition to Testing
+        if (Status == LeadSourceStatus.Draft)
+            Status = LeadSourceStatus.Testing;
+
+        return true;
+    }
+
+    /// <summary>Records an unauthorized origin ping (for warning display).</summary>
+    public void RecordUnauthorizedOrigin(string origin)
+    {
+        UnauthorizedOriginSeen = origin;
+    }
 
     // ── Activation prerequisites ────────────────────────────────────────
 
