@@ -57,6 +57,8 @@ using Sankore.Modules.Leads.Features.GetPipeline;
 using Sankore.Modules.Leads.Features.Opportunities;
 using Sankore.Modules.Leads.Features.SlaMonitoring;
 using Sankore.Modules.Leads.Features.NurturingExecution;
+using Sankore.Modules.Leads.Features.Ingestions;
+using Sankore.Modules.Leads.Features.Ingestions.ReplayIngestion;
 using Sankore.Modules.Leads.Features.ReactivateRecycledLeads;
 using Sankore.Modules.Leads.Features.ListActivities;
 using Sankore.Modules.Leads.Features.ListLeads;
@@ -132,6 +134,9 @@ public static class LeadsModule
 
         // Recycled lead reactivation — Hangfire recurring job (US-M13-160/161)
         services.AddTransient<ReactivateRecycledLeadsJob>();
+
+        // Ingestion replay — Hangfire on-demand job (F13.37-BE-11)
+        services.AddTransient<ReplayIngestionJob>();
 
         // Import — file storage for uploaded CSV files
         services.AddSingleton<IImportFileStore, LocalImportFileStore>();
@@ -236,6 +241,9 @@ public static class LeadsModule
         group.MapTaskTypesEndpoints();
         group.MapPipelineStagesEndpoints();
         group.MapSlaConfigsEndpoints();
+
+        // Ingestions (F13.37-BE-11)
+        group.MapIngestionsEndpoints();
 
         return app;
     }
