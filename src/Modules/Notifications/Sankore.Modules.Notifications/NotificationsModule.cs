@@ -45,7 +45,9 @@ public static class NotificationsModule
         services.AddScoped<ITemplateRenderer, ScribanTemplateRenderer>();
 
         // Email transport: keyed senders per provider type, routed by CompositeEmailSender
-        // services.AddKeyedSingleton<IEmailSender, StubEmailSender>("stub");
+        // "stub" is the fallback for provider types with no sender implementation yet
+        // (Ses / Postmark / SendGrid) — it logs instead of throwing at send time.
+        services.AddKeyedSingleton<IEmailSender, StubEmailSender>("stub");
         services.AddKeyedSingleton<IEmailSender, SmtpEmailSender>("smtp");
         services.AddSingleton<IEmailSender, CompositeEmailSender>();
 

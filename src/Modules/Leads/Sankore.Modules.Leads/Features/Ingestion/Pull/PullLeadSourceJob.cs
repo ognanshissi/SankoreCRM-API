@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.CaptureLead;
+using Sankore.Modules.Leads.Features.LeadSources.Mapping;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 using Sankore.Shared.Kernel;
@@ -194,24 +195,20 @@ public sealed class PullLeadSourceJob(IServiceScopeFactory scopeFactory)
         JsonElement item, ScheduledPullSettings settings,
         Guid tenantId, LeadSourceConfig source)
     {
-        var mapping = settings.FieldMapping;
-        if (mapping is null or { Count: 0 })
+        var rules = settings.FieldMappings;
+        if (rules is null or { Count: 0 })
+            return null;
+
+        var mapped = FieldMappingEngine.Apply(rules, item.GetRawText());
+        if (mapped.Errors.Count > 0)
             return null;
 
         string? GetField(string leadField)
-        {
-            var externalField = mapping.FirstOrDefault(m =>
-                m.Value.Equals(leadField, StringComparison.OrdinalIgnoreCase)).Key;
-            if (externalField is null) return null;
+            => mapped.MappedValues.TryGetValue(leadField, out var value) ? value : null;
 
-            return item.TryGetProperty(externalField, out var val)
-                ? val.ValueKind == JsonValueKind.String ? val.GetString() : val.ToString()
-                : null;
-        }
-
-        var fullName = GetField("FullName")
-            ?? $"{GetField("FirstName") ?? ""} {GetField("LastName") ?? ""}".Trim();
-        var phone = GetField("PhoneNumber");
+        var fullName = GetField("fullName")
+            ?? $"{GetField("firstName") ?? ""} {GetField("lastName") ?? ""}".Trim();
+        var phone = GetField("phoneNumber");
 
         if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(phone))
             return null;
@@ -221,14 +218,14 @@ public sealed class PullLeadSourceJob(IServiceScopeFactory scopeFactory)
             FullName:          fullName,
             PhoneNumber:       phone,
             Source:             Domain.LeadSource.Partner,
-            InterestedProduct: GetField("InterestedProduct") ?? "Unknown",
-            PreferredLanguage: GetField("PreferredLanguage") ?? "fr",
+            InterestedProduct: GetField("interestedProduct") ?? "Unknown",
+            PreferredLanguage: GetField("preferredLanguage") ?? "fr",
             Latitude:          0,
             Longitude:         0,
             PreferredAgencyId: source.DefaultAgencyId,
-            FirstName:         GetField("FirstName"),
-            LastName:          GetField("LastName"),
-            Email:             GetField("Email"),
+            FirstName:         GetField("firstName"),
+            LastName:          GetField("lastName"),
+            Email:             GetField("email"),
             AgencyId:          source.DefaultAgencyId);
     }
 }

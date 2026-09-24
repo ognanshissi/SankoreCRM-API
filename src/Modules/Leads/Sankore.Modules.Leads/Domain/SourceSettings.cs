@@ -103,8 +103,8 @@ public sealed record ServerWebhookSettings : SourceSettings
     /// <summary>Vault reference for the HMAC signing credential (never inline).</summary>
     public string? SignatureCredentialVaultRef { get; init; }
 
-    /// <summary>JSON path mapping: external field → Lead field.</summary>
-    public IReadOnlyDictionary<string, string>? FieldMapping { get; init; }
+    /// <summary>Mapping rules: inbound payload field → Lead field.</summary>
+    public IReadOnlyList<FieldMappingRule>? FieldMappings { get; init; }
 
     /// <summary>IP addresses allowed to push webhooks. Empty = any IP allowed.</summary>
     public IReadOnlyList<string> AllowedIpAddresses { get; init; } = [];
@@ -160,8 +160,8 @@ public sealed record ScheduledPullSettings : SourceSettings
     /// <summary>JSONPath to extract external ID per item.</summary>
     public string? ExternalIdPath { get; init; }
 
-    /// <summary>Field mapping: external → Lead property.</summary>
-    public IReadOnlyDictionary<string, string>? FieldMapping { get; init; }
+    /// <summary>Mapping rules: fetched item field → Lead field.</summary>
+    public IReadOnlyList<FieldMappingRule>? FieldMappings { get; init; }
 
     // ── Pagination ──────────────────────────────────────────────────────
 
@@ -230,8 +230,8 @@ public sealed record PlatformSettings : SourceSettings
     /// <summary>Vault reference for the platform OAuth credential.</summary>
     public string? OAuthCredentialVaultRef { get; init; }
 
-    /// <summary>Field mapping: platform field → Lead field.</summary>
-    public IReadOnlyDictionary<string, string>? FieldMapping { get; init; }
+    /// <summary>Mapping rules: platform field → Lead field.</summary>
+    public IReadOnlyList<FieldMappingRule>? FieldMappings { get; init; }
 }
 
 /// <summary>Settings for SocialTracking mode (social engagement tracking).</summary>
@@ -259,4 +259,10 @@ public sealed record InternalSettings : SourceSettings
 
     /// <summary>Default priority assigned to leads from this source.</summary>
     public string? DefaultPriority { get; init; }
+
+    /// <summary>
+    /// Optional mapping rules for file imports (CSV/Excel column → Lead field).
+    /// Unlike the push/pull modes, mapping is not required to activate an Internal source.
+    /// </summary>
+    public IReadOnlyList<FieldMappingRule>? FieldMappings { get; init; }
 }

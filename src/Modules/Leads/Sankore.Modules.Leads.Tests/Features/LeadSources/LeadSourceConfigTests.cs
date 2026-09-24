@@ -82,11 +82,11 @@ public sealed class LeadSourceConfigTests
         {
             PlatformName = "facebook",
             OAuthCredentialVaultRef = "vault-ref",
-            FieldMapping = new Dictionary<string, string>
-            {
-                ["$.phone"] = "phoneNumber",
-                ["$.name"]  = "fullName"
-            }
+            FieldMappings =
+            [
+                new() { SourceField = "$.phone", TargetField = "phoneNumber" },
+                new() { SourceField = "$.name", TargetField = "fullName" }
+            ]
         };
         var source = LeadSourceConfig.Create(_tenantId, "FB", "Facebook",
             LeadChannelType.FacebookLeadAds, 0, IntegrationMode.PlatformConnection,

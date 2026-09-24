@@ -29,11 +29,11 @@ public sealed class WebhookIngestEndpointTests : IDisposable
         await using var db = _factory.CreateContext();
         var s = settings ?? new ServerWebhookSettings
         {
-            FieldMapping = new Dictionary<string, string>
-            {
-                ["$.phone"] = "phoneNumber",
-                ["$.name"]  = "fullName"
-            },
+            FieldMappings =
+            [
+                new() { SourceField = "$.phone", TargetField = "phoneNumber" },
+                new() { SourceField = "$.name", TargetField = "fullName" }
+            ],
             ExternalIdPath = "$.id"
         };
         var source = LeadSourceConfig.Create(
@@ -93,11 +93,11 @@ public sealed class WebhookIngestEndpointTests : IDisposable
             LeadChannelType.InboundWebhook, 0, IntegrationMode.ServerWebhook,
             settings: new ServerWebhookSettings
             {
-                FieldMapping = new Dictionary<string, string>
-                {
-                    ["$.phone"] = "phoneNumber",
-                    ["$.name"]  = "fullName"
-                }
+                FieldMappings =
+                [
+                    new() { SourceField = "$.phone", TargetField = "phoneNumber" },
+                    new() { SourceField = "$.name", TargetField = "fullName" }
+                ]
             });
         source.StartTesting();
         source.Activate();

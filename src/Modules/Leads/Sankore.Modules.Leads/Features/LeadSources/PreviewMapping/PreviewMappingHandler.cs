@@ -19,13 +19,7 @@ internal sealed class PreviewMappingHandler(LeadsDbContext db)
         if (source is null)
             return Result.Fail<PreviewMappingResult>("SOURCE_NOT_FOUND");
 
-        var fieldMapping = source.Settings switch
-        {
-            ServerWebhookSettings wh => wh.FieldMapping,
-            ScheduledPullSettings pull => pull.FieldMapping,
-            PlatformSettings plat => plat.FieldMapping,
-            _ => null
-        };
+        var fieldMapping = source.Settings.FieldMappingsOf();
 
         if (fieldMapping is null || fieldMapping.Count == 0)
             return Result.Fail<PreviewMappingResult>("NO_FIELD_MAPPING_CONFIGURED");

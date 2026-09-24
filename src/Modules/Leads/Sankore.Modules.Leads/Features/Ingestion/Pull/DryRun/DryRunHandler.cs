@@ -4,6 +4,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.LeadSources.Mapping;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
@@ -93,24 +94,19 @@ internal sealed class DryRunHandler(
     private static DryRunLeadPreview SimulateMapping(
         JsonElement item, ScheduledPullSettings settings)
     {
-        var mapping = settings.FieldMapping;
-        if (mapping is null or { Count: 0 })
+        var rules = settings.FieldMappings;
+        if (rules is null or { Count: 0 })
             return new(null, null, null, null, "NO_FIELD_MAPPING");
 
-        string? GetField(string leadField)
-        {
-            var ext = mapping.FirstOrDefault(m =>
-                m.Value.Equals(leadField, StringComparison.OrdinalIgnoreCase)).Key;
-            if (ext is null) return null;
-            return item.TryGetProperty(ext, out var val)
-                ? val.ValueKind == JsonValueKind.String ? val.GetString() : val.ToString()
-                : null;
-        }
+        var mapped = FieldMappingEngine.Apply(rules, item.GetRawText());
 
-        var fullName = GetField("FullName")
-            ?? $"{GetField("FirstName") ?? ""} {GetField("LastName") ?? ""}".Trim();
-        var phone = GetField("PhoneNumber");
-        var email = GetField("Email");
+        string? GetField(string leadField)
+            => mapped.MappedValues.TryGetValue(leadField, out var value) ? value : null;
+
+        var fullName = GetField("fullName")
+            ?? $"{GetField("firstName") ?? ""} {GetField("lastName") ?? ""}".Trim();
+        var phone = GetField("phoneNumber");
+        var email = GetField("email");
 
         string? externalId = null;
         if (settings.ExternalIdPath is not null)
@@ -123,9 +119,14 @@ internal sealed class DryRunHandler(
             externalId = el.ValueKind != JsonValueKind.Undefined ? el.ToString() : null;
         }
 
-        string? error = null;
-        if (string.IsNullOrWhiteSpace(fullName)) error = "MISSING_FULL_NAME";
-        else if (string.IsNullOrWhiteSpace(phone)) error = "MISSING_PHONE_NUMBER";
+        // Surface transformation failures (bad phone, unresolvable JSONPath, …) —
+        // seeing them is the point of a dry run
+        string? error = mapped.Errors.Count > 0
+            ? string.Join("; ", mapped.Errors.Select(e => $"{e.JsonPath}: {e.Message}"))
+            : null;
+
+        if (error is null && string.IsNullOrWhiteSpace(fullName)) error = "MISSING_FULL_NAME";
+        else if (error is null && string.IsNullOrWhiteSpace(phone)) error = "MISSING_PHONE_NUMBER";
 
         return new(fullName, phone, email, externalId, error);
     }

@@ -45,6 +45,7 @@ internal sealed class GetLeadSourceHandler(LeadsDbContext db, TimeProvider clock
             lastReceived, volume,
             source.PublicKey, source.Settings, source.PlatformConnectionId,
             source.DedupWindowDays, source.CostPerLead,
+            source.DefaultAgencyId, source.DefaultDispatchingRuleId,
             source.IsSystem, source.DisplayOrder, source.Version, source.CreatedAt,
             secrets));
     }

@@ -1,78 +1,147 @@
 namespace Sankore.Modules.Leads.Tests.Features.LeadSources;
 
 using FluentAssertions;
+using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.LeadSources.Mapping;
 using Xunit;
 
 public sealed class FieldMappingEngineTests
 {
+    private static FieldMappingRule Rule(
+        string source,
+        string target,
+        FieldTransformation transformation = FieldTransformation.None,
+        string? e164Country = null,
+        string? defaultValue = null,
+        IReadOnlyDictionary<string, string>? mapEntries = null,
+        string? concatSeparator = null)
+        => new()
+        {
+            SourceField     = source,
+            TargetField     = target,
+            Transformation  = transformation,
+            E164Country     = e164Country,
+            DefaultValue    = defaultValue,
+            MapEntries      = mapEntries,
+            ConcatSeparator = concatSeparator
+        };
+
     // ── Validate ──────────────────────────────────────────────────────────
 
     [Fact]
-    public void Validate_accepts_valid_mapping()
+    public void Validate_accepts_valid_rules()
     {
-        var mapping = new Dictionary<string, string>
+        var rules = new[]
         {
-            ["$.contact.phone"] = "phoneNumber|trim|e164:CI",
-            ["$.contact.name"]  = "fullName|trim",
-            ["$.contact.email"] = "email|trim"
+            Rule("$.contact.phone", "phoneNumber", FieldTransformation.E164, e164Country: "CI"),
+            Rule("$.contact.name",  "fullName",    FieldTransformation.Trim),
+            Rule("$.contact.email", "email")
         };
 
-        var errors = FieldMappingEngine.Validate(mapping);
-        errors.Should().BeEmpty();
+        FieldMappingEngine.Validate(rules).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_accepts_firstName_lastName_instead_of_fullName()
+    {
+        var rules = new[]
+        {
+            Rule("$.Phone",     "phoneNumber", FieldTransformation.E164, e164Country: "+225"),
+            Rule("$.FirstName", "firstName",   FieldTransformation.Trim),
+            Rule("$.LastName",  "lastName")
+        };
+
+        FieldMappingEngine.Validate(rules).Should().BeEmpty();
     }
 
     [Fact]
     public void Validate_detects_missing_required_fields()
     {
-        var mapping = new Dictionary<string, string>
-        {
-            ["$.email"] = "email"
-        };
+        var rules = new[] { Rule("$.email", "email") };
 
-        var errors = FieldMappingEngine.Validate(mapping);
+        var errors = FieldMappingEngine.Validate(rules);
+
         errors.Should().Contain(e => e.Path.Contains("phoneNumber"));
         errors.Should().Contain(e => e.Path.Contains("fullName"));
     }
 
     [Fact]
+    public void Validate_rejects_empty_rule_set()
+    {
+        var errors = FieldMappingEngine.Validate([]);
+        errors.Should().ContainSingle(e => e.Path == "(rules)");
+    }
+
+    [Fact]
     public void Validate_detects_unknown_target_field()
     {
-        var mapping = new Dictionary<string, string>
+        var rules = new[]
         {
-            ["$.phone"]   = "phoneNumber",
-            ["$.name"]    = "fullName",
-            ["$.unknown"] = "nonExistentField"
+            Rule("$.phone",   "phoneNumber"),
+            Rule("$.name",    "fullName"),
+            Rule("$.unknown", "notALeadField")
         };
 
-        var errors = FieldMappingEngine.Validate(mapping);
+        var errors = FieldMappingEngine.Validate(rules);
+
         errors.Should().ContainSingle(e => e.Path == "$.unknown");
     }
 
     [Fact]
-    public void Validate_detects_invalid_transform()
+    public void Validate_requires_e164_country_for_e164_transform()
     {
-        var mapping = new Dictionary<string, string>
+        var rules = new[]
         {
-            ["$.phone"] = "phoneNumber|invalidTransform",
-            ["$.name"]  = "fullName"
+            Rule("$.phone", "phoneNumber", FieldTransformation.E164),
+            Rule("$.name",  "fullName")
         };
 
-        var errors = FieldMappingEngine.Validate(mapping);
-        errors.Should().ContainSingle(e => e.Message.Contains("invalidTransform"));
+        var errors = FieldMappingEngine.Validate(rules);
+
+        errors.Should().ContainSingle(e => e.Message.Contains("e164Country"));
     }
 
     [Fact]
-    public void Validate_accepts_e164_transform_with_iso2()
+    public void Validate_requires_map_entries_for_map_transform()
     {
-        var mapping = new Dictionary<string, string>
+        var rules = new[]
         {
-            ["$.phone"] = "phoneNumber|e164:SN",
-            ["$.name"]  = "fullName"
+            Rule("$.phone",  "phoneNumber"),
+            Rule("$.name",   "fullName"),
+            Rule("$.gender", "gender", FieldTransformation.Map)
         };
 
-        var errors = FieldMappingEngine.Validate(mapping);
-        errors.Should().BeEmpty();
+        var errors = FieldMappingEngine.Validate(rules);
+
+        errors.Should().ContainSingle(e => e.Message.Contains("mapEntries"));
+    }
+
+    [Fact]
+    public void Validate_rejects_duplicate_target_without_concat()
+    {
+        var rules = new[]
+        {
+            Rule("$.phone", "phoneNumber"),
+            Rule("$.a",     "fullName"),
+            Rule("$.b",     "fullName")
+        };
+
+        var errors = FieldMappingEngine.Validate(rules);
+
+        errors.Should().ContainSingle(e => e.Message.Contains("mapped 2 times"));
+    }
+
+    [Fact]
+    public void Validate_allows_duplicate_target_when_concatenating()
+    {
+        var rules = new[]
+        {
+            Rule("$.phone", "phoneNumber"),
+            Rule("$.first", "fullName", FieldTransformation.Concat),
+            Rule("$.last",  "fullName", FieldTransformation.Concat)
+        };
+
+        FieldMappingEngine.Validate(rules).Should().BeEmpty();
     }
 
     // ── Apply ─────────────────────────────────────────────────────────────
@@ -80,12 +149,12 @@ public sealed class FieldMappingEngineTests
     [Fact]
     public void Apply_extracts_values_via_jsonpath()
     {
-        var mapping = new Dictionary<string, string>
+        var rules = new[]
         {
-            ["$.contact.firstName"] = "firstName|trim",
-            ["$.contact.lastName"]  = "lastName|trim",
-            ["$.contact.phone"]     = "phoneNumber|trim",
-            ["$.contact.email"]     = "email"
+            Rule("$.contact.firstName", "firstName",   FieldTransformation.Trim),
+            Rule("$.contact.lastName",  "lastName",    FieldTransformation.Trim),
+            Rule("$.contact.phone",     "phoneNumber", FieldTransformation.Trim),
+            Rule("$.contact.email",     "email")
         };
 
         var payload = """
@@ -99,7 +168,7 @@ public sealed class FieldMappingEngineTests
         }
         """;
 
-        var result = FieldMappingEngine.Apply(mapping, payload);
+        var result = FieldMappingEngine.Apply(rules, payload);
 
         result.Errors.Should().BeEmpty();
         result.MappedValues["firstName"].Should().Be("Amadou");
@@ -111,15 +180,28 @@ public sealed class FieldMappingEngineTests
     [Fact]
     public void Apply_with_e164_normalizes_phone_number()
     {
-        var mapping = new Dictionary<string, string>
+        var rules = new[]
         {
-            ["$.phone"] = "phoneNumber|e164:CI",
-            ["$.name"]  = "fullName"
+            Rule("$.phone", "phoneNumber", FieldTransformation.E164, e164Country: "CI"),
+            Rule("$.name",  "fullName")
         };
 
-        var payload = """{"phone": "0707070707", "name": "Test"}""";
+        var result = FieldMappingEngine.Apply(rules, """{"phone": "0707070707", "name": "Test"}""");
 
-        var result = FieldMappingEngine.Apply(mapping, payload);
+        result.Errors.Should().BeEmpty();
+        result.MappedValues["phoneNumber"].Should().Be("+225707070707");
+    }
+
+    [Fact]
+    public void Apply_accepts_dial_prefix_as_e164_country()
+    {
+        var rules = new[]
+        {
+            Rule("$.Phone", "phoneNumber", FieldTransformation.E164, e164Country: "+225"),
+            Rule("$.Name",  "fullName")
+        };
+
+        var result = FieldMappingEngine.Apply(rules, """{"Phone": "0707070707", "Name": "Test"}""");
 
         result.Errors.Should().BeEmpty();
         result.MappedValues["phoneNumber"].Should().Be("+225707070707");
@@ -128,33 +210,88 @@ public sealed class FieldMappingEngineTests
     [Fact]
     public void Apply_with_invalid_phone_produces_error()
     {
-        var mapping = new Dictionary<string, string>
+        var rules = new[]
         {
-            ["$.phone"] = "phoneNumber|e164:CI",
-            ["$.name"]  = "fullName"
+            Rule("$.phone", "phoneNumber", FieldTransformation.E164, e164Country: "CI"),
+            Rule("$.name",  "fullName")
         };
 
-        var payload = """{"phone": "12", "name": "Test"}""";
+        var result = FieldMappingEngine.Apply(rules, """{"phone": "12", "name": "Test"}""");
 
-        var result = FieldMappingEngine.Apply(mapping, payload);
+        result.Errors.Should().ContainSingle(e => e.Message.Contains("InvalidPhone"));
+    }
 
-        result.Errors.Should().ContainSingle(e =>
-            e.Message.Contains("InvalidPhone"));
+    [Fact]
+    public void Apply_concatenates_rules_sharing_a_target()
+    {
+        var rules = new[]
+        {
+            Rule("$.phone", "phoneNumber"),
+            Rule("$.first", "fullName", FieldTransformation.Concat),
+            Rule("$.last",  "fullName", FieldTransformation.Concat)
+        };
+
+        var result = FieldMappingEngine.Apply(
+            rules, """{"phone": "+2250707070707", "first": "Amadou", "last": "Diallo"}""");
+
+        result.Errors.Should().BeEmpty();
+        result.MappedValues["fullName"].Should().Be("Amadou Diallo");
+    }
+
+    [Fact]
+    public void Apply_honours_custom_concat_separator()
+    {
+        var rules = new[]
+        {
+            Rule("$.last",  "fullName", FieldTransformation.Concat),
+            Rule("$.first", "fullName", FieldTransformation.Concat, concatSeparator: ", ")
+        };
+
+        var result = FieldMappingEngine.Apply(rules, """{"first": "Amadou", "last": "Diallo"}""");
+
+        result.MappedValues["fullName"].Should().Be("Diallo, Amadou");
+    }
+
+    [Fact]
+    public void Apply_uses_default_value_when_source_is_missing()
+    {
+        var rules = new[]
+        {
+            Rule("$.phone", "phoneNumber"),
+            Rule("$.name",  "fullName"),
+            Rule("$.lang",  "preferredLanguage", defaultValue: "fr")
+        };
+
+        var result = FieldMappingEngine.Apply(rules, """{"phone": "+2250707070707", "name": "Test"}""");
+
+        result.MappedValues["preferredLanguage"].Should().Be("fr");
+    }
+
+    [Fact]
+    public void Apply_translates_values_through_map_entries()
+    {
+        var rules = new[]
+        {
+            Rule("$.sexe", "gender", FieldTransformation.Map,
+                 mapEntries: new Dictionary<string, string> { ["H"] = "Male", ["F"] = "Female" })
+        };
+
+        var result = FieldMappingEngine.Apply(rules, """{"sexe": "h"}""");
+
+        result.MappedValues["gender"].Should().Be("Male");
     }
 
     [Fact]
     public void Apply_missing_field_leaves_value_unset()
     {
-        var mapping = new Dictionary<string, string>
+        var rules = new[]
         {
-            ["$.phone"]   = "phoneNumber",
-            ["$.name"]    = "fullName",
-            ["$.missing"] = "email"
+            Rule("$.phone",   "phoneNumber"),
+            Rule("$.name",    "fullName"),
+            Rule("$.missing", "email")
         };
 
-        var payload = """{"phone": "0707070707", "name": "Test"}""";
-
-        var result = FieldMappingEngine.Apply(mapping, payload);
+        var result = FieldMappingEngine.Apply(rules, """{"phone": "0707070707", "name": "Test"}""");
 
         result.Errors.Should().BeEmpty();
         result.MappedValues.Should().NotContainKey("email");
@@ -163,12 +300,9 @@ public sealed class FieldMappingEngineTests
     [Fact]
     public void Apply_invalid_json_produces_root_error()
     {
-        var mapping = new Dictionary<string, string>
-        {
-            ["$.phone"] = "phoneNumber"
-        };
+        var rules = new[] { Rule("$.phone", "phoneNumber") };
 
-        var result = FieldMappingEngine.Apply(mapping, "not valid json");
+        var result = FieldMappingEngine.Apply(rules, "not valid json");
 
         result.Errors.Should().ContainSingle(e => e.JsonPath == "(root)");
     }
@@ -180,9 +314,11 @@ public sealed class FieldMappingEngineTests
     [InlineData("0707070707", "CI", "+225707070707")]       // local format CI
     [InlineData("0770001122", "SN", "+221770001122")]       // local format SN
     [InlineData("0612345678", "FR", "+33612345678")]         // local format FR
-    public void NormalizeE164_handles_various_formats(string input, string iso2, string expected)
+    [InlineData("0707070707", "+225", "+225707070707")]      // dial prefix instead of ISO2
+    [InlineData("0707070707", "225", "+225707070707")]       // bare dial prefix
+    public void NormalizeE164_handles_various_formats(string input, string country, string expected)
     {
-        var (phone, error) = FieldMappingEngine.NormalizeE164(input, iso2);
+        var (phone, error) = FieldMappingEngine.NormalizeE164(input, country);
         error.Should().BeNull();
         phone.Should().Be(expected);
     }

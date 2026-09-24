@@ -22,7 +22,12 @@ internal sealed class SmtpEmailSender(
     {
         var message = BuildMessage(request);
 
-        using var client = new SmtpClient();
+        using var client = new SmtpClient
+        {
+            // Without this a dead SMTP host blocks the outbox processor indefinitely,
+            // leaving the message claimed as Sending with no attempt recorded.
+            Timeout = (int)TimeSpan.FromSeconds(_opts.TimeoutSeconds).TotalMilliseconds
+        };
 
         var secureSocketOptions = _opts.UseSsl ? SecureSocketOptions.SslOnConnect
             : _opts.UseStartTls ? SecureSocketOptions.StartTls

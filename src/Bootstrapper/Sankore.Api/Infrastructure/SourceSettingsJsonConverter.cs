@@ -25,7 +25,9 @@ public sealed class SourceSettingsJsonConverter : JsonConverter<SourceSettings>
 
         using var doc = JsonDocument.ParseValue(ref reader);
         var root = doc.RootElement;
-        var rawText = root.GetRawText();
+
+        // Accept the v1 dictionary mapping from older clients
+        var rawText = SourceSettingsUpgrader.MigrateJson(root.GetRawText());
 
         // Resolve mode: from $mode property or inferred from structure
         string mode;

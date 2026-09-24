@@ -53,13 +53,7 @@ internal sealed class IngestInboundLeadHandler(
         var isTest = source.Status == LeadSourceStatus.Testing;
 
         // ── 3. Resolve field mapping and apply ──────────────────────────
-        var fieldMapping = source.Settings switch
-        {
-            ServerWebhookSettings wh => wh.FieldMapping,
-            ScheduledPullSettings pull => pull.FieldMapping,
-            PlatformSettings plat => plat.FieldMapping,
-            _ => null
-        };
+        var fieldMapping = source.Settings.FieldMappingsOf();
 
         Dictionary<string, string?> mapped;
         if (fieldMapping is not null && fieldMapping.Count > 0)

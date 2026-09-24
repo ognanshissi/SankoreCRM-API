@@ -7,7 +7,6 @@ using Sankore.Modules.Workflow.Features.Instances.StartInstance;
 using Sankore.Modules.Workflow.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
 using Xunit;
-using NSubstitute;
 
 public sealed class StartInstanceHandlerTests : IDisposable
 {
@@ -22,8 +21,10 @@ public sealed class StartInstanceHandlerTests : IDisposable
         var cu = Substitute.For<ICurrentUser>();
         cu.TenantId.Returns(_tenantId);
         cu.Id.Returns(Guid.NewGuid());
+        // No module registers a context provider for these synthetic entity types,
+        // so an empty set is the faithful double.
         return new StartInstanceHandler(
-            _factory.CreateContext(), cu, Substitute.For<IRuleEvaluator>());
+            _factory.CreateContext(), cu, Substitute.For<IRuleEvaluator>(), []);
     }
 
     private async Task<WorkflowTemplate> SeedActiveTemplate(string entityType = "Lead")

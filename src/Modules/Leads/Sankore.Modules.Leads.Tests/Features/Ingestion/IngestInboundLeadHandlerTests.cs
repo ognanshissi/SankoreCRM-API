@@ -207,12 +207,12 @@ public sealed class IngestInboundLeadHandlerTests : IDisposable
     {
         var settings = new ServerWebhookSettings
         {
-            FieldMapping = new Dictionary<string, string>
-            {
-                ["$.contact.phone"] = "phoneNumber|trim",
-                ["$.contact.name"]  = "fullName|trim",
-                ["$.contact.mail"]  = "email|trim"
-            }
+            FieldMappings =
+            [
+                new() { SourceField = "$.contact.phone", TargetField = "phoneNumber", Transformation = FieldTransformation.Trim },
+                new() { SourceField = "$.contact.name", TargetField = "fullName", Transformation = FieldTransformation.Trim },
+                new() { SourceField = "$.contact.mail", TargetField = "email", Transformation = FieldTransformation.Trim }
+            ]
         };
         var source = await SeedActiveSource(IntegrationMode.ServerWebhook, settings, LeadChannelType.InboundWebhook);
 

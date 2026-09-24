@@ -62,6 +62,12 @@ internal sealed class EmailOutboxProcessor(
 
     private async Task ProcessBatchAsync(CancellationToken ct)
     {
+        // Messages claimed (Sending) but never resolved — the process died, the send
+        // hung, or the DB call timed out after the claim committed. Without this
+        // cutoff they are invisible to the query below and stay stuck forever.
+        var stuckBefore = DateTimeOffset.UtcNow
+            .AddMinutes(-_opts.StuckSendingTimeoutMinutes);
+
         List<Guid> ids;
         await using (var scope = scopeFactory.CreateAsyncScope())
         {
@@ -69,7 +75,11 @@ internal sealed class EmailOutboxProcessor(
             ids = await db.EmailOutboxMessages
                 .IgnoreQueryFilters()
                 .Where(m =>
-                    (m.Status == EmailOutboxStatus.Pending || m.Status == EmailOutboxStatus.Failed)
+                    (m.Status == EmailOutboxStatus.Pending
+                     || m.Status == EmailOutboxStatus.Failed
+                     || (m.Status == EmailOutboxStatus.Sending
+                         && m.LastAttemptAt != null
+                         && m.LastAttemptAt < stuckBefore))
                     && m.AttemptCount < _opts.MaxAttempts)
                 .OrderBy(m => m.CreatedAt)
                 .Take(_opts.BatchSize)
@@ -85,7 +95,21 @@ internal sealed class EmailOutboxProcessor(
         foreach (var id in ids)
         {
             if (ct.IsCancellationRequested) break;
-            await ProcessOneAsync(id, ct);
+
+            // Isolate each message: a DB hiccup on one must not abort the batch.
+            try
+            {
+                await ProcessOneAsync(id, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "EmailOutboxProcessor failed to process message {MessageId} — skipping", id);
+            }
         }
     }
 

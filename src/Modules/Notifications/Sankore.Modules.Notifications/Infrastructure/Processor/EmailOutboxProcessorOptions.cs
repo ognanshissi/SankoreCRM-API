@@ -15,4 +15,10 @@ internal sealed class EmailOutboxProcessorOptions
     /// After the last attempt the message is not retried automatically.
     /// </summary>
     public int MaxAttempts { get; set; } = 3;
+
+    /// <summary>
+    /// Minutes after which a message left in Sending is considered abandoned and
+    /// reclaimed for another attempt. Must exceed the slowest realistic send.
+    /// </summary>
+    public int StuckSendingTimeoutMinutes { get; set; } = 5;
 }

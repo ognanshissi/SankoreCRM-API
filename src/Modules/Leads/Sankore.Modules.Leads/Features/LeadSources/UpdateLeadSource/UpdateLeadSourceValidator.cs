@@ -12,7 +12,8 @@ internal sealed class UpdateLeadSourceValidator
         RuleFor(x => x.SourceId).NotEmpty();
         RuleFor(x => x.Label).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Description).MaximumLength(500);
-        RuleFor(x => x.DisplayOrder).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.DisplayOrder).GreaterThanOrEqualTo(0)
+            .When(x => x.DisplayOrder.HasValue);
         RuleFor(x => x.DedupWindowDays).GreaterThanOrEqualTo(0)
             .When(x => x.DedupWindowDays.HasValue);
         RuleFor(x => x.CostCurrency)
@@ -64,27 +65,18 @@ internal sealed class UpdateLeadSourceValidator
                 .GreaterThanOrEqualTo(0).WithName("settings.minEngagementScore");
         });
 
-        When(x => GetFieldMapping(x.Settings) is not null, () =>
-        {
-            RuleFor(x => GetFieldMapping(x.Settings)!)
-                .Must(fm => FieldMappingEngine.Validate(fm).Count == 0)
-                .WithMessage(x =>
-                {
-                    var errors = FieldMappingEngine.Validate(GetFieldMapping(x.Settings)!);
-                    return string.Join("; ", errors.Select(e => $"{e.Path}: {e.Message}"));
-                })
-                .WithName("settings.fieldMapping");
-        });
-    }
+        // One failure per mapping error, so the client gets a usable list
+        // rather than a single joined string.
+        RuleFor(x => x.Settings)
+            .Custom((settings, ctx) =>
+            {
+                var rules = settings.FieldMappingsOf();
+                if (rules is null or { Count: 0 }) return;
 
-    private static IReadOnlyDictionary<string, string>? GetFieldMapping(SourceSettings? s)
-        => s switch
-        {
-            ServerWebhookSettings wh => wh.FieldMapping,
-            ScheduledPullSettings pull => pull.FieldMapping,
-            PlatformSettings plat => plat.FieldMapping,
-            _ => null
-        };
+                foreach (var error in FieldMappingEngine.Validate(rules))
+                    ctx.AddFailure("settings.fieldMappings", $"{error.Path}: {error.Message}");
+            });
+    }
 
     private static bool BeAValidUrl(string url)
         => Uri.TryCreate(url, UriKind.Absolute, out var uri)

@@ -38,6 +38,8 @@ public sealed record LeadSourceDetailDto(
     string? PlatformConnectionId,
     int DedupWindowDays,
     Money? CostPerLead,
+    Guid? DefaultAgencyId,
+    Guid? DefaultDispatchingRuleId,
     bool IsSystem,
     int DisplayOrder,
     uint Version,

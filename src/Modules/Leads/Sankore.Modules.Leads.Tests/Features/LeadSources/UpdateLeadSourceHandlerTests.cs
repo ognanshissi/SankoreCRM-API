@@ -50,6 +50,33 @@ public sealed class UpdateLeadSourceHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Update_persists_dispatching_defaults()
+    {
+        var agencyId = Guid.NewGuid();
+        var ruleId = Guid.NewGuid();
+
+        await using var db = _factory.CreateContext();
+        var source = LeadSourceConfig.Create(
+            _tenantId, "WEB", "Label", LeadChannelType.WebForm, 0,
+            defaultAgencyId: agencyId, defaultDispatchingRuleId: ruleId);
+        db.LeadSourceConfigs.Add(source);
+        await db.SaveChangesAsync();
+
+        var handler = new UpdateLeadSourceHandler(db, _publisher);
+        var result = await handler.Handle(new UpdateLeadSourceCommand(
+            SourceId: source.Id,
+            ExpectedVersion: source.Version,
+            Label: "Updated",
+            DisplayOrder: 0,
+            DefaultAgencyId: agencyId,
+            DefaultDispatchingRuleId: ruleId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        source.DefaultAgencyId.Should().Be(agencyId);
+        source.DefaultDispatchingRuleId.Should().Be(ruleId);
+    }
+
+    [Fact]
     public async Task Update_returns_409_on_version_mismatch()
     {
         await using var db = _factory.CreateContext();

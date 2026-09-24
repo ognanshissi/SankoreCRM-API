@@ -7,6 +7,7 @@ using Sankore.Modules.Workflow.Domain;
 using Sankore.Modules.Workflow.Domain.Events;
 using Sankore.Modules.Workflow.Features.Instances.ApproveStep;
 using Sankore.Modules.Workflow.Features.Instances.RejectStep;
+using Sankore.Modules.Workflow.Infrastructure.Conditions;
 using Sankore.Modules.Workflow.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
 using Xunit;
@@ -29,12 +30,17 @@ public sealed class ApproveRejectHandlerTests : IDisposable
         return cu;
     }
 
+    // The real ConditionEvaluator is dependency-free and treats a null condition as
+    // an unconditional match — which is what these templates use. A substitute would
+    // return false and block every transition.
     private ApproveStepHandler ApproveHandler(ICurrentUser? cu = null) =>
         new(_factory.CreateContext(), cu ?? BuildUser("branchmanager"), _bus,
-            Substitute.For<IRuleEvaluator>());
+            Substitute.For<IRuleEvaluator>(), new ConditionEvaluator(),
+            Substitute.For<IActionExecutorDispatcher>());
 
     private RejectStepHandler RejectHandler(ICurrentUser? cu = null) =>
-        new(_factory.CreateContext(), cu ?? BuildUser("branchmanager"));
+        new(_factory.CreateContext(), cu ?? BuildUser("branchmanager"),
+            new ConditionEvaluator(), Substitute.For<IActionExecutorDispatcher>());
 
     /// Seeds a running instance (template with 2 steps) and returns its Id.
     private async Task<Guid> SeedRunningInstance()

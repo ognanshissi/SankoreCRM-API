@@ -39,7 +39,9 @@ internal sealed class CreateLeadSourceHandler(
             settings:             cmd.Settings,
             platformConnectionId: cmd.PlatformConnectionId,
             dedupWindowDays:      cmd.DedupWindowDays,
-            costPerLead:          costPerLead);
+            costPerLead:          costPerLead,
+            defaultAgencyId:          cmd.DefaultAgencyId,
+            defaultDispatchingRuleId: cmd.DefaultDispatchingRuleId);
 
         db.LeadSourceConfigs.Add(source);
 

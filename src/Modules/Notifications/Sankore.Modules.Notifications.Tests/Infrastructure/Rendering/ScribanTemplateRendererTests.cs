@@ -66,33 +66,49 @@ public sealed class ScribanTemplateRendererTests
     }
 
     [Fact]
-    public async void Falls_back_to_en_locale_when_requested_locale_not_found()
+    public async void Falls_back_to_fr_locale_when_requested_locale_not_found()
     {
         var renderer = BuildRendererWithDb(db =>
         {
             db.EmailTemplates.Add(EmailTemplate.Create(
-                null, "welcome", "en", 1, "English Subject", "<p>english</p>"));
+                null, "welcome", "fr", 1, "French Subject", "<p>french</p>"));
         });
 
         var result = await renderer.RenderAsync(_tenantId, "welcome", "wolof", "{}");
 
-        result.Subject.Should().Be("English Subject");
+        result.Subject.Should().Be("French Subject");
     }
 
     [Fact]
-    public async void Does_not_fall_back_to_en_when_en_is_requested_but_only_fr_exists()
+    public async void Does_not_fall_back_when_fr_is_requested_but_only_en_exists()
     {
         var renderer = BuildRendererWithDb(db =>
         {
             db.EmailTemplates.Add(EmailTemplate.Create(
-                null, "welcome", "fr", 1, "French Only", "<p>fr</p>"));
+                null, "welcome", "en", 1, "English Only", "<p>en</p>"));
         });
 
-        var result = await renderer.RenderAsync(_tenantId, "welcome", "en", "{}");
+        var result = await renderer.RenderAsync(_tenantId, "welcome", "fr", "{}");
 
-        // No en template and we requested en (no double-fallback) — stub output
+        // fr IS the fallback locale, so requesting it must not hop again — stub output
         result.Subject.Should().Contain("welcome");
-        result.Subject.Should().NotBe("French Only");
+        result.Subject.Should().NotBe("English Only");
+    }
+
+    [Fact]
+    public async void Does_not_fall_back_to_en_for_an_unsupported_locale()
+    {
+        var renderer = BuildRendererWithDb(db =>
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                null, "welcome", "en", 1, "English Only", "<p>en</p>"));
+        });
+
+        var result = await renderer.RenderAsync(_tenantId, "welcome", "wolof", "{}");
+
+        // fr is the only fallback locale — en is not a second chance
+        result.Subject.Should().Contain("welcome");
+        result.Subject.Should().NotBe("English Only");
     }
 
     [Fact]

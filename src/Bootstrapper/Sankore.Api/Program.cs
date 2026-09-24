@@ -328,10 +328,21 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
     app.UseHangfireDashboard("/hangfire");
+}
 
-    // Register per-tenant recurring Hangfire jobs from the tenant registry.
+// Register per-tenant recurring Hangfire jobs from the tenant registry.
+// Runs in EVERY environment: SLA escalation, nurturing, lead recycling and
+// scheduled pulls are product behaviour, not a dev convenience.
+//
+// Scheduling is not a prerequisite for serving HTTP: registration takes a
+// distributed lock per job id, so a second instance running against the same
+// database (a leftover `dotnet run`, a rolling restart) can lose the race and
+// throw PostgreSqlDistributedLockException. Log and carry on rather than
+// taking the whole API down — the jobs are already registered in that case.
+try
+{
     var tenantStore = app.Services.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>();
-    var activeTenants = tenantStore.GetAllActiveAsync(CancellationToken.None).GetAwaiter().GetResult();
+    var activeTenants = await tenantStore.GetAllActiveAsync(CancellationToken.None);
 
     foreach (var t in activeTenants)
     {
@@ -359,6 +370,17 @@ if (app.Environment.IsDevelopment())
         "lead-source-pull-orchestrator",
         job => job.ExecuteAsync(),
         "* * * * *");
+
+    app.Logger.LogInformation(
+        "Registered recurring Hangfire jobs for {TenantCount} active tenant(s), plus the global pull orchestrator.",
+        activeTenants.Count);
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex,
+        "Failed to register recurring Hangfire jobs. The API will start WITHOUT them, so "
+        + "SLA escalation, nurturing, lead recycling and scheduled pulls will not run on this "
+        + "instance. This usually means another instance is already running against the same database.");
 }
 
 app.UseExceptionHandler();

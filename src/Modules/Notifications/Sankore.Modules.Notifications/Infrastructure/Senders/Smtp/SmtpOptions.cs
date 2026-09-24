@@ -15,6 +15,9 @@ internal sealed class SmtpOptions
     /// <summary>true → STARTTLS (port 587). false → plain (port 1025, MailDev, etc.).</summary>
     public bool UseStartTls { get; set; } = false;
 
+    /// <summary>Connect / send timeout in seconds.</summary>
+    public int TimeoutSeconds { get; set; } = 30;
+
     public string FromEmail { get; set; } = "noreply@sankore.io";
     public string FromName { get; set; } = "Sankore";
 }

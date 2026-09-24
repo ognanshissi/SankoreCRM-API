@@ -11,14 +11,21 @@ internal sealed class CompositeEmailSender(IServiceProvider sp) : IEmailSender
 {
     public Task SendAsync(SendEmailRequest request, ResolvedEmailProvider provider, CancellationToken ct)
     {
-        var sender = provider.ProviderType switch
+        // "Default" is what TenantNotificationSettings.CreateDefault() writes — it means
+        // "use the platform-wide provider", which is SMTP. Treat an empty value the same way.
+        var key = provider.ProviderType?.Trim().ToLowerInvariant() switch
         {
-            "Smtp"     => sp.GetRequiredKeyedService<IEmailSender>("smtp"),
-            "Ses"      => sp.GetRequiredKeyedService<IEmailSender>("ses"),
-            "Postmark" => sp.GetRequiredKeyedService<IEmailSender>("postmark"),
-            "SendGrid" => sp.GetRequiredKeyedService<IEmailSender>("sendgrid"),
-            _          => sp.GetRequiredKeyedService<IEmailSender>("stub"),
+            null or "" or "default" => "smtp",
+            "smtp"                  => "smtp",
+            "ses"                   => "ses",
+            "postmark"              => "postmark",
+            "sendgrid"              => "sendgrid",
+            _                       => "stub",
         };
+
+        var sender = sp.GetKeyedService<IEmailSender>(key)
+            ?? throw new InvalidOperationException(
+                $"No IEmailSender registered for provider '{provider.ProviderType}' (key '{key}').");
 
         return sender.SendAsync(request, provider, ct);
     }

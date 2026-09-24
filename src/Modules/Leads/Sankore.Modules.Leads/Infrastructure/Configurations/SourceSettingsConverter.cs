@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Infrastructure.Configurations;
 
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Sankore.Modules.Leads.Domain;
@@ -19,6 +20,7 @@ internal sealed class SourceSettingsConverter()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     private static string? Serialize(SourceSettings? settings)
@@ -33,6 +35,9 @@ internal sealed class SourceSettingsConverter()
     private static SourceSettings? Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
+
+        // Rewrite v1 documents (dictionary field mapping) before typing them
+        json = SourceSettingsUpgrader.MigrateJson(json);
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -78,6 +83,7 @@ internal sealed class SourceSettingsComparer()
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     private static string? Ser(SourceSettings? v)

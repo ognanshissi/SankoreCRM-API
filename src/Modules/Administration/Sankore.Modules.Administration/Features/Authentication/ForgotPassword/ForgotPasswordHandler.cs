@@ -43,7 +43,7 @@ internal sealed class ForgotPasswordHandler(
         var locale = user.PreferredLanguage ?? tenantInfo?.DefaultLanguage ?? "fr";
         
         // Idempotency: one reset email per user per calendar day (prevents spam)
-        var idempotencyKey = $"password-reset-{user.Id}-{DateTimeOffset.UtcNow:yyyyMMdd}";
+        var idempotencyKey = $"password-reset-{user.Id}-{DateTimeOffset.UtcNow:yyyyMMdd}-{DateTimeOffset.UtcNow:hh:mm}";
 
         await notifications.QueueEmailAsync(new QueueEmailRequest(
             TemplateKey:    "user.password-forgot",

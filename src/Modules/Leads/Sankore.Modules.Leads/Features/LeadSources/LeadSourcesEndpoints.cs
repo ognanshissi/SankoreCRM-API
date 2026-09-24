@@ -206,7 +206,9 @@ public static class LeadSourcesEndpoints
             PlatformConnectionId: req.PlatformConnectionId,
             DedupWindowDays: req.DedupWindowDays,
             CostPerLead:     req.CostPerLead,
-            CostCurrency:    req.CostCurrency), ct);
+            CostCurrency:    req.CostCurrency,
+            DefaultAgencyId:          req.DefaultAgencyId,
+            DefaultDispatchingRuleId: req.DefaultDispatchingRuleId), ct);
 
         return result.IsSuccess
             ? Results.Created($"lead-sources/{result.Value}", result.Value)
@@ -226,7 +228,9 @@ public static class LeadSourcesEndpoints
             PlatformConnectionId: req.PlatformConnectionId,
             DedupWindowDays: req.DedupWindowDays,
             CostPerLead:     req.CostPerLead,
-            CostCurrency:    req.CostCurrency), ct);
+            CostCurrency:    req.CostCurrency,
+            DefaultAgencyId:          req.DefaultAgencyId,
+            DefaultDispatchingRuleId: req.DefaultDispatchingRuleId), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -337,18 +341,22 @@ public sealed record CreateLeadSourceRequest(
     string? PlatformConnectionId = null,
     int DedupWindowDays = 30,
     decimal? CostPerLead = null,
-    string? CostCurrency = null);
+    string? CostCurrency = null,
+    Guid? DefaultAgencyId = null,
+    Guid? DefaultDispatchingRuleId = null);
 
 public sealed record UpdateLeadSourceRequest(
     uint Version,
     string Label,
-    int DisplayOrder,
+    int? DisplayOrder = null,
     string? Description = null,
     SourceSettings? Settings = null,
     string? PlatformConnectionId = null,
     int? DedupWindowDays = null,
     decimal? CostPerLead = null,
-    string? CostCurrency = null);
+    string? CostCurrency = null,
+    Guid? DefaultAgencyId = null,
+    Guid? DefaultDispatchingRuleId = null);
 
 public sealed record PreviewMappingRequest(string SamplePayloadJson);
 

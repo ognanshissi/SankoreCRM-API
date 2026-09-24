@@ -54,13 +54,14 @@ internal static class ProviderDocPdfGenerator
                     {
                         c.Item().Text($"Content-Type: {settings.ContentType}").FontSize(10);
 
-                        if (settings.FieldMapping is { Count: > 0 })
+                        if (settings.FieldMappings is { Count: > 0 })
                         {
                             c.Item().PaddingTop(8).Text("Field Mapping:").Bold();
                             c.Item().Table(table =>
                             {
                                 table.ColumnsDefinition(cols =>
                                 {
+                                    cols.RelativeColumn(1);
                                     cols.RelativeColumn(1);
                                     cols.RelativeColumn(1);
                                 });
@@ -71,21 +72,25 @@ internal static class ProviderDocPdfGenerator
                                         .Text("Your Field").Bold();
                                     header.Cell().Background(Colors.Blue.Lighten4).Padding(4)
                                         .Text("Lead Field").Bold();
+                                    header.Cell().Background(Colors.Blue.Lighten4).Padding(4)
+                                        .Text("Transformation").Bold();
                                 });
 
-                                foreach (var (externalField, leadField) in settings.FieldMapping)
+                                foreach (var rule in settings.FieldMappings)
                                 {
                                     table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten3)
-                                        .Padding(4).Text(externalField).FontFamily(Fonts.Courier).FontSize(9);
+                                        .Padding(4).Text(rule.SourceField).FontFamily(Fonts.Courier).FontSize(9);
                                     table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten3)
-                                        .Padding(4).Text(leadField).FontFamily(Fonts.Courier).FontSize(9);
+                                        .Padding(4).Text(rule.TargetField).FontFamily(Fonts.Courier).FontSize(9);
+                                    table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten3)
+                                        .Padding(4).Text(DescribeTransform(rule)).FontFamily(Fonts.Courier).FontSize(9);
                                 }
                             });
                         }
 
                         // Example payload
                         c.Item().PaddingTop(8).Text("Example Payload:").Bold();
-                        var exampleJson = BuildExamplePayload(settings.FieldMapping);
+                        var exampleJson = BuildExamplePayload(settings.FieldMappings);
                         c.Item().Background(Colors.Grey.Lighten4).Padding(8)
                             .Text(exampleJson).FontFamily(Fonts.Courier).FontSize(8);
                     });
@@ -174,14 +179,22 @@ internal static class ProviderDocPdfGenerator
             .Text(description);
     }
 
-    private static string BuildExamplePayload(IReadOnlyDictionary<string, string>? fieldMapping)
+    private static string DescribeTransform(FieldMappingRule rule) => rule.Transformation switch
     {
-        if (fieldMapping is null or { Count: 0 })
+        FieldTransformation.None   => "—",
+        FieldTransformation.E164   => $"e164 ({rule.E164Country})",
+        FieldTransformation.Concat => $"concat ('{rule.ConcatSeparator ?? " "}')",
+        _ => rule.Transformation.ToString().ToLowerInvariant()
+    };
+
+    private static string BuildExamplePayload(IReadOnlyList<FieldMappingRule>? fieldMappings)
+    {
+        if (fieldMappings is null or { Count: 0 })
             return "{\n  \"fullName\": \"Amadou Traoré\",\n  \"phoneNumber\": \"+22370123456\"\n}";
 
-        var lines = fieldMapping.Select(kv =>
+        var lines = fieldMappings.Select(rule =>
         {
-            var example = kv.Value.ToLowerInvariant() switch
+            var example = rule.TargetField.ToLowerInvariant() switch
             {
                 "fullname" => "\"Amadou Traoré\"",
                 "phonenumber" => "\"+22370123456\"",
@@ -190,7 +203,7 @@ internal static class ProviderDocPdfGenerator
                 "lastname" => "\"Traoré\"",
                 _ => "\"...\""
             };
-            return $"  \"{kv.Key}\": {example}";
+            return $"  \"{rule.SourceField}\": {example}";
         });
 
         return "{\n" + string.Join(",\n", lines) + "\n}";

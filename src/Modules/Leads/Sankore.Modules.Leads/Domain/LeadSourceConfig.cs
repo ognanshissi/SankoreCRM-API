@@ -165,7 +165,7 @@ public sealed class LeadSourceConfig : ITenant
     public IReadOnlyList<string> Update(
         string label,
         string? description,
-        int displayOrder,
+        int? displayOrder,
         SourceSettings? settings = null,
         string? platformConnectionId = null,
         int? dedupWindowDays = null,
@@ -181,7 +181,7 @@ public sealed class LeadSourceConfig : ITenant
 
         if (Label != label.Trim()) changed.Add(nameof(Label));
         if (Description != description?.Trim()) changed.Add(nameof(Description));
-        if (DisplayOrder != displayOrder) changed.Add(nameof(DisplayOrder));
+        if (displayOrder.HasValue && DisplayOrder != displayOrder.Value) changed.Add(nameof(DisplayOrder));
         if (PlatformConnectionId != platformConnectionId) changed.Add(nameof(PlatformConnectionId));
         if (dedupWindowDays.HasValue && DedupWindowDays != dedupWindowDays.Value) changed.Add(nameof(DedupWindowDays));
         if (costPerLead != CostPerLead) changed.Add(nameof(CostPerLead));
@@ -191,7 +191,7 @@ public sealed class LeadSourceConfig : ITenant
 
         Label                    = label.Trim();
         Description              = description?.Trim();
-        DisplayOrder             = displayOrder;
+        if (displayOrder.HasValue) DisplayOrder = displayOrder.Value;
         PlatformConnectionId     = platformConnectionId;
         if (dedupWindowDays.HasValue) DedupWindowDays = dedupWindowDays.Value;
         CostPerLead              = costPerLead;
@@ -357,15 +357,9 @@ public sealed class LeadSourceConfig : ITenant
         // Modes that need field mapping must have at least phoneNumber + fullName mapped
         if (Mode is not IntegrationMode.Internal and not IntegrationMode.EmbeddedScript)
         {
-            var fieldMapping = Settings switch
-            {
-                ServerWebhookSettings wh => wh.FieldMapping,
-                ScheduledPullSettings pull => pull.FieldMapping,
-                PlatformSettings plat => plat.FieldMapping,
-                _ => null
-            };
+            var fieldMappings = Settings.FieldMappingsOf();
 
-            if (fieldMapping is null || fieldMapping.Count == 0)
+            if (fieldMappings is null || fieldMappings.Count == 0)
                 missing.Add("NoFieldMappingConfigured");
         }
 
