@@ -54,6 +54,8 @@ builder.Services.ConfigureHttpJsonOptions(opts =>
         new Sankore.Api.Infrastructure.DateOnlyConverter());
     opts.SerializerOptions.Converters.Add(
         new Sankore.Api.Infrastructure.NullableDateOnlyConverter());
+    opts.SerializerOptions.Converters.Add(
+        new Sankore.Api.Infrastructure.SourceSettingsJsonConverter());
 });
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();

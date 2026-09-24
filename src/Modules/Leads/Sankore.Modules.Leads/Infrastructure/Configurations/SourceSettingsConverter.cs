@@ -7,7 +7,8 @@ using Sankore.Modules.Leads.Domain;
 
 /// <summary>
 /// EF Core ValueConverter: serializes <see cref="SourceSettings"/> to/from JSONB
-/// with polymorphic $mode discriminator. Applies schema upgrades on read.
+/// with $mode discriminator. Applies schema upgrades on read.
+/// Handles polymorphism manually (no [JsonPolymorphic] attributes on the domain).
 /// </summary>
 internal sealed class SourceSettingsConverter()
     : ValueConverter<SourceSettings?, string?>(
@@ -21,18 +22,47 @@ internal sealed class SourceSettingsConverter()
     };
 
     private static string? Serialize(SourceSettings? settings)
-        => settings is null ? null : JsonSerializer.Serialize(settings, JsonOpts);
+    {
+        if (settings is null) return null;
+        // Serialize the concrete type to get all properties, then inject $mode
+        var json = JsonSerializer.Serialize(settings, settings.GetType(), JsonOpts);
+        var mode = settings.ExpectedMode.ToString();
+        return "{\"$mode\":\"" + mode + "\"," + json.TrimStart('{');
+    }
 
     private static SourceSettings? Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
 
-        var settings = JsonSerializer.Deserialize<SourceSettings>(json, JsonOpts);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        // Read $mode discriminator
+        string? mode = null;
+        if (root.TryGetProperty("$mode", out var modeEl))
+            mode = modeEl.GetString();
+
+        if (mode is null) return null;
+
+        var type = ResolveType(mode);
+        if (type is null) return null;
+
+        var settings = (SourceSettings?)JsonSerializer.Deserialize(json, type, JsonOpts);
         if (settings is null) return null;
 
-        // Apply schema upgrades transparently on read
         return SourceSettingsUpgrader.Upgrade(settings);
     }
+
+    private static Type? ResolveType(string mode) => mode switch
+    {
+        "EmbeddedScript"     => typeof(EmbeddedScriptSettings),
+        "ServerWebhook"      => typeof(ServerWebhookSettings),
+        "ScheduledPull"      => typeof(ScheduledPullSettings),
+        "PlatformConnection" => typeof(PlatformSettings),
+        "SocialTracking"     => typeof(SocialTrackingSettings),
+        "Internal"           => typeof(InternalSettings),
+        _                    => null
+    };
 }
 
 /// <summary>
@@ -41,22 +71,22 @@ internal sealed class SourceSettingsConverter()
 /// </summary>
 internal sealed class SourceSettingsComparer()
     : ValueComparer<SourceSettings?>(
-        (a, b) => Serialize(a) == Serialize(b),
-        v => (Serialize(v) ?? "").GetHashCode(),
-        v => DeepClone(v))
+        (a, b) => Ser(a) == Ser(b),
+        v => (Ser(v) ?? "").GetHashCode(),
+        v => Clone(v))
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    private static string? Serialize(SourceSettings? v)
-        => v is null ? null : JsonSerializer.Serialize(v, JsonOpts);
+    private static string? Ser(SourceSettings? v)
+        => v is null ? null : JsonSerializer.Serialize(v, v.GetType(), JsonOpts);
 
-    private static SourceSettings? DeepClone(SourceSettings? v)
+    private static SourceSettings? Clone(SourceSettings? v)
     {
         if (v is null) return null;
-        var json = JsonSerializer.Serialize(v, JsonOpts);
-        return JsonSerializer.Deserialize<SourceSettings>(json, JsonOpts);
+        var json = JsonSerializer.Serialize(v, v.GetType(), JsonOpts);
+        return (SourceSettings?)JsonSerializer.Deserialize(json, v.GetType(), JsonOpts);
     }
 }

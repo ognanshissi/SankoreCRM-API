@@ -8,13 +8,11 @@ using System.Text.Json.Serialization;
 /// No field may carry a name evoking a secret (secret, password, token, apiKey)
 /// — credentials live in the vault, referenced by opaque ID only.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$mode")]
-[JsonDerivedType(typeof(EmbeddedScriptSettings), "EmbeddedScript")]
-[JsonDerivedType(typeof(ServerWebhookSettings), "ServerWebhook")]
-[JsonDerivedType(typeof(ScheduledPullSettings), "ScheduledPull")]
-[JsonDerivedType(typeof(PlatformSettings), "PlatformConnection")]
-[JsonDerivedType(typeof(SocialTrackingSettings), "SocialTracking")]
-[JsonDerivedType(typeof(InternalSettings), "Internal")]
+/// <remarks>
+/// Polymorphic serialization handled by <c>SourceSettingsJsonConverter</c> (HTTP)
+/// and <c>SourceSettingsConverter</c> (EF). The $mode discriminator is injected/inferred
+/// by these converters — no [JsonPolymorphic] attributes needed.
+/// </remarks>
 public abstract record SourceSettings
 {
     /// <summary>Schema version for forward-compatible upgrades.</summary>

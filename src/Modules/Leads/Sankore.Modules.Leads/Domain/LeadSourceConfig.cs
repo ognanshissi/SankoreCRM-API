@@ -198,10 +198,9 @@ public sealed class LeadSourceConfig : ITenant
         DefaultAgencyId          = defaultAgencyId;
         DefaultDispatchingRuleId = defaultDispatchingRuleId;
 
+        // Only update settings if explicitly provided (null = no change, not "clear")
         if (settings is not null)
             UpdateSettings(settings);
-        else
-            Settings = null;
 
         return changed;
     }

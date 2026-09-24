@@ -32,13 +32,16 @@ internal sealed class SlaCheckerJob(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(Interval, stoppingToken);
-
             try
             {
+                await Task.Delay(Interval, stoppingToken);
                 await CheckSlaDeadlinesAsync(stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
             {
                 logger.LogError(ex, "SlaCheckerJob encountered an error during SLA check.");
             }

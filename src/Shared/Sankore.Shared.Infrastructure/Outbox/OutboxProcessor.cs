@@ -33,13 +33,17 @@ public sealed class OutboxProcessor<TDbContext>(
             try
             {
                 await ProcessBatchAsync(stoppingToken);
+                await Task.Delay(PollInterval, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // Graceful shutdown — not an error
+                break;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Outbox processing failed for {DbContext}", typeof(TDbContext).Name);
             }
-
-            await Task.Delay(PollInterval, stoppingToken);
         }
     }
 
