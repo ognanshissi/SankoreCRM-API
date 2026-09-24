@@ -58,6 +58,7 @@ using Sankore.Modules.Leads.Features.Opportunities;
 using Sankore.Modules.Leads.Features.SlaMonitoring;
 using Sankore.Modules.Leads.Features.NurturingExecution;
 using Sankore.Modules.Leads.Features.Ingestion.Web;
+using Sankore.Modules.Leads.Features.Ingestion.Webhook;
 using Sankore.Modules.Leads.Features.Ingestions;
 using Sankore.Modules.Leads.Features.LeadSources.Sdk;
 using Sankore.Modules.Leads.Features.LeadSources.Snippet;
@@ -272,6 +273,7 @@ public static class LeadsModule
         app.MapWebIngestCorsEndpoint();
         app.MapWebPingEndpoint();
         app.MapWebFormEndpoint();
+        app.MapWebhookIngestEndpoint();
         app.MapSdkServeEndpoints();
         return app;
     }

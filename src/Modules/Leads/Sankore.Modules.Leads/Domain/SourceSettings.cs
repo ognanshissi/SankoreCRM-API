@@ -107,6 +107,12 @@ public sealed record ServerWebhookSettings : SourceSettings
 
     /// <summary>JSON path mapping: external field → Lead field.</summary>
     public IReadOnlyDictionary<string, string>? FieldMapping { get; init; }
+
+    /// <summary>IP addresses allowed to push webhooks. Empty = any IP allowed.</summary>
+    public IReadOnlyList<string> AllowedIpAddresses { get; init; } = [];
+
+    /// <summary>JSONPath to extract the external ID from each payload item.</summary>
+    public string? ExternalIdPath { get; init; }
 }
 
 /// <summary>Settings for ScheduledPull mode (periodic fetch from external API).</summary>
