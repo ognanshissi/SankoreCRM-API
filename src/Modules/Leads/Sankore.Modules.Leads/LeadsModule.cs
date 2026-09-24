@@ -59,6 +59,7 @@ using Sankore.Modules.Leads.Features.SlaMonitoring;
 using Sankore.Modules.Leads.Features.NurturingExecution;
 using Sankore.Modules.Leads.Features.Ingestion.Web;
 using Sankore.Modules.Leads.Features.Ingestions;
+using Sankore.Modules.Leads.Features.LeadSources.Sdk;
 using Sankore.Modules.Leads.Features.LeadSources.Snippet;
 using Sankore.Modules.Leads.Features.Ingestions.ReplayIngestion;
 using Sankore.Modules.Leads.Features.ReactivateRecycledLeads;
@@ -143,6 +144,10 @@ public static class LeadsModule
 
         // Web ingest — captcha validator (stub MVP)
         services.AddSingleton<ICaptchaValidator, StubCaptchaValidator>();
+
+        // SDK file store — local filesystem (wwwroot/sdk/)
+        services.AddSingleton<ISdkFileStore>(
+            new LocalSdkFileStore(Path.Combine(AppContext.BaseDirectory, "wwwroot", "sdk")));
 
         // Import — file storage for uploaded CSV files
         services.AddSingleton<IImportFileStore, LocalImportFileStore>();
@@ -251,6 +256,9 @@ public static class LeadsModule
         // Ingestions (F13.37-BE-11)
         group.MapIngestionsEndpoints();
 
+        // SDK admin (F13.37-BE-15)
+        group.MapSdkAdminEndpoints();
+
         return app;
     }
 
@@ -263,6 +271,7 @@ public static class LeadsModule
         app.MapWebIngestEndpoint();
         app.MapWebIngestCorsEndpoint();
         app.MapWebPingEndpoint();
+        app.MapSdkServeEndpoints();
         return app;
     }
 }

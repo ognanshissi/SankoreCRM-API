@@ -28,8 +28,18 @@ internal sealed class GetSnippetHandler(
 
         var settings = source.Settings as EmbeddedScriptSettings;
         var containerId = settings?.FormContainerId ?? "sankore-form";
-        var sdkUrl = options.Value.SdkUrl;
-        var sriHash = options.Value.SriHash;
+
+        // Resolve SDK URL and SRI from published version (DB), fall back to config
+        var currentSdk = await db.SdkVersions
+            .IgnoreQueryFilters()
+            .Where(v => v.IsCurrent)
+            .OrderByDescending(v => v.Major)
+            .FirstOrDefaultAsync(ct);
+
+        var sdkUrl = currentSdk is not null
+            ? $"/sdk/v{currentSdk.Major}/forms.min.js"
+            : options.Value.SdkUrl;
+        var sriHash = currentSdk?.SriHash ?? options.Value.SriHash;
 
         var html = $"""
             <!-- Sankore CRM Lead Capture — {source.Label} -->
@@ -48,9 +58,9 @@ internal sealed class GetSnippetHandler(
 
 public sealed class SnippetOptions
 {
-    /// <summary>CDN URL for the current SDK version.</summary>
-    public string SdkUrl { get; set; } = "https://cdn.sankore.io/sdk/v1/sankore-forms.min.js";
+    /// <summary>Fallback CDN URL when no SDK version is published.</summary>
+    public string SdkUrl { get; set; } = "/sdk/v1/forms.min.js";
 
-    /// <summary>SRI hash (sha384) for the SDK file.</summary>
+    /// <summary>Fallback SRI hash when no SDK version is published.</summary>
     public string SriHash { get; set; } = "sha384-placeholder";
 }

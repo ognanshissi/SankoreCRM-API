@@ -38,6 +38,7 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<NurturingSequence> NurturingSequences => Set<NurturingSequence>();
     public DbSet<NurturingStep> NurturingSteps => Set<NurturingStep>();
     public DbSet<NurturingEnrollment> NurturingEnrollments => Set<NurturingEnrollment>();
+    public DbSet<SdkVersion> SdkVersions => Set<SdkVersion>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
