@@ -144,8 +144,12 @@ public static class LeadsModule
         // Ingestion replay — Hangfire on-demand job (F13.37-BE-11)
         services.AddTransient<ReplayIngestionJob>();
 
-        // Generic REST puller — HttpClient with Polly retry (F13.37-BE-19)
+        // Generic REST puller — SSRF-safe HttpClient with Polly retry (F13.37-BE-19/20)
+        services.AddTransient<Infrastructure.SsrfProtection.SafeRedirectHandler>();
         services.AddHttpClient("LeadPuller")
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                Infrastructure.SsrfProtection.SsrfSafeHandler.Create())
+            .AddHttpMessageHandler<Infrastructure.SsrfProtection.SafeRedirectHandler>()
             .AddStandardResilienceHandler(opts =>
             {
                 opts.Retry.MaxRetryAttempts = 3;
