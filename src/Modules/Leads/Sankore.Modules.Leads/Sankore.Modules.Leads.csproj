@@ -18,6 +18,7 @@
     <PackageReference Include="Hangfire.Core" />
     <PackageReference Include="Newtonsoft.Json" />
     <PackageReference Include="CsvHelper" />
+    <PackageReference Include="QuestPDF" />
   </ItemGroup>
 
   <ItemGroup>

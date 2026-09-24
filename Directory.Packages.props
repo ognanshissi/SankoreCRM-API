@@ -46,6 +46,7 @@
   </ItemGroup>
   <ItemGroup Label="CsvHelper">
     <PackageVersion Include="CsvHelper" Version="33.0.1" />
+    <PackageVersion Include="QuestPDF" Version="2024.12.2" />
   </ItemGroup>
   <ItemGroup Label="SecurityOverrides">
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />

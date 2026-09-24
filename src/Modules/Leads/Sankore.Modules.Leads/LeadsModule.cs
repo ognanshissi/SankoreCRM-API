@@ -61,6 +61,7 @@ using Sankore.Modules.Leads.Features.Ingestion.Web;
 using Sankore.Modules.Leads.Features.Ingestion.Webhook;
 using Sankore.Modules.Leads.Features.Ingestions;
 using Sankore.Modules.Leads.Features.LeadSources.Sdk;
+using Sankore.Modules.Leads.Features.LeadSources.ProviderDoc;
 using Sankore.Modules.Leads.Features.LeadSources.Snippet;
 using Sankore.Modules.Leads.Features.Ingestions.ReplayIngestion;
 using Sankore.Modules.Leads.Features.ReactivateRecycledLeads;
@@ -249,6 +250,7 @@ public static class LeadsModule
 
         // Phase 14 — Configuration (US-M13-190..197)
         group.MapLeadSourcesEndpoints();
+        group.MapProviderDocEndpoint();
         group.MapScoringConfigsEndpoints();
         group.MapTaskTypesEndpoints();
         group.MapPipelineStagesEndpoints();
