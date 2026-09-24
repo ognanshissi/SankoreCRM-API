@@ -88,6 +88,9 @@ public sealed class Lead : AggregateRoot
     /// <summary>Snapshot of the source's CostPerLead at capture time. Never recalculated.</summary>
     public Money? AcquisitionCost { get; private set; }
 
+    /// <summary>True for leads captured from a source in Testing status. Not dispatched.</summary>
+    public bool IsTest { get; private set; }
+
     // ── Lifecycle tracking ───────────────────────────────────────────────────
     public DateTimeOffset? LastActivityAt { get; private set; }
     public string? LossReason { get; private set; }
@@ -136,7 +139,8 @@ public sealed class Lead : AggregateRoot
         string? externalId = null,
         string? socialPublicationId = null,
         string? socialInteractionId = null,
-        Money? acquisitionCost = null)
+        Money? acquisitionCost = null,
+        bool isTest = false)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Lead must have a name.");
@@ -197,6 +201,7 @@ public sealed class Lead : AggregateRoot
             SocialPublicationId   = socialPublicationId?.Trim(),
             SocialInteractionId   = socialInteractionId?.Trim(),
             AcquisitionCost       = acquisitionCost,
+            IsTest                = isTest,
         };
 
         lead.RaiseDomainEvent(new LeadCapturedDomainEvent(lead.Id));

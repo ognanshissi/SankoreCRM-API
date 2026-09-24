@@ -12,6 +12,7 @@ public class LeadIngestionConfiguration: IEntityTypeConfiguration<LeadIngestion>
         b.HasKey(i => i.Id);
         b.Property(i => i.Status).HasConversion<string>().HasMaxLength(20);
         b.Property(i => i.RejectionReason).HasMaxLength(500);
+        b.Property(i => i.ExternalId).HasMaxLength(200);
         b.Property(i => i.RawPayloadJson).HasColumnType("jsonb");
         // FK intra-schema to lead_source_runs (nullable)
         b.HasOne<LeadSourceRun>()
@@ -21,5 +22,10 @@ public class LeadIngestionConfiguration: IEntityTypeConfiguration<LeadIngestion>
         b.HasIndex(i => new { i.TenantId, i.LeadId });
         b.HasIndex(i => new { i.TenantId, i.SourceId });
         b.HasIndex(i => i.RunId).HasFilter("run_id IS NOT NULL");
+        // Idempotence: one ingestion per (tenant, source, external_id)
+        b.HasIndex(i => new { i.TenantId, i.SourceId, i.ExternalId })
+            .IsUnique()
+            .HasFilter("external_id IS NOT NULL")
+            .HasDatabaseName("ux_ingestion_idempotency");
     }
 }
