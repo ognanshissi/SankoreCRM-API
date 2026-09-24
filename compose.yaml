@@ -25,6 +25,28 @@
     networks:
       - "default"
 
+  sankore.hangfire:
+    image: ${DOCKER_REGISTRY-}sankore.hangfire
+    container_name: sankore.hangfire
+    build:
+      context: .
+      dockerfile: src/Bootstrapper/Sankore.Hangfire/Dockerfile
+    ports:
+      - 5210:8080
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # Same database as sankore.api — that is what makes it the same Hangfire storage.
+      ConnectionStrings__Database: "Host=sankore.database;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PW}"
+      # Dashboard credentials. With no password the dashboard denies every request.
+      Hangfire__Dashboard__Username: "${HANGFIRE_DASHBOARD_USER:-admin}"
+      Hangfire__Dashboard__Password: "${HANGFIRE_DASHBOARD_PASSWORD:?set HANGFIRE_DASHBOARD_PASSWORD in .env}"
+    depends_on:
+      sankore.database:
+        condition: service_healthy
+    restart: always
+    networks:
+      - "default"
+
   sankore.database:
     image: ${DOCKER_REGISTRY:-sankore.database}
     build:

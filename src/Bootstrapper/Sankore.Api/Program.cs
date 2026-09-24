@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -327,8 +328,11 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    app.UseHangfireDashboard("/hangfire");
 }
+
+// The Hangfire dashboard is NOT mounted here. It lives in Sankore.Hangfire, which
+// reads the same storage behind basic auth in every environment — see that host's
+// Program.cs. This one only produces and processes jobs.
 
 // Register per-tenant recurring Hangfire jobs from the tenant registry.
 // Runs in EVERY environment: SLA escalation, nurturing, lead recycling and
@@ -344,29 +348,50 @@ try
     var tenantStore = app.Services.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>();
     var activeTenants = await tenantStore.GetAllActiveAsync(CancellationToken.None);
 
+    // Jobs paused from the Sankore.Hangfire dashboard must STAY paused. Without
+    // this guard AddOrUpdate below would silently resurrect every one of them on
+    // each restart or rolling deploy, which is exactly why pausing exists.
+    var pauseStore = new RecurringJobPauseStore(
+        app.Services.GetRequiredService<Hangfire.JobStorage>(),
+        app.Services.GetRequiredService<Hangfire.IRecurringJobManager>());
+
+    var pausedJobIds = pauseStore.GetPausedIds();
+    var skipped = new List<string>();
+
+    void AddOrUpdate<TJob>(string jobId, Expression<Func<TJob, Task>> methodCall, string cron)
+    {
+        if (pausedJobIds.Contains(jobId))
+        {
+            skipped.Add(jobId);
+            return;
+        }
+
+        Hangfire.RecurringJob.AddOrUpdate(jobId, methodCall, cron);
+    }
+
     foreach (var t in activeTenants)
     {
         var tenantId = t.Id;
         var suffix = tenantId.ToString()[..8];
 
-        Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.SlaMonitoring.CheckSlaBreachesJob>(
+        AddOrUpdate<Sankore.Modules.Leads.Features.SlaMonitoring.CheckSlaBreachesJob>(
             $"sla-breach-check-{suffix}",
             job => job.ExecuteAsync(tenantId),
             "*/15 * * * *");
 
-        Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.NurturingExecution.ExecuteNurturingJob>(
+        AddOrUpdate<Sankore.Modules.Leads.Features.NurturingExecution.ExecuteNurturingJob>(
             $"nurturing-execution-{suffix}",
             job => job.ExecuteAsync(tenantId),
             "*/10 * * * *");
 
-        Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.ReactivateRecycledLeads.ReactivateRecycledLeadsJob>(
+        AddOrUpdate<Sankore.Modules.Leads.Features.ReactivateRecycledLeads.ReactivateRecycledLeadsJob>(
             $"reactivate-recycled-leads-{suffix}",
             job => job.ExecuteAsync(tenantId),
             "0 3 * * *");
     }
 
     // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)
-    Hangfire.RecurringJob.AddOrUpdate<Sankore.Modules.Leads.Features.Ingestion.Pull.LeadSourcePullOrchestratorJob>(
+    AddOrUpdate<Sankore.Modules.Leads.Features.Ingestion.Pull.LeadSourcePullOrchestratorJob>(
         "lead-source-pull-orchestrator",
         job => job.ExecuteAsync(),
         "* * * * *");
@@ -374,6 +399,15 @@ try
     app.Logger.LogInformation(
         "Registered recurring Hangfire jobs for {TenantCount} active tenant(s), plus the global pull orchestrator.",
         activeTenants.Count);
+
+    if (skipped.Count > 0)
+    {
+        app.Logger.LogInformation(
+            "Skipped {SkippedCount} recurring job(s) paused from the Hangfire dashboard: {SkippedJobIds}. "
+            + "They will not run until resumed there.",
+            skipped.Count,
+            string.Join(", ", skipped));
+    }
 }
 catch (Exception ex)
 {

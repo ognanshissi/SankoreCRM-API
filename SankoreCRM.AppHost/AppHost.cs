@@ -102,4 +102,13 @@ builder.AddProject<Projects.Sankore_Api>("sankore-api")
     .WaitFor(db)
     .WaitFor(redis);
 
+// Hangfire dashboard — visualise, requeue and pause background jobs.
+// Dashboard only: it runs no Hangfire server, so it never competes with
+// sankore-api for work. Same database, hence the same Hangfire storage.
+builder.AddProject<Projects.Sankore_Hangfire>("sankore-hangfire")
+    .WithReference(db)
+    .WithEnvironment("Hangfire__Dashboard__Username", "admin")
+    .WithEnvironment("Hangfire__Dashboard__Password", "dev-only-change-me")
+    .WaitFor(db);
+
 builder.Build().Run();

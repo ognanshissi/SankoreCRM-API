@@ -19,6 +19,9 @@ dotnet test src/Modules/Leads/Sankore.Modules.Leads.Tests --filter "FullyQualifi
 # Run the API (requires Postgres + secrets configured)
 dotnet run --project src/Bootstrapper/Sankore.Api
 
+# Run the Hangfire dashboard (http://localhost:5210/hangfire, basic auth)
+dotnet run --project src/Bootstrapper/Sankore.Hangfire
+
 # Run via .NET Aspire (auto-provisions Postgres, RabbitMQ, Seq via Docker)
 dotnet run --project SankoreCRM.AppHost
 ```
@@ -28,6 +31,13 @@ dotnet run --project SankoreCRM.AppHost
 dotnet user-secrets init --project src/Bootstrapper/Sankore.Api
 dotnet user-secrets set "Jwt:SigningKey" "some-dev-only-secret-at-least-32-bytes-long" --project src/Bootstrapper/Sankore.Api
 dotnet user-secrets set "ConnectionStrings:Database" "Host=localhost;Port=5432;Database=sankore_crm_dev;Username=sankore_app;Password=devpassword" --project src/Bootstrapper/Sankore.Api
+
+# Hangfire dashboard credentials — it points at the SAME database as the API and
+# denies every request when no password is set.
+dotnet user-secrets init --project src/Bootstrapper/Sankore.Hangfire
+dotnet user-secrets set "Hangfire:Dashboard:Username" "admin" --project src/Bootstrapper/Sankore.Hangfire
+dotnet user-secrets set "Hangfire:Dashboard:Password" "some-dev-only-password" --project src/Bootstrapper/Sankore.Hangfire
+dotnet user-secrets set "ConnectionStrings:Database" "Host=localhost;Port=5432;Database=sankore_crm_dev;Username=sankore_app;Password=devpassword" --project src/Bootstrapper/Sankore.Hangfire
 ```
 
 ### EF Core migrations (always specify --context to avoid IdentityDbContext ambiguity)
@@ -65,6 +75,7 @@ SankoreCRM.AppHost/           ← Aspire orchestrator (provisions Postgres, Rabb
 SankoreCRM.ServiceDefaults/   ← Aspire shared defaults (health checks, telemetry)
 src/
   Bootstrapper/Sankore.Api/        ← Single host; only project referencing all module main assemblies
+  Bootstrapper/Sankore.Hangfire/   ← Hangfire dashboard host (no Hangfire server — see below)
   Shared/Sankore.Shared.Kernel/    ← AggregateRoot, Result<T>, DomainEvent, Address, GeoPoint,
                                       ITenantContext, Permissions, Roles. Zero deps.
   Shared/Sankore.Shared.Infrastructure/ ← MediatR behaviors, Outbox, Auth policies
@@ -104,6 +115,10 @@ AdministrationModule.cs                                   ← calls app.MapXxxEn
 **Authorization:** `AddSankoreAuthorization()` auto-generates one policy per entry in `Permissions.All` (policy name = `permission.Code`, e.g. `"agency:create"`). Add new permissions to `Sankore.Shared.Kernel/Permissions.cs` and include in `Permissions.All`. Endpoints call `.RequireAuthorization("permission:code")`.
 
 **Messaging:** MassTransit in-memory by default. Set `Messaging:UseRabbitMq=true` for RabbitMQ.
+
+**Background jobs (Hangfire):** `Sankore.Api` owns execution — it calls `AddHangfireServer()` and registers every recurring job at startup. `Sankore.Hangfire` is a separate host that mounts *only* the dashboard (`/hangfire`) against the same Postgres storage, behind HTTP Basic auth (`Hangfire:Dashboard:Username` / `:Password`, denies everything when unset). It references the Leads and Administration assemblies purely so job types resolve for display — it registers none of their services and runs no Hangfire server.
+
+Its extra **Job control** page adds pause/resume, which Hangfire OSS has no equivalent for: `RecurringJobPauseStore` (`Sankore.Shared.Infrastructure/BackgroundJobs/`) snapshots a recurring job's definition into Hangfire's own storage, removes it from the schedule, and records its id in the `sankore:paused-recurring-jobs` set. `Sankore.Api` skips re-registering any id in that set, so a pause survives a restart — without that guard `RecurringJob.AddOrUpdate` would resurrect it on the next boot.
 
 ### Administration module specifics
 

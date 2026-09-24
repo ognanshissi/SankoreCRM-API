@@ -2,6 +2,9 @@ namespace Sankore.Modules.Leads.Tests.Features.LeadSources;
 
 using System.Text;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using NSubstitute;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.LeadSources.Sdk;
 using Sankore.Modules.Leads.Tests.TestSupport;
@@ -56,6 +59,48 @@ public sealed class SdkVersionTests : IDisposable
     }
 
     // ── File store ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void ResolveBasePath_defaults_to_the_web_root_not_the_build_output()
+    {
+        var env = Substitute.For<IWebHostEnvironment>();
+        env.WebRootPath.Returns("/srv/app/wwwroot");
+        env.ContentRootPath.Returns("/srv/app");
+
+        var path = LocalSdkFileStore.ResolveBasePath(EmptyConfig(), env);
+
+        path.Should().Be(Path.Combine("/srv/app/wwwroot", "sdk"));
+        path.Should().NotStartWith(AppContext.BaseDirectory);
+    }
+
+    [Fact]
+    public void ResolveBasePath_falls_back_to_content_root_when_web_root_is_missing()
+    {
+        var env = Substitute.For<IWebHostEnvironment>();
+        env.WebRootPath.Returns((string?)null!);
+        env.ContentRootPath.Returns("/srv/app");
+
+        LocalSdkFileStore.ResolveBasePath(EmptyConfig(), env)
+            .Should().Be(Path.Combine("/srv/app", "wwwroot", "sdk"));
+    }
+
+    [Fact]
+    public void ResolveBasePath_prefers_the_configured_storage_path()
+    {
+        var env = Substitute.For<IWebHostEnvironment>();
+        env.WebRootPath.Returns("/srv/app/wwwroot");
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Leads:SdkStoragePath"] = "/mnt/sdk",
+            })
+            .Build();
+
+        LocalSdkFileStore.ResolveBasePath(config, env).Should().Be(Path.GetFullPath("/mnt/sdk"));
+    }
+
+    private static IConfiguration EmptyConfig() => new ConfigurationBuilder().Build();
 
     [Fact]
     public async Task LocalSdkFileStore_write_and_read_round_trips()

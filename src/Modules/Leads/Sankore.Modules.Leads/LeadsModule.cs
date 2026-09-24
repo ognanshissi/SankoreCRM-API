@@ -166,9 +166,10 @@ public static class LeadsModule
         // Web ingest — captcha validator (stub MVP)
         services.AddSingleton<ICaptchaValidator, StubCaptchaValidator>();
 
-        // SDK file store — local filesystem (wwwroot/sdk/)
-        services.AddSingleton<ISdkFileStore>(
-            new LocalSdkFileStore(Path.Combine(AppContext.BaseDirectory, "wwwroot", "sdk")));
+        // SDK file store — local filesystem, rooted at Leads:SdkStoragePath or <content root>/wwwroot/sdk
+        services.AddSingleton<ISdkFileStore>(sp => new LocalSdkFileStore(
+            LocalSdkFileStore.ResolveBasePath(
+                config, sp.GetRequiredService<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>())));
 
         // Import — file storage for uploaded CSV files
         services.AddSingleton<IImportFileStore, LocalImportFileStore>();

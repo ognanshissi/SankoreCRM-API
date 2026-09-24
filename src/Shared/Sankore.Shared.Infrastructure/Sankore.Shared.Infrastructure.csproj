@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <PackageReference Include="MediatR" />
+    <!-- Hangfire.Core only (no server, no ASP.NET integration): RecurringJobPauseStore
+         is shared by the job host (Sankore.Api) and the dashboard host (Sankore.Hangfire). -->
+    <PackageReference Include="Hangfire.Core" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="MassTransit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />

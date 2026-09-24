@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Hangfire</RootNamespace>
+    <UserSecretsId>sankore-crm-hangfire-local</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hangfire.AspNetCore" />
+    <PackageReference Include="Hangfire.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\SankoreCRM.ServiceDefaults\SankoreCRM.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
+
+    <!-- Type resolution ONLY. This host runs no Hangfire server and registers none
+         of these modules' services; it references them so UseSimpleAssemblyNameTypeSerializer
+         can resolve the job types stored in the database. Without them every Sankore
+         job renders as "Can not find the target method" and a paused job's definition
+         cannot be deserialized on resume. -->
+    <ProjectReference Include="..\..\Modules\Leads\Sankore.Modules.Leads\Sankore.Modules.Leads.csproj" />
+    <ProjectReference Include="..\..\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\..\.dockerignore">
+      <Link>.dockerignore</Link>
+    </Content>
+  </ItemGroup>
+
+</Project>

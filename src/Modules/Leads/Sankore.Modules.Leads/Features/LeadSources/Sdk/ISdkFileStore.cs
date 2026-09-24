@@ -1,5 +1,8 @@
 namespace Sankore.Modules.Leads.Features.LeadSources.Sdk;
 
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+
 /// <summary>
 /// Stores and serves SDK JS files. MVP: local filesystem (wwwroot/sdk/).
 /// </summary>
@@ -12,6 +15,25 @@ internal interface ISdkFileStore
 
 internal sealed class LocalSdkFileStore(string basePath) : ISdkFileStore
 {
+    /// <summary>
+    /// Resolves the SDK storage root: <c>Leads:SdkStoragePath</c> when configured (point it at a
+    /// mounted volume so published versions survive a restart), otherwise <c>sdk/</c> under the
+    /// host's web root — where the shipped SDK actually lives. Never AppContext.BaseDirectory:
+    /// wwwroot is a static web asset and is not copied to the build output.
+    /// </summary>
+    public static string ResolveBasePath(IConfiguration config, IWebHostEnvironment env)
+    {
+        var configured = config["Leads:SdkStoragePath"];
+        if (!string.IsNullOrWhiteSpace(configured)) return Path.GetFullPath(configured);
+
+        // WebRootPath is null when the wwwroot folder does not exist yet.
+        var webRoot = string.IsNullOrEmpty(env.WebRootPath)
+            ? Path.Combine(env.ContentRootPath, "wwwroot")
+            : env.WebRootPath;
+
+        return Path.Combine(webRoot, "sdk");
+    }
+
     public async Task WriteAsync(string version, string fileName, byte[] content, CancellationToken ct)
     {
         var dir = Path.Combine(basePath, version);
