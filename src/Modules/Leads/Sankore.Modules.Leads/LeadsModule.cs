@@ -177,6 +177,21 @@ public static class LeadsModule
         return services;
     }
 
+    /// <summary>
+    /// Runs migrations and seeds the SDK builds shipped in wwwroot/sdk.
+    /// Called from the startup scope in Program.cs.
+    /// </summary>
+    public static async Task InitializeAsync(IServiceProvider sp)
+    {
+        var db = sp.GetRequiredService<Infrastructure.LeadsDbContext>();
+        await db.Database.MigrateAsync();
+
+        await Features.LeadSources.Sdk.SdkVersionSeeder.SeedAsync(
+            db,
+            sp.GetRequiredService<Features.LeadSources.Sdk.ISdkFileStore>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Infrastructure.LeadsDbContext>>());
+    }
+
     public static IEndpointRouteBuilder MapLeadsEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("leads");

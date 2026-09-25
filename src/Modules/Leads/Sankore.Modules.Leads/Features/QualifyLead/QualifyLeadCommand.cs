@@ -17,7 +17,9 @@ internal sealed record QualifyLeadCommand(
     int? Score = null,
     string TriggerEvent = "MANUAL_QUALIFICATION",
     Guid? TemplateId = null,
-    IReadOnlyList<QualificationAnswerInput>? Answers = null
+    IReadOnlyList<QualificationAnswerInput>? Answers = null,
+    /// <summary>UpdatedAt the caller last read; null skips the staleness check.</summary>
+    DateTimeOffset? ExpectedUpdatedAt = null
 ) : IRequest<Result<QualifyLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

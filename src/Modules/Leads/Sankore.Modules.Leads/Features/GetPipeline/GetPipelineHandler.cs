@@ -76,7 +76,8 @@ internal sealed class GetPipelineHandler(LeadsDbContext db)
                         l.IntentLevel.ToString(),
                         l.OwnerId,
                         l.CreatedAt,
-                        l.LastActivityAt))
+                        l.LastActivityAt,
+                        l.UpdatedAt))
                     .ToListAsync(ct);
             }
             else

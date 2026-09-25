@@ -27,4 +27,6 @@ public sealed record PipelineCard(
     string IntentLevel,
     Guid? OwnerId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? LastActivityAt);
+    DateTimeOffset? LastActivityAt,
+    /// <summary>Echo back as expectedUpdatedAt when moving the card, to detect concurrent edits.</summary>
+    DateTimeOffset UpdatedAt);

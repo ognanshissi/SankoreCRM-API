@@ -50,6 +50,11 @@ internal sealed class UpdateLeadOwnerHandler(
         if (newOwner is null)
             return Result.Fail("NEW_OWNER_NOT_FOUND");
 
+        // Staleness is checked after authorization so a caller who may not touch this
+        // lead learns nothing about whether it changed.
+        if (lead.IsStale(cmd.ExpectedUpdatedAt))
+            return Result.Fail(LeadConcurrency.ConflictError);
+
         var previousOwnerId = lead.OwnerId;
 
         var result = lead.SetOwner(cmd.OwnerId);

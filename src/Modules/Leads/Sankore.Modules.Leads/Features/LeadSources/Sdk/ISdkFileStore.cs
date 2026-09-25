@@ -11,6 +11,9 @@ internal interface ISdkFileStore
     Task WriteAsync(string version, string fileName, byte[] content, CancellationToken ct);
     Task<byte[]?> ReadAsync(string version, string fileName, CancellationToken ct);
     bool Exists(string version, string fileName);
+
+    /// <summary>Version folders currently present in the store (unordered).</summary>
+    IEnumerable<string> ListVersions();
 }
 
 internal sealed class LocalSdkFileStore(string basePath) : ISdkFileStore
@@ -50,4 +53,9 @@ internal sealed class LocalSdkFileStore(string basePath) : ISdkFileStore
 
     public bool Exists(string version, string fileName)
         => File.Exists(Path.Combine(basePath, version, fileName));
+
+    public IEnumerable<string> ListVersions()
+        => Directory.Exists(basePath)
+            ? Directory.EnumerateDirectories(basePath).Select(d => Path.GetFileName(d)!)
+            : [];
 }

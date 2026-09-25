@@ -139,7 +139,7 @@ internal sealed class EmailOutboxProcessor(
         try
         {
             var provider = await resolver.ResolveAsync(message.TenantId, ct);
-
+            
             var rendered = await renderer.RenderAsync(
                 message.TenantId, message.TemplateKey, message.Locale, message.TemplateDataJson, ct);
 

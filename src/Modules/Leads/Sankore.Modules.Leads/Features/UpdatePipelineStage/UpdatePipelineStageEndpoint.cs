@@ -17,6 +17,7 @@ public static class UpdatePipelineStageEndpoint
             .RequireAuthorization(Permissions.CanMovePipelineStage.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
             .WithOpenApi();
 
         return app;
@@ -28,14 +29,21 @@ public static class UpdatePipelineStageEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var result = await sender.Send(new UpdatePipelineStageCommand(leadId, req.Stage), ct);
+        var result = await sender.Send(
+            new UpdatePipelineStageCommand(leadId, req.Stage, req.ExpectedUpdatedAt), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
-            : result.Error == "LEAD_NOT_FOUND"
-                ? Results.NotFound()
-                : Results.Problem(title: "Stage update failed", detail: result.Error, statusCode: 422);
+            : result.Error switch
+            {
+                "LEAD_NOT_FOUND" => Results.NotFound(),
+                "CONFLICT"       => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(title: "Stage update failed", detail: result.Error, statusCode: 422)
+            };
     }
 }
 
-public sealed record UpdatePipelineStageRequest(PipelineStage Stage);
+public sealed record UpdatePipelineStageRequest(
+    PipelineStage Stage,
+    /// <summary>UpdatedAt read with the lead; echo it back to detect concurrent edits.</summary>
+    DateTimeOffset? ExpectedUpdatedAt = null);

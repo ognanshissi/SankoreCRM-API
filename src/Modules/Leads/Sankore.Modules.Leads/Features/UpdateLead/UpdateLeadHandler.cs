@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.UpdateLead;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
@@ -18,6 +19,9 @@ internal sealed class UpdateLeadHandler(LeadsDbContext db)
 
         if (lead is null)
             return Result.Fail("LEAD_NOT_FOUND");
+
+        if (lead.IsStale(cmd.ExpectedUpdatedAt))
+            return Result.Fail(LeadConcurrency.ConflictError);
 
         GeoPoint? location = null;
         if (cmd.Latitude.HasValue && cmd.Longitude.HasValue)

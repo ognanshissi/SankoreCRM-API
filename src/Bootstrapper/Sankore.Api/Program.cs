@@ -313,8 +313,7 @@ using (var scope = app.Services.CreateScope())
 
     // Each module owns its own migration + initialization.
     // AdministrationModule.InitializeAsync runs migrations AND seeds system roles.
-    var leadsDb = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
-    await leadsDb.Database.MigrateAsync();
+    await LeadsModule.InitializeAsync(scope.ServiceProvider);
     await AdministrationModule.InitializeAsync(scope.ServiceProvider);
     await WorkflowModule.InitializeAsync(scope.ServiceProvider);
     await NotificationsModule.InitializeAsync(scope.ServiceProvider);

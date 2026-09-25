@@ -17,6 +17,7 @@ public static class UpdateLeadOwnerEndpoint
             .RequireAuthorization(Permissions.CanAssignLead.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
@@ -37,13 +38,17 @@ public static class UpdateLeadOwnerEndpoint
             OwnerId:          req.OwnerId,
             AssignedBy:       assignedBy,
             AssignmentMethod: req.AssignmentMethod ?? "Manual",
-            Reason:           req.Reason), ct);
+            Reason:           req.Reason,
+            ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
-            : result.Error == "LEAD_NOT_FOUND"
-                ? Results.NotFound()
-                : Results.Problem(title: "Owner update failed", detail: result.Error, statusCode: 422);
+            : result.Error switch
+            {
+                "LEAD_NOT_FOUND" => Results.NotFound(),
+                "CONFLICT"       => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(title: "Owner update failed", detail: result.Error, statusCode: 422)
+            };
     }
 }
 
@@ -51,4 +56,6 @@ public sealed record UpdateLeadOwnerRequest(
     Guid OwnerId,
     string? Reason = null,
     /// <summary>Manual | Import | System. Defaults to Manual.</summary>
-    string? AssignmentMethod = null);
+    string? AssignmentMethod = null,
+    /// <summary>UpdatedAt read with the lead; echo it back to detect concurrent edits.</summary>
+    DateTimeOffset? ExpectedUpdatedAt = null);

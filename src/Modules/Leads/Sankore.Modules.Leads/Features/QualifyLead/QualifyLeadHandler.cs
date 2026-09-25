@@ -23,6 +23,9 @@ internal sealed class QualifyLeadHandler(
         if (lead is null)
             return Result.Fail<QualifyLeadResult>("LEAD_NOT_FOUND");
 
+        if (lead.IsStale(cmd.ExpectedUpdatedAt))
+            return Result.Fail<QualifyLeadResult>(LeadConcurrency.ConflictError);
+
         string factorsJson;
         int score;
         double completeness = lead.QualificationCompleteness; // keep existing unless template used

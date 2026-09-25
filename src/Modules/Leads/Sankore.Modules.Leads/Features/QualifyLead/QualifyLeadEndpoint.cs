@@ -17,6 +17,7 @@ public static class QualifyLeadEndpoint
             .RequireAuthorization(Permissions.CanQualifyLead.Code)
             .Produces<QualifyLeadResult>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
@@ -38,13 +39,19 @@ public static class QualifyLeadEndpoint
             Score:       req.Score,
             TriggerEvent: req.TriggerEvent ?? "MANUAL_QUALIFICATION",
             TemplateId:  req.TemplateId,
-            Answers:     req.Answers), ct);
+            Answers:     req.Answers,
+            ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
 
         if (!result.IsSuccess)
         {
-            return result.Error is "LEAD_NOT_FOUND" or "QUALIFICATION_TEMPLATE_NOT_FOUND"
-                ? Results.NotFound(new { error = result.Error })
-                : Results.Problem(title: "Qualification failed", detail: result.Error, statusCode: 422);
+            return result.Error switch
+            {
+                "LEAD_NOT_FOUND" or "QUALIFICATION_TEMPLATE_NOT_FOUND"
+                    => Results.NotFound(new { error = result.Error }),
+                "CONFLICT" => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(
+                    title: "Qualification failed", detail: result.Error, statusCode: 422)
+            };
         }
 
         return Results.Ok(result.Value);
@@ -64,4 +71,6 @@ public sealed record QualifyLeadRequest(
     IReadOnlyList<QualificationAnswerInput>? Answers = null,
     /// <summary>Explicit override score (0-100). Ignored when TemplateId is provided.</summary>
     int? Score = null,
-    string? TriggerEvent = null);
+    string? TriggerEvent = null,
+    /// <summary>UpdatedAt read with the lead; echo it back to detect concurrent edits.</summary>
+    DateTimeOffset? ExpectedUpdatedAt = null);

@@ -3,7 +3,9 @@ namespace Sankore.Modules.Leads.Tests.Features.LeadSources;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.LeadSources.Sdk;
@@ -101,6 +103,57 @@ public sealed class SdkVersionTests : IDisposable
     }
 
     private static IConfiguration EmptyConfig() => new ConfigurationBuilder().Build();
+
+    // ── Seeder ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Seeder_registers_shipped_versions_and_marks_the_highest_current()
+    {
+        await WriteShippedAsync("1.0.0", "v1");
+        await WriteShippedAsync("1.2.0", "v12");
+
+        await using var db = _factory.CreateContext();
+        await SdkVersionSeeder.SeedAsync(db, _fileStore, NullLogger.Instance);
+
+        var seeded = await db.SdkVersions.IgnoreQueryFilters().ToListAsync();
+        seeded.Should().HaveCount(2);
+        seeded.Single(v => v.IsCurrent).Version.Should().Be("1.2.0");
+        seeded.Should().OnlyContain(v => v.SriHash.StartsWith("sha384-", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Seeder_is_idempotent_and_never_demotes_an_uploaded_version()
+    {
+        await WriteShippedAsync("1.0.0", "v1");
+
+        await using var db = _factory.CreateContext();
+        var uploaded = SdkVersion.Publish("1.5.0", 1, "sha384-uploaded");
+        db.SdkVersions.Add(uploaded);
+        await db.SaveChangesAsync();
+
+        await SdkVersionSeeder.SeedAsync(db, _fileStore, NullLogger.Instance);
+        await SdkVersionSeeder.SeedAsync(db, _fileStore, NullLogger.Instance);
+
+        var seeded = await db.SdkVersions.IgnoreQueryFilters().ToListAsync();
+        seeded.Should().HaveCount(2);
+        seeded.Single(v => v.IsCurrent).Version.Should().Be("1.5.0");
+    }
+
+    [Fact]
+    public async Task Seeder_ignores_folders_that_are_not_a_version()
+    {
+        await WriteShippedAsync("1.0.0", "v1");
+        await WriteShippedAsync("latest", "junk");
+
+        await using var db = _factory.CreateContext();
+        await SdkVersionSeeder.SeedAsync(db, _fileStore, NullLogger.Instance);
+
+        var seeded = await db.SdkVersions.IgnoreQueryFilters().ToListAsync();
+        seeded.Should().ContainSingle().Which.Version.Should().Be("1.0.0");
+    }
+
+    private Task WriteShippedAsync(string version, string body) => _fileStore.WriteAsync(
+        version, "forms.min.js", Encoding.UTF8.GetBytes(body), CancellationToken.None);
 
     [Fact]
     public async Task LocalSdkFileStore_write_and_read_round_trips()

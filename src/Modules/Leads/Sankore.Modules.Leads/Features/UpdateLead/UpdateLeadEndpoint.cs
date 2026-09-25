@@ -18,6 +18,7 @@ public static class UpdateLeadEndpoint
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
             .WithOpenApi();
 
         return app;
@@ -45,13 +46,17 @@ public static class UpdateLeadEndpoint
             Comment:          req.Comment,
             Latitude:         req.Latitude,
             Longitude:        req.Longitude,
-            PreferredAgencyId: req.PreferredAgencyId), ct);
+            PreferredAgencyId: req.PreferredAgencyId,
+            ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
-            : result.Error == "LEAD_NOT_FOUND"
-                ? Results.NotFound()
-                : Results.Problem(title: "Update failed", detail: result.Error, statusCode: 422);
+            : result.Error switch
+            {
+                "LEAD_NOT_FOUND" => Results.NotFound(),
+                "CONFLICT"       => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(title: "Update failed", detail: result.Error, statusCode: 422)
+            };
     }
 }
 
@@ -70,4 +75,6 @@ public sealed record UpdateLeadRequest(
     string? Comment = null,
     double? Latitude = null,
     double? Longitude = null,
-    Guid? PreferredAgencyId = null);
+    Guid? PreferredAgencyId = null,
+    /// <summary>UpdatedAt read with the lead; echo it back to detect concurrent edits.</summary>
+    DateTimeOffset? ExpectedUpdatedAt = null);

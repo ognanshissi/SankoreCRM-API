@@ -17,6 +17,7 @@ public static class CloseLeadEndpoint
             .RequireAuthorization(Permissions.CanCloseLead.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
             .WithOpenApi();
 
         return app;
@@ -28,14 +29,22 @@ public static class CloseLeadEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var result = await sender.Send(new CloseLeadCommand(leadId, req.Reason, req.Detail), ct);
+        var result = await sender.Send(
+            new CloseLeadCommand(leadId, req.Reason, req.Detail, req.ExpectedUpdatedAt), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
-            : result.Error == "LEAD_NOT_FOUND"
-                ? Results.NotFound()
-                : Results.Problem(title: "Close failed", detail: result.Error, statusCode: 422);
+            : result.Error switch
+            {
+                "LEAD_NOT_FOUND" => Results.NotFound(),
+                "CONFLICT"       => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(title: "Close failed", detail: result.Error, statusCode: 422)
+            };
     }
 }
 
-public sealed record CloseLeadRequest(LeadCloseReason Reason, string? Detail = null);
+public sealed record CloseLeadRequest(
+    LeadCloseReason Reason,
+    string? Detail = null,
+    /// <summary>UpdatedAt read with the lead; echo it back to detect concurrent edits.</summary>
+    DateTimeOffset? ExpectedUpdatedAt = null);

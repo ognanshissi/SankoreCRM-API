@@ -22,7 +22,9 @@ internal sealed record UpdateLeadCommand(
     string? Comment,
     double? Latitude,
     double? Longitude,
-    Guid? PreferredAgencyId
+    Guid? PreferredAgencyId,
+    /// <summary>UpdatedAt the caller last read; null skips the staleness check.</summary>
+    DateTimeOffset? ExpectedUpdatedAt = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";
