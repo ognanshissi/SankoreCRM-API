@@ -86,15 +86,63 @@ public sealed class QualificationQuestion
             OptionsJson     = options is { Length: > 0 }
                 ? JsonSerializer.Serialize(options)
                 : null,
-            RulesJson       = rules is { Count: > 0 }
-                ? JsonSerializer.Serialize(rules.Select(r => new
-                  {
-                      triggerQuestionId = r.TriggerQuestionId,
-                      triggerValue      = r.TriggerValue,
-                      action            = r.Action.ToString()
-                  }))
-                : null
+            RulesJson       = SerializeRules(rules)
         };
+
+    /// <summary>
+    /// Copies this question onto another template with a fresh id, mapping its section
+    /// reference onto the target's own section. Conditional rules are carried over
+    /// verbatim and must then be rewired with <see cref="RemapRuleTriggers"/>, once every
+    /// sibling question has been cloned and its new id is known.
+    /// </summary>
+    internal QualificationQuestion CloneInto(
+        Guid templateId,
+        IReadOnlyDictionary<Guid, Guid> sectionIdMap)
+        => new()
+        {
+            Id              = Guid.NewGuid(),
+            TemplateId      = templateId,
+            SectionId       = SectionId is { } sectionId && sectionIdMap.TryGetValue(sectionId, out var clonedSectionId)
+                ? clonedSectionId
+                : null,
+            Label           = Label,
+            HelpText        = HelpText,
+            PlaceholderText = PlaceholderText,
+            Type            = Type,
+            Weight          = Weight,
+            IsRequired      = IsRequired,
+            Order           = Order,
+            MinValue        = MinValue,
+            MaxValue        = MaxValue,
+            OptionsJson     = OptionsJson,
+            RulesJson       = RulesJson
+        };
+
+    /// <summary>
+    /// Rewrites this question's rule triggers from the source template's question ids to
+    /// the clone's. A rule whose trigger question is absent from the map is dropped: left
+    /// alone it would point at a question in another template and could never fire.
+    /// </summary>
+    internal void RemapRuleTriggers(IReadOnlyDictionary<Guid, Guid> questionIdMap)
+    {
+        if (RulesJson is null) return;
+
+        RulesJson = SerializeRules(GetRules()
+            .Where(r => questionIdMap.ContainsKey(r.TriggerQuestionId))
+            .Select(r => (questionIdMap[r.TriggerQuestionId], r.TriggerValue, r.Action))
+            .ToList());
+    }
+
+    private static string? SerializeRules(
+        IReadOnlyList<(Guid TriggerQuestionId, string TriggerValue, QuestionRuleAction Action)>? rules)
+        => rules is { Count: > 0 }
+            ? JsonSerializer.Serialize(rules.Select(r => new
+              {
+                  triggerQuestionId = r.TriggerQuestionId,
+                  triggerValue      = r.TriggerValue,
+                  action            = r.Action.ToString()
+              }))
+            : null;
 
     /// <summary>Returns the deserialized option labels, or an empty array for non-choice questions.</summary>
     public string[] GetOptions()

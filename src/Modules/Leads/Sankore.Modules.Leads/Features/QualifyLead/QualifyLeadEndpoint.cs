@@ -1,3 +1,5 @@
+using Sankore.Shared.Infrastructure.Auth;
+
 namespace Sankore.Modules.Leads.Features.QualifyLead;
 
 using MediatR;
@@ -27,15 +29,14 @@ public static class QualifyLeadEndpoint
     private static async Task<IResult> Handle(
         Guid leadId,
         QualifyLeadRequest req,
+        ICurrentUser  currentUser,
         ISender sender,
-        HttpContext http,
         CancellationToken ct)
     {
-        var qualifiedBy = http.User.GetUserId();
 
         var result = await sender.Send(new QualifyLeadCommand(
             LeadId:      leadId,
-            QualifiedBy: qualifiedBy,
+            QualifiedBy: currentUser.Id,
             Score:       req.Score,
             TriggerEvent: req.TriggerEvent ?? "MANUAL_QUALIFICATION",
             TemplateId:  req.TemplateId,

@@ -9,11 +9,13 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.QualificationTemplates.ArchiveQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.CreateQualificationTemplate;
+using Sankore.Modules.Leads.Features.QualificationTemplates.DuplicateQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.GetActiveTemplateForProduct;
 using Sankore.Modules.Leads.Features.QualificationTemplates.ResolveQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.GetQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.ListQualificationTemplates;
 using Sankore.Modules.Leads.Features.QualificationTemplates.PublishQualificationTemplate;
+using Sankore.Modules.Leads.Features.QualificationTemplates.UnarchiveQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.UpdateQualificationTemplate;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
@@ -74,6 +76,16 @@ public static class QualificationTemplatesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        group.MapPost("{templateId:guid}/duplicate", DuplicateTemplate)
+            .WithName("DuplicateQualificationTemplate")
+            .WithTags("Leads")
+            .WithSummary("Copy a template (Draft, Published or Archived) into a new editable Draft")
+            .RequireAuthorization(Permissions.CanManageQualificationTemplates.Code)
+            .Produces<Guid>(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         group.MapGet("resolve", ResolveTemplate)
             .WithName("ResolveQualificationTemplate")
             .WithTags("Leads")
@@ -81,6 +93,16 @@ public static class QualificationTemplatesEndpoints
             .RequireAuthorization(Permissions.CanQualifyLead.Code)
             .Produces<QualificationTemplateDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        group.MapPost("{templateId:guid}/unarchive", UnarchiveTemplate)
+            .WithName("UnarchiveQualificationTemplate")
+            .WithTags("Leads")
+            .WithSummary("Restore an archived template to Draft so it can be edited and published again")
+            .RequireAuthorization(Permissions.CanManageQualificationTemplates.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
         group.MapPost("{templateId:guid}/archive", ArchiveTemplate)
@@ -185,6 +207,36 @@ public static class QualificationTemplatesEndpoints
             : result.Error is "TEMPLATE_NOT_FOUND"
                 ? Results.NotFound(new { error = result.Error })
                 : Results.Problem(title: "Publish template failed", detail: result.Error, statusCode: 422);
+    }
+
+    private static async Task<IResult> DuplicateTemplate(
+        Guid templateId,
+        string? name,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(new DuplicateQualificationTemplateCommand(templateId, name), ct);
+
+        if (result.IsSuccess)
+            return Results.Created($"/api/v1/leads/qualification-templates/{result.Value}", result.Value);
+
+        return result.Error is "TEMPLATE_NOT_FOUND"
+            ? Results.NotFound(new { error = result.Error })
+            : Results.Problem(title: "Duplicate template failed", detail: result.Error, statusCode: 422);
+    }
+
+    private static async Task<IResult> UnarchiveTemplate(
+        Guid templateId,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(new UnarchiveQualificationTemplateCommand(templateId), ct);
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error is "TEMPLATE_NOT_FOUND"
+                ? Results.NotFound(new { error = result.Error })
+                : Results.Problem(title: "Unarchive template failed", detail: result.Error, statusCode: 422);
     }
 
     private static async Task<IResult> ArchiveTemplate(

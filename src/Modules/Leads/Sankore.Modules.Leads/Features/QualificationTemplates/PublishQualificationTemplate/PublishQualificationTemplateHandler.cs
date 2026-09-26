@@ -20,12 +20,21 @@ internal sealed class PublishQualificationTemplateHandler(LeadsDbContext db, Tim
         if (template is null)
             return Result.Fail("TEMPLATE_NOT_FOUND");
 
-        var result = template.Publish(clock.GetUtcNow());
-        if (result.IsFailure)
-            return result;
+        // Check first, write nothing yet: archiving the incumbent below is flushed
+        // immediately, and a template that turns out to be unpublishable must not
+        // take the live one down with it.
+        var canPublish = template.CanPublish();
+        if (canPublish.IsFailure)
+            return canPublish;
 
-        // Auto-archive the previous Published template for this product category (if any).
-        // Ensures at most one Published template per (TenantId, ProductCategory).
+        // Auto-archive the template currently live for this product category, so at most
+        // one is Published per (TenantId, ProductCategory).
+        //
+        // This is flushed BEFORE the new one is published. A single SaveChanges would let
+        // EF order the two UPDATEs freely, and publishing first trips the filtered unique
+        // index on (tenant_id, product_category) WHERE status = 'Published'. Both writes
+        // still commit or roll back together under the ambient TransactionScope that
+        // TransactionBehavior opens for every ICommand.
         if (template.ProductCategory is not null)
         {
             var superseded = await db.QualificationTemplates
@@ -36,9 +45,18 @@ internal sealed class PublishQualificationTemplateHandler(LeadsDbContext db, Tim
                             && t.Status == TemplateStatus.Published)
                 .ToListAsync(ct);
 
-            foreach (var prev in superseded)
-                prev.Archive();
+            if (superseded.Count > 0)
+            {
+                foreach (var prev in superseded)
+                    prev.Archive();
+
+                await db.SaveChangesAsync(ct);
+            }
         }
+
+        var result = template.Publish(clock.GetUtcNow());
+        if (result.IsFailure)
+            return result;
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();
