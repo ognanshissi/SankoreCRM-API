@@ -34,6 +34,10 @@ internal sealed class AdminResetPasswordHandler(
         if (target.Status == UserStatus.Disabled)
             return Result.Fail("Cannot reset password for a disabled user. Re-activate the account first.");
 
+        // As administrator, I can activate an account while resetting the password if not
+        if (target.Status == UserStatus.PendingActivation)
+            target.Activate();
+
         // Check password-reuse policy against the last N hashes.
         var recentHashes = await db.PasswordHistories
             .Where(p => p.UserId == target.Id)
