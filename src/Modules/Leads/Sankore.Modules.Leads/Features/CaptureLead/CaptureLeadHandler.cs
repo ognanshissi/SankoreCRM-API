@@ -94,7 +94,12 @@ public sealed class CaptureLeadHandler(
         // ── Create the lead ───────────────────────────────────────────────────
         var lead = Lead.Capture(
             tenantId:             cmd.TenantId,
-            fullName:             $"{cmd.FirstName} {cmd.LastName}",
+            // FullName is the authoritative field; first/last are optional refinements.
+            // Composing it blindly produced " " for callers that only send FullName
+            // (file import, web forms), which Lead.Capture rejects.
+            fullName:             string.IsNullOrWhiteSpace(cmd.FullName)
+                                      ? $"{cmd.FirstName} {cmd.LastName}".Trim()
+                                      : cmd.FullName,
             phoneNumber:          cmd.PhoneNumber,
             source:               cmd.Source,
             interestedProduct:    cmd.InterestedProduct,

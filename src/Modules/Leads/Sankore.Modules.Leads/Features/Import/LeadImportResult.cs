@@ -5,7 +5,8 @@ using Sankore.Modules.Leads.Domain;
 public sealed record LeadImportStatusResponse(
     Guid ImportJobId,
     LeadImportStatus Status,
-    string OriginalFileName,
+    LeadImportSourceType SourceType,
+    string? OriginalFileName,
     int TotalRows,
     int Succeeded,
     int Skipped,

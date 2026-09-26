@@ -69,7 +69,9 @@ public static class NotificationsModule
 
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(typeof(NotificationsModule).Assembly));
-        services.AddValidatorsFromAssembly(typeof(NotificationsModule).Assembly);
+        // includeInternalTypes: validators here are mostly `internal sealed`, and the
+        // assembly scan skips those by default — without this they never run.
+        services.AddValidatorsFromAssembly(typeof(NotificationsModule).Assembly, includeInternalTypes: true);
 
         return services;
     }

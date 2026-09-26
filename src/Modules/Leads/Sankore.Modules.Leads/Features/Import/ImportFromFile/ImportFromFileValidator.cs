@@ -1,10 +1,10 @@
-namespace Sankore.Modules.Leads.Features.Import;
+namespace Sankore.Modules.Leads.Features.Import.ImportFromFile;
 
 using FluentValidation;
 
-internal sealed class ImportLeadsValidator : AbstractValidator<ImportLeadsCommand>
+public sealed class ImportFromFileValidator : AbstractValidator<ImportFromFileCommand>
 {
-    public ImportLeadsValidator()
+    public ImportFromFileValidator()
     {
         RuleFor(x => x.TenantId).NotEmpty();
         RuleFor(x => x.InitiatedBy).NotEmpty();

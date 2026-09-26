@@ -4,6 +4,7 @@ using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Sheets.v4;
 using Microsoft.Extensions.Options;
+using Sankore.Shared.Infrastructure.Google;
 
 /// <summary>
 /// Reads user rows from a Google Sheets spreadsheet.

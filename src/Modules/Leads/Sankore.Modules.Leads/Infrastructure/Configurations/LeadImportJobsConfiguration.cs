@@ -14,5 +14,9 @@ public class LeadImportJobsConfiguration: IEntityTypeConfiguration<LeadImportJob
                 v => v.ToString(),
                 v => Enum.Parse<LeadImportStatus>(v))
             .HasMaxLength(20);
+
+        b.Property(j => j.SourceType).HasConversion<string>().HasMaxLength(30).IsRequired();
+        b.Property(j => j.SourceReference).IsRequired();
+        b.Property(j => j.DefaultsJson).HasColumnType("jsonb");
     }
 }

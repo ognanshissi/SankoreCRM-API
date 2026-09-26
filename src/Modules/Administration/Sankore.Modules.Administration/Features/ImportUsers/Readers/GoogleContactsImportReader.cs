@@ -5,6 +5,7 @@ using Google.Apis.PeopleService.v1;
 using Google.Apis.PeopleService.v1.Data;
 using Google.Apis.Services;
 using Microsoft.Extensions.Options;
+using Sankore.Shared.Infrastructure.Google;
 
 /// <summary>
 /// Reads contacts from Google People API (Google Contacts) and maps them to import rows.

@@ -44,6 +44,7 @@ public static class GetImportStatusEndpoint
         return Results.Ok(new LeadImportStatusResponse(
             ImportJobId: job.Id,
             Status: job.Status,
+            SourceType: job.SourceType,
             OriginalFileName: job.OriginalFileName,
             TotalRows: job.TotalRows,
             Succeeded: job.Succeeded,

@@ -17,9 +17,16 @@ public static class ClaimsPrincipalExtensions
         return Guid.Parse(claim.Value);
     }
 
+    /// <summary>
+    /// Reads the user id from the token's subject. JwtBearer maps the inbound "sub"
+    /// claim to <see cref="ClaimTypes.NameIdentifier"/>, so the mapped type is checked
+    /// first and the raw claim only as a fallback (for tokens read with mapping off).
+    /// <see cref="Auth.HttpContextCurrentUser"/> reads the same mapped claim.
+    /// </summary>
     public static Guid GetUserId(this ClaimsPrincipal user)
     {
-        var claim = user.FindFirst("sub")
+        var claim = user.FindFirst(ClaimTypes.NameIdentifier)
+            ?? user.FindFirst("sub")
             ?? throw new InvalidOperationException("Missing sub claim on the authenticated principal.");
 
         return Guid.Parse(claim.Value);

@@ -8,7 +8,7 @@ using CsvHelper;
 using CsvHelper.Configuration;
 
 /// <summary>
-/// Reads user rows from a CSV or Excel (.xlsx) file stored via IImportFileStore.
+/// Reads user rows from a CSV or Excel (.xlsx) file stored via IFileStore.
 /// </summary>
 public sealed class FileImportReader(IFileStore fileStore) : IUserImportSourceReader
 {

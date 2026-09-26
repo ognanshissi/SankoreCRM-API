@@ -57,7 +57,9 @@ public static class WorkflowModule
         // MediatR handlers + FluentValidation validators for all Features/* slices
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(typeof(WorkflowModule).Assembly));
-        services.AddValidatorsFromAssembly(typeof(WorkflowModule).Assembly);
+        // includeInternalTypes: validators here are mostly `internal sealed`, and the
+        // assembly scan skips those by default — without this they never run.
+        services.AddValidatorsFromAssembly(typeof(WorkflowModule).Assembly, includeInternalTypes: true);
 
         // SLA deadline checker — runs every minute, times out overdue steps.
         services.AddHostedService<SlaCheckerJob>();

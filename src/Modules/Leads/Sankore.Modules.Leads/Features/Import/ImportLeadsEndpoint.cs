@@ -4,14 +4,15 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
+/// <summary>
+/// Kept as an alias of <c>POST leads/import/file</c> so existing clients keep working.
+/// New integrations should call the source-specific routes in
+/// <see cref="ImportLeadsEndpoints"/>.
+/// </summary>
 public static class ImportLeadsEndpoint
 {
-    private static readonly string[] AllowedExtensions = [".csv"];
-    private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
-
     public static IEndpointRouteBuilder MapImportLeads(this IEndpointRouteBuilder app)
     {
         app.MapPost("import", Handle)
@@ -28,51 +29,14 @@ public static class ImportLeadsEndpoint
         return app;
     }
 
-    private static async Task<IResult> Handle(
+    private static Task<IResult> Handle(
         IFormFile file,
-        IImportFileStore fileStore,
+        IFileStore fileStore,
         ISender sender,
         HttpContext http,
+        string? interestedProduct,
+        string? preferredLanguage,
         CancellationToken ct)
-    {
-        // ── Validate the uploaded file ───────────────────────────────
-        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!AllowedExtensions.Contains(ext))
-            return Results.Problem(
-                title: "Invalid file type",
-                detail: $"Only CSV files are accepted. Received: {ext}",
-                statusCode: 400);
-
-        if (file.Length == 0)
-            return Results.Problem(
-                title: "Empty file",
-                detail: "The uploaded file is empty.",
-                statusCode: 400);
-
-        if (file.Length > MaxFileSize)
-            return Results.Problem(
-                title: "File too large",
-                detail: $"Maximum file size is {MaxFileSize / (1024 * 1024)} MB.",
-                statusCode: 400);
-
-        // ── Store the file (opaque reference) ────────────────────────
-        var tenantId = http.User.GetTenantId();
-        var userId = http.User.GetUserId();
-
-        await using var stream = file.OpenReadStream();
-        var fileRef = await fileStore.StoreAsync(stream, file.FileName, ct);
-
-        // ── Schedule the background import ───────────────────────────
-        var result = await sender.Send(
-            new ImportLeadsCommand(tenantId, userId, fileRef, file.FileName), ct);
-
-        return result.IsSuccess
-            ? Results.Accepted(
-                $"/api/v1/leads/import/{result.Value.ImportJobId}",
-                result.Value)
-            : Results.Problem(
-                title: "Import scheduling failed",
-                detail: result.Error,
-                statusCode: 422);
-    }
+        => ImportLeadsEndpoints.ImportFromFileEndpoint(
+            file, fileStore, sender, http, interestedProduct, preferredLanguage, source: null, ct);
 }

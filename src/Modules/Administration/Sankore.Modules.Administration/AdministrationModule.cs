@@ -31,6 +31,7 @@ using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Infrastructure.FileStore;
+using Sankore.Shared.Infrastructure.Google;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration;
@@ -72,20 +73,20 @@ public static class AdministrationModule
         // MediatR handlers + FluentValidation validators for all Features/* slices
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(typeof(AdministrationModule).Assembly));
-        services.AddValidatorsFromAssembly(typeof(AdministrationModule).Assembly);
+        // includeInternalTypes: validators here are mostly `internal sealed`, and the
+        // assembly scan skips those by default — without this they never run.
+        services.AddValidatorsFromAssembly(typeof(AdministrationModule).Assembly, includeInternalTypes: true);
 
         services.AddOutboxForModule<AdministrationDbContext>();
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
         // User import — multi-source (CSV, Excel, Google Sheets, Google Contacts)
-        services.AddSingleton<IFileStore,
-                              LocalFileStore>();
+        services.AddLocalFileStore();
         services.AddTransient<Features.ImportUsers.ProcessUserImportJob>();
         services.AddTransient<Features.ImportUsers.Readers.FileImportReader>();
         services.AddTransient<Features.ImportUsers.Readers.GoogleSheetsImportReader>();
         services.AddTransient<Features.ImportUsers.Readers.GoogleContactsImportReader>();
-        services.Configure<Features.ImportUsers.GoogleImportSettings>(
-            config.GetSection("GoogleImport"));
+        services.AddGoogleImportSettings(config);
 
         return services;
     }

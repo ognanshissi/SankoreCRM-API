@@ -17,6 +17,9 @@ using Sankore.Modules.Leads.Features.GetLead;
 using Sankore.Modules.Leads.Features.ConvertLead;
 using Sankore.Modules.Leads.Features.Bulk;
 using Sankore.Modules.Leads.Features.Import;
+using Sankore.Shared.Infrastructure.FileStore;
+using Sankore.Shared.Infrastructure.Google;
+using Sankore.Modules.Leads.Features.Import.ValidateImport;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Features.DismissDuplicate;
 using Sankore.Modules.Leads.Features.ListDismissals;
@@ -95,7 +98,9 @@ public static class LeadsModule
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(typeof(LeadsModule).Assembly));
 
-        services.AddValidatorsFromAssembly(typeof(LeadsModule).Assembly);
+        // includeInternalTypes: validators here are mostly `internal sealed`, and the
+        // assembly scan skips those by default — without this they never run.
+        services.AddValidatorsFromAssembly(typeof(LeadsModule).Assembly, includeInternalTypes: true);
 
         // DispatchLead slice-internal services
         services.AddScoped<CompatibilityScorer>();
@@ -171,8 +176,13 @@ public static class LeadsModule
             LocalSdkFileStore.ResolveBasePath(
                 config, sp.GetRequiredService<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>())));
 
-        // Import — file storage for uploaded CSV files
-        services.AddSingleton<IImportFileStore, LocalImportFileStore>();
+        // Import — multi-source (CSV, Excel, Google Sheets, Google Contacts)
+        services.AddLocalFileStore();
+        services.AddGoogleImportSettings(config);
+        services.AddTransient<Features.Import.ProcessLeadImportJob>();
+        services.AddTransient<Features.Import.Readers.FileImportReader>();
+        services.AddTransient<Features.Import.Readers.GoogleSheetsImportReader>();
+        services.AddTransient<Features.Import.Readers.GoogleContactsImportReader>();
 
         return services;
     }
@@ -247,6 +257,8 @@ public static class LeadsModule
 
         // Phase 10 — Import, Duplicate Detection & Merge
         group.MapImportLeads();
+        group.MapImportLeadsEndpoints();
+        group.MapValidateLeadImport();
         group.MapGetImportStatus();
         group.MapFindDuplicates();
         group.MapMergeLeads();
