@@ -18,6 +18,16 @@ public sealed class AppUser: IdentityUser<Guid>
     // ── Identity & tenancy ────────────────────────────────────────────────
     public Guid TenantId { get; private set; }
     public Guid? AgencyId { get; private set; }
+
+    /// <summary>
+    /// The user this one reports to, or null at the top of the line. Deliberately independent of
+    /// <see cref="AgencyId"/>: a regional director in head office manages branch staff, so a
+    /// reporting line that had to stay inside one agency would be unusable.
+    ///
+    /// No physical foreign key — it points at the same table, and a self-referencing FK turns
+    /// every delete into a cascade question. The reference is validated when it is set.
+    /// </summary>
+    public Guid? ReportsToUserId { get; private set; }
     public Agency? Agency { get; private set; } = null!;
     public string FullName { get; private set; } = null!;
 
@@ -233,6 +243,24 @@ public sealed class AppUser: IdentityUser<Guid>
         if (specialties is not null) Specialties = specialties;
         if (enableNotifications is not null) EnableNotifications = enableNotifications.Value;
     }
+
+    /// <summary>
+    /// Sets who this user reports to. The caller must have checked that the manager exists, is
+    /// active, and does not already report to this user — the aggregate cannot see other users,
+    /// and a reporting line is a graph invariant, not a local one.
+    /// </summary>
+    public void ReportTo(Guid managerUserId)
+    {
+        if (managerUserId == Guid.Empty)
+            throw new DomainException("A manager user id is required.", "User.Manager.Required");
+        if (managerUserId == Id)
+            throw new DomainException("A user cannot report to themselves.", "User.Manager.Self");
+
+        ReportsToUserId = managerUserId;
+    }
+
+    /// <summary>Puts this user at the top of their line. A no-op when there is no manager.</summary>
+    public void ClearReportingLine() => ReportsToUserId = null;
 
     /// <summary>Re-enables a previously disabled user.</summary>
     public void Reactivate()

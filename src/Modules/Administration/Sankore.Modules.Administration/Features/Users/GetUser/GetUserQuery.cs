@@ -21,4 +21,8 @@ public sealed record UserDto(
     bool IsAvailable,
     bool EnableNotifications,
     string AccountType,
-    List<string> Roles);
+    List<string> Roles,
+    /// <summary>Who this user reports to, or null at the top of the line.</summary>
+    Guid? ReportsToUserId,
+    /// <summary>Resolved for display so the caller does not need a second round-trip.</summary>
+    string? ReportsToFullName);

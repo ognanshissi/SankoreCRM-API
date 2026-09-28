@@ -42,6 +42,13 @@ internal sealed class GetUserHandler(
             user.IsAvailable,
             user.EnableNotifications,
             user.AccountType.ToString(),
-            roles));
+            roles,
+            user.ReportsToUserId,
+            user.ReportsToUserId is null
+                ? null
+                : await db.Users
+                    .Where(u => u.Id == user.ReportsToUserId)
+                    .Select(u => u.FullName)
+                    .FirstOrDefaultAsync(ct)));
     }
 }

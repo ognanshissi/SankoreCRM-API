@@ -51,6 +51,12 @@ internal sealed class ListUsersHandler(
                 u.IsAvailable,
                 u.EnableNotifications,
                 u.AccountType,
+                u.ReportsToUserId,
+                // Correlated sub-query rather than a second round-trip per row: one page of users
+                // stays one query whatever the page size.
+                ReportsToFullName = u.ReportsToUserId == null
+                    ? null
+                    : db.Users.Where(m => m.Id == u.ReportsToUserId).Select(m => m.FullName).FirstOrDefault(),
             })
             .ToListAsync(ct);
 
@@ -80,7 +86,9 @@ internal sealed class ListUsersHandler(
                 u.IsAvailable,
                 u.EnableNotifications,
                 u.AccountType.ToString(),
-                rolesByUser.TryGetValue(u.Id, out var r) ? r : []))
+                rolesByUser.TryGetValue(u.Id, out var r) ? r : [],
+                u.ReportsToUserId,
+                u.ReportsToFullName))
             .ToList();
 
         return Result.Ok(new ListUsersResult(items, totalCount, request.Page, request.PageSize));

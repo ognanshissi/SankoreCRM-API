@@ -61,6 +61,9 @@ public static class Permissions
     public static readonly PermissionItem CanReactivateUser =
         new("user:reactivate", "Reactivate User", ApplicationModules.Administration, "reactivate");
 
+    public static readonly PermissionItem CanAssignUserManager =
+        new("user:assign-manager", "Set or Clear a User's Reporting Line", ApplicationModules.Administration, "assign-manager");
+
     public static readonly PermissionItem CanAssignUserAgency =
         new("user:assign-agency", "Assign Users to an Agency", ApplicationModules.Administration, "assign-agency");
 
@@ -370,6 +373,7 @@ public static class Permissions
         CanReadAudit,
         CanAssignRole,
         CanAssignUserAgency,
+        CanAssignUserManager,
         CanRevokeRole,
         CanAssignPermission,
         CanRevokePermission,

@@ -11,6 +11,11 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
     {
         builder.ToTable("app_users");
         builder.Property(u => u.FullName).HasMaxLength(200);
+        // No FK: app_users referencing itself would make every delete a cascade decision, and
+        // the reporting line is validated (existence, activity, no cycle) when it is set.
+        builder.HasIndex(u => new { u.TenantId, u.ReportsToUserId })
+            .HasFilter("reports_to_user_id IS NOT NULL");
+
         builder.Property(u => u.FirstName).HasMaxLength(200).HasDefaultValue("");
         builder.Property(u => u.LastName).HasMaxLength(200).HasDefaultValue("");
 

@@ -74,6 +74,7 @@ public static class AdministrationModule
         services.AddScoped<Infrastructure.ModuleEmailSender>();
         services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerNotifier>();
         services.AddScoped<Features.Users.BulkAssign.BulkAssignNotifier>();
+        services.AddScoped<Features.Users.AssignManager.ReportingLine>();
         services.Configure<JwtOptions>(config.GetSection("Jwt"));
         services.AddScoped<IJwtTokenService, JwtTokenService>();
 

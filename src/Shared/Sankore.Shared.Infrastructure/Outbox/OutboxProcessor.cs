@@ -54,6 +54,8 @@ public sealed class OutboxProcessor<TDbContext>(
         var bus = scope.ServiceProvider.GetRequiredService<IBus>();
 
         var pending = await db.Set<OutboxMessage>()
+            .AsNoTracking()
+            .IgnoreQueryFilters()
             .Where(m => m.ProcessedAt == null && m.RetryCount < MaxRetries)
             .OrderBy(m => m.OccurredAt)
             .Take(BatchSize)
@@ -72,11 +74,13 @@ public sealed class OutboxProcessor<TDbContext>(
                 await bus.Publish(@event, eventType, ct);
 
                 message.ProcessedAt = DateTimeOffset.UtcNow;
+                db.Set<OutboxMessage>().Update(message);
             }
             catch (Exception ex)
             {
                 message.RetryCount++;
                 message.LastError = ex.Message;
+                db.Set<OutboxMessage>().Update(message);
                 logger.LogWarning(ex,
                     "Failed to publish outbox message {MessageId} (attempt {Attempt}/{Max})",
                     message.Id, message.RetryCount, MaxRetries);
