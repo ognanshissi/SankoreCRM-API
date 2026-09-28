@@ -19,6 +19,14 @@ public sealed class Agency : AggregateRoot
     public DateTimeOffset? UpdatedAt { get; private set; }
     public Guid? CreatedBy { get; private set; }
 
+    /// <summary>
+    /// The user who runs this agency, or null when the post is vacant. Deliberately NOT a
+    /// physical foreign key to <see cref="AppUser"/>: AppUser already points back at Agency
+    /// through <c>AgencyId</c>, and closing that loop in the database would make deleting
+    /// either side depend on the other. Eligibility is enforced when the manager is assigned.
+    /// </summary>
+    public Guid? ManagerUserId { get; private set; }
+
     private readonly List<AppUser> _users = [];
     public IReadOnlyCollection<AppUser> Users => _users.AsReadOnly();
 
@@ -67,6 +75,36 @@ public sealed class Agency : AggregateRoot
         Description = description.Trim();
         AgencyType = agencyType;
         Address = address;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Puts <paramref name="managerUserId"/> in charge of this agency. Re-assigning the same
+    /// user is a no-op so a retried request cannot churn <see cref="UpdatedAt"/>.
+    /// The caller is responsible for checking the user exists, is active and belongs to this
+    /// agency — the aggregate cannot see other aggregates.
+    /// </summary>
+    public void AssignManager(Guid managerUserId)
+    {
+        if (managerUserId == Guid.Empty)
+            throw new DomainException("A manager user id is required.", "Agency.Manager.Required");
+        if (IsDeleted)
+            throw new DomainException("A deleted agency cannot be given a manager.", "Agency.AlreadyDeleted");
+
+        if (ManagerUserId == managerUserId)
+            return;
+
+        ManagerUserId = managerUserId;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Leaves the post vacant. A no-op when there is no manager.</summary>
+    public void RemoveManager()
+    {
+        if (ManagerUserId is null)
+            return;
+
+        ManagerUserId = null;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

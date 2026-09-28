@@ -34,6 +34,9 @@ public static class Permissions
     public static readonly PermissionItem CanActivateAgency =
         new("agency:activate", "Activate Agency", ApplicationModules.Administration, "activate");
 
+    public static readonly PermissionItem CanAssignAgencyManager =
+        new("agency:assign-manager", "Assign or Remove an Agency Manager", ApplicationModules.Administration, "assign-manager");
+
     public static readonly PermissionItem CanMoveAgency =
         new("agency:move", "Move Agency", ApplicationModules.Administration, "move");
 
@@ -57,6 +60,9 @@ public static class Permissions
 
     public static readonly PermissionItem CanReactivateUser =
         new("user:reactivate", "Reactivate User", ApplicationModules.Administration, "reactivate");
+
+    public static readonly PermissionItem CanAssignUserAgency =
+        new("user:assign-agency", "Assign Users to an Agency", ApplicationModules.Administration, "assign-agency");
 
     public static readonly PermissionItem CanAssignRole =
         new("user:assign-role", "Assign Role to User", ApplicationModules.Administration, "assign-role");
@@ -350,6 +356,7 @@ public static class Permissions
         CanDeleteAgency,
         CanActivateAgency,
         CanMoveAgency,
+        CanAssignAgencyManager,
         CanCreateUser,
         CanReadUser,
         CanUpdateUser,
@@ -362,6 +369,7 @@ public static class Permissions
         CanDeleteTerritory,
         CanReadAudit,
         CanAssignRole,
+        CanAssignUserAgency,
         CanRevokeRole,
         CanAssignPermission,
         CanRevokePermission,

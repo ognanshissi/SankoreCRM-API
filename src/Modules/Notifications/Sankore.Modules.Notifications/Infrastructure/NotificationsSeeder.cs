@@ -18,6 +18,10 @@ internal static class NotificationsSeeder
         await SeedTaskAssignedAsync(db, logger, ct);
         await SeedLeadSlaBreachAsync(db, logger, ct);
         await SeedLeadSourceSnippetAsync(db, logger, ct);
+        await SeedAgencyManagerAssignedAsync(db, logger, ct);
+        await SeedAgencyManagerUnassignedAsync(db, logger, ct);
+        await SeedUserAgencyChangedAsync(db, logger, ct);
+        await SeedUserRoleGrantedAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -422,6 +426,323 @@ internal static class NotificationsSeeder
                       </ol>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">Public key: {{ public_key }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── agency.manager-assigned ─────────────────────────────────────────────
+
+    private static async Task SeedAgencyManagerAssignedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "agency.manager-assigned";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Vous dirigez désormais l'agence {{ agency_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        Vous venez d'être désigné(e) responsable de l'agence
+                        <strong>{{ agency_name }}</strong> ({{ agency_code }}) de {{ company_name }}.
+                      </p>
+                      <p>
+                        Le rôle <strong>{{ role_name }}</strong> a été ajouté à votre compte&nbsp;: il sera
+                        actif à votre prochaine connexion.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Si cette affectation vous semble inattendue, contactez votre administrateur.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "You now manage the {{ agency_name }} agency",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        You have just been made manager of the
+                        <strong>{{ agency_name }}</strong> ({{ agency_code }}) agency at {{ company_name }}.
+                      </p>
+                      <p>
+                        The <strong>{{ role_name }}</strong> role was added to your account; it takes
+                        effect the next time you sign in.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        If this assignment is unexpected, please contact your administrator.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── agency.manager-unassigned ───────────────────────────────────────────
+
+    private static async Task SeedAgencyManagerUnassignedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "agency.manager-unassigned";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Vous ne dirigez plus l'agence {{ agency_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        La responsabilité de l'agence <strong>{{ agency_name }}</strong>
+                        ({{ agency_code }}) de {{ company_name }} ne vous est plus confiée.
+                      </p>
+                      <p>
+                        Les accès liés à cette agence seront ajustés à votre prochaine connexion.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Pour toute question sur ce changement, adressez-vous à votre administrateur.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "You no longer manage the {{ agency_name }} agency",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        You are no longer responsible for the <strong>{{ agency_name }}</strong>
+                        ({{ agency_code }}) agency at {{ company_name }}.
+                      </p>
+                      <p>
+                        Access tied to that agency will be adjusted the next time you sign in.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        If you have questions about this change, please contact your administrator.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── user.agency-changed ─────────────────────────────────────────────────
+
+    private static async Task SeedUserAgencyChangedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "user.agency-changed";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Vous êtes désormais rattaché(e) à l'agence {{ agency_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        Votre rattachement a changé&nbsp;: vous dépendez désormais de l'agence
+                        <strong>{{ agency_name }}</strong> ({{ agency_code }}) de {{ company_name }}.
+                      </p>
+                      <p>
+                        Les données et les écrans accessibles depuis votre compte suivront ce
+                        rattachement à votre prochaine connexion.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Si ce changement vous semble inattendu, contactez votre administrateur.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "You are now attached to the {{ agency_name }} agency",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        Your home agency has changed: you now report to
+                        <strong>{{ agency_name }}</strong> ({{ agency_code }}) at {{ company_name }}.
+                      </p>
+                      <p>
+                        The data and screens your account can reach will follow that change the next
+                        time you sign in.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        If this change is unexpected, please contact your administrator.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── user.role-granted ───────────────────────────────────────────────────
+
+    private static async Task SeedUserRoleGrantedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "user.role-granted";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Un nouveau rôle vous a été attribué : {{ role_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        Le rôle <strong>{{ role_name }}</strong> vient d'être ajouté à votre compte
+                        {{ company_name }}.
+                      </p>
+                      <p>
+                        Les écrans et les actions qu'il ouvre seront disponibles à votre prochaine
+                        connexion.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Si cette attribution vous semble inattendue, contactez votre administrateur.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "A new role was assigned to you: {{ role_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        The <strong>{{ role_name }}</strong> role has just been added to your
+                        {{ company_name }} account.
+                      </p>
+                      <p>
+                        The screens and actions it opens up become available the next time you sign in.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        If this is unexpected, please contact your administrator.
+                      </p>
                     </body>
                     </html>
                     """));

@@ -19,4 +19,8 @@ public sealed record AgencyDto(
     double? Latitude,
     double? Longitude,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    /// <summary>Who runs the agency, or null when the post is vacant.</summary>
+    Guid? ManagerUserId,
+    /// <summary>Resolved for display so a list does not need one round-trip per agency.</summary>
+    string? ManagerFullName);

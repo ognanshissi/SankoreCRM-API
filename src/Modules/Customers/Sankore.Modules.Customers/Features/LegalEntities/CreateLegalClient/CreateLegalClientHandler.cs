@@ -21,6 +21,7 @@ using Sankore.Shared.Kernel;
 /// </summary>
 internal sealed class CreateLegalClientHandler(
     CustomersDbContext db,
+    ITenantContext tenantContext,
     ICurrentUser currentUser,
     IDuplicateProbe duplicateProbe,
     IAgencyDirectory agencyDirectory,
@@ -34,7 +35,7 @@ internal sealed class CreateLegalClientHandler(
     public async Task<Result<CreateLegalClientResult>> Handle(
         CreateLegalClientCommand cmd, CancellationToken ct)
     {
-        var tenantId = currentUser.TenantId;
+        var tenantId = tenantContext.CurrentTenantId;
         var actor = currentUser.Id;
 
         // 1. Closed, tenant-configurable list of legal forms: an unknown or deactivated

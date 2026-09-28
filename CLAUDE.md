@@ -146,7 +146,7 @@ Its extra **Job control** page adds pause/resume, which Hangfire OSS has no equi
 
 **AppUser factories:**
 - `AppUser.Create(tenantId, agencyId, fullName, email)` — standard user, `AgencyId` required
-- `AppUser.CreateRoot(tenantId, fullName, email)` — super-user, no agency, `IsSuperUser = true`, `AccountType = System`
+- `AppUser.CreateRoot(tenantId, firstName, lastName, email)` — super-user, no agency, `IsSuperUser = true`, `AccountType = System`
 - `AppUser.CreateAgent(...)` — standard user with dispatching fields
 
 **Agency hierarchy:** `AgencyType` ∈ {HeadQuarter, Branch, ServicePoint, Counter}. Non-HQ agencies require a `ParentAgencyId`. `Agency.Deactivate()` soft-deletes (sets `IsDeleted = true`, `IsActive = false`). Cannot delete an agency that still has users.

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Administration.Features.Agencies.ActivateAgency;
+using Sankore.Modules.Administration.Features.Agencies.AssignAgencyManager;
 using Sankore.Modules.Administration.Features.Agencies.CreateAgency;
 using Sankore.Modules.Administration.Features.Agencies.DeleteAgency;
 using Sankore.Modules.Administration.Features.Agencies.GetAgency;
@@ -28,6 +29,7 @@ public static class AgenciesEndpoints
             .MapUpdateAgency()
             .MapDeleteAgency()
             .MapActivateAgency()
-            .MapMoveAgency();
+            .MapMoveAgency()
+            .MapAgencyManager();
     }
 }

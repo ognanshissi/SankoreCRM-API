@@ -51,6 +51,12 @@ public class AgencyConfiguration: IEntityTypeConfiguration<Agency>
             .OnDelete(DeleteBehavior.Restrict);
 
         // Indexes
+        // No FK to app_users on purpose: app_users.agency_id already points here, and a second
+        // FK the other way would make the two tables mutually blocking on delete. Eligibility is
+        // checked by AssignAgencyManagerHandler instead.
+        builder.HasIndex(x => new { x.TenantId, x.ManagerUserId })
+            .HasFilter("manager_user_id IS NOT NULL");
+
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.ParentAgencyId });
         builder.HasIndex(x => new { x.TenantId, x.IsDeleted });

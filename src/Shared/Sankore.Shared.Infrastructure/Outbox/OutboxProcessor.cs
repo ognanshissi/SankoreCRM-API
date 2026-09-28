@@ -66,7 +66,7 @@ public sealed class OutboxProcessor<TDbContext>(
                 var eventType = Type.GetType(message.EventType)
                     ?? throw new InvalidOperationException($"Unknown event type: {message.EventType}");
 
-                var @event = System.Text.Json.JsonSerializer.Deserialize(message.PayloadJson, eventType)
+                var @event = System.Text.Json.JsonSerializer.Deserialize(message.PayloadJson, eventType, OutboxJson.Options)
                     ?? throw new InvalidOperationException("Failed to deserialize outbox payload.");
 
                 await bus.Publish(@event, eventType, ct);

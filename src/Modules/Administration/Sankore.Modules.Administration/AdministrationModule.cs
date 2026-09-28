@@ -70,6 +70,10 @@ public static class AdministrationModule
         services.AddScoped<IAgencyScopeProvider, AgencyScopeProvider>();
         services.AddScoped<Features.Agencies.CreateAgency.IAgencyCodeGenerator,
                            Features.Agencies.CreateAgency.PostgresAgencyCodeGenerator>();
+        services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerRoleCoordinator>();
+        services.AddScoped<Infrastructure.ModuleEmailSender>();
+        services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerNotifier>();
+        services.AddScoped<Features.Users.BulkAssign.BulkAssignNotifier>();
         services.Configure<JwtOptions>(config.GetSection("Jwt"));
         services.AddScoped<IJwtTokenService, JwtTokenService>();
 

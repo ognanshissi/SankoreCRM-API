@@ -30,7 +30,9 @@ public sealed class ClientCreatedTimelineConsumer(
     {
         // Note what is NOT in the summary: no client number (not sensitive, but useless here —
         // the entry is already scoped to the client), no name, no contact value.
-        var summary = evt.ClientType.Equals("Legal", StringComparison.OrdinalIgnoreCase)
+        // Static string.Equals rather than the instance method: ClientType is non-nullable by
+        // contract, but a consumer is the wrong place to turn a broken contract into a retry storm.
+        var summary = string.Equals(evt.ClientType, "Legal", StringComparison.OrdinalIgnoreCase)
             ? "Personne morale enregistrée (dossier en attente de KYC)"
             : "Client enregistré (dossier en attente de KYC)";
 

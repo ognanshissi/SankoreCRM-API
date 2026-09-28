@@ -99,13 +99,27 @@ public sealed class AppUser: IdentityUser<Guid>
         };
     }
 
-    public static AppUser CreateRoot(Guid tenantId, string fullName, string email)
+    /// <summary>
+    /// Creates the tenant's super-user. Takes the name in two parts like
+    /// <see cref="Create"/>: FirstName and LastName are non-nullable and EF rejects the insert
+    /// when they are missing, so a root built from a single display string could never be saved.
+    /// </summary>
+    public static AppUser CreateRoot(Guid tenantId, string firstName, string lastName, string email)
     {
+        if (string.IsNullOrWhiteSpace(firstName))
+            throw new DomainException("User must have a name.", "User.Name.Required");
+        if (string.IsNullOrWhiteSpace(lastName))
+            throw new DomainException("User must have a name.", "User.Name.Required");
+        if (string.IsNullOrWhiteSpace(email))
+            throw new DomainException("User must have an email.", "User.Email.Required");
+
         return new AppUser
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            FullName = fullName,
+            FirstName = firstName.Trim(),
+            LastName = lastName.Trim(),
+            FullName = $"{firstName.Trim()} {lastName.Trim()}",
             UserName = email,
             Email = email,
             Status = UserStatus.Active,

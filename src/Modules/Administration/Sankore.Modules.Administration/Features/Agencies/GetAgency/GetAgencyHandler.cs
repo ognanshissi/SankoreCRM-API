@@ -31,7 +31,11 @@ internal sealed class GetAgencyHandler(
                 a.Address != null && a.Address.Location != null ? a.Address.Location.Latitude : (double?)null,
                 a.Address != null && a.Address.Location != null ? a.Address.Location.Longitude : (double?)null,
                 a.CreatedAt,
-                a.UpdatedAt))
+                a.UpdatedAt,
+                a.ManagerUserId,
+                a.ManagerUserId == null
+                    ? null
+                    : db.Users.Where(u => u.Id == a.ManagerUserId).Select(u => u.FullName).FirstOrDefault()))
             .SingleOrDefaultAsync(ct);
 
         return dto is null

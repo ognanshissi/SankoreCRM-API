@@ -9,6 +9,7 @@ using Sankore.Modules.Customers.PublicApi.Events;
 using Sankore.Modules.Customers.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Crypto;
 using Xunit;
+using Sankore.Shared.Kernel;
 
 /// <summary>US-M01-BE-17 — registration of a legal entity.</summary>
 public sealed class CreateLegalClientHandlerTests : IDisposable
@@ -35,6 +36,9 @@ public sealed class CreateLegalClientHandlerTests : IDisposable
 
         return new CreateLegalClientHandler(
             db,
+            // Same tenant source as the DbContext's query filter, so the handler and the rows it
+            // reads can never disagree about which tenant it is working in.
+            new FixedTenantContext(TenantId),
             TestDoubles.CurrentUser(TenantId, UserId),
             // The REAL probe: the duplicate check under test is its blind-index equality.
             new DuplicateProbe(db),

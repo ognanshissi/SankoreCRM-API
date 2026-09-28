@@ -18,15 +18,10 @@ using Sankore.Shared.Kernel;
 public sealed class OutboxEventPublisher<TDbContext>(TDbContext db) : IEventPublisher
     where TDbContext : DbContext
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct)
         where TEvent : IIntegrationEvent
     {
-        var payload = JsonSerializer.Serialize(@event, JsonOptions);
+        var payload = JsonSerializer.Serialize(@event, OutboxJson.Options);
 
         var message = new OutboxMessage
         {

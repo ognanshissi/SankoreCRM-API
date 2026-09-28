@@ -39,7 +39,8 @@ internal sealed class RegisterHandler(
         
         var user = AppUser.CreateRoot(
             tenant.CurrentTenantId,
-           $"{request.FirstName} {request.LastName}",
+            request.FirstName,
+            request.LastName,
             request.Email);
 
         var createResult = await userManager.CreateAsync(user, request.Password);
