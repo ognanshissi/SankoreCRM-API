@@ -312,6 +312,35 @@ public static class Permissions
     public static readonly PermissionItem CanReadEmailDeliveryLogs =
         new("notification:delivery-log:read", "Read Email Delivery Logs", ApplicationModules.Notifications, "read");
 
+    // ── Customers module (M01) ─────────────────────────────────────────────
+
+    public static readonly PermissionItem CanReadCustomer =
+        new("customers:read", "Read Customer Record", ApplicationModules.Customers, "read");
+
+    public static readonly PermissionItem CanCreateCustomer =
+        new("customers:create", "Create Customer Record", ApplicationModules.Customers, "create");
+
+    public static readonly PermissionItem CanUpdateCustomer =
+        new("customers:update", "Update Non-Sensitive Customer Data", ApplicationModules.Customers, "update");
+
+    public static readonly PermissionItem CanUpdateCustomerSensitive =
+        new("customers:update_sensitive", "Update Sensitive Customer Data (name, ID document, address)", ApplicationModules.Customers, "update_sensitive");
+
+    public static readonly PermissionItem CanRevealCustomerSensitive =
+        new("customers:reveal_sensitive", "Reveal a Single Encrypted Customer Field in Clear Text", ApplicationModules.Customers, "reveal_sensitive");
+
+    public static readonly PermissionItem CanArchiveCustomer =
+        new("customers:archive", "Archive a Customer Record", ApplicationModules.Customers, "archive");
+
+    public static readonly PermissionItem CanMergeCustomers =
+        new("customers:merge", "Request or Approve a Customer Merge", ApplicationModules.Customers, "merge");
+
+    public static readonly PermissionItem CanManageCustomerGroups =
+        new("customers:groups_manage", "Create and Manage Solidarity Groups, Tontines and VSLAs", ApplicationModules.Customers, "groups_manage");
+
+    public static readonly PermissionItem CanExportCustomers =
+        new("customers:export", "Export a Customer Search Result", ApplicationModules.Customers, "export");
+
     public static readonly PermissionItem[] All =
     [
         CanCreateLoan,
@@ -410,5 +439,14 @@ public static class Permissions
         CanManageNurturingSequences,
         CanReadNurturingSequences,
         CanManageLeadSourceCredentials,
+        CanReadCustomer,
+        CanCreateCustomer,
+        CanUpdateCustomer,
+        CanUpdateCustomerSensitive,
+        CanRevealCustomerSensitive,
+        CanArchiveCustomer,
+        CanMergeCustomers,
+        CanManageCustomerGroups,
+        CanExportCustomers,
     ];
 }

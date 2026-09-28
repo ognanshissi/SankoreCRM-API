@@ -132,6 +132,9 @@ public static class LeadsModule
         services.AddScoped<LeadScoreCalculator>();
 
         services.AddScoped<IContextProvider, LeadContextProvider>();
+        // Public contract of M13. Consumed by the Customers module (M01) to import a
+        // converted lead's commercial history into the client timeline (F13.29).
+        services.AddScoped<PublicApi.ILeadsModule, LeadsModuleFacade>();
         services.AddOutboxForModule<LeadsDbContext>();
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 

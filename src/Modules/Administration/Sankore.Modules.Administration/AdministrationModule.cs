@@ -33,6 +33,7 @@ using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Infrastructure.FileStore;
 using Sankore.Shared.Infrastructure.Google;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Kernel.Authorization;
 
 namespace Sankore.Modules.Administration;
 
@@ -65,6 +66,8 @@ public static class AdministrationModule
             .AddEntityFrameworkStores<AdministrationDbContext>();
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
+        // Agency perimeter (Kernel contract) — Administration owns the agency tree.
+        services.AddScoped<IAgencyScopeProvider, AgencyScopeProvider>();
         services.AddScoped<Features.Agencies.CreateAgency.IAgencyCodeGenerator,
                            Features.Agencies.CreateAgency.PostgresAgencyCodeGenerator>();
         services.Configure<JwtOptions>(config.GetSection("Jwt"));

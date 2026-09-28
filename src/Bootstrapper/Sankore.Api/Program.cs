@@ -17,6 +17,7 @@ using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Administration;
 using Sankore.Modules.Workflow;
 using Sankore.Modules.Notifications;
+using Sankore.Modules.Customers;
 using Sankore.Modules.Leads.Features.Consumers;
 using Sankore.Modules.Notifications.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Consumers;
@@ -180,6 +181,9 @@ builder.Services.AddMediatR(cfg =>
 // Logging -> Validation -> Transaction -> Audit -> [Handler]
 builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+// Agency perimeter: rejects any IAgencyScopedRequest whose TargetAgencyId falls outside the
+// caller's perimeter BEFORE a transaction is opened. Inert for every other request.
+builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(AgencyAuthorizationBehavior<,>));
 builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(TransactionBehavior<,>));
 builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(AuditBehavior<,>));
 
@@ -217,6 +221,26 @@ builder.Services.AddMassTransit(x =>
     // Workflow module consumers
     x.AddConsumer<WorkflowTriggerConsumer>();
     x.AddConsumer<ChildWorkflowCompletedConsumer>();
+
+    // ── Customers module (M01) ────────────────────────────────────────────────
+    // KYC decisions drive the client status snapshot (US-M01-BE-13). Every one of
+    // these consumers is guarded by IInboxGuard, so a redelivered event is ignored.
+    x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycValidatedConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRejectedConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRiskLevelChangedConsumer>();
+    // Development-only auto-validation stub; inert outside Development (US-M01-BE-13).
+    x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.DevKycAutoValidateConsumer>();
+
+    // 360° timeline projection (US-M01-BE-26). Adding a source module later means
+    // adding a consumer here — the timeline model itself never changes.
+    x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientCreatedTimelineConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientActivatedTimelineConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientSuspendedTimelineConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientArchivedTimelineConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientTransferredTimelineConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientsMergedTimelineConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientSegmentChangedTimelineConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.GroupMembershipChangedTimelineConsumer>();
 
     var useRabbitMq = builder.Configuration.GetValue<bool>("Messaging:UseRabbitMq");
 
@@ -287,11 +311,11 @@ builder.Services.AddAdministrationModule(builder.Configuration);
 builder.Services.AddLeadsModule(builder.Configuration);
 builder.Services.AddWorkflowModule(builder.Configuration);
 builder.Services.AddNotificationsModule(builder.Configuration);
-// builder.Services.AddCustomersModule(builder.Configuration);   // M01 — same pattern
+builder.Services.AddCustomersModule(builder.Configuration);      // M01
 
-// Stub registrations for modules not yet scaffolded (US-M13-171/172)
-builder.Services.AddScoped<Sankore.Modules.Customer360.PublicApi.ICustomerModule,
-    Sankore.Api.Stubs.StubCustomerModule>();
+// Stub registrations for modules not yet scaffolded (US-M13-171/172).
+// ICustomerModule is NO LONGER stubbed: the Customers module (M01) registers
+// LegacyCustomerModuleAdapter for it, so Leads now talks to real client records.
 builder.Services.AddScoped<Sankore.Modules.Kyc.PublicApi.IKycModule,
     Sankore.Api.Stubs.StubKycModule>();
 // builder.Services.AddKycModule(builder.Configuration);         // M02 — same pattern
@@ -317,6 +341,9 @@ using (var scope = app.Services.CreateScope())
     await AdministrationModule.InitializeAsync(scope.ServiceProvider);
     await WorkflowModule.InitializeAsync(scope.ServiceProvider);
     await NotificationsModule.InitializeAsync(scope.ServiceProvider);
+    // Migrates the "customers" schema, then seeds this tenant's M01 parameters and
+    // legal forms idempotently (US-M01-BE-01).
+    await CustomersModule.InitializeAsync(scope.ServiceProvider);
 }
 
 // ---------------------------------------------------------------------
@@ -395,6 +422,30 @@ try
         job => job.ExecuteAsync(),
         "* * * * *");
 
+    // ── Customers module (M01) ────────────────────────────────────────────────
+    // All four are GLOBAL orchestrators: they iterate active tenants themselves and
+    // enqueue one opaque per-tenant job each, so adding a tenant needs no new
+    // recurring registration and the job arguments stay opaque identifiers.
+    AddOrUpdate<Sankore.Modules.Customers.Features.Duplicates.DetectDuplicates.DetectDuplicatesOrchestratorJob>(
+        "customers-detect-duplicates-orchestrator",
+        job => job.ExecuteAsync(),
+        "0 2 * * *");                                    // nightly (US-M01-BE-24)
+
+    AddOrUpdate<Sankore.Modules.Customers.Features.Timeline.Segments.AssignSegmentsOrchestratorJob>(
+        "customers-assign-segments-orchestrator",
+        job => job.ExecuteAsync(),
+        "0 3 * * *");                                    // nightly (US-M01-BE-27)
+
+    AddOrUpdate<Sankore.Modules.Customers.Features.Timeline.Loyalty.ComputeLoyaltyScoresOrchestratorJob>(
+        "customers-loyalty-scores-orchestrator",
+        job => job.ExecuteAsync(),
+        "30 3 * * *");                                   // nightly (US-M01-BE-28)
+
+    AddOrUpdate<Sankore.Modules.Customers.Features.Compliance.Retention.IdentifyRetentionCandidatesOrchestratorJob>(
+        "customers-retention-candidates-orchestrator",
+        job => job.ExecuteAsync(),
+        "0 4 1 * *");                                    // monthly (US-M01-BE-29)
+
     app.Logger.LogInformation(
         "Registered recurring Hangfire jobs for {TenantCount} active tenant(s), plus the global pull orchestrator.",
         activeTenants.Count);
@@ -446,6 +497,7 @@ appVersion1.MapAdministrationModuleEndpoints();
 appVersion1.MapLeadsEndpoints();
 appVersion1.MapWorkflowModuleEndpoints();
 appVersion1.MapNotificationsModuleEndpoints();
+appVersion1.MapCustomersModuleEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 
@@ -454,7 +506,6 @@ app.MapBootstrapEndpoints();
 // Public (unauthenticated) ingest endpoints — outside api/v1, own rate limiting
 app.MapPublicIngestEndpoints();
 
-// app.MapCustomersEndpoints();
 // app.MapKycEndpoints();
 // app.MapLoansEndpoints();
 

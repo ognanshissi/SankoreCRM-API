@@ -13,6 +13,9 @@
     <!-- Hangfire.Core only (no server, no ASP.NET integration): RecurringJobPauseStore
          is shared by the job host (Sankore.Api) and the dashboard host (Sankore.Hangfire). -->
     <PackageReference Include="Hangfire.Core" />
+    <!-- Hangfire.Core drags Newtonsoft.Json 11.0.1 (GHSA-5crp-9r3c-p9vr, high severity).
+         Direct reference pins 13.0.3, the same override the modules already apply. -->
+    <PackageReference Include="Newtonsoft.Json" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="MassTransit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />

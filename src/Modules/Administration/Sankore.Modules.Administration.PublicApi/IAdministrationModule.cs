@@ -25,6 +25,22 @@ public interface IAdministrationModule
     Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct);
 
     /// <summary>
+    /// Non-sensitive projection of one agency, or <c>null</c> when it does not exist
+    /// (or has been soft-deleted) in that tenant.
+    ///
+    /// Added for module M01 (Customers), which stamps the agency CODE onto every
+    /// client record so a client number can be minted per agency and per year
+    /// (<c>{AgencyCode}-{YYYY}-{Seq:6}</c>) without M01 ever reading the
+    /// <c>administration</c> schema. <c>AgentSummary</c> only carries an agency id,
+    /// hence this second, agency-shaped projection.
+    ///
+    /// <paramref name="tenantId"/> is explicit because callers may run outside an HTTP
+    /// request (Hangfire jobs, MassTransit consumers) where the ambient tenant context
+    /// is not the tenant being operated on.
+    /// </summary>
+    Task<AgencySummary?> GetAgencyAsync(Guid tenantId, Guid agencyId, CancellationToken ct);
+
+    /// <summary>
     /// Returns the IDs of agents managed by the given supervisor (same agency or sub-agencies).
     /// Used for task visibility scoping (US-M13-090).
     /// </summary>
@@ -60,6 +76,18 @@ public sealed record TenantNotificationConfigDto(
     string? SendingDomain,
     string? CredentialVaultPath,
     int? MonthlyQuotaLimit);
+
+/// <summary>
+/// Read-only projection of an agency, safe to hand to other modules: identifier,
+/// business code, display name, place in the hierarchy and activity flag — nothing
+/// that would let a consumer bypass the Administration module's own rules.
+/// </summary>
+public sealed record AgencySummary(
+    Guid Id,
+    string Code,
+    string Name,
+    Guid? ParentAgencyId,
+    bool IsActive);
 
 /// <summary>
 /// Read-only projection of an agent, safe to hand to other modules.

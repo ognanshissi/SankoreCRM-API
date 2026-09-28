@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- ── Client — identity ── -->
+  <data name="Client.FirstName.Required" xml:space="preserve">
+    <value>First name is required.</value>
+  </data>
+  <data name="Client.LastName.Required" xml:space="preserve">
+    <value>Last name is required.</value>
+  </data>
+  <data name="Client.LegalName.Required" xml:space="preserve">
+    <value>Legal name is required.</value>
+  </data>
+  <data name="Client.LegalForm.Required" xml:space="preserve">
+    <value>Legal form is required.</value>
+  </data>
+  <data name="Client.LegalForm.Unknown" xml:space="preserve">
+    <value>This legal form is not part of the configured list.</value>
+  </data>
+  <data name="Client.PreferredLanguage.Required" xml:space="preserve">
+    <value>Correspondence language is required.</value>
+  </data>
+  <data name="Client.MinimumAge" xml:space="preserve">
+    <value>The client is below the required minimum age.</value>
+  </data>
+  <data name="Client.DateOfBirth.Future" xml:space="preserve">
+    <value>Date of birth cannot be in the future.</value>
+  </data>
+  <data name="Client.IdentityDocument.Duplicate" xml:space="preserve">
+    <value>An identical identity document is already recorded for another client.</value>
+  </data>
+  <data name="Client.RegistrationNumber.Duplicate" xml:space="preserve">
+    <value>This registration number is already recorded for another client.</value>
+  </data>
+  <data name="Client.Phone.PossibleDuplicate" xml:space="preserve">
+    <value>This phone number may belong to an existing client.</value>
+  </data>
+
+  <!-- ── Client — assignment ── -->
+  <data name="Client.Agency.Required" xml:space="preserve">
+    <value>The owning agency is required.</value>
+  </data>
+  <data name="Client.Agency.OutOfScope" xml:space="preserve">
+    <value>This agency is outside your perimeter.</value>
+  </data>
+  <data name="Client.Advisor.NotEligible" xml:space="preserve">
+    <value>This user cannot be assigned as the client's advisor.</value>
+  </data>
+
+  <!-- ── Client — lifecycle ── -->
+  <data name="Client.NotFound" xml:space="preserve">
+    <value>Client not found.</value>
+  </data>
+  <data name="Client.ReadOnly" xml:space="preserve">
+    <value>This client is archived or merged and can no longer be modified.</value>
+  </data>
+  <data name="Client.Status.InvalidTransition" xml:space="preserve">
+    <value>This status change is not allowed from the current status.</value>
+  </data>
+  <data name="Client.Reason.Required" xml:space="preserve">
+    <value>A reason is required for this operation.</value>
+  </data>
+  <data name="Client.AlreadyMerged" xml:space="preserve">
+    <value>This client has already been merged into another record.</value>
+  </data>
+  <data name="Client.HasActiveCommitments" xml:space="preserve">
+    <value>This client has active commitments; the operation is not possible.</value>
+  </data>
+  <data name="Client.NotLegalEntity" xml:space="preserve">
+    <value>This operation is only available on a legal-entity client.</value>
+  </data>
+  <data name="Client.Concurrency.Conflict" xml:space="preserve">
+    <value>The record was changed in the meantime. Reload the page and try again.</value>
+  </data>
+
+  <!-- ── Contact points ── -->
+  <data name="Client.Phone.LastRequired" xml:space="preserve">
+    <value>The client's last phone number cannot be removed.</value>
+  </data>
+  <data name="ContactPoint.NotFound" xml:space="preserve">
+    <value>Contact point not found.</value>
+  </data>
+
+  <!-- ── Groups ── -->
+  <data name="Group.Name.Required" xml:space="preserve">
+    <value>Group name is required.</value>
+  </data>
+  <data name="Group.Name.AlreadyUsed" xml:space="preserve">
+    <value>This group name is already used in this agency.</value>
+  </data>
+  <data name="Group.NotFound" xml:space="preserve">
+    <value>Group not found.</value>
+  </data>
+  <data name="Group.Size.LimitReached" xml:space="preserve">
+    <value>The group has reached its maximum size.</value>
+  </data>
+  <data name="Group.Size.BelowMinimum" xml:space="preserve">
+    <value>The group is below its minimum size.</value>
+  </data>
+  <data name="Group.Member.NotEligible" xml:space="preserve">
+    <value>This client does not meet the group's membership conditions.</value>
+  </data>
+  <data name="Group.Member.AlreadyInSolidarityGroup" xml:space="preserve">
+    <value>This client already belongs to a solidarity group.</value>
+  </data>
+  <data name="Group.Membership.NotFound" xml:space="preserve">
+    <value>Membership not found.</value>
+  </data>
+
+  <!-- ── Relationships ── -->
+  <data name="Relationship.Self.Forbidden" xml:space="preserve">
+    <value>A client cannot be related to themselves.</value>
+  </data>
+  <data name="Relationship.NotFound" xml:space="preserve">
+    <value>Relationship not found.</value>
+  </data>
+
+  <!-- ── Beneficial owners ── -->
+  <data name="BeneficialOwner.Ownership.Exceeds100" xml:space="preserve">
+    <value>Total ownership exceeds 100%.</value>
+  </data>
+  <data name="BeneficialOwner.Manager.Required" xml:space="preserve">
+    <value>At least one manager must be declared as a beneficial owner.</value>
+  </data>
+
+  <!-- ── Merge ── -->
+  <data name="Merge.SelfApproval.Forbidden" xml:space="preserve">
+    <value>You cannot approve a merge you requested yourself.</value>
+  </data>
+  <data name="Merge.Request.NotFound" xml:space="preserve">
+    <value>Merge request not found.</value>
+  </data>
+  <data name="Merge.AlreadyDecided" xml:space="preserve">
+    <value>This merge request has already been decided.</value>
+  </data>
+  <data name="Merge.SameClient.Forbidden" xml:space="preserve">
+    <value>A client cannot be merged with themselves.</value>
+  </data>
+
+  <!-- ── Sensitive data ── -->
+  <data name="Sensitive.Reveal.RateLimitExceeded" xml:space="preserve">
+    <value>You have reached the sensitive-data viewing limit. Try again later.</value>
+  </data>
+  <data name="Sensitive.Field.Unknown" xml:space="preserve">
+    <value>This sensitive field does not exist.</value>
+  </data>
+
+  <!-- ── Export &amp; retention ── -->
+  <data name="Export.NotFound" xml:space="preserve">
+    <value>Export not found.</value>
+  </data>
+  <data name="Export.Link.Expired" xml:space="preserve">
+    <value>This download link has expired.</value>
+  </data>
+  <data name="Retention.NotReached" xml:space="preserve">
+    <value>The legal retention period has not been reached for this client.</value>
+  </data>
+  <data name="Retention.KycNotCleared" xml:space="preserve">
+    <value>The KYC file must be closed before anonymization.</value>
+  </data>
+
+  <!-- ── Settings ── -->
+  <data name="Setting.Unknown" xml:space="preserve">
+    <value>This setting does not exist.</value>
+  </data>
+</root>

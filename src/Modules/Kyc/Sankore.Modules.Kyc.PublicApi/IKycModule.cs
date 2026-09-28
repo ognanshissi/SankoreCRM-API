@@ -14,6 +14,17 @@ public interface IKycModule
     /// Returns the current KYC status for a customer entity.
     /// </summary>
     Task<KycStatus?> GetStatusAsync(Guid tenantId, Guid customerEntityId, CancellationToken ct);
+
+    /// <summary>
+    /// True when the compliance side has no remaining obligation to keep this
+    /// customer's KYC evidence, i.e. the record may be anonymized.
+    ///
+    /// Deliberately fail-closed: an implementation that does not know (module not
+    /// deployed yet, file still open, pending investigation or legal hold) returns
+    /// <c>false</c>, and the caller reports <c>KYC_RETENTION_NOT_CLEARED</c>
+    /// rather than destroying data it might still owe to a regulator.
+    /// </summary>
+    Task<bool> IsRetentionClearedAsync(Guid tenantId, Guid customerEntityId, CancellationToken ct);
 }
 
 public enum KycStatus

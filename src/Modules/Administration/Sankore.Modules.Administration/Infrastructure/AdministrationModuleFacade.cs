@@ -114,6 +114,19 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db, Use
             .ToListAsync(ct);
     }
 
+    public async Task<AgencySummary?> GetAgencyAsync(Guid tenantId, Guid agencyId, CancellationToken ct)
+    {
+        // IgnoreQueryFilters + an explicit tenant predicate: callers may be a Hangfire
+        // job or a MassTransit consumer, where the ambient ITenantContext is not the
+        // tenant being read. Soft-deleted agencies are invisible on purpose — a client
+        // must never be attached to an agency that no longer exists operationally.
+        return await db.Agencies
+            .IgnoreQueryFilters()
+            .Where(a => a.TenantId == tenantId && a.Id == agencyId && !a.IsDeleted)
+            .Select(a => new AgencySummary(a.Id, a.Code, a.Name, a.ParentAgencyId, a.IsActive))
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct)
     {
         var agent = await db.Users.SingleOrDefaultAsync(u => u.Id == agentId, ct);

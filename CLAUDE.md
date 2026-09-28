@@ -32,6 +32,11 @@ dotnet user-secrets init --project src/Bootstrapper/Sankore.Api
 dotnet user-secrets set "Jwt:SigningKey" "some-dev-only-secret-at-least-32-bytes-long" --project src/Bootstrapper/Sankore.Api
 dotnet user-secrets set "ConnectionStrings:Database" "Host=localhost;Port=5432;Database=sankore_crm_dev;Username=sankore_app;Password=devpassword" --project src/Bootstrapper/Sankore.Api
 
+# Customers module (M01) field-level encryption — dev values already sit in
+# appsettings.Development.json; set real ones per environment.
+dotnet user-secrets set "Customers:FieldEncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+dotnet user-secrets set "Customers:BlindIndexKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+
 # Hangfire dashboard credentials — it points at the SAME database as the API and
 # denies every request when no password is set.
 dotnet user-secrets init --project src/Bootstrapper/Sankore.Hangfire
@@ -51,6 +56,15 @@ dotnet ef migrations add <Name> \
   --project src/Modules/Leads/Sankore.Modules.Leads \
   --startup-project src/Bootstrapper/Sankore.Api \
   --context LeadsDbContext --output-dir Infrastructure/Migrations
+
+dotnet ef migrations add <Name> \
+  --project src/Modules/Customers/Sankore.Modules.Customers \
+  --startup-project src/Bootstrapper/Sankore.Api \
+  --context CustomersDbContext --output-dir Infrastructure/Migrations
+
+dotnet ef database update \
+  --project src/Modules/Customers/Sankore.Modules.Customers \
+  --startup-project src/Bootstrapper/Sankore.Api --context CustomersDbContext
 
 dotnet ef database update \
   --project src/Modules/Administration/Sankore.Modules.Administration \
@@ -88,6 +102,10 @@ src/
       Sankore.Modules.Leads.PublicApi/           ← ILeadsModule contract only
       Sankore.Modules.Leads/                     ← Features/CaptureLead, Features/DispatchLead
       Sankore.Modules.Leads.Tests/
+    Customers/                                   ← M01: clients PP/PM, groups, doublons, 360°
+      Sankore.Modules.Customers.PublicApi/       ← ICustomersModule + integration events
+      Sankore.Modules.Customers/                 ← schema "customers"
+      Sankore.Modules.Customers.Tests/
 ```
 
 ### Core rules
@@ -144,6 +162,62 @@ Its extra **Job control** page adds pause/resume, which Hangfire OSS has no equi
 - `Address` — owned value object with `Create()` factory; mapped as EF owned entity
 - `GeoPoint` — lat/lng value object
 - `DomainException` — thrown from domain methods for invariant violations
+
+### Customers module specifics (M01)
+
+`CustomersDbContext` — schema `customers`, migrations history in `customers`. Central
+`HasQueryFilter` per tenant-scoped entity, `OutboxMessage` excluded. Contract:
+`Sankore.Modules.Customers.PublicApi.ICustomersModule`. The legacy
+`Customer360.PublicApi.ICustomerModule` consumed by Leads is served by
+`LegacyCustomerModuleAdapter` — it exposes no sensitive field.
+
+**Field-level encryption (F12.14)** lives in `Sankore.Shared.Infrastructure/Crypto/`, not in
+the module, so M02 can reuse it: `IFieldEncryptor` (AES-256-GCM, payload
+`v1:nonce:tag:ciphertext`) and `IBlindIndexer` (HMAC-SHA256 over `purpose:normalizedValue`,
+lowercase hex). Register with `services.AddFieldProtection(config, "Customers")`; keys come
+from `Customers:FieldEncryptionKey` / `Customers:BlindIndexKey` (base64, 32 bytes — dev
+values are in `appsettings.Development.json`, set real ones through user-secrets).
+
+Encrypted: identity-document number, phones, email, postal address, date of birth, declared
+income, RCCM, NIF. **Names stay in clear** so prefix search remains an indexable
+`LIKE 'TERM%'`; `Client.SearchKey` (upper-case, accent-free, surname first) is maintained by
+`SearchKeyBuilder` and MUST be used on both the write and the read side.
+
+`SensitiveValueNormalizer.NormalizePhone` keeps the indicatif. It strips the `00`
+international prefix and neutralises the national trunk `0` **only** for countries whose plan
+has one (France, Belgium, UK, Ghana, Nigeria, DR Congo…), never for Côte d'Ivoire, Senegal or
+Mali where a leading `0` is part of the subscriber number. A number typed locally therefore
+does not match the same number typed internationally — deliberate, single point of change.
+
+**Duplicate detection never decrypts.** Blocking checks are equality lookups on a blind index;
+the nightly scorer (`ClientMatchScorer`) compares phonetic keys, the date-of-birth blind index,
+agency and parents' names, blocking candidates by phonetic key to avoid a cartesian product.
+`WestAfricanPhoneticKeyCalculator` folds West-African spelling variants (`ou`/`w`, `dj`/`j`,
+`kh`/`k`, doubled letters) before Double Metaphone.
+
+**Agency perimeter.** `IAgencyScopeProvider` (Kernel) is implemented by Administration
+(`AgencyScopeProvider`: BFS over the agency tree + active `PermissionAttribution` rows scoped
+to an agency); `null` means unrestricted (super-user). `AgencyAuthorizationBehavior` rejects
+any command implementing `IAgencyScopedRequest` with `AGENCY_OUT_OF_SCOPE`. A single read
+outside the perimeter returns `CLIENT_NOT_FOUND` (404), never 403 — the existence of a client
+must not leak.
+
+**Tenant parameters** are module-owned (`customer_settings`, `ICustomerSettings`, defaults in
+`CustomerSettingKeys.Defaults`, seeded idempotently by `CustomerSeeder` for every active
+tenant) because M12 exposes no generic settings store. Legal forms are a per-tenant closed
+list in `legal_forms`.
+
+**Idempotent consumers**: every MassTransit consumer of the module starts with
+`IInboxGuard.TryBeginAsync(...)` backed by `inbox_messages`, so a replayed KYC event never
+changes state twice. Client status follows M02's decisions; a `KycValidated` on a Suspended or
+Archived client updates `KycStatus` only.
+
+**Merge is four-eyes.** `ClientMergeRequest` refuses approval by its own requester
+(`SELF_APPROVAL_FORBIDDEN`); an M12 `WorkflowInstance` is created for traceability but the M12
+engine enforces no self-approval rule of its own, so M01 owns that guarantee.
+
+Concurrency uses the PostgreSQL `xmin` token (`Version`) with error `CONCURRENCY_CONFLICT`.
+No endpoint deletes a client: archiving is a status, anonymisation blanks encrypted fields.
 
 ### Adding a new module
 

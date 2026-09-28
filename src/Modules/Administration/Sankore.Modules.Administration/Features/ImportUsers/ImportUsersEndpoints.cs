@@ -80,7 +80,7 @@ public static class ImportUsersEndpoints
     }
 
     private static async Task<IResult> ImportFromGoogleSheetEndpoint(
-        GoogleSheetImportRequest req,
+        UserGoogleSheetImportRequest req,
         ICurrentUser currentUser,
         ITenantContext tenant,
         ISender sender,
@@ -120,4 +120,9 @@ public static class ImportUsersEndpoints
 }
 
 public sealed record ImportJobCreatedResult(Guid ImportJobId);
-public sealed record GoogleSheetImportRequest(string SpreadsheetUrl);
+/// <summary>
+/// Google Sheets source for a USER import. Prefixed because the Leads module exposes its own
+/// <c>GoogleSheetImportRequest</c> with a different shape, and Swashbuckle keys OpenAPI
+/// components by simple type name — two same-named schemas break the whole document.
+/// </summary>
+public sealed record UserGoogleSheetImportRequest(string SpreadsheetUrl);
