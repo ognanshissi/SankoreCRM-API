@@ -26,8 +26,23 @@ internal sealed class CachedEmailProviderResolver(
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    private static readonly ResolvedEmailProvider PlatformDefault =
-        new("Smtp", true, "sankoredev@sankorecrm.io", "Sankore CRM", null, null, null);
+    /// <summary>
+    /// What a tenant that has never configured anything gets: the platform's own SMTP account,
+    /// whose connection settings come from Notifications:Smtp in configuration.
+    /// </summary>
+    private static readonly ResolvedEmailProvider PlatformDefault = new(
+        ProviderType: "Default",
+        IsDefault: true,
+        FromEmail: null,
+        FromName: null,
+        ReplyToEmail: null,
+        SendingDomain: null,
+        HasCredential: false,
+        SmtpHost: null,
+        SmtpPort: null,
+        SmtpUsername: null,
+        SmtpUseSsl: false,
+        SmtpUseStartTls: false);
 
     public async Task<ResolvedEmailProvider> ResolveAsync(Guid tenantId, CancellationToken ct)
     {
@@ -53,7 +68,12 @@ internal sealed class CachedEmailProviderResolver(
                 config.FromName,
                 config.ReplyToEmail,
                 config.SendingDomain,
-                config.CredentialVaultPath);
+                config.HasCredential,
+                config.SmtpHost,
+                config.SmtpPort,
+                config.SmtpUsername,
+                config.SmtpUseSsl,
+                config.SmtpUseStartTls);
 
         var serialized = JsonSerializer.Serialize(provider, JsonOpts);
         await cache.SetStringAsync(key, serialized,

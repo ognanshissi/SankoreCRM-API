@@ -14,7 +14,10 @@ public sealed class AesSecretsModule(
     SecretsDbContext db,
     IOptions<SecretsOptions> options) : ISecretsModule
 {
-    private byte[] Key => Convert.FromBase64String(options.Value.EncryptionKey);
+    // Decoded once per instance, not per operation. Validated at start-up by
+    // AddSecretsVault, so reaching here with an unusable key means the vault was
+    // registered without it.
+    private readonly byte[] _key = Convert.FromBase64String(options.Value.EncryptionKey);
 
     public async Task SetAsync(SecretKey key, string value, DateTimeOffset? expiresAt = null, CancellationToken ct = default)
     {
@@ -106,7 +109,7 @@ public sealed class AesSecretsModule(
         var cipherBytes = new byte[plainBytes.Length];
         var tag = new byte[16]; // GCM tag
 
-        using var aes = new AesGcm(Key, 16);
+        using var aes = new AesGcm(_key, 16);
         aes.Encrypt(iv, plainBytes, cipherBytes, tag);
 
         return (
@@ -122,7 +125,7 @@ public sealed class AesSecretsModule(
         var tagBytes = Convert.FromBase64String(tag);
         var plainBytes = new byte[cipherBytes.Length];
 
-        using var aes = new AesGcm(Key, 16);
+        using var aes = new AesGcm(_key, 16);
         aes.Decrypt(ivBytes, cipherBytes, tagBytes, plainBytes);
 
         return Encoding.UTF8.GetString(plainBytes);

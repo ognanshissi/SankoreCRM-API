@@ -37,6 +37,12 @@ dotnet user-secrets set "ConnectionStrings:Database" "Host=localhost;Port=5432;D
 dotnet user-secrets set "Customers:FieldEncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 dotnet user-secrets set "Customers:BlindIndexKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 
+# Secrets vault master key (AES-256-GCM) — protects every per-tenant credential
+# (SMTP passwords, Brevo API keys, lead-source secrets). A dev value sits in
+# appsettings.Development.json; the API REFUSES TO START without a valid one.
+# Losing it makes every stored secret undecryptable — back it up, don't rotate casually.
+dotnet user-secrets set "Secrets:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+
 # Hangfire dashboard credentials — it points at the SAME database as the API and
 # denies every request when no password is set.
 dotnet user-secrets init --project src/Bootstrapper/Sankore.Hangfire
@@ -218,6 +224,27 @@ engine enforces no self-approval rule of its own, so M01 owns that guarantee.
 
 Concurrency uses the PostgreSQL `xmin` token (`Version`) with error `CONCURRENCY_CONFLICT`.
 No endpoint deletes a client: archiving is a status, anonymisation blanks encrypted fields.
+
+### Secrets vault
+
+`ISecretsModule` (Kernel) / `AesSecretsModule` (`Shared.Infrastructure/Secrets/`) — AES-256-GCM
+values in `secrets.entries`, keyed `(TenantId, Scope, EntityId, Name)`. Registered by
+`services.AddSecretsVault(config, configureDb)`, which **validates `Secrets:EncryptionKey` at
+start-up** (present, base64, exactly 32 bytes) and fails the boot otherwise. Before that
+validation existed, a missing key surfaced as `ArgumentNullException (Parameter 's')` from
+`Convert.FromBase64String` on the first write — a 500 for whoever happened to save a provider.
+
+The vault is shared infrastructure, so no module owns its schema: `Program.cs` migrates it in
+the startup scope via `SecretsServiceCollectionExtensions.InitializeAsync`, next to the audit
+schema. Without that call the table is never created and every write fails with
+`relation "secrets.entries" does not exist`.
+
+Per-tenant email credentials go through `NotificationSecrets.CredentialKey(tenantId,
+providerType)` (Administration.PublicApi) → `(tenantId, "notifications", Guid.Empty,
+"<provider>-credential")`. One credential per provider, so switching SMTP ⇄ Brevo does not
+destroy the other's. M12 writes it from `PUT /notification-settings`; M08 reads it at send time
+through `VaultNotificationCredentials`. The value never reaches a column, a `GET`, an event or
+an audit row.
 
 ### Adding a new module
 

@@ -10,6 +10,7 @@ using Sankore.Modules.Notifications.Infrastructure;
 using Sankore.Modules.Notifications.Infrastructure.Providers;
 using Sankore.Modules.Notifications.Infrastructure.Rendering;
 using Sankore.Modules.Notifications.Infrastructure.Senders;
+using Sankore.Modules.Administration.PublicApi;
 
 /// <summary>
 /// Background service that polls the email_outbox_messages table and dispatches
@@ -120,6 +121,7 @@ internal sealed class EmailOutboxProcessor(
         var resolver = scope.ServiceProvider.GetRequiredService<IEmailProviderResolver>();
         var renderer = scope.ServiceProvider.GetRequiredService<ITemplateRenderer>();
         var sender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
+        var admin = scope.ServiceProvider.GetRequiredService<IAdministrationModule>();
 
         // Load with tracking so mutations are persisted
         var message = await db.EmailOutboxMessages
@@ -135,6 +137,36 @@ internal sealed class EmailOutboxProcessor(
         message.MarkSending();
         db.EmailOutboxMessages.Update(message);
         await db.SaveChangesAsync(ct);
+
+        // ── Monthly quota ───────────────────────────────────────────────────
+        // Enforced HERE and nowhere else. Checking at queue time would need the usage count,
+        // which is cached for 15 minutes alongside the provider config — a stale count is worse
+        // than no check. One gate, at the only moment that actually consumes an allowance.
+        var quota = await admin.TryConsumeEmailQuotaAsync(message.TenantId, ct);
+
+        if (!quota.Granted)
+        {
+            // Dead-lettered outright rather than retried: the allowance will not free up before
+            // the month turns, and retrying until MaxAttempts would just bury the real reason.
+            message.MarkQuotaExceeded(quota.Limit, quota.UsedThisMonth);
+            db.EmailOutboxMessages.Update(message);
+
+            db.EmailDeliveryLogs.Add(EmailDeliveryLog.Record(
+                message.TenantId,
+                message.Id,
+                EmailDeliveryEventType.Rejected,
+                message.RecipientEmail,
+                $"{{\"source\":\"outbox_processor\",\"reason\":\"monthly_quota_exceeded\"," +
+                $"\"limit\":{quota.Limit},\"used\":{quota.UsedThisMonth}}}"));
+
+            await db.SaveChangesAsync(ct);
+
+            logger.LogWarning(
+                "Email rejected — monthly quota reached | MessageId={Id} Tenant={TenantId} Used={Used}/{Limit}",
+                message.Id, message.TenantId, quota.UsedThisMonth, quota.Limit);
+
+            return;
+        }
 
         try
         {

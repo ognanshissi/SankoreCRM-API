@@ -17,6 +17,9 @@ using Sankore.Modules.Notifications.Infrastructure.Processor;
 using Sankore.Modules.Notifications.Infrastructure.Providers;
 using Sankore.Modules.Notifications.Infrastructure.Rendering;
 using Sankore.Modules.Notifications.Infrastructure.Senders;
+using Microsoft.AspNetCore.Http;
+using Sankore.Modules.Notifications.Features.TestSend;
+using Sankore.Modules.Notifications.Infrastructure.Senders.Brevo;
 using Sankore.Modules.Notifications.Infrastructure.Senders.Smtp;
 using Sankore.Modules.Notifications.PublicApi;
 
@@ -47,9 +50,14 @@ public static class NotificationsModule
         // Email transport: keyed senders per provider type, routed by CompositeEmailSender
         // "stub" is the fallback for provider types with no sender implementation yet
         // (Ses / Postmark / SendGrid) — it logs instead of throwing at send time.
-        services.AddKeyedSingleton<IEmailSender, StubEmailSender>("stub");
-        services.AddKeyedSingleton<IEmailSender, SmtpEmailSender>("smtp");
-        services.AddSingleton<IEmailSender, CompositeEmailSender>();
+        // Scoped, not singleton: the senders resolve the tenant's credential through
+        // ISecretsModule, which is scoped because it owns a DbContext.
+        services.AddKeyedScoped<IEmailSender, StubEmailSender>("stub");
+        services.AddKeyedScoped<IEmailSender, SmtpEmailSender>("smtp");
+        services.AddKeyedScoped<IEmailSender, BrevoEmailSender>("brevo");
+        services.AddScoped<IEmailSender, CompositeEmailSender>();
+        services.AddScoped<INotificationCredentials, VaultNotificationCredentials>();
+        services.AddHttpClient(BrevoEmailSender.HttpClientName);
 
         // SMTP options — bind from Notifications:Smtp in appsettings / user-secrets
         services.Configure<SmtpOptions>(config.GetSection(SmtpOptions.SectionName));
@@ -92,6 +100,7 @@ public static class NotificationsModule
         app.MapEmailTemplatesEndpoints();
         app.MapWebhooksEndpoints();
         app.MapDeliveryLogsEndpoints();
+        app.MapGroup("notification-settings").WithTags("Notification Settings").MapSendTestEmail();
         return app;
     }
 }

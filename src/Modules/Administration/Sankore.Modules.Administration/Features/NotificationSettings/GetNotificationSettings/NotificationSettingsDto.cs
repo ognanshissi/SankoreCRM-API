@@ -7,8 +7,13 @@ public sealed record NotificationSettingsDto(
     string? FromName,
     string? ReplyToEmail,
     string? SendingDomain,
-    /// <summary>Never the real secret — only a masked reference path.</summary>
-    string? CredentialVaultPathRef,
+    /// <summary>Whether a credential is stored in the vault. The secret itself is never returned.</summary>
+    bool HasCredential,
+    string? SmtpHost,
+    int? SmtpPort,
+    string? SmtpUsername,
+    bool SmtpUseSsl,
+    bool SmtpUseStartTls,
     int? MonthlyQuotaLimit,
     int CurrentMonthUsageCount,
     DateTimeOffset UpdatedAt);

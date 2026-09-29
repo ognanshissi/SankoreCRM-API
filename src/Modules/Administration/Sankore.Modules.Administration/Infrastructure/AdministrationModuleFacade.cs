@@ -34,6 +34,52 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db, Use
         throw new NotImplementedException();
     }
 
+    /// <summary>
+    /// Retried on a concurrency clash rather than failed: two outbox instances hitting the same
+    /// tenant in the same millisecond is ordinary, and losing an email over it would be absurd.
+    /// The retry re-reads, so the second attempt decides against the winner's count.
+    /// </summary>
+    private const int QuotaRetries = 3;
+
+    public async Task<EmailQuotaDecision> TryConsumeEmailQuotaAsync(Guid tenantId, CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < QuotaRetries; attempt++)
+        {
+            var settings = await db.TenantNotificationSettings
+                .AsTracking()
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+
+            // A tenant that never opened the settings screen has no limit to enforce.
+            if (settings is null)
+                return new EmailQuotaDecision(Granted: true, Limit: null, UsedThisMonth: 0);
+
+            var granted = settings.TryConsumeMonthlyQuota();
+
+            if (!granted)
+            {
+                return new EmailQuotaDecision(
+                    false, settings.MonthlyQuotaLimit, settings.CurrentMonthUsageCount);
+            }
+
+            try
+            {
+                await db.SaveChangesAsync(ct);
+
+                return new EmailQuotaDecision(
+                    true, settings.MonthlyQuotaLimit, settings.CurrentMonthUsageCount);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Someone else counted first. Drop the stale entity and read the new truth.
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        // Persistent contention: refuse rather than send uncounted. The outbox will retry.
+        return new EmailQuotaDecision(Granted: false, Limit: null, UsedThisMonth: 0);
+    }
+
     public async Task<TenantNotificationConfigDto?> GetNotificationConfigAsync(
         Guid tenantId, CancellationToken ct)
     {
@@ -48,8 +94,13 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db, Use
             s.FromName,
             s.ReplyToEmail,
             s.SendingDomain,
-            s.CredentialVaultPath,
-            s.MonthlyQuotaLimit);
+            s.MonthlyQuotaLimit,
+            s.HasCredential,
+            s.SmtpHost,
+            s.SmtpPort,
+            s.SmtpUsername,
+            s.SmtpUseSsl,
+            s.SmtpUseStartTls);
     }
 
     public async Task<string?> GetProductCategoryAsync(

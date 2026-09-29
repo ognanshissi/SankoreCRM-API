@@ -83,6 +83,19 @@ public sealed class EmailOutboxMessage
     }
 
     /// <summary>Resets a DeadLettered message for manual requeue (V1.1).</summary>
+    /// <summary>
+    /// Refused by the tenant's monthly allowance. Goes straight to dead-letter: unlike a network
+    /// blip, this will not resolve before the month turns, and burning the retry budget on it
+    /// would replace the real reason with "max attempts reached".
+    /// </summary>
+    public void MarkQuotaExceeded(int? limit, int usedThisMonth)
+    {
+        AttemptCount++;
+        LastAttemptAt = DateTimeOffset.UtcNow;
+        LastError = $"MONTHLY_QUOTA_EXCEEDED: {usedThisMonth} of {limit?.ToString() ?? "unlimited"} used this month.";
+        Status = EmailOutboxStatus.DeadLettered;
+    }
+
     public void ResetForRetry()
     {
         Status = EmailOutboxStatus.Pending;

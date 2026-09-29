@@ -28,16 +28,16 @@ internal sealed class GetNotificationSettingsHandler(
                 FromName: null,
                 ReplyToEmail: null,
                 SendingDomain: null,
-                CredentialVaultPathRef: null,
+                HasCredential: false,
+                SmtpHost: null,
+                SmtpPort: null,
+                SmtpUsername: null,
+                SmtpUseSsl: false,
+                SmtpUseStartTls: false,
                 MonthlyQuotaLimit: null,
                 CurrentMonthUsageCount: 0,
                 UpdatedAt: DateTimeOffset.UtcNow));
         }
-
-        // Mask vault path: expose only the reference path, never the secret value
-        var maskedVaultRef = settings.CredentialVaultPath is not null
-            ? $"vault://{settings.CredentialVaultPath}"
-            : null;
 
         return Result.Ok(new NotificationSettingsDto(
             settings.ProviderType,
@@ -46,7 +46,12 @@ internal sealed class GetNotificationSettingsHandler(
             settings.FromName,
             settings.ReplyToEmail,
             settings.SendingDomain,
-            maskedVaultRef,
+            settings.HasCredential,
+            settings.SmtpHost,
+            settings.SmtpPort,
+            settings.SmtpUsername,
+            settings.SmtpUseSsl,
+            settings.SmtpUseStartTls,
             settings.MonthlyQuotaLimit,
             settings.CurrentMonthUsageCount,
             settings.UpdatedAt));

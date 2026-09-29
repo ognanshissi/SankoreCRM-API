@@ -199,12 +199,13 @@ builder.Services.AddDbContextFactory<AuditDbContext>(opts =>
 builder.Services.AddScoped<IAuditWriter, SqlAuditWriter>();
 
 // Secrets vault — AES-256-GCM encrypted, PostgreSQL-backed.
-builder.Services.Configure<SecretsOptions>(builder.Configuration.GetSection("Secrets"));
-builder.Services.AddDbContext<SecretsDbContext>(opts =>
-    opts.UseNpgsql(connectionString,
-        b => b.MigrationsHistoryTable("__EFMigrationsHistory", "secrets"))
+// AddSecretsVault validates Secrets:EncryptionKey at start-up: the app refuses to boot without
+// a usable key rather than throwing on the first write.
+builder.Services.AddSecretsVault(
+    builder.Configuration,
+    opts => opts.UseNpgsql(connectionString,
+            b => b.MigrationsHistoryTable("__EFMigrationsHistory", "secrets"))
         .UseSnakeCaseNamingConvention());
-builder.Services.AddScoped<ISecretsModule, AesSecretsModule>();
 
 // Message bus (MassTransit). In-memory transport by default for local dev;
 // swap to RabbitMQ/Kafka via configuration for staging/production without
@@ -336,6 +337,10 @@ using (var scope = app.Services.CreateScope())
     // Audit schema — independent of all module schemas.
     var auditDb = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
     await auditDb.Database.MigrateAsync();
+
+    // Secrets vault — shared infrastructure, so no module owns its schema: it has to be
+    // migrated here or its table never gets created.
+    await SecretsServiceCollectionExtensions.InitializeAsync(scope.ServiceProvider);
 
     // Each module owns its own migration + initialization.
     // AdministrationModule.InitializeAsync runs migrations AND seeds system roles.

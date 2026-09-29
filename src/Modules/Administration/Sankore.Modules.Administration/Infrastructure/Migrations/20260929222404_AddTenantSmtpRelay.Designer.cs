@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sankore.Modules.Administration.Infrastructure;
@@ -12,9 +13,11 @@ using Sankore.Modules.Administration.Infrastructure;
 namespace Sankore.Modules.Administration.Infrastructure.Migrations
 {
     [DbContext(typeof(AdministrationDbContext))]
-    partial class AdministrationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929222404_AddTenantSmtpRelay")]
+    partial class AddTenantSmtpRelay
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -980,12 +983,6 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<bool>("UseDefaultPlatformProvider")
                         .HasColumnType("boolean")
                         .HasColumnName("use_default_platform_provider");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_tenant_notification_settings");

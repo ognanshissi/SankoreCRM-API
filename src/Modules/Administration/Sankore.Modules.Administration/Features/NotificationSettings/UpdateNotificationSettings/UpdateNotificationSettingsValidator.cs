@@ -30,6 +30,23 @@ internal sealed class UpdateNotificationSettingsValidator
             });
         });
 
+        // A tenant relay without a host is not a relay. The port is optional — the handler
+        // derives 465 or 587 from the TLS mode rather than making an operator remember them.
+        When(x => x.ProviderType == "Smtp", () =>
+        {
+            RuleFor(x => x.SmtpHost)
+                .NotEmpty()
+                .WithMessage(_ => localizer["NotificationSettings.SmtpHost.Required"]);
+
+            RuleFor(x => x.SmtpPort)
+                .InclusiveBetween(1, 65535)
+                .When(x => x.SmtpPort.HasValue);
+
+            RuleFor(x => x)
+                .Must(x => !(x.SmtpUseSsl && x.SmtpUseStartTls))
+                .WithMessage(_ => localizer["NotificationSettings.SmtpTls.Exclusive"]);
+        });
+
         RuleFor(x => x.ReplyToEmail)
             .EmailAddress()
             .When(x => !string.IsNullOrEmpty(x.ReplyToEmail))

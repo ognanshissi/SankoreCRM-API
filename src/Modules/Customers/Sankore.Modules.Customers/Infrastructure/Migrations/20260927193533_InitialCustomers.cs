@@ -11,6 +11,14 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // NOTE: clients, client_groups and client_number_sequences map a concurrency token
+            // onto PostgreSQL's xmin system column. EF scaffolds that as a real column, which
+            // CREATE TABLE refuses:
+            //     ERROR: column name "xmin" conflicts with a system column name
+            // The column already exists on every table — mapping it is a read-only binding, not
+            // a schema change — so those three lines were removed by hand. The model snapshot
+            // keeps the mapping, which is what matters at run time.
+
             migrationBuilder.EnsureSchema(
                 name: "customers");
 
@@ -53,7 +61,6 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     created_by = table.Column<Guid>(type: "uuid", nullable: false),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false),
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
@@ -88,8 +95,7 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
                     agency_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     year = table.Column<int>(type: "integer", nullable: false),
-                    next_value = table.Column<int>(type: "integer", nullable: false),
-                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
+                    next_value = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -198,7 +204,6 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     updated_by = table.Column<Guid>(type: "uuid", nullable: true),
                     updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false),
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>

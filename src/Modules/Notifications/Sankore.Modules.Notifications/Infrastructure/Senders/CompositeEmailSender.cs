@@ -17,6 +17,7 @@ internal sealed class CompositeEmailSender(IServiceProvider sp) : IEmailSender
         {
             null or "" or "default" => "smtp",
             "smtp"                  => "smtp",
+            "brevo"                 => "brevo",
             "ses"                   => "ses",
             "postmark"              => "postmark",
             "sendgrid"              => "sendgrid",

@@ -20,7 +20,10 @@ internal sealed class SetMonthlyQuotaHandler(
 {
     public async Task<Result> Handle(SetMonthlyQuotaCommand request, CancellationToken ct)
     {
+        // Same trap as UpdateNotificationSettingsHandler: NoTracking by default means an
+        // existing row would be mutated detached and never written.
         var settings = await db.TenantNotificationSettings
+            .AsTracking()
             .FirstOrDefaultAsync(ct);
 
         if (settings is null)

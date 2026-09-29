@@ -14,6 +14,7 @@ namespace Sankore.Modules.Administration.Features.NotificationSettings.UpdateNot
 internal sealed class UpdateNotificationSettingsHandler(
     AdministrationDbContext db,
     ICurrentUser currentUser,
+    ISecretsModule secrets,
     [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher,
     IDistributedCache cache)
     : IRequestHandler<UpdateNotificationSettingsCommand, Result>
@@ -21,15 +22,31 @@ internal sealed class UpdateNotificationSettingsHandler(
     public async Task<Result> Handle(
         UpdateNotificationSettingsCommand request, CancellationToken ct)
     {
-        var settings = await db.TenantNotificationSettings
-            .FirstOrDefaultAsync(ct);
+        var tenantId = currentUser.TenantId;
+
+        // AsTracking is not optional here: the DbContext is NoTracking by default, so without it
+        // an UPDATE of an existing row mutates a detached entity and SaveChangesAsync writes
+        // nothing — the settings appear to save and silently do not.
+        var settings = await db.TenantNotificationSettings.AsTracking().FirstOrDefaultAsync(ct);
 
         if (settings is null)
         {
-            settings = TenantNotificationSettings.CreateDefault(
-                currentUser.TenantId, currentUser.Id);
+            settings = TenantNotificationSettings.CreateDefault(tenantId, currentUser.Id);
             db.TenantNotificationSettings.Add(settings);
         }
+
+        // Captured BEFORE UpdateProvider overwrites it — the credential decision below depends
+        // on whether the provider actually changed.
+        var previousProvider = settings.ProviderType;
+
+        var smtp = request.ProviderType == "Smtp" && !string.IsNullOrWhiteSpace(request.SmtpHost)
+            ? new SmtpRelaySettings(
+                request.SmtpHost.Trim(),
+                request.SmtpPort ?? DefaultPortFor(request.SmtpUseSsl),
+                string.IsNullOrWhiteSpace(request.SmtpUsername) ? null : request.SmtpUsername.Trim(),
+                request.SmtpUseSsl,
+                request.SmtpUseStartTls)
+            : null;
 
         settings.UpdateProvider(
             request.ProviderType,
@@ -37,18 +54,42 @@ internal sealed class UpdateNotificationSettingsHandler(
             request.FromName,
             request.ReplyToEmail,
             request.SendingDomain,
-            request.CredentialVaultPath,
+            smtp,
             currentUser.Id);
 
-        // Publish outbox event atomically with the settings change
-        await publisher.PublishAsync(
-            new TenantNotificationSettingsChangedEvent(currentUser.TenantId), ct);
+        // ── The credential ──────────────────────────────────────────────────
+        // Written to the vault BEFORE the row is saved. If the vault write throws, the
+        // TransactionScope opened by TransactionBehavior rolls the settings back, so the tenant
+        // is never left claiming a provider whose credential was never stored.
+        if (!string.IsNullOrWhiteSpace(request.Credential))
+        {
+            await secrets.SetAsync(
+                NotificationSecrets.CredentialKey(tenantId, request.ProviderType),
+                request.Credential,
+                expiresAt: null,
+                ct);
 
+            settings.SetCredentialPresence(true, currentUser.Id);
+        }
+        else if (previousProvider != request.ProviderType)
+        {
+            // Switching provider without supplying a credential: whatever was stored belongs to
+            // the OLD provider, so this one has none until an administrator provides it.
+            var existing = await secrets.GetHintAsync(
+                NotificationSecrets.CredentialKey(tenantId, request.ProviderType), ct);
+
+            settings.SetCredentialPresence(existing is not null, currentUser.Id);
+        }
+
+        await publisher.PublishAsync(new TenantNotificationSettingsChangedEvent(tenantId), ct);
         await db.SaveChangesAsync(ct);
 
-        // Immediately invalidate the provider-resolution cache (best-effort)
-        await cache.RemoveAsync($"notifications:provider:{currentUser.TenantId}", ct);
+        // Best-effort: the consumer invalidates it too, and the entry expires on its own.
+        await cache.RemoveAsync($"notifications:provider:{tenantId}", ct);
 
         return Result.Ok();
     }
+
+    /// <summary>465 is implicit TLS, 587 is STARTTLS — the two ports nobody should have to recall.</summary>
+    private static int DefaultPortFor(bool useSsl) => useSsl ? 465 : 587;
 }

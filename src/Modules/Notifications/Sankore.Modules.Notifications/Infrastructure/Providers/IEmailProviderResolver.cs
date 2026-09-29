@@ -11,7 +11,10 @@ public interface IEmailProviderResolver
 
 /// <summary>
 /// Effective provider configuration used by the outbox processor at send time.
-/// Credentials are never stored here — only the vault reference path.
+///
+/// It deliberately holds NO credential. This record is serialized into Redis, and a cache is the
+/// last place an SMTP password or an API key should live: the sender fetches the secret from the
+/// vault at send time, keyed by tenant and provider.
 /// </summary>
 public sealed record ResolvedEmailProvider(
     string ProviderType,
@@ -20,4 +23,10 @@ public sealed record ResolvedEmailProvider(
     string? FromName,
     string? ReplyToEmail,
     string? SendingDomain,
-    string? CredentialVaultPath);
+    /// <summary>A credential exists in the vault. Not the credential.</summary>
+    bool HasCredential,
+    string? SmtpHost,
+    int? SmtpPort,
+    string? SmtpUsername,
+    bool SmtpUseSsl,
+    bool SmtpUseStartTls);

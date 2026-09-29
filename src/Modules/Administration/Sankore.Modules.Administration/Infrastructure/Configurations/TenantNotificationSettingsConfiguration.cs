@@ -17,7 +17,12 @@ internal sealed class TenantNotificationSettingsConfiguration
         b.Property(s => s.FromName).HasMaxLength(200);
         b.Property(s => s.ReplyToEmail).HasMaxLength(256);
         b.Property(s => s.SendingDomain).HasMaxLength(253);
-        b.Property(s => s.CredentialVaultPath).HasMaxLength(500);
+        b.Property(s => s.Version)
+            .HasColumnName("xmin").HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+
+        b.Property(s => s.SmtpHost).HasMaxLength(253);
+        b.Property(s => s.SmtpUsername).HasMaxLength(256);
 
         // One row per tenant — enforced by unique index
         b.HasIndex(s => s.TenantId).IsUnique();

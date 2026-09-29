@@ -60,12 +60,25 @@ public interface IAdministrationModule
     /// </summary>
     Task<TenantNotificationConfigDto?> GetNotificationConfigAsync(
         Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Counts one email against the tenant's monthly allowance, or refuses it. Check and
+    /// increment happen together so two concurrent senders cannot both slip past the limit.
+    /// A tenant with no configured limit is always granted — and still counted, so usage stays
+    /// visible before anyone sets one.
+    /// </summary>
+    Task<EmailQuotaDecision> TryConsumeEmailQuotaAsync(Guid tenantId, CancellationToken ct);
 }
 
 /// <summary>
 /// Read-only projection of tenant email provider settings exposed to
 /// the Notifications module. Credentials are never included — only the
 /// vault reference path.
+/// </summary>
+/// <summary>
+/// A tenant's effective email configuration — everything EXCEPT the credential itself, which
+/// the consumer fetches from the vault with <see cref="NotificationSecrets.CredentialKey"/>.
+/// Keeping the secret out of this DTO is what lets M08 cache the rest in Redis.
 /// </summary>
 public sealed record TenantNotificationConfigDto(
     string ProviderType,
@@ -74,8 +87,15 @@ public sealed record TenantNotificationConfigDto(
     string? FromName,
     string? ReplyToEmail,
     string? SendingDomain,
-    string? CredentialVaultPath,
-    int? MonthlyQuotaLimit);
+    int? MonthlyQuotaLimit,
+    /// <summary>Whether a credential was stored for this provider. Never the credential.</summary>
+    bool HasCredential,
+    // ── SMTP relay settings, meaningful when ProviderType is "Smtp" ─────────
+    string? SmtpHost,
+    int? SmtpPort,
+    string? SmtpUsername,
+    bool SmtpUseSsl,
+    bool SmtpUseStartTls);
 
 /// <summary>
 /// Read-only projection of an agency, safe to hand to other modules: identifier,
@@ -105,3 +125,6 @@ public sealed record AgentSummary(
     int HotLeadsCount,
     double ConversionRate30d,
     bool IsAvailable);
+
+/// <param name="Limit">Null when the tenant has no monthly limit.</param>
+public sealed record EmailQuotaDecision(bool Granted, int? Limit, int UsedThisMonth);
