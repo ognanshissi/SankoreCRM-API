@@ -47,6 +47,7 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
 
     // ── Messaging plumbing ──────────────────────────────────────────────────
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public DbSet<ClientImportJob> ClientImportJobs => Set<ClientImportJob>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -119,6 +120,7 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
         modelBuilder.Entity<LegalForm>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         // The inbox is tenant-scoped too: a replayed event from tenant A must never
         // be considered "already processed" because tenant B saw the same id.
+        modelBuilder.Entity<ClientImportJob>().HasQueryFilter(j => j.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<InboxMessage>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
     }
 }

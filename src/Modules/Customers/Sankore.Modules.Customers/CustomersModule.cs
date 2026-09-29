@@ -25,6 +25,7 @@ using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Infrastructure.FileStore;
 using Sankore.Shared.Kernel;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sankore.Modules.Customers.Features.Import;
 
 /// <summary>
 /// Composition root of module M01 (Customers): the only file the host touches to wire
@@ -88,6 +89,7 @@ public static class CustomersModule
         services.AddTimelineServices();
         services.AddComplianceServices();
         services.AddLeadConversionServices();
+        services.AddImportServices();
 
         return services;
     }
@@ -125,6 +127,7 @@ public static class CustomersModule
         app.MapDuplicatesEndpoints();
         app.MapTimelineEndpoints();
         app.MapComplianceEndpoints();
+        app.MapImportClientsEndpoints();
         return app;
     }
 }

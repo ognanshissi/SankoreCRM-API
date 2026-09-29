@@ -20,6 +20,9 @@
          reference to 13.0.3, same override the other modules apply. -->
     <PackageReference Include="Newtonsoft.Json" />
     <PackageReference Include="CsvHelper" />
+    <!-- Bulk client import: .xlsx reading and Google Sheets, same sources as the user import. -->
+    <PackageReference Include="ClosedXML" />
+    <PackageReference Include="Google.Apis.Sheets.v4" />
   </ItemGroup>
 
   <ItemGroup>
