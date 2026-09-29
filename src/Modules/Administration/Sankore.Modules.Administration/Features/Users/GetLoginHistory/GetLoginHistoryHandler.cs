@@ -27,7 +27,13 @@ internal sealed class GetLoginHistoryHandler(AdministrationDbContext db)
                 l.Id,
                 l.OccuredAt,
                 l.Location != null ? l.Location.Latitude : null,
-                l.Location != null ? l.Location.Longitude : null))
+                l.Location != null ? l.Location.Longitude : null,
+                l.IpAddress,
+                l.UserAgent,
+                l.Browser,
+                l.BrowserVersion,
+                l.Platform.ToString(),
+                l.ClientKind.ToString()))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<LoginHistoryDto>>(items);

@@ -7,9 +7,13 @@ using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Converts a lead into a customer.
-/// If <see cref="CustomerId"/> is null the handler generates a new Guid that
-/// the Customers module will use as the customer's Id when it processes the
-/// <c>LeadConvertedIntegrationEvent</c> from the outbox.
+///
+/// When <see cref="CustomerId"/> is supplied the lead is attached to that existing customer.
+/// When it is null the handler CREATES the client synchronously through
+/// <c>ICustomersModule.CreateFromLeadAsync</c> (US-M01-BE-06) and uses the identifier it
+/// returns. It is deliberately not left to an outbox consumer: the caller needs the customer
+/// id in its response, and a lead flagged "converted" pointing at a customer that does not
+/// exist yet is worse than a slower call.
 /// </summary>
 internal sealed record ConvertLeadCommand(
     Guid LeadId,
@@ -34,6 +38,14 @@ public sealed record ConvertLeadResult(
     Guid LeadId,
     Guid CustomerId,
     DateTimeOffset ConvertedAt,
+    /// <summary>
+    /// Set when M01 refused to create the client because its identity document already belongs
+    /// to someone — <c>DUPLICATE_IDENTITY_DOCUMENT</c>. The lead is NOT converted; the agent is
+    /// expected to attach it to <see cref="ExistingCustomerId"/> by hand (US-M01-BE-06).
+    /// </summary>
+    string? BlockingCode = null,
+    Guid? ExistingCustomerId = null,
+    string? ExistingCustomerNumber = null,
     /// <summary>True when high-confidence duplicate leads were found at conversion time.</summary>
     bool DuplicateDetected = false,
     /// <summary>

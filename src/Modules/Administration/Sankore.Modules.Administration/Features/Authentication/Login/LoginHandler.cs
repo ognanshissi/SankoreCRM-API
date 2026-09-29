@@ -61,8 +61,13 @@ internal sealed class LoginHandler(
         user.RecordSuccessfulLogin();
         db.Users.Update(user);
 
-        // LoginHistory
-        var userLogin = UserLoginLocation.Create(tenant.CurrentTenantId, user.Id, new GeoPoint(0, 0));
+        // LoginHistory: address, raw User-Agent, and what could be read from it.
+        var userLogin = UserLoginLocation.Create(
+            tenant.CurrentTenantId,
+            user.Id,
+            location: null,
+            ipAddress: request.IpAddress,
+            userAgent: UserAgentParser.Parse(request.UserAgent));
         db.UserLoginLocations.Add(userLogin);
 
         var refreshToken = Domain.RefreshToken.Create(

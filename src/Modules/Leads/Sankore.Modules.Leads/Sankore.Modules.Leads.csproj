@@ -34,6 +34,9 @@
     <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
     <!-- Cross-module dependency: Notifications PublicApi for SLA alert delivery (US-M13-141) -->
     <ProjectReference Include="..\..\Notifications\Sankore.Modules.Notifications.PublicApi\Sankore.Modules.Notifications.PublicApi.csproj" />
+    <!-- Cross-module dependency: Customers PublicApi — ICustomersModule.CreateFromLeadAsync is
+         what actually creates the client record when a lead is converted (US-M01-BE-06). -->
+    <ProjectReference Include="..\..\Customers\Sankore.Modules.Customers.PublicApi\Sankore.Modules.Customers.PublicApi.csproj" />
     <!-- Cross-module dependency: Customer360 PublicApi for convert-to-existing validation (US-M13-171) -->
     <ProjectReference Include="..\..\Customer360\Sankore.Modules.Customer360.PublicApi\Sankore.Modules.Customer360.PublicApi.csproj" />
     <!-- Cross-module dependency: KYC PublicApi for KycRequested event (US-M13-172) -->

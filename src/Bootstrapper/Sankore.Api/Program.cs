@@ -234,6 +234,8 @@ builder.Services.AddMassTransit(x =>
     // 360° timeline projection (US-M01-BE-26). Adding a source module later means
     // adding a consumer here — the timeline model itself never changes.
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientCreatedTimelineConsumer>();
+    // Welcomes a prospect who just became a client (lead conversions only).
+    x.AddConsumer<Sankore.Modules.Customers.Features.LeadConversion.Consumers.ClientWelcomeEmailConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientActivatedTimelineConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientSuspendedTimelineConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientArchivedTimelineConsumer>();

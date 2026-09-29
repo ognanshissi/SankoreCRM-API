@@ -22,6 +22,7 @@ internal static class NotificationsSeeder
         await SeedAgencyManagerUnassignedAsync(db, logger, ct);
         await SeedUserAgencyChangedAsync(db, logger, ct);
         await SeedUserRoleGrantedAsync(db, logger, ct);
+        await SeedClientWelcomeAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -742,6 +743,90 @@ internal static class NotificationsSeeder
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">
                         If this is unexpected, please contact your administrator.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── client.welcome ──────────────────────────────────────────────────────
+
+    private static async Task SeedClientWelcomeAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "client.welcome";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Bienvenue chez {{ company_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bienvenue {{ full_name }},</h2>
+                      <p>
+                        Votre dossier est ouvert chez {{ company_name }}. Votre numéro client est
+                        <strong>{{ client_number }}</strong>&nbsp;: conservez-le, il vous sera demandé
+                        au guichet et lors de vos échanges avec nos conseillers.
+                      </p>
+                      <p>
+                        Votre conseiller reviendra vers vous pour finaliser les pièces nécessaires à
+                        l'ouverture complète de votre compte.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Ce message vous est adressé parce qu'un dossier a été ouvert à votre nom. Si
+                        vous n'en êtes pas à l'origine, contactez-nous sans tarder.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Welcome to {{ company_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Welcome {{ full_name }},</h2>
+                      <p>
+                        Your file is now open at {{ company_name }}. Your client number is
+                        <strong>{{ client_number }}</strong> — keep it to hand: you will be asked for it
+                        at the counter and whenever you speak to one of our advisers.
+                      </p>
+                      <p>
+                        Your adviser will come back to you about the documents needed to complete the
+                        opening of your account.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        You are receiving this because a file was opened in your name. If that was not
+                        you, please contact us right away.
                       </p>
                     </body>
                     </html>
