@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Shared.Spreadsheets</RootNamespace>
+
+    <!--
+      Exists so that ClosedXML reaches exactly the three modules that read
+      spreadsheets (Administration, Customers, Leads) and nothing else.
+
+      The alternative was to put XlsxCell in Sankore.Shared.Infrastructure,
+      which every project references — including Sankore.Admin and
+      Sankore.Hangfire, neither of which opens a workbook. A tenant registry
+      and a job dashboard have no business shipping a spreadsheet engine.
+
+      Keep this project as narrow as it is: one concern, one dependency.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" />
+  </ItemGroup>
+
+</Project>

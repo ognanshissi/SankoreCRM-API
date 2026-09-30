@@ -4,6 +4,7 @@ namespace Sankore.Modules.Administration.Features.ImportUsers.Readers;
 
 using System.Globalization;
 using ClosedXML.Excel;
+using Sankore.Shared.Spreadsheets;
 using CsvHelper;
 using CsvHelper.Configuration;
 
@@ -46,26 +47,35 @@ public sealed class FileImportReader(IFileStore fileStore) : IUserImportSourceRe
         var headerRow = ws.Row(1);
         var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int col = 1; col <= ws.LastColumnUsed()?.ColumnNumber(); col++)
-            headers[headerRow.Cell(col).GetString().Trim()] = col;
+            headers[XlsxCell.ReadAsText(headerRow.Cell(col))] = col;
 
         int Col(string name) => headers.GetValueOrDefault(name, 0);
 
         for (int r = 2; r <= ws.LastRowUsed()?.RowNumber(); r++)
         {
             var row = ws.Row(r);
-            var email = Col("Email") > 0 ? row.Cell(Col("Email")).GetString().Trim() : "";
+            // XlsxCell keeps every column culture-independent. These are all text today, but an
+            // AgencyCode typed as a number is one spreadsheet away, and the failure would be
+            // silent on the operator's machine and loud only on the server.
+            string Text(string name) => Col(name) > 0 ? XlsxCell.ReadAsText(row.Cell(Col(name))) : "";
+            string? TextOrNull(string name) => Col(name) > 0 ? XlsxCell.ReadAsTextOrNull(row.Cell(Col(name))) : null;
+
+            var email = Text("Email");
             if (string.IsNullOrWhiteSpace(email)) continue;
 
             rows.Add(new ImportUserRow
             {
-                FirstName       = Col("FirstName") > 0 ? row.Cell(Col("FirstName")).GetString().Trim() : "",
-                LastName        = Col("LastName") > 0 ? row.Cell(Col("LastName")).GetString().Trim() : "",
+                FirstName       = Text("FirstName"),
+                LastName        = Text("LastName"),
                 Email           = email,
-                AgencyCode      = Col("AgencyCode") > 0 ? row.Cell(Col("AgencyCode")).GetString().Trim() : null,
-                RoleCode        = Col("RoleCode") > 0 ? row.Cell(Col("RoleCode")).GetString().Trim() : null,
-                DefaultLanguage = Col("DefaultLanguage") > 0 ? row.Cell(Col("DefaultLanguage")).GetString().Trim() : "fr",
-                SpokenLanguages = Col("SpokenLanguages") > 0 ? row.Cell(Col("SpokenLanguages")).GetString().Trim() : null,
-                Specialties     = Col("Specialties") > 0 ? row.Cell(Col("Specialties")).GetString().Trim() : null,
+                AgencyCode      = TextOrNull("AgencyCode"),
+                RoleCode        = TextOrNull("RoleCode"),
+                // Deliberately NOT "TextOrNull(...) ?? \"fr\"": a present-but-blank cell must stay
+                // empty so the validator still reports "DefaultLanguage is required", the way the
+                // CSV path does. Only an absent column falls back.
+                DefaultLanguage = Col("DefaultLanguage") > 0 ? Text("DefaultLanguage") : "fr",
+                SpokenLanguages = TextOrNull("SpokenLanguages"),
+                Specialties     = TextOrNull("Specialties"),
             });
         }
 

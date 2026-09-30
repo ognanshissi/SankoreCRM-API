@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
+    <ProjectReference Include="..\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />
   </ItemGroup>
 
 </Project>

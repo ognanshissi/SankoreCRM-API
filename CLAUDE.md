@@ -225,6 +225,24 @@ engine enforces no self-approval rule of its own, so M01 owns that guarantee.
 Concurrency uses the PostgreSQL `xmin` token (`Version`) with error `CONCURRENCY_CONFLICT`.
 No endpoint deletes a client: archiving is a status, anonymisation blanks encrypted fields.
 
+### Reading spreadsheets
+
+All three importers (users M12, clients M01, leads M13) accept CSV and .xlsx. **Read every
+.xlsx cell through `XlsxCell.ReadAsText` / `ReadAsTextOrNull`** (`Sankore.Shared.Spreadsheets`),
+never `cell.GetString()`.
+
+The import rows are deliberately all-string — a spreadsheet only ever hands back text, and typed
+binding would abort a whole file on one bad cell — and the parsers then read those strings with
+`InvariantCulture`. `GetString()` renders a TYPED cell with the *process* culture, so the two
+disagree: on a fr-FR host a numeric Latitude arrives as `5,300489` and every row is rejected as
+"not a number", and a date cell arrives as `02/04/1987`, which the invariant short-date pattern
+(MM/dd/yyyy) reads as 4 February instead of 2 April — silently. Both depend on where the process
+runs, so they pass every test on a machine whose culture is invariant.
+
+`Sankore.Shared.Spreadsheets` exists to keep ClosedXML off the projects that never open a
+workbook: it is referenced by those three modules only, not by `Shared.Infrastructure`, so
+`Sankore.Admin` ships no spreadsheet engine.
+
 ### Host configuration that must not be hardcoded
 
 **CORS origins** come from `Cors:AllowedOrigins` (a string array), bound by

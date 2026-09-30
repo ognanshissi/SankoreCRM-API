@@ -2,6 +2,7 @@ namespace Sankore.Modules.Customers.Features.Import.Readers;
 
 using System.Globalization;
 using ClosedXML.Excel;
+using Sankore.Shared.Spreadsheets;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Sankore.Shared.Kernel;
@@ -42,7 +43,7 @@ public sealed class ClientFileImportReader(IFileStore fileStore) : IClientImport
         var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var lastColumn = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
         for (var col = 1; col <= lastColumn; col++)
-            headers[headerRow.Cell(col).GetString().Trim()] = col;
+            headers[XlsxCell.ReadAsText(headerRow.Cell(col))] = col;
 
         var rows = new List<ImportClientRow>();
         var lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
@@ -51,9 +52,12 @@ public sealed class ClientFileImportReader(IFileStore fileStore) : IClientImport
         {
             var row = ws.Row(r);
 
+            // XlsxCell rather than GetString(): DateOfBirth and IncorporationDate are dates in
+            // any spreadsheet an operator actually fills in, and a date cell rendered with the
+            // server's culture is read back as the wrong day without anyone being told.
             string? Cell(string name) =>
                 headers.TryGetValue(name, out var col)
-                    ? row.Cell(col).GetString().Trim() is { Length: > 0 } v ? v : null
+                    ? XlsxCell.ReadAsTextOrNull(row.Cell(col))
                     : null;
 
             var candidate = new ImportClientRow

@@ -34,6 +34,7 @@
     <ProjectReference Include="..\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
     <!-- Cross-module: only the Notifications PublicApi contract, never the main assembly -->
     <ProjectReference Include="..\..\Notifications\Sankore.Modules.Notifications.PublicApi\Sankore.Modules.Notifications.PublicApi.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />
   </ItemGroup>
 
   <ItemGroup>

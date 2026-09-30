@@ -37,6 +37,7 @@
     <ProjectReference Include="..\..\Customer360\Sankore.Modules.Customer360.PublicApi\Sankore.Modules.Customer360.PublicApi.csproj" />
     <!-- Leads PublicApi: lead commercial-history import into the client timeline (US-M01-BE-26 / F13.29) -->
     <ProjectReference Include="..\..\Leads\Sankore.Modules.Leads.PublicApi\Sankore.Modules.Leads.PublicApi.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />
   </ItemGroup>
 
   <ItemGroup>

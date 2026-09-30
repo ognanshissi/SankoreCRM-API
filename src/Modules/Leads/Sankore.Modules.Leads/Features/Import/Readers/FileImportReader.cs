@@ -5,6 +5,7 @@ using Sankore.Shared.Kernel;
 using ClosedXML.Excel;
 using CsvHelper;
 using CsvHelper.Configuration;
+using Sankore.Shared.Spreadsheets;
 
 /// <summary>
 /// Reads lead rows from a CSV or Excel (.xlsx) file held in <see cref="IFileStore"/>.
@@ -61,7 +62,7 @@ public sealed class FileImportReader(IFileStore fileStore) : ILeadImportSourceRe
             string? Cell(string name)
             {
                 if (!headers.TryGetValue(name, out var col)) return null;
-                var value = row.Cell(col).GetString().Trim();
+                var value = XlsxCell.ReadAsText(row.Cell(col));
                 return value.Length == 0 ? null : value;
             }
 
