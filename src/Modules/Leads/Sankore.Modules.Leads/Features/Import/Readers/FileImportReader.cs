@@ -73,6 +73,7 @@ public sealed class FileImportReader(IFileStore fileStore) : ILeadImportSourceRe
                 LastName          = Cell("LastName"),
                 PhoneNumber       = Cell("PhoneNumber"),
                 Email             = Cell("Email"),
+                NationalId        = Cell("NationalId"),
                 Source            = Cell("Source"),
                 InterestedProduct = Cell("InterestedProduct"),
                 PreferredLanguage = Cell("PreferredLanguage"),

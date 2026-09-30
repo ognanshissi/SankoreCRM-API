@@ -27,12 +27,6 @@ internal sealed class ValidateActivationTokenHandler(
         if (user is null)
             return Result.Fail("Invalid activation link.");
 
-        if (user.Status == UserStatus.Active)
-            return Result.Fail("Account is already active.");
-
-        if (user.Status != UserStatus.PendingActivation)
-            return Result.Fail("Account cannot be activated.");
-
         // VerifyUserTokenAsync checks validity without consuming the token — AccountActivationHandler
         // consumes it. Provider and purpose must match CreateUserHandler exactly: both are part of
         // the token's purpose chain, so a mismatch reads as an invalid token, not as a bug.

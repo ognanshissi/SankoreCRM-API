@@ -225,6 +225,44 @@ engine enforces no self-approval rule of its own, so M01 owns that guarantee.
 Concurrency uses the PostgreSQL `xmin` token (`Version`) with error `CONCURRENCY_CONFLICT`.
 No endpoint deletes a client: archiving is a status, anonymisation blanks encrypted fields.
 
+### Lead capture, qualification and dispatching
+
+**Dispatching no longer requires `Qualified`.** `Lead.IsDispatchable` is the single definition,
+shared by `Lead.AssignTo` and `DispatchLeadHandler`: any live lead may be dispatched, only the
+terminal statuses (Converted, Lost, Disqualified, Archived) refuse — routing a captured lead to
+an agent is how it gets qualified. Error code: `LEAD_NOT_DISPATCHABLE`.
+
+**The qualification threshold is configurable**, `Leads:QualificationThreshold`, default 60
+unchanged. Do not lower it casually, and do not assume 60 is reachable at capture:
+`LeadScoreCalculator` awards 35 of its 100 points from activity history (20 interactions,
+15 behaviour), which is empty at capture. Measured ceilings on a freshly captured lead are **60
+for a walk-in** (`LeadSource.Agency`, source quality 20/20) and **45 for a file import**
+(`LeadSource.FileImport`, 5/20). A complete row of `docs/sample-lead-import.xlsx` scores 30.
+
+**Which rule applies is resolved from the lead**, by `DispatchingRuleResolver`: the rule pinned
+on the source the lead was ingested through (`LeadSourceConfig.DefaultDispatchingRuleId`, via
+`LeadIngestion` — a `Lead` holds no source-config id), else the highest-priority active rule,
+else `DispatchingRule.Default()`. The rule then carries the strategy. A caller that names a
+strategy explicitly still gets the rule tuned for it, so the manual dispatch screen is unchanged.
+`LeadAssignment.RuleId` records which rule produced an assignment (null = built-in defaults).
+
+`DispatchingRuleSeeder` (run from `LeadsModule.InitializeAsync`) gives every tenant one visible
+rule named **"Par défaut"**, carrying exactly `DispatchingRule.Default()`'s values — so the
+behaviour is unchanged and only its visibility and traceability are new. It seeds **only for a
+tenant that has no rule at all**: a tenant which configured its own has made its choice, and
+re-adding a default after a deliberate deletion would be a startup undoing an administrator's
+decision. Dispatching still works with an empty table, and a test pins that.
+
+**Auto-dispatch on capture** is off by default (`Leads:AutoDispatchOnCapture`). When on,
+`CaptureLeadHandler` publishes `LeadCapturedEvent` **through the outbox**, in the lead's own
+transaction, and `LeadAutoDispatchConsumer` scores, qualifies and dispatches out of band. Never
+do this inline: a lead must persist when no agent is free, and a 400-row import would otherwise
+run 400 synchronous dispatches inside its loop. The consumer skips a lead captured with an owner,
+a suspected duplicate, and anything already assigned — its idempotency is `CurrentAssignmentId`,
+not an inbox table. It establishes `BackgroundJobContext.SetScope` **before** creating its DI
+scope, because `ITenantContext` and `ICurrentUser` are built from it and a consumer has no HTTP
+context.
+
 ### Reading spreadsheets
 
 All three importers (users M12, clients M01, leads M13) accept CSV and .xlsx. **Read every

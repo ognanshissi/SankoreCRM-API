@@ -84,10 +84,16 @@ public sealed class ProcessLeadImportJob(IServiceScopeFactory scopeFactory)
                         PreferredLanguage: row.PreferredLanguage,
                         Latitude:          row.Latitude,
                         Longitude:         row.Longitude,
-                        PreferredAgencyId: null,
+                        // The row's agency IS the preferred agency. Passing null here did more
+                        // than cost 5 score points: DispatchLeadHandler scopes its candidate
+                        // agents with GetAvailableAgentsAsync(tenantId, lead.PreferredAgencyId),
+                        // so an imported lead was dispatched across the whole tenant instead of
+                        // its own branch.
+                        PreferredAgencyId: row.AgencyId,
                         FirstName:         row.FirstName,
                         LastName:          row.LastName,
                         Email:             row.Email,
+                        NationalId:        row.NationalId,
                         Gender:            row.Gender,
                         DateOfBirth:       row.DateOfBirth,
                         DesiredAmount:     row.DesiredAmount,

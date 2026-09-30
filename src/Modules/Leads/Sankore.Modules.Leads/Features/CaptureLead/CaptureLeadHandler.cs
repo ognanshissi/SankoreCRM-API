@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Infrastructure.Workflow;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
@@ -20,7 +22,8 @@ public sealed class CaptureLeadHandler(
     ILogger<CaptureLeadHandler> logger,
     TimeProvider clock,
     IBus bus,
-    IPhoneBlindIndexer phoneBlindIndexer)
+    IPhoneBlindIndexer phoneBlindIndexer,
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<CaptureLeadCommand, Result<CaptureLeadResult>>
 {
     public async Task<Result<CaptureLeadResult>> Handle(
@@ -128,6 +131,19 @@ public sealed class CaptureLeadHandler(
             phoneBlindIndex:      phoneIndex);
 
         db.Leads.Add(lead);
+
+        // Outbox row written into THIS DbContext so it commits with the lead: a captured lead
+        // whose event was lost would never be dispatched, and an event without its lead would
+        // dispatch a row that does not exist.
+        await publisher.PublishAsync(
+            new Events.LeadCapturedEvent(
+                LeadId:             lead.Id,
+                TenantId:           cmd.TenantId,
+                Source:             lead.Source.ToString(),
+                HasExplicitOwner:   cmd.OwnerId.HasValue,
+                DuplicateSuspected: warnMatches is not null),
+            ct);
+
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(

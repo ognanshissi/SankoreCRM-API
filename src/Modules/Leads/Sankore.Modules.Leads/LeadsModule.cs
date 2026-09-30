@@ -130,6 +130,7 @@ public static class LeadsModule
 
         // QualifyLead slice-internal services
         services.AddScoped<LeadScoreCalculator>();
+        services.AddScoped<Features.DispatchLead.DispatchingRuleResolver>();
 
         services.AddScoped<IContextProvider, LeadContextProvider>();
         // Public contract of M13. Consumed by the Customers module (M01) to import a
@@ -199,10 +200,17 @@ public static class LeadsModule
         var db = sp.GetRequiredService<Infrastructure.LeadsDbContext>();
         await db.Database.MigrateAsync();
 
+        var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Infrastructure.LeadsDbContext>>();
+
         await Features.LeadSources.Sdk.SdkVersionSeeder.SeedAsync(
             db,
             sp.GetRequiredService<Features.LeadSources.Sdk.ISdkFileStore>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Infrastructure.LeadsDbContext>>());
+            logger);
+
+        // Makes the implicit default rule visible and tunable per tenant. Same values, so
+        // dispatching behaves exactly as before.
+        await Features.DispatchingRules.DispatchingRuleSeeder.SeedAsync(
+            db, sp.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>(), logger);
     }
 
     public static IEndpointRouteBuilder MapLeadsEndpoints(this IEndpointRouteBuilder app)

@@ -25,6 +25,7 @@ internal sealed class DispatchLeadHandler(
     IAdministrationModule usersModule,
     CompatibilityScorer scorer,
     DispatchingStrategyFactory strategyFactory,
+    DispatchingRuleResolver ruleResolver,
     AgentCapacityService capacityService,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     ILogger<DispatchLeadHandler> logger,
@@ -41,8 +42,11 @@ internal sealed class DispatchLeadHandler(
         if (lead is null)
             return Result.Fail<DispatchLeadResult>("LEAD_NOT_FOUND");
 
-        if (lead.Status != LeadStatus.Qualified)
-            return Result.Fail<DispatchLeadResult>("LEAD_NOT_QUALIFIED");
+        // Any live lead may be dispatched — a captured lead is routed to an agent precisely so
+        // that someone qualifies it. Only the terminal statuses refuse; Lead.IsDispatchable is
+        // the single definition, shared with Lead.AssignTo.
+        if (!lead.IsDispatchable)
+            return Result.Fail<DispatchLeadResult>("LEAD_NOT_DISPATCHABLE");
 
         // 2. Load available agents from the Users module (cross-module contract — PublicApi only)
         var candidates = await usersModule.GetAvailableAgentsAsync(
@@ -59,13 +63,13 @@ internal sealed class DispatchLeadHandler(
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
         }
 
-        // 3. Load tenant-specific dispatching rules (fallback to sane defaults).
-        //    When multiple active rules share a strategy, the highest Priority wins.
-        var rules = await db.DispatchingRules
-            .Where(r => r.IsActive && r.Strategy == cmd.Strategy)
-            .OrderByDescending(r => r.Priority)
-            .FirstOrDefaultAsync(ct)
-            ?? DispatchingRule.Default();
+        // 3. Resolve the applicable rule: the one pinned on the lead's source, else the
+        //    highest-priority active rule, else the built-in defaults. When the caller named a
+        //    strategy, the rule tuned for that strategy is used instead — see the resolver.
+        var rules = await ruleResolver.ResolveAsync(lead, cmd.Strategy, ct);
+
+        // The rule carries the strategy; an explicit request still wins.
+        var effectiveStrategy = cmd.Strategy ?? rules.Strategy;
 
         // 4. Filter out permanently excluded agents before strategy evaluation.
         var eligible_candidates = rules.ExcludedAgentIds.Count > 0
@@ -101,7 +105,7 @@ internal sealed class DispatchLeadHandler(
         }
 
         // 5. Apply the selected strategy to rank candidates
-        var strategy = strategyFactory.Create(cmd.Strategy);
+        var strategy = strategyFactory.Create(effectiveStrategy);
         var scored = await strategy.EvaluateAsync(lead, unsaturated, rules, scorer, ct);
 
         // 5. Apply the anti-monopoly filter (F13.15)
@@ -128,11 +132,14 @@ internal sealed class DispatchLeadHandler(
             tenantId: cmd.TenantId,
             leadId: lead.Id,
             agentId: winner.Agent.Id,
-            strategy: cmd.Strategy,
+            strategy: effectiveStrategy,
             compatibilityScore: winner.CompatibilityScore,
             slaDeadline: clock.GetUtcNow().Add(rules.FirstContactSla),
             createdAt: clock.GetUtcNow(),
-            compatibilityFactorsJson: winner.FactorsJson);
+            compatibilityFactorsJson: winner.FactorsJson,
+            // Guid.Empty is DispatchingRule.Default()'s id: record "no configured rule" as
+            // null rather than as an id that matches no row.
+            ruleId: rules.Id == Guid.Empty ? null : rules.Id);
 
         var assignResult = lead.AssignTo(assignment);
         if (assignResult.IsFailure)
@@ -149,7 +156,7 @@ internal sealed class DispatchLeadHandler(
                 LeadId: lead.Id,
                 TenantId: cmd.TenantId,
                 AgentId: winner.Agent.Id,
-                Strategy: cmd.Strategy,
+                Strategy: effectiveStrategy,
                 Score: winner.CompatibilityScore,
                 SlaDeadline: assignment.SlaDeadline),
             ct);
@@ -161,7 +168,7 @@ internal sealed class DispatchLeadHandler(
 
         logger.LogInformation(
             "Lead {LeadId} dispatched to agent {AgentId} (score={Score}, strategy={Strategy})",
-            lead.Id, winner.Agent.Id, winner.CompatibilityScore, cmd.Strategy);
+            lead.Id, winner.Agent.Id, winner.CompatibilityScore, effectiveStrategy);
 
         return Result.Ok(new DispatchLeadResult(
             AssignmentId: assignment.Id,

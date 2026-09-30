@@ -10,7 +10,8 @@ using Sankore.Shared.Kernel;
 internal sealed class QualifyLeadHandler(
     LeadsDbContext db,
     LeadScoreCalculator calculator,
-    TimeProvider clock)
+    TimeProvider clock,
+    Microsoft.Extensions.Options.IOptions<LeadModuleSettings> settings)
     : IRequestHandler<QualifyLeadCommand, Result<QualifyLeadResult>>
 {
     public async Task<Result<QualifyLeadResult>> Handle(
@@ -86,7 +87,7 @@ internal sealed class QualifyLeadHandler(
             (score, factorsJson) = await calculator.CalculateAsync(lead, ct);
         }
 
-        var qualifyResult = lead.Qualify(score);
+        var qualifyResult = lead.Qualify(score, settings.Value.QualificationThreshold);
         if (qualifyResult.IsFailure)
             return Result.Fail<QualifyLeadResult>(qualifyResult.Error!);
 

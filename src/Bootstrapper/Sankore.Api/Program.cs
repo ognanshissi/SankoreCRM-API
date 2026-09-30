@@ -218,6 +218,9 @@ builder.Services.AddSecretsVault(
 builder.Services.AddMassTransit(x =>
 {
     // Leads module consumers (US-M13-080 — task generation from events)
+    // Auto-qualification + auto-dispatch of captured leads. Inert unless
+    // Leads:AutoDispatchOnCapture is true — see LeadModuleSettings.
+    x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer>();
     x.AddConsumer<LeadDispatchedTaskConsumer>();
     x.AddConsumer<LeadDispatchingFailedTaskConsumer>();
 

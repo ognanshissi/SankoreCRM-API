@@ -126,11 +126,12 @@ public sealed class DispatchLeadHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Should_reject_dispatching_a_lead_that_is_not_sales_qualified()
+    public async Task Should_reject_dispatching_a_closed_lead()
     {
         await using var db = _factory.CreateContext();
 
-        // Build a lead but do NOT qualify it (stays in "New" status).
+        // A lead that has been LOST cannot be dispatched. (A "New" lead now can — routing a
+        // captured lead to an agent is precisely how it gets qualified.)
         var lead = Lead.Capture(
             tenantId: _tenantId,
             fullName: "Fresh Prospect",
@@ -141,6 +142,8 @@ public sealed class DispatchLeadHandlerTests : IDisposable
             location: new GeoPoint(14.69, -17.44),
             preferredAgencyId: null,
             clock: TimeProvider.System);
+
+        lead.Close(LeadCloseReason.Lost, "Injoignable");
 
         db.Leads.Add(lead);
         await db.SaveChangesAsync();
@@ -153,7 +156,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
             new DispatchLeadCommand(lead.Id, _tenantId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("LEAD_NOT_QUALIFIED");
+        result.Error.Should().Be("LEAD_NOT_DISPATCHABLE");
         await usersModule.DidNotReceive().GetAvailableAgentsAsync(
             Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
@@ -211,7 +214,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
 
         var capacityService = new AgentCapacityService(db, null);
         return new DispatchLeadHandler(
-            db, usersModule, scorer, factory, capacityService, publisher,
-            NullLogger<DispatchLeadHandler>.Instance, TimeProvider.System);
+            db, usersModule, scorer, factory, new DispatchingRuleResolver(db), capacityService,
+            publisher, NullLogger<DispatchLeadHandler>.Instance, TimeProvider.System);
     }
 }

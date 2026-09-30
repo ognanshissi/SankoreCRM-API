@@ -85,7 +85,7 @@ public sealed class DispatchingRule: ITenant
         MaxTasksPerAgent = 20,
         DeclineExclusionTtl = TimeSpan.FromMinutes(30),
         AntiMonopolyThreshold = 5,
-        FirstContactSla = TimeSpan.FromHours(2),
+        FirstContactSla = TimeSpan.FromHours(24),
         IsActive = true
     };
 

@@ -13,6 +13,12 @@ public sealed record ImportLeadRow
     public string? LastName { get; init; }
     public string? PhoneNumber { get; init; }
     public string? Email { get; init; }
+
+    /// <summary>
+    /// National identity document number. Feeds duplicate detection and is worth 7 of the 100
+    /// score points (4 profile + 3 coherence) — its absence from the import schema was pure loss.
+    /// </summary>
+    public string? NationalId { get; init; }
     public string? Source { get; init; }
     public string? InterestedProduct { get; init; }
     public string? PreferredLanguage { get; init; }

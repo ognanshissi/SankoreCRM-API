@@ -53,5 +53,8 @@ public static class DispatchLeadEndpoint
     }
 }
 
+/// <param name="Strategy">
+/// Omit it to let the applicable dispatching rule decide; name one to force it.
+/// </param>
 public sealed record DispatchLeadRequest(
-    DispatchingStrategy Strategy = DispatchingStrategy.CompatibilityScoring);
+    DispatchingStrategy? Strategy = null);

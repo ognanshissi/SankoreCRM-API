@@ -208,6 +208,17 @@ public sealed class Lead : AggregateRoot
         return lead;
     }
 
+    /// <summary>Historical qualification threshold; see <see cref="Qualify"/>.</summary>
+    public const int DefaultQualifiedThreshold = 60;
+
+    /// <summary>
+    /// A lead can be dispatched unless it has reached a terminal status. One predicate, so the
+    /// domain and <c>DispatchLeadHandler</c> cannot disagree on what "dispatchable" means.
+    /// </summary>
+    public bool IsDispatchable =>
+        Status is not (LeadStatus.Converted or LeadStatus.Lost
+                    or LeadStatus.Disqualified or LeadStatus.Archived);
+
     // ── Status transitions ──────────────────────────────────────────────────
 
     /// <summary>Moves Lead from New to Open (first manual or system action).</summary>
@@ -227,7 +238,15 @@ public sealed class Lead : AggregateRoot
     /// Leads scoring ≥ 60 become Qualified (eligible for dispatching);
     /// below that they enter Qualifying for further work.
     /// </summary>
-    public Result Qualify(int score)
+    /// <param name="qualifiedThreshold">
+    /// Score at or above which the lead becomes <see cref="LeadStatus.Qualified"/> rather than
+    /// <see cref="LeadStatus.Qualifying"/>. Configurable because 60 was calibrated for
+    /// qualification AFTER interactions: <c>LeadScoreCalculator</c> awards 35 of its 100 points
+    /// from activity history, so a lead scored at capture can never reach 60 (45 at most when it
+    /// came from a file import, whose source quality is 5/20). A tenant that wants captured leads
+    /// dispatched lowers this; everyone else keeps the historical 60.
+    /// </param>
+    public Result Qualify(int score, int qualifiedThreshold = DefaultQualifiedThreshold)
     {
         if (Status is LeadStatus.Converted or LeadStatus.Archived or LeadStatus.Lost or LeadStatus.Disqualified)
             return Result.Fail("LEAD_CANNOT_BE_QUALIFIED_FROM_CURRENT_STATUS");
@@ -236,7 +255,7 @@ public sealed class Lead : AggregateRoot
             return Result.Fail("SCORE_OUT_OF_RANGE");
 
         Score     = score;
-        Status    = score >= 60 ? LeadStatus.Qualified : LeadStatus.Qualifying;
+        Status    = score >= qualifiedThreshold ? LeadStatus.Qualified : LeadStatus.Qualifying;
         UpdatedAt = DateTimeOffset.UtcNow;
 
         RaiseDomainEvent(new LeadQualifiedDomainEvent(Id, Status, score));
@@ -244,10 +263,16 @@ public sealed class Lead : AggregateRoot
     }
 
     /// <summary>Assigns the lead to an agent via a freshly created LeadAssignment.</summary>
+    /// <summary>
+    /// Records a dispatching assignment. Any lead that is still live may be dispatched — a
+    /// captured lead is routed to an agent precisely so that someone qualifies it. Only the
+    /// terminal statuses refuse: there is nobody to work a lead that is already converted, lost,
+    /// disqualified or archived.
+    /// </summary>
     public Result AssignTo(LeadAssignment assignment)
     {
-        if (Status != LeadStatus.Qualified)
-            return Result.Fail("ONLY_QUALIFIED_LEADS_CAN_BE_DISPATCHED");
+        if (!IsDispatchable)
+            return Result.Fail("LEAD_NOT_DISPATCHABLE");
 
         CurrentAssignmentId = assignment.Id;
         CurrentAssignedId   = assignment.AgentId;

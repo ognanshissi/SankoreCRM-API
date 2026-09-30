@@ -15,6 +15,13 @@ public sealed class LeadAssignment
     public Guid LeadId { get; private set; }
     public Guid AgentId { get; private set; }
     public DispatchingStrategy Strategy { get; private set; }
+
+    /// <summary>
+    /// The <see cref="DispatchingRule"/> that produced this assignment, or <c>null</c> when the
+    /// built-in defaults were used. Without it nobody can tell, after the fact, which
+    /// configuration routed a lead — nor measure the effect of changing a rule.
+    /// </summary>
+    public Guid? RuleId { get; private set; }
     public double CompatibilityScore { get; private set; }
     public bool WasManualOverride { get; private set; }
     public string? OverrideReason { get; private set; } = string.Empty;
@@ -35,7 +42,7 @@ public sealed class LeadAssignment
     public static LeadAssignment Create(
         Guid tenantId, Guid leadId, Guid agentId, DispatchingStrategy strategy,
         double compatibilityScore, DateTimeOffset slaDeadline, DateTimeOffset createdAt,
-        string compatibilityFactorsJson = "{}")
+        string compatibilityFactorsJson = "{}", Guid? ruleId = null)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -43,6 +50,7 @@ public sealed class LeadAssignment
             LeadId = leadId,
             AgentId = agentId,
             Strategy = strategy,
+            RuleId = ruleId,
             CompatibilityScore = compatibilityScore,
             WasManualOverride = false,
             CreatedAt = createdAt,

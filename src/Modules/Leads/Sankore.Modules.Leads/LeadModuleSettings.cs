@@ -35,6 +35,26 @@ public sealed class LeadModuleSettings
     public int[] CriticalScoreThresholds { get; init; } = [40, 60];
 
     /// <summary>
+    /// Score at or above which <c>Lead.Qualify</c> marks a lead <c>Qualified</c> rather than
+    /// <c>Qualifying</c>. Default: 60 — the historical value, unchanged.
+    ///
+    /// Lower it only knowingly: <c>LeadScoreCalculator</c> awards 35 of its 100 points from
+    /// activity history (interactions 20, behaviour 15), which is empty at capture, so a lead
+    /// scored on capture alone peaks at 60 for a walk-in and at 45 for a file import
+    /// (<c>LeadSource.FileImport</c> is worth 5 of the 20 source-quality points). A tenant that
+    /// wants imported leads to reach dispatching sets something like 35.
+    /// </summary>
+    public int QualificationThreshold { get; init; } = Domain.Lead.DefaultQualifiedThreshold;
+
+    /// <summary>
+    /// When <see langword="true"/>, a freshly captured lead is scored, qualified and then
+    /// dispatched automatically by <c>LeadAutoDispatchConsumer</c>. Default:
+    /// <see langword="false"/> — turning this on changes what happens to EVERY capture channel
+    /// (web forms, webhooks, mobile agents, imports), not just file imports.
+    /// </summary>
+    public bool AutoDispatchOnCapture { get; init; } = false;
+
+    /// <summary>
     /// Number of days a recycled lead must wait before automatic reactivation.
     /// Default: 30 days.
     /// </summary>
