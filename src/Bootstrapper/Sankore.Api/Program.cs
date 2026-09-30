@@ -62,14 +62,8 @@ builder.Services.ConfigureHttpJsonOptions(opts =>
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:4222")
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials());
-});
+// Origins from Cors:AllowedOrigins — see CorsSetup for why they are not literals here.
+builder.Services.AddSankoreCors(builder.Configuration, builder.Environment);
 
 builder.AddSeqEndpoint("seq");
 builder.Services.AddHttpLogging(o =>
@@ -327,6 +321,7 @@ builder.Services.AddScoped<Sankore.Modules.Kyc.PublicApi.IKycModule,
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
+app.LogCorsOrigins();
 
 // ---------------------------------------------------------------------
 // 3. Ensure database schemas exist (creates tables when no migrations are applied yet)

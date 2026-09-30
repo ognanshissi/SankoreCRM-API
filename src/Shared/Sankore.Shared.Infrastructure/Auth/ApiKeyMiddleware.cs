@@ -15,8 +15,8 @@ public sealed class ApiKeyMiddleware(
     IConfiguration config,
     ILogger<ApiKeyMiddleware> logger)
 {
-    private const string HeaderName = "X-Api-Key";
-    private const string ConfigKey = "ApiKey";
+    private const string HeaderName = ApiKeyValidator.HeaderName;
+    private const string ConfigKey = ApiKeyValidator.ConfigKey;
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -39,7 +39,8 @@ public sealed class ApiKeyMiddleware(
             return;
         }
 
-        if (!string.Equals(expectedKey, providedKey, StringComparison.Ordinal))
+        // Constant-time: an ordinary comparison leaks the shared prefix length through timing.
+        if (!ApiKeyValidator.Matches(expectedKey, providedKey))
         {
             logger.LogWarning("Invalid API key on {Method} {Path}",
                 context.Request.Method, context.Request.Path);
