@@ -27,6 +27,7 @@ using Hangfire.PostgreSql;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 using Sankore.Shared.Infrastructure.Behaviors;
+using Sankore.Shared.Infrastructure.DataProtection;
 using Sankore.Shared.Infrastructure.Logging;
 using Sankore.Shared.Infrastructure.Localization;
 using Sankore.Shared.Infrastructure.Secrets;
@@ -192,6 +193,16 @@ builder.Services.AddDbContextFactory<AuditDbContext>(opts =>
 
 builder.Services.AddScoped<IAuditWriter, SqlAuditWriter>();
 
+// Data Protection key ring — PostgreSQL-backed, fixed application name.
+// Identity signs every account-activation and password-reset token with this ring. The framework
+// default keeps it in the container filesystem, so a redeploy silently invalidated every
+// activation link already in a user's inbox. See SankoreDataProtection.
+builder.Services.AddSankoreDataProtection(
+    builder.Configuration,
+    opts => opts.UseNpgsql(connectionString,
+            b => b.MigrationsHistoryTable("__EFMigrationsHistory", "dataprotection"))
+        .UseSnakeCaseNamingConvention());
+
 // Secrets vault — AES-256-GCM encrypted, PostgreSQL-backed.
 // AddSecretsVault validates Secrets:EncryptionKey at start-up: the app refuses to boot without
 // a usable key rather than throwing on the first write.
@@ -332,6 +343,11 @@ using (var scope = app.Services.CreateScope())
     // Audit schema — independent of all module schemas.
     var auditDb = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
     await auditDb.Database.MigrateAsync();
+
+    // Data Protection key ring — must be created before anything protects or unprotects a
+    // payload: a missing table makes Data Protection fall back to an ephemeral in-memory key
+    // without raising, which only shows up as dead activation links after the next restart.
+    await SankoreDataProtection.InitializeAsync(scope.ServiceProvider);
 
     // Secrets vault — shared infrastructure, so no module owns its schema: it has to be
     // migrated here or its table never gets created.

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies;
 using Sankore.Modules.Administration.Features.PermissionsCatalog;
@@ -27,6 +28,7 @@ using Sankore.Modules.Administration.Features.ImportUsers.ValidateImport;
 using Sankore.Modules.Administration.Features.Users.GetCurrentUser;
 using Sankore.Modules.Administration.Features.Users.GetLoginHistory;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.Infrastructure.Identity;
 using Sankore.Modules.Administration.Infrastructure.JwtToken;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Infrastructure.Extensions;
@@ -63,7 +65,12 @@ public static class AdministrationModule
             .AddRoles<AppRole>()
             .AddSignInManager()
             .AddDefaultTokenProviders()
+            // Account activation gets its own provider so its lifespan can be days without
+            // dragging password-reset links along with it — see IdentityTokenOptions.
+            .AddTokenProvider<ActivationTokenProvider>(ActivationTokens.ProviderName)
             .AddEntityFrameworkStores<AdministrationDbContext>();
+
+        AddTokenLifespans(services, config);
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
         // Agency perimeter (Kernel contract) — Administration owns the agency tree.
@@ -108,6 +115,38 @@ public static class AdministrationModule
         var db = sp.GetRequiredService<AdministrationDbContext>();
         await db.Database.MigrateAsync();
         await RoleSeeder.SeedAsync(sp);
+    }
+
+    /// <summary>
+    /// Binds the <c>Identity</c> section onto the two token providers that issue links.
+    ///
+    /// Validated at start-up rather than at first use: a zero or negative lifespan — what a
+    /// mistyped TimeSpan binds to — would make every activation and reset link fail the moment
+    /// it was clicked, and the only visible symptom is a 400 that reads like an expired link.
+    /// </summary>
+    internal static void AddTokenLifespans(IServiceCollection services, IConfiguration config)
+    {
+        services.AddOptions<IdentityTokenOptions>()
+            .Bind(config.GetSection(IdentityTokenOptions.SectionName))
+            .Validate(
+                o => o.ActivationTokenLifespan > TimeSpan.Zero,
+                $"{IdentityTokenOptions.SectionName}:ActivationTokenLifespan must be a positive "
+                + "TimeSpan, e.g. \"7.00:00:00\" for seven days.")
+            .Validate(
+                o => o.PasswordResetTokenLifespan > TimeSpan.Zero,
+                $"{IdentityTokenOptions.SectionName}:PasswordResetTokenLifespan must be a positive "
+                + "TimeSpan, e.g. \"02:00:00\" for two hours.")
+            .ValidateOnStart();
+
+        // Identity's own providers read DataProtectionTokenProviderOptions: password reset, email
+        // confirmation and change-email all share it. Activation no longer does.
+        services.AddOptions<DataProtectionTokenProviderOptions>()
+            .Configure<IOptions<IdentityTokenOptions>>((o, tokens) =>
+                o.TokenLifespan = tokens.Value.PasswordResetTokenLifespan);
+
+        services.AddOptions<ActivationTokenProviderOptions>()
+            .Configure<IOptions<IdentityTokenOptions>>((o, tokens) =>
+                o.TokenLifespan = tokens.Value.ActivationTokenLifespan);
     }
 
     public static IEndpointRouteBuilder MapAdministrationModuleEndpoints(this IEndpointRouteBuilder app)

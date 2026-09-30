@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.Infrastructure.Identity;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Authentication.AccountActivation;
@@ -32,12 +33,13 @@ internal sealed class ValidateActivationTokenHandler(
         if (user.Status != UserStatus.PendingActivation)
             return Result.Fail("Account cannot be activated.");
 
-        // VerifyUserTokenAsync checks validity without consuming the token.
-        // The token will only be consumed by ResetPasswordAsync in AccountActivationHandler.
+        // VerifyUserTokenAsync checks validity without consuming the token — AccountActivationHandler
+        // consumes it. Provider and purpose must match CreateUserHandler exactly: both are part of
+        // the token's purpose chain, so a mismatch reads as an invalid token, not as a bug.
         var isValid = await userManager.VerifyUserTokenAsync(
             user,
-            userManager.Options.Tokens.PasswordResetTokenProvider,
-            UserManager<AppUser>.ResetPasswordTokenPurpose,
+            ActivationTokens.ProviderName,
+            ActivationTokens.Purpose,
             request.Token);
 
         return isValid

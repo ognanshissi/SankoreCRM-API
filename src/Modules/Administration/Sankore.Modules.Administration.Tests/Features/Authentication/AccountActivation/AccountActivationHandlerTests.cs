@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using NSubstitute;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Authentication.AccountActivation;
+using Sankore.Modules.Administration.Infrastructure.Identity;
 using Sankore.Modules.Administration.Tests.TestSupport;
 using Xunit;
 
@@ -49,6 +50,23 @@ public sealed class AccountActivationHandlerTests : IDisposable
     private static AccountActivationCommand ValidCommand(Guid userId, string token = "valid-token") =>
         new(userId.ToString(), token, "SecurePass1!", "SecurePass1!");
 
+    /// <summary>
+    /// Activation tokens live in their own provider, so the handler verifies explicitly and only
+    /// then sets the password with an internal reset token. Both seams have to be stubbed.
+    /// </summary>
+    private static void StubTokenAccepted(UserManager<AppUser> userManager, bool accepted = true)
+    {
+        userManager.VerifyUserTokenAsync(
+                Arg.Any<AppUser>(),
+                ActivationTokens.ProviderName,
+                ActivationTokens.Purpose,
+                Arg.Any<string>())
+            .Returns(accepted);
+
+        userManager.GeneratePasswordResetTokenAsync(Arg.Any<AppUser>())
+            .Returns("internal-reset-token");
+    }
+
     // ── S1: happy path ────────────────────────────────────────────────────
 
     [Fact]
@@ -57,6 +75,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
         var user = await SeedPendingUserAsync();
 
         var userManager = IdentityMockFactory.BuildUserManager();
+        StubTokenAccepted(userManager);
         userManager.ResetPasswordAsync(Arg.Any<AppUser>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns(IdentityResult.Success);
 
@@ -140,8 +159,7 @@ public sealed class AccountActivationHandlerTests : IDisposable
         var user = await SeedPendingUserAsync("pending@test.sn");
 
         var userManager = IdentityMockFactory.BuildUserManager();
-        userManager.ResetPasswordAsync(Arg.Any<AppUser>(), Arg.Any<string>(), Arg.Any<string>())
-            .Returns(IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "Invalid token." }));
+        StubTokenAccepted(userManager, accepted: false);
 
         await using var db = _factory.CreateContext();
         var handler = new AccountActivationHandler(db, userManager,  _context);
@@ -150,7 +168,11 @@ public sealed class AccountActivationHandlerTests : IDisposable
             ValidCommand(user.Id,  "bad-token"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Invalid token");
+        result.Error.Should().Contain("expired or already been used");
+
+        // A rejected token must never reach the password pipeline.
+        await userManager.DidNotReceive()
+            .ResetPasswordAsync(Arg.Any<AppUser>(), Arg.Any<string>(), Arg.Any<string>());
 
         // Status must remain PendingActivation
         await using var verify = _factory.CreateContext();

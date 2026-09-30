@@ -225,6 +225,24 @@ engine enforces no self-approval rule of its own, so M01 owns that guarantee.
 Concurrency uses the PostgreSQL `xmin` token (`Version`) with error `CONCURRENCY_CONFLICT`.
 No endpoint deletes a client: archiving is a status, anonymisation blanks encrypted fields.
 
+### Host configuration that must not be hardcoded
+
+**CORS origins** come from `Cors:AllowedOrigins` (a string array), bound by
+`CorsSetup.AddSankoreCors` in the API bootstrapper. `http://localhost:4222` is only the
+Development fallback. A `*` entry is refused at boot — it is incompatible with the credentialed
+requests the API makes. With nothing configured outside Development the policy allows no origin
+and start-up logs a warning; an empty CORS policy is otherwise invisible, since every curl keeps
+working while the browser blocks the front-end.
+
+**`POST users/create-root`** provisions a tenant's system user and cannot sit behind a JWT, so it
+carries `.RequireApiKey()` (`ApiKeyEndpointFilter`) against the root `ApiKey` value — the same
+secret the tenant registry uses. Unlike `ApiKeyMiddleware`, which skips validation when no key is
+configured, the filter allows that only in Development and answers 503 elsewhere: an endpoint
+that creates a super-user fails closed. Both share `ApiKeyValidator.Matches`, which compares in
+constant time.
+
+Deployment specifics live in `docs/deployment-dokploy.md`.
+
 ### Secrets vault
 
 `ISecretsModule` (Kernel) / `AesSecretsModule` (`Shared.Infrastructure/Secrets/`) — AES-256-GCM
@@ -245,6 +263,55 @@ providerType)` (Administration.PublicApi) → `(tenantId, "notifications", Guid.
 destroy the other's. M12 writes it from `PUT /notification-settings`; M08 reads it at send time
 through `VaultNotificationCredentials`. The value never reaches a column, a `GET`, an event or
 an audit row.
+
+### Data Protection key ring
+
+Identity's `AddDefaultTokenProviders()` signs every account-activation and password-reset token
+with the ASP.NET Data Protection key ring, so the ring's durability *is* the lifetime of those
+links. `AddSankoreDataProtection` (`Shared.Infrastructure/DataProtection/`) persists it to
+`dataprotection.keys` and pins `SetApplicationName("SankoreCRM")`. Both halves matter: the
+framework default writes the ring to the container filesystem (recreated on every redeploy) and
+derives the application name from the content-root path (which an image can change silently).
+Either one shifting makes an unexpired, unused activation link fail to unprotect, and the only
+symptom is `GET auth/activate/verify` answering 400 *"Activation link has expired or already been
+used."* — nothing in the logs mentions the key ring.
+
+Like the audit and secrets schemas, it is migrated from the startup scope
+(`SankoreDataProtection.InitializeAsync`) and **before** them, because Data Protection swallows a
+failed read of a missing table and quietly falls back to an ephemeral in-memory key — which works
+until the next restart. Optional overrides: `DataProtection:ApplicationName` (changing it
+invalidates every link in circulation) and `DataProtection:KeyLifetimeDays` (the ring's rotation
+period, not a token lifespan — old keys stay usable for decryption).
+
+**Token lifespans** are two settings, not one, bound from the `Identity` section
+(`Infrastructure/Identity/IdentityTokenOptions.cs`, validated at start-up — a non-positive
+TimeSpan fails the boot):
+
+| Key | Default | Applies to |
+|-----|---------|-----------|
+| `Identity:ActivationTokenLifespan` | 7 days | account activation only |
+| `Identity:PasswordResetTokenLifespan` | 2 hours | password reset, email confirmation, change-email |
+
+They are split because they pull in opposite directions — an activation email may sit unread for
+days, a reset link is a live credential. Identity has only one knob
+(`DataProtectionTokenProviderOptions.TokenLifespan`, shared by every default provider), so
+activation gets its own `ActivationTokenProvider` registered under
+`ActivationTokens.ProviderName`. Without the split, every day granted to onboarding would also be
+granted to password reset.
+
+Provider name and purpose (`ActivationTokens`) are part of the token's purpose chain, so
+`CreateUserHandler` (issue), `ValidateActivationTokenHandler` (check) and
+`AccountActivationHandler` (consume) must agree on both — drift reads as an invalid token, not as
+a bug. `ResetPasswordAsync` is hardwired to the password-reset provider and so cannot validate an
+activation token: `AccountActivationHandler` verifies explicitly, then sets the password with an
+internal reset token it generates and consumes itself (the idiom `AdminResetPasswordHandler`
+already uses). The security-stamp rotation inside `ResetPasswordAsync` is what keeps the
+activation link single-use.
+
+Tokens are Base64, so anything that puts one in a URL must `Uri.EscapeDataString` it — a raw `+`
+is read back as a space and the token no longer verifies. That is what `CreateUserHandler`
+(`activation_url`) and `ForgotPasswordHandler` (`reset_url`) do; `CreateUserHandlerTests`
+guards it.
 
 ### Adding a new module
 

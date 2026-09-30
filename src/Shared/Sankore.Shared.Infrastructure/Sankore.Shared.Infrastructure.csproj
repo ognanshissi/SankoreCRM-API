@@ -19,6 +19,8 @@
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="MassTransit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <!-- Data Protection key ring persisted in Postgres — see DataProtection/. -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
   </ItemGroup>
 
   <ItemGroup>

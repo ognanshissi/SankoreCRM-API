@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Modules.Administration.Infrastructure.Identity;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Notifications.PublicApi;
@@ -72,8 +73,11 @@ internal sealed class CreateUserHandler(
 
         await db.SaveChangesAsync(ct);
 
-        // 8. Generate activation token and publish event — email service sends the activation link
-        var activationToken = await userManager.GeneratePasswordResetTokenAsync(user);
+        // 8. Generate activation token and publish event — email service sends the activation link.
+        //    Its own provider, not the password-reset one, so onboarding gets a multi-day
+        //    lifespan without extending reset links (Identity:ActivationTokenLifespan).
+        var activationToken = await userManager.GenerateUserTokenAsync(
+            user, ActivationTokens.ProviderName, ActivationTokens.Purpose);
 
         await publisher.PublishAsync(
             new UserCreatedEvent(tenantId, user.Id, user.Email!, user.FullName), ct);
@@ -90,7 +94,7 @@ internal sealed class CreateUserHandler(
             TemplateData: new Dictionary<string, object>
             {
                 ["full_name"]        = user.FullName,
-                ["activation_url"] = $"{tenantInfo?.Fqdn}/auth/account-activation?token={activationToken}&userId={user.Id}&RequestType=AccountActivation",
+                ["activation_url"] = $"{tenantInfo?.Fqdn}/auth/account-activation?token={Uri.EscapeDataString(activationToken)}&userId={user.Id}&RequestType=AccountActivation",
                 ["company_name"]     = tenantInfo?.Name ?? "",
                 ["tenant_id"]        = tenantId.ToString(),
                 ["user_id"]          = user.Id.ToString()

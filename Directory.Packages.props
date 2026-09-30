@@ -26,6 +26,10 @@
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.9.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.0" />
+    <!-- Persists the Data Protection key ring in Postgres. Without it the keys live in the
+         container filesystem and every redeploy invalidates all outstanding activation /
+         password-reset tokens. -->
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="9.0.0" />
   </ItemGroup>
   <ItemGroup Label="EntityFrameworkCore">
     <PackageVersion Include="EFCore.NamingConventions" Version="9.0.0" />

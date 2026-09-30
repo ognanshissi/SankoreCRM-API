@@ -9,6 +9,7 @@ using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Modules.Administration.Domain.Events;
 using Sankore.Modules.Administration.Features.Users.CreateUser;
+using Sankore.Modules.Administration.Infrastructure.Identity;
 using Sankore.Modules.Administration.Tests.TestSupport;
 using Sankore.Modules.Notifications.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
@@ -69,7 +70,8 @@ public sealed class CreateUserHandlerTests : IDisposable
         userManager.AddToRoleAsync(Arg.Any<AppUser>(), role.Name!)
             .Returns(IdentityResult.Success);
 
-        userManager.GeneratePasswordResetTokenAsync(Arg.Any<AppUser>())
+        userManager.GenerateUserTokenAsync(
+                Arg.Any<AppUser>(), ActivationTokens.ProviderName, ActivationTokens.Purpose)
             .Returns("activation-token");
 
         var notifications = Substitute.For<INotificationsModule>();
@@ -193,5 +195,93 @@ public sealed class CreateUserHandlerTests : IDisposable
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("already exists");
         await publisher.DidNotReceive().PublishAsync(Arg.Any<UserCreatedEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── Regression: activation token must survive the query string ────────
+
+    /// <summary>
+    /// Identity password-reset tokens are standard Base64, so they routinely contain '+', '/'
+    /// and '='. Interpolated raw into the activation URL, the '+' is read back as a space and
+    /// <c>GET auth/activate/verify</c> answered 400 "Activation link has expired or already been
+    /// used." for a freshly issued link. The assertion parses the URL rather than matching the
+    /// escaped text: what matters is that the token comes back out byte-for-byte.
+    /// </summary>
+    [Fact]
+    public async Task Should_url_encode_the_activation_token_so_it_round_trips()
+    {
+        // ARRANGE
+        await using var db = _factory.CreateContext();
+
+        var agency = Agency.Create(_tenantId, "AG0001", "Agence Dakar", "HQ", AgencyType.HeadQuarter, null, null);
+        db.Agencies.Add(agency);
+        await db.SaveChangesAsync();
+
+        var roleId = Guid.NewGuid();
+        var callerUserId = Guid.NewGuid();
+
+        // Every character class Base64 emits that a query string would otherwise mangle.
+        const string rawToken = "CfDJ8Ab+c/d=eF+gh/i==";
+
+        var userManager = IdentityMockFactory.BuildUserManager();
+        var roleManager = IdentityMockFactory.BuildRoleManager();
+        var publisher = Substitute.For<IEventPublisher>();
+        var tenantContext = Substitute.For<ITenantContext>();
+        var currentUser = Substitute.For<ICurrentUser>();
+        var tenantStore = Substitute.For<ITenantStore>();
+        tenantContext.CurrentTenantId.Returns(_tenantId);
+        currentUser.Id.Returns(callerUserId);
+
+        var role = AppRole.Create("Agent", "Agent", isSystem: false);
+        typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(role, roleId);
+        roleManager.FindByIdAsync(roleId.ToString()).Returns(role);
+
+        userManager.CreateAsync(Arg.Any<AppUser>()).Returns(IdentityResult.Success);
+        userManager.AddToRoleAsync(Arg.Any<AppUser>(), role.Name!).Returns(IdentityResult.Success);
+        userManager.GenerateUserTokenAsync(
+                Arg.Any<AppUser>(), ActivationTokens.ProviderName, ActivationTokens.Purpose)
+            .Returns(rawToken);
+
+        QueueEmailRequest? queued = null;
+        var notifications = Substitute.For<INotificationsModule>();
+        notifications.QueueEmailAsync(Arg.Any<QueueEmailRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                queued = call.Arg<QueueEmailRequest>();
+                return Result<Guid>.Ok(Guid.NewGuid());
+            });
+
+        var handler = new CreateUserHandler(
+            db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
+
+        var command = new CreateUserCommand(
+            AgencyId: agency.Id,
+            RoleId: roleId,
+            FirstName: "Aminata",
+            LastName: "Diallo",
+            Email: "aminata@sankorefinance.sn",
+            DefaultLanguage: "fr",
+            SpokenLanguages: [],
+            Specialties: [],
+            CallerUserId: callerUserId);
+
+        // ACT
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // ASSERT
+        result.IsSuccess.Should().BeTrue();
+        queued.Should().NotBeNull();
+
+        var activationUrl = queued!.TemplateData["activation_url"].ToString()!;
+
+        // Unreserved characters only: nothing a query parser can reinterpret.
+        activationUrl.Should().NotContain("+");
+
+        // Read the token back the way a browser and the endpoint's query binder would.
+        var token = activationUrl[(activationUrl.IndexOf('?') + 1)..]
+            .Split('&')
+            .Select(pair => pair.Split('=', 2))
+            .Single(pair => pair[0] == "token")[1];
+
+        Uri.UnescapeDataString(token).Should().Be(rawToken);
     }
 }

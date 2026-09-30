@@ -151,6 +151,20 @@ Jwt__Issuer=https://api.example.com
 Jwt__Audience=sankore-crm-api
 Jwt__SigningKey=<≥ 32 bytes>
 
+# How long an emailed link stays valid. Optional — shown here as the defaults.
+# Activation is long on purpose (the mail may sit unread); reset is short on
+# purpose (it is a live credential). A non-positive value fails the boot.
+Identity__ActivationTokenLifespan=7.00:00:00
+Identity__PasswordResetTokenLifespan=02:00:00
+
+# ── browser origins allowed to call this API (repeat the index per origin) ─
+# Without at least one, every cross-origin browser call is blocked and the
+# start-up log says so. "*" is refused at boot: credentialed requests forbid it.
+Cors__AllowedOrigins__0=https://crm.example.com
+
+# ── inbound service-to-service key; gates POST users/create-root ────────────
+ApiKey=<the SAME value as Sankore.Admin's ApiKey>
+
 # ── encryption (see §1 — back these up) ─────────────────────────────────
 Secrets__EncryptionKey=<base64 32 bytes>
 Customers__FieldEncryptionKey=<base64 32 bytes>
@@ -274,14 +288,26 @@ call — `api.example.com` here, or the front-end's domain if that is what reach
 ```bash
 curl -X POST https://api.example.com/api/v1/users/create-root \
   -H "Content-Type: application/json" \
+  -H "X-Api-Key: $API_KEY" \
   -H "X-Tenant-Fqdn: api.example.com" \
   -d '{"email":"admin@mfi.ci","password":"<strong>","confirmPassword":"<strong>",
        "firstName":"Awa","lastName":"Ouattara","tenantId":"<tenantId>"}'
 ```
 
-This endpoint is **anonymous** and rate-limited to the `auth` policy. It refuses a second system
-user per tenant, so it closes itself after this call — but it is open until you make it. Run it
-immediately after the first deploy, and read §9.
+This endpoint carries no JWT — it is what creates the first account — so it is gated by the
+`X-Api-Key` header instead, matched against `ApiKey`. Outside Development it is **refused with
+`503`** when no key is configured, so a deployment that forgot the key cannot leave super-user
+provisioning open. It also refuses a second system user per tenant, and is rate-limited to the
+`auth` policy.
+
+Expected outcomes, verified at runtime:
+
+| Call | Response |
+|---|---|
+| no `X-Api-Key` | `401 {"error":"A valid X-Api-Key header is required."}` |
+| wrong key | `401` — same body, so the header's presence is not confirmed to a prober |
+| correct key, tenant already has a root | `400 "A tenant could not have more thant one system user."` |
+| correct key, no root yet | `201` + the user id |
 
 **3 — log in and verify the wiring:**
 
@@ -320,6 +346,11 @@ Two things must change together, or events get lost:
 
 Until both are done, one replica is the supported topology.
 
+The Data Protection key ring is no longer a third blocker: it lives in `dataprotection.keys`
+under a fixed application name, so every replica unprotects the same activation and
+password-reset tokens. Nothing to configure — but the schema has to be reachable, which it is
+since the API migrates it at start-up.
+
 ---
 
 ## 8. Redeploys, migrations and rollback
@@ -345,15 +376,14 @@ Postgres and both apply unchanged.
 
 ## 9. Pre-production hardening — read before going live
 
-Four of these are code changes, and none are hypothetical. They are in the repository as it
-stands today.
+Two blockers that were here when this runbook was first written are now fixed in the repository
+(see §12). What remains:
 
 | # | Finding | Where | Consequence |
 |---|---|---|---|
-| 1 | **CORS is hardcoded to `http://localhost:4222`** | `Program.cs` `AddCors` | the deployed Angular front gets blocked by the browser on every call; no configuration can fix it |
-| 2 | **`POST /api/v1/users/create-root` is `AllowAnonymous`** | `RegisterEndpoint` | anyone who reaches the API before you do can claim the system user of a tenant that has none. It self-closes after one use per tenant, which is mitigation, not protection |
-| 3 | **No production health endpoint on Admin or Hangfire** | `MapDefaultEndpoints()` is Development-only | no meaningful readiness signal for two of three services |
-| 4 | **Swagger is Development-only** (this one is correct) | `Program.cs` | do not "fix" it by setting `ASPNETCORE_ENVIRONMENT=Development` in production — that would also expose `/health` details and turn on sensitive EF data logging |
+| 1 | **No production health endpoint on Admin or Hangfire** | `MapDefaultEndpoints()` is Development-only | no meaningful readiness signal for two of three services; use `/health` on the API only |
+| 2 | **Swagger is Development-only** (this one is correct) | `Program.cs` | do not "fix" it by setting `ASPNETCORE_ENVIRONMENT=Development` in production — that would also expose health details and turn on sensitive EF data logging |
+| 3 | **`Messaging__UseRabbitMq=true` cannot authenticate** | `cfg.Host(host)` passes a hostname only | a broker with credentials will not connect; see §7 |
 
 Also worth knowing, though not blocking:
 
@@ -384,6 +414,11 @@ Also worth knowing, though not blocking:
 | Import job fails `Stored file not found` | `FileStore__BasePath` is not on a volume | mount it (§4) |
 | Emails silently not sent | tenant provider is `Ses`, `Postmark` or `SendGrid` — accepted but routed to `StubEmailSender`, which only logs | use `Smtp` or `Brevo` |
 | `429` under normal load | per-instance rate limiter counting the proxy IP | set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` |
+| `500` on any request that resolves a tenant, log says `No endpoints specified. Ensure a valid connection string was provided in 'ConnectionStrings:redis'` | Redis missing — the app starts fine and only fails on the first cache read, so this looks like a runtime bug rather than a missing service | set `ConnectionStrings__redis` |
+| curl works, the browser does not, console says the CORS policy blocked it | the calling origin is not in `Cors__AllowedOrigins`; the start-up log lists what is allowed | add the front-end origin, scheme included, no trailing slash |
+| Boot: `Cors:AllowedOrigins contains "*"` | a wildcard was configured; it is incompatible with credentialed requests | list the exact origins |
+| Activation or reset link 400s with "expired or already been used" for a link that is neither | either the lifespan is too short for how the link is used (`Identity__ActivationTokenLifespan`), or the deployment predates the persisted Data Protection key ring, which reset the signing keys on every redeploy | raise the lifespan, and redeploy from a commit containing `SankoreDataProtection`; links issued before that deploy must be re-sent |
+| `create-root` returns `503` | `ApiKey` is not configured and the environment is not Development — deliberate: the endpoint provisions a super-user and refuses to run unprotected | set `ApiKey` |
 
 ---
 
@@ -413,3 +448,66 @@ The API Dockerfile's restore layer still lists only 7 of its 9 project reference
 and the two `PublicApi` projects are missing. It builds correctly anyway (`COPY . .` and the
 implicit restore during `dotnet build` cover them), so this costs layer-cache efficiency on
 rebuilds, nothing more. Worth tidying, not worth blocking a deploy on.
+
+---
+
+## 12. Security fixes applied for this deployment
+
+Two findings in the first draft of §9 were blockers rather than advice, so they are fixed in the
+repository. Both were verified against a running instance, not only by unit test.
+
+### CORS origins are configuration
+
+`Program.cs` pinned `http://localhost:4222` in source. No environment variable could change it,
+so a deployed front-end was blocked by the browser on every call and the only remedy was a
+rebuild. Origins now come from `Cors:AllowedOrigins` (`CorsSetup.AddSankoreCors`):
+
+- `http://localhost:4222` stays the **Development** fallback, so local work needs no config;
+- a `*` entry is **refused at boot** with the reason — it cannot be combined with the
+  credentialed requests this API makes, and the browser's own error points at the browser
+  instead of at the setting;
+- with no origin configured outside Development the policy allows none, and start-up logs a
+  warning saying so. An empty CORS policy is otherwise invisible: every curl succeeds while the
+  front-end fails.
+
+Verified on a Production-mode instance with `Cors__AllowedOrigins__0=https://crm.example.com`:
+
+```
+OPTIONS /api/v1/auth/login   Origin: https://crm.example.com   → Access-Control-Allow-Origin: https://crm.example.com
+OPTIONS /api/v1/auth/login   Origin: https://evil.example.com  → (no Access-Control-Allow-Origin)
+Cors__AllowedOrigins__0='*'                                    → refused at boot
+```
+
+### `create-root` is behind the service API key
+
+`POST /api/v1/users/create-root` was reachable by anyone who could reach the API from a
+recognised tenant host — which, on a public deployment, is anyone. It self-closed after one use
+per tenant, so the window was "until you get there first", not "forever"; on a fresh tenant that
+is still someone else's super-user.
+
+It now carries `.RequireApiKey()` (`ApiKeyEndpointFilter`), matched against the same `ApiKey`
+value the tenant registry uses. It stays `AllowAnonymous` because there is no JWT to present
+when creating the first account — the shared secret replaces it.
+
+The filter differs from `ApiKeyMiddleware` on purpose: the middleware skips validation when no
+key is configured, because it guards a host that is entirely internal. This filter allows that
+**only in Development**, and answers `503` elsewhere. An endpoint that provisions a super-user
+has to fail closed.
+
+`ApiKeyValidator` now holds the comparison for both, using
+`CryptographicOperations.FixedTimeEquals`. The previous ordinary string comparison returned as
+soon as two bytes differed, which leaks the shared-prefix length through response timing.
+
+Verified end to end (11 unit tests, plus a live instance):
+
+```
+POST users/create-root  no header          → 401 {"error":"A valid X-Api-Key header is required."}
+POST users/create-root  wrong key          → 401  (identical body — a prober learns nothing)
+POST users/create-root  correct key        → 400 "A tenant could not have more thant one system user."
+                                                 (the handler ran: the gate passed)
+```
+
+Test suites after both changes: Shared.Infrastructure 69, Administration 230, Leads 207,
+Notifications 81, Customers 762 — all green. Workflow fails 1 of 33
+(`ActivateTemplateHandlerTests.Activates_template_with_steps`: `ExecuteDeleteAsync` is
+unsupported by the EF InMemory provider), which is pre-existing and unrelated.

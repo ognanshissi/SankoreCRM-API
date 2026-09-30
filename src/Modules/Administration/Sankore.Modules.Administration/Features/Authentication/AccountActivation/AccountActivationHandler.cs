@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.Infrastructure.Identity;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Authentication.AccountActivation;
@@ -37,19 +38,35 @@ internal sealed class AccountActivationHandler(
                     ? "Account is already active."
                     : "Account cannot be activated.");
 
-        // 4. Validate token + set the initial password atomically via Identity
-        //    ResetPasswordAsync validates the token, hashes the password, and calls UpdateAsync internally.
-        var resetResult = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+        // 4. Validate the activation token. It lives in its own provider, so ResetPasswordAsync —
+        //    which is hardwired to the password-reset provider — cannot check it for us.
+        var isValid = await userManager.VerifyUserTokenAsync(
+            user,
+            ActivationTokens.ProviderName,
+            ActivationTokens.Purpose,
+            request.Token);
+
+        if (!isValid)
+            return Result.Fail<AccountActivationResult>(
+                "Activation link has expired or already been used.");
+
+        // 5. Set the initial password through Identity's own pipeline (strength validators,
+        //    hashing, security-stamp rotation) with an internal token the caller never sees —
+        //    the same idiom as AdminResetPasswordHandler. The stamp rotation is what makes the
+        //    activation token single-use: it is baked into the token, so the link just consumed
+        //    stops verifying from here on.
+        var resetToken = await userManager.GeneratePasswordResetTokenAsync(user);
+        var resetResult = await userManager.ResetPasswordAsync(user, resetToken, request.NewPassword);
         if (!resetResult.Succeeded)
         {
             var errors = string.Join("; ", resetResult.Errors.Select(e => e.Description));
             return Result.Fail<AccountActivationResult>(errors);
         }
 
-        // 5. Transition domain status to Active
+        // 6. Transition domain status to Active
         user.Activate();
         db.Users.Update(user);
-        // 6. Update password histories
+        // 7. Update password histories
         db.PasswordHistories.Add(PasswordHistory.Create(tenantContext.CurrentTenantId, user.Id, user.PasswordHash!));
         await db.SaveChangesAsync(ct);
 

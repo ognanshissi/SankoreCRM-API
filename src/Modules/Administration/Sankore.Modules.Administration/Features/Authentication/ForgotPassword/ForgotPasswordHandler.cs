@@ -55,7 +55,7 @@ internal sealed class ForgotPasswordHandler(
             {
                 ["full_name"]    = user.FullName,
                 ["company_name"] = tenantInfo?.Name ?? "",
-                ["reset_url"]    = $"{tenantInfo?.Fqdn}/auth/reset-password?userId={user.Id.ToString()}&token={resetToken}&RequestType=ForgotPassword",
+                ["reset_url"]    = $"{tenantInfo?.Fqdn}/auth/reset-password?userId={user.Id.ToString()}&token={Uri.EscapeDataString(resetToken)}&RequestType=ForgotPassword",
                 ["tenant_id"]    = tenantId.ToString(),
                 ["user_id"]      = user.Id.ToString()
             },
