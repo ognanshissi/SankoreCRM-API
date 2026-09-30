@@ -38,12 +38,8 @@ internal sealed class ResetPasswordHandler(
         if (user.Status != UserStatus.Active)
             return Result.Fail<ResetPasswordResult>(
                 "Password reset is not available for this account. Contact your administrator.");
-        
-        if (user.Status == UserStatus.Disabled)
-            return Result.Fail<ResetPasswordResult>("Cannot reset password for a disabled user.");
 
-        
-        // 2. Fetch the last N hashes — ordered newest-first to bail out early on recent reuse.
+        // 4. Fetch the last N hashes — ordered newest-first to bail out early on recent reuse.
         var recentHashes = await db.PasswordHistories
             .Where(p => p.UserId == user.Id)
             .OrderByDescending(p => p.SetAt)
@@ -51,7 +47,7 @@ internal sealed class ResetPasswordHandler(
             .Select(p => p.PasswordHash)
             .ToListAsync(ct);
 
-        // 3. Check each historic hash against the proposed new password.
+        // 5. Check each historic hash against the proposed new password.
         //    VerifyHashedPassword returns Failed / Success / SuccessRehashNeeded.
         //    Any non-Failed result means the password was recently used.
         foreach (var historicHash in recentHashes)
@@ -63,7 +59,7 @@ internal sealed class ResetPasswordHandler(
                 return Result.Fail<ResetPasswordResult>("PASSWORD_RECENTLY_USED");
         }
 
-        // 4. Validate token + set the new password via Identity
+        // 6. Validate token + set the new password via Identity
         var resetResult = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
         if (!resetResult.Succeeded)
         {
@@ -71,10 +67,10 @@ internal sealed class ResetPasswordHandler(
             return Result.Fail<ResetPasswordResult>(errors);
         }
 
-        // 5. Record password in history and refresh expiry
+        // 7. Record password in history and refresh expiry
         db.PasswordHistories.Add(PasswordHistory.Create(user.TenantId, user.Id, user.PasswordHash!));
 
-        // 6. Extend password expiry from today (token consumption resets the clock)
+        // 8. Extend password expiry from today (token consumption resets the clock)
         user.ExtendPasswordExpiry();
         db.Users.Update(user);
 
