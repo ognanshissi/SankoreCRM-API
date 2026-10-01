@@ -229,19 +229,8 @@ builder.Services.AddSecretsVault(
             b => b.MigrationsHistoryTable("__EFMigrationsHistory", "secrets"))
         .UseSnakeCaseNamingConvention());
 
-// Message bus (MassTransit). In-memory transport by default for local dev;
-// swap to RabbitMQ/Kafka via configuration for staging/production without
-// touching module code (OutboxProcessor<T> only depends on IBus).
 builder.Services.AddMassTransit(x =>
 {
-    // Leads module consumers (US-M13-080 — task generation from events)
-    // Auto-qualification + auto-dispatch of captured leads. Inert unless
-    // Leads:AutoDispatchOnCapture is true — see LeadModuleSettings.
-    // M02 KYC — the two automatic triggers of KYC-B-01. A converted lead reaches BOTH
-    // (M13 publishes KycRequested, M01 publishes ClientCreated for the client it creates on the
-    // way); the command they share is idempotent, so the second one finds the file and stops.
-    // Drops a customer's cached ceilings the instant their tier moves — the 5-minute TTL on the
-    // limits is a floor, not the mechanism. A downgrade must bite at once.
     x.AddConsumer<Sankore.Modules.Kyc.Features.Limits.Consumers.KycTierChangedCacheConsumer>();
 
     x.AddConsumer<Sankore.Modules.Kyc.Features.Files.Consumers.ClientCreatedKycConsumer>();
@@ -258,9 +247,6 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<WorkflowTriggerConsumer>();
     x.AddConsumer<ChildWorkflowCompletedConsumer>();
 
-    // ── Customers module (M01) ────────────────────────────────────────────────
-    // KYC decisions drive the client status snapshot (US-M01-BE-13). Every one of
-    // these consumers is guarded by IInboxGuard, so a redelivered event is ignored.
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycValidatedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRiskLevelChangedConsumer>();
@@ -316,7 +302,7 @@ builder.AddRedisDistributedCache("redis");
 builder.Services.AddEndpointsApiExplorer();
 
 #region Swagger Generation
-builder.Services.AddSwaggerGen(options =>
+builder.Services.AddSwaggerGen(options => 
 {
     options.AddSecurityDefinition("BearerToken", new ()
     {
@@ -345,23 +331,6 @@ builder.Services.AddSwaggerGen(options =>
 });
 #endregion
 
-
-// ---------------------------------------------------------------------
-// 2. Module registration — one line per module, each module owns its own
-//    DbContext, handlers, validators, and endpoints internally.
-// ---------------------------------------------------------------------
-
-// Object storage, BEFORE the modules. Each module registers a filesystem fallback with TryAdd
-// under the same concern key, so whatever is declared here wins and the fallback stands down.
-// Ordering is the whole mechanism: registering these after AddKycModule would leave the
-// filesystem backend in place and KYC evidence on a container volume, silently.
-//
-// With ObjectStorage:R2 unset, these resolve to the same local roots the modules would have
-// chosen — a developer machine and a single-node install keep working with no configuration.
-// With it set, both concerns move to their own bucket and nothing above the backend changes:
-// KycDocumentStore still encrypts AES-256-GCM before a byte leaves the process.
-// One declaration per entry in ObjectStorageConcerns.All — the same list the migration endpoint
-// resolves its SOURCE folder from, so the two can never disagree about where a concern's files are.
 foreach (var concern in ObjectStorageConcerns.All)
 {
     builder.Services.AddObjectBackend(
@@ -376,31 +345,11 @@ builder.Services.AddWorkflowModule(builder.Configuration);
 builder.Services.AddNotificationsModule(builder.Configuration);
 builder.Services.AddCustomersModule(builder.Configuration);      // M01
 
-// Stub registrations for modules not yet scaffolded (US-M13-171/172).
-// ICustomerModule is NO LONGER stubbed: the Customers module (M01) registers
-// LegacyCustomerModuleAdapter for it, so Leads now talks to real client records.
-// M02 KYC. AddKycModule registers KycModuleFacade for IKycModule, which REPLACES
-// StubKycModule — and that swap is not neutral: the stub answered NotStarted to every status
-// question. M01's retention job and its anonymisation handler both call this contract, so they
-// now see real statuses. IsRetentionClearedAsync deliberately still answers false: the retention
-// rule is not implemented, and loosening it would let a nightly job anonymise customers whose
-// KYC evidence a regulator may still demand.
 builder.Services.AddKycModule(builder.Configuration);            // M02
-// builder.Services.AddLoansModule(builder.Configuration);       // M04 — same pattern
 
-// Emit mode starts the host — it has to, the document is built from the endpoint data sources and
-// those only materialise on start. Starting also starts every background worker, and THAT is a real
-// side effect: the outbox processors and the email outbox would publish events and send mail for the
-// few seconds the host is up, on a machine whose database answers. Writing a JSON file must not
-// send an email, so they are removed rather than merely expected to fail.
 if (emitOpenApiTo is not null)
 {
     builder.Services.RemoveAll<IHostedService>();
-
-    // Port 0: the host has to START for the endpoint data sources to materialise, but it has no
-    // reason to be reachable, and binding a fixed port makes the command fail on any machine where
-    // something already holds it — the launch profile's 5000 is taken by AirPlay on macOS. An
-    // ephemeral port is always free, and UseUrls overrides the profile.
     builder.WebHost.UseUrls("http://127.0.0.1:0");
 }
 
@@ -420,27 +369,17 @@ if (emitOpenApiTo is null)
     // Audit schema — independent of all module schemas.
     var auditDb = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
     await auditDb.Database.MigrateAsync();
-
-    // Data Protection key ring — must be created before anything protects or unprotects a
-    // payload: a missing table makes Data Protection fall back to an ephemeral in-memory key
-    // without raising, which only shows up as dead activation links after the next restart.
     await SankoreDataProtection.InitializeAsync(scope.ServiceProvider);
 
     // Secrets vault — shared infrastructure, so no module owns its schema: it has to be
-    // migrated here or its table never gets created.
     await SecretsServiceCollectionExtensions.InitializeAsync(scope.ServiceProvider);
 
-    // Each module owns its own migration + initialization.
     // AdministrationModule.InitializeAsync runs migrations AND seeds system roles.
     await LeadsModule.InitializeAsync(scope.ServiceProvider);
     await AdministrationModule.InitializeAsync(scope.ServiceProvider);
     await WorkflowModule.InitializeAsync(scope.ServiceProvider);
     await NotificationsModule.InitializeAsync(scope.ServiceProvider);
-    // Migrates the "customers" schema, then seeds this tenant's M01 parameters and
-    // legal forms idempotently (US-M01-BE-01).
     await CustomersModule.InitializeAsync(scope.ServiceProvider);
-    // Migrates the "kyc" schema, then seeds each tenant's M02 parameters (ceilings, review
-    // periodicity, grace period) idempotently.
     await KycModule.InitializeAsync(scope.ServiceProvider);
 }
 
@@ -454,53 +393,30 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// The Hangfire dashboard is NOT mounted here. It lives in Sankore.Hangfire, which
-// reads the same storage behind basic auth in every environment — see that host's
-// Program.cs. This one only produces and processes jobs.
+if (emitOpenApiTo is null) { 
+    try {
+        var tenantStore = app.Services.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>();
+        var activeTenants = await tenantStore.GetAllActiveAsync(CancellationToken.None);
 
-// Register per-tenant recurring Hangfire jobs from the tenant registry.
-// Runs in EVERY environment: SLA escalation, nurturing, lead recycling and
-// scheduled pulls are product behaviour, not a dev convenience.
-//
-// Scheduling is not a prerequisite for serving HTTP: registration takes a
-// distributed lock per job id, so a second instance running against the same
-// database (a leftover `dotnet run`, a rolling restart) can lose the race and
-// throw PostgreSqlDistributedLockException. Log and carry on rather than
-// taking the whole API down — the jobs are already registered in that case.
-//
-// Skipped entirely when emitting the OpenAPI document: scheduling reads the tenant registry over
-// HTTP and takes locks in Hangfire's storage, neither of which belongs in a command that writes a
-// JSON file. Guarded BEFORE the try rather than thrown from inside it — landing in that catch would
-// log "Failed to register recurring Hangfire jobs", which is alarming and, here, untrue.
-if (emitOpenApiTo is null)
-{
-try
-{
-    var tenantStore = app.Services.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>();
-    var activeTenants = await tenantStore.GetAllActiveAsync(CancellationToken.None);
+        var pauseStore = new RecurringJobPauseStore(
+            app.Services.GetRequiredService<Hangfire.JobStorage>(),
+            app.Services.GetRequiredService<Hangfire.IRecurringJobManager>());
 
-    // Jobs paused from the Sankore.Hangfire dashboard must STAY paused. Without
-    // this guard AddOrUpdate below would silently resurrect every one of them on
-    // each restart or rolling deploy, which is exactly why pausing exists.
-    var pauseStore = new RecurringJobPauseStore(
-        app.Services.GetRequiredService<Hangfire.JobStorage>(),
-        app.Services.GetRequiredService<Hangfire.IRecurringJobManager>());
+        var pausedJobIds = pauseStore.GetPausedIds();
+        var skipped = new List<string>();
 
-    var pausedJobIds = pauseStore.GetPausedIds();
-    var skipped = new List<string>();
-
-    void AddOrUpdate<TJob>(string jobId, Expression<Func<TJob, Task>> methodCall, string cron)
-    {
-        if (pausedJobIds.Contains(jobId))
+        void AddOrUpdate<TJob>(string jobId, Expression<Func<TJob, Task>> methodCall, string cron)
         {
-            skipped.Add(jobId);
-            return;
+            if (pausedJobIds.Contains(jobId))
+            {
+                skipped.Add(jobId);
+                return;
+            }
+
+            Hangfire.RecurringJob.AddOrUpdate(jobId, methodCall, cron);
         }
 
-        Hangfire.RecurringJob.AddOrUpdate(jobId, methodCall, cron);
-    }
-
-    foreach (var t in activeTenants)
+        foreach (var t in activeTenants)
     {
         var tenantId = t.Id;
         var suffix = tenantId.ToString()[..8];
@@ -521,66 +437,66 @@ try
             "0 3 * * *");
     }
 
-    // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)
-    AddOrUpdate<Sankore.Modules.Leads.Features.Ingestion.Pull.LeadSourcePullOrchestratorJob>(
-        "lead-source-pull-orchestrator",
-        job => job.ExecuteAsync(),
-        "* * * * *");
+        // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)
+        AddOrUpdate<Sankore.Modules.Leads.Features.Ingestion.Pull.LeadSourcePullOrchestratorJob>(
+            "lead-source-pull-orchestrator",
+            job => job.ExecuteAsync(),
+            "* * * * *");
 
-    // ── Customers module (M01) ────────────────────────────────────────────────
-    // All four are GLOBAL orchestrators: they iterate active tenants themselves and
-    // enqueue one opaque per-tenant job each, so adding a tenant needs no new
-    // recurring registration and the job arguments stay opaque identifiers.
-    AddOrUpdate<Sankore.Modules.Customers.Features.Duplicates.DetectDuplicates.DetectDuplicatesOrchestratorJob>(
-        "customers-detect-duplicates-orchestrator",
-        job => job.ExecuteAsync(),
-        "0 2 * * *");                                    // nightly (US-M01-BE-24)
+        // ── Customers module (M01) ────────────────────────────────────────────────
+        // All four are GLOBAL orchestrators: they iterate active tenants themselves and
+        // enqueue one opaque per-tenant job each, so adding a tenant needs no new
+        // recurring registration and the job arguments stay opaque identifiers.
+        AddOrUpdate<Sankore.Modules.Customers.Features.Duplicates.DetectDuplicates.DetectDuplicatesOrchestratorJob>(
+            "customers-detect-duplicates-orchestrator",
+            job => job.ExecuteAsync(),
+            "0 2 * * *");                                    // nightly (US-M01-BE-24)
 
-    AddOrUpdate<Sankore.Modules.Customers.Features.Timeline.Segments.AssignSegmentsOrchestratorJob>(
-        "customers-assign-segments-orchestrator",
-        job => job.ExecuteAsync(),
-        "0 3 * * *");                                    // nightly (US-M01-BE-27)
+        AddOrUpdate<Sankore.Modules.Customers.Features.Timeline.Segments.AssignSegmentsOrchestratorJob>(
+            "customers-assign-segments-orchestrator",
+            job => job.ExecuteAsync(),
+            "0 3 * * *");                                    // nightly (US-M01-BE-27)
 
-    AddOrUpdate<Sankore.Modules.Customers.Features.Timeline.Loyalty.ComputeLoyaltyScoresOrchestratorJob>(
-        "customers-loyalty-scores-orchestrator",
-        job => job.ExecuteAsync(),
-        "30 3 * * *");                                   // nightly (US-M01-BE-28)
+        AddOrUpdate<Sankore.Modules.Customers.Features.Timeline.Loyalty.ComputeLoyaltyScoresOrchestratorJob>(
+            "customers-loyalty-scores-orchestrator",
+            job => job.ExecuteAsync(),
+            "30 3 * * *");                                   // nightly (US-M01-BE-28)
 
-    // ── KYC module (M02) ──────────────────────────────────────────────────────
-    // GLOBAL like M01's: it walks the active tenants itself and enqueues one opaque per-tenant
-    // job, so a new tenant needs no new recurring registration. 01:00 is before M01's 02:00 and
-    // 03:00 sweeps — a review that downgrades a tier should land before the nightly scoring reads
-    // it.
-    AddOrUpdate<Sankore.Modules.Kyc.Features.Reviews.KycReviewOrchestratorJob>(
-        "kyc-review-orchestrator",
-        job => job.ExecuteAsync(),
-        "0 1 * * *");                                    // daily (KYC-B-07)
+        // ── KYC module (M02) ──────────────────────────────────────────────────────
+        // GLOBAL like M01's: it walks the active tenants itself and enqueues one opaque per-tenant
+        // job, so a new tenant needs no new recurring registration. 01:00 is before M01's 02:00 and
+        // 03:00 sweeps — a review that downgrades a tier should land before the nightly scoring reads
+        // it.
+        AddOrUpdate<Sankore.Modules.Kyc.Features.Reviews.KycReviewOrchestratorJob>(
+            "kyc-review-orchestrator",
+            job => job.ExecuteAsync(),
+            "0 1 * * *");                                    // daily (KYC-B-07)
 
-    AddOrUpdate<Sankore.Modules.Customers.Features.Compliance.Retention.IdentifyRetentionCandidatesOrchestratorJob>(
-        "customers-retention-candidates-orchestrator",
-        job => job.ExecuteAsync(),
-        "0 4 1 * *");                                    // monthly (US-M01-BE-29)
+        AddOrUpdate<Sankore.Modules.Customers.Features.Compliance.Retention.IdentifyRetentionCandidatesOrchestratorJob>(
+            "customers-retention-candidates-orchestrator",
+            job => job.ExecuteAsync(),
+            "0 4 1 * *");                                    // monthly (US-M01-BE-29)
 
-    app.Logger.LogInformation(
-        "Registered recurring Hangfire jobs for {TenantCount} active tenant(s), plus the global pull orchestrator.",
-        activeTenants.Count);
-
-    if (skipped.Count > 0)
-    {
         app.Logger.LogInformation(
-            "Skipped {SkippedCount} recurring job(s) paused from the Hangfire dashboard: {SkippedJobIds}. "
-            + "They will not run until resumed there.",
-            skipped.Count,
-            string.Join(", ", skipped));
+            "Registered recurring Hangfire jobs for {TenantCount} active tenant(s), plus the global pull orchestrator.",
+            activeTenants.Count);
+
+        if (skipped.Count > 0) 
+        {
+            app.Logger.LogInformation(
+                "Skipped {SkippedCount} recurring job(s) paused from the Hangfire dashboard: {SkippedJobIds}. "
+                + "They will not run until resumed there.",
+                skipped.Count,
+                string.Join(", ", skipped)); 
+        } 
+    } 
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex,
+            "Failed to register recurring Hangfire jobs. The API will start WITHOUT them, so "
+            + "SLA escalation, nurturing, lead recycling and scheduled pulls will not run on this "
+            + "instance. This usually means another instance is already running against the same database."); 
     }
-}
-catch (Exception ex)
-{
-    app.Logger.LogError(ex,
-        "Failed to register recurring Hangfire jobs. The API will start WITHOUT them, so "
-        + "SLA escalation, nurturing, lead recycling and scheduled pulls will not run on this "
-        + "instance. This usually means another instance is already running against the same database.");
-}
 }
 
 app.UseExceptionHandler();

@@ -1,0 +1,15 @@
+# Root EditorConfig. Only carries analyzer severities that must hold across the whole
+# modular monolith; the quality bar itself lives in Directory.Build.props
+# (AnalysisMode=Recommended, TreatWarningsAsErrors in Release).
+
+root = true
+
+# EF Core writes these files, we don't. `dotnet ef migrations add` emits
+# `columns: new[] { "tenant_id", ... }` for every composite index, so CA1861
+# ("prefer static readonly fields over constant array arguments") fires a few times per
+# migration and there is no way to make the generator stop. Hand-hoisting the arrays would
+# make every file diverge from what the generator produces, and the next migration would
+# reintroduce the warning anyway. The rule also has no payoff here: a migration's Up/Down
+# runs once per database, so the allocation it warns about never repeats.
+[**/Migrations/*.cs]
+dotnet_diagnostic.CA1861.severity = none

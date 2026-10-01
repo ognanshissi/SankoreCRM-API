@@ -1,3 +1,5 @@
+using Sankore.Modules.Kyc.PublicApi;
+
 namespace Sankore.Modules.Customers.Features.Duplicates.Merge;
 
 using System.Text.Json;
@@ -8,7 +10,6 @@ using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Domain.Matching;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.PublicApi.Events;
-using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 

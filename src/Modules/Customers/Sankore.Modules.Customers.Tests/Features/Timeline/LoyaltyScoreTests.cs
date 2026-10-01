@@ -19,6 +19,7 @@ public sealed class LoyaltyScoreTests : IDisposable
     private static readonly Guid OtherAgencyId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
     private static readonly Guid UserId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001");
     private static readonly DateTimeOffset Now = new(2026, 9, 27, 3, 30, 0, TimeSpan.Zero);
+    private static readonly string[] VolumeAndProducts = ["volume", "products"];
 
     private readonly TestCustomersDbContextFactory _factory = new(TenantId);
 
@@ -148,7 +149,7 @@ public sealed class LoyaltyScoreTests : IDisposable
         var result = await BuildHandler().Handle(
             new ComputeLoyaltyScoresCommand(TenantId), CancellationToken.None);
 
-        result.Value.UnavailableComponents.Should().BeEquivalentTo(new[] { "volume", "products" });
+        result.Value.UnavailableComponents.Should().BeEquivalentTo(VolumeAndProducts);
 
         await using var assertions = _factory.CreateContext();
         var snapshot = await assertions.ClientLoyaltyScores.SingleAsync(s => s.ClientId == client.Id);
@@ -182,7 +183,7 @@ public sealed class LoyaltyScoreTests : IDisposable
         // …and repeated at the top level, so "what was missing" is readable without
         // walking the array.
         root.GetProperty("unavailableComponents").EnumerateArray()
-            .Select(e => e.GetString()).Should().BeEquivalentTo(new[] { "volume", "products" });
+            .Select(e => e.GetString()).Should().BeEquivalentTo(VolumeAndProducts);
     }
 
     [Fact]
@@ -253,7 +254,7 @@ public sealed class LoyaltyScoreTests : IDisposable
         result.Value.ComputedAt.Should().Be(Now);
         result.Value.Breakdown.Should().Be("""{"v":3}""");
         result.Value.History.Select(h => h.Score).Should().ContainInOrder(61, 55, 40);
-        result.Value.UnavailableComponents.Should().BeEquivalentTo(new[] { "volume", "products" });
+        result.Value.UnavailableComponents.Should().BeEquivalentTo(VolumeAndProducts);
     }
 
     [Fact]

@@ -187,7 +187,7 @@ internal sealed class SearchClientsHandler(
         ClientStatus Status,
         Guid AgencyId,
         Guid? AdvisorUserId,
-        Sankore.Modules.Kyc.PublicApi.KycStatus KycStatus,
+        Kyc.PublicApi.KycStatus KycStatus,
         RiskLevel RiskLevel,
         string? SegmentCode,
         string? PrimaryPhoneEncrypted);

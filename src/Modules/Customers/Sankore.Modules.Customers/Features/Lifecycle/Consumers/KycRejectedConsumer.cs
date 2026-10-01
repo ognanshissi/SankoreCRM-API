@@ -1,10 +1,11 @@
+using Sankore.Modules.Kyc.PublicApi;
+
 namespace Sankore.Modules.Customers.Features.Lifecycle.Consumers;
 
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Customers.Infrastructure;
-using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 
 /// <summary>

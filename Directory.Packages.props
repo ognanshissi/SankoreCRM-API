@@ -22,23 +22,30 @@
     <PackageVersion Include="MediatR" Version="12.4.1" />
   </ItemGroup>
   <ItemGroup Label="AspNetCore">
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
+    <!-- Deliberately held at 9.x while the rest of the stack is on 10.x. The 10.x line
+         pulls Microsoft.OpenApi 2.x, which relocated the types out of
+         Microsoft.OpenApi.Models / .Any and is incompatible with Swashbuckle 6.9.0 below.
+         Moving it means migrating EnumSchemaFilter, TenantHeaderOperationFilter and
+         OpenApiEmitter together with Swashbuckle -> 9.x, and the swagger document those
+         emit is what SankoreFront generates its client from. Nothing in this package
+         pulls the vulnerable System.Security.Cryptography.Xml. -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.9.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
     <!-- Persists the Data Protection key ring in Postgres. Without it the keys live in the
          container filesystem and every redeploy invalidates all outstanding activation /
          password-reset tokens. -->
-    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup Label="EntityFrameworkCore">
-    <PackageVersion Include="EFCore.NamingConventions" Version="9.0.0" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" Version="9.0.2" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
-    <PackageVersion Include="Npgsql.OpenTelemetry" Version="9.0.2" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0" />
+    <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.OpenTelemetry" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup Label="Scriban">
     <PackageVersion Include="Scriban" Version="7.2.6" />
@@ -54,7 +61,10 @@
     <PackageVersion Include="ncrontab" Version="3.3.3" />
   </ItemGroup>
   <ItemGroup Label="SecurityOverrides">
-    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- Hangfire.Core drags in 11.0.1, which is vulnerable; this pin overrides it.
+         Floor raised to 13.0.4 by Microsoft.EntityFrameworkCore.Design 10.x, which
+         requires >= 13.0.4 — 13.0.3 now restores as a downgrade (NU1605). -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
   <ItemGroup Label="Google">
     <PackageVersion Include="ClosedXML" Version="0.104.2" />
@@ -62,17 +72,17 @@
     <PackageVersion Include="Google.Apis.PeopleService.v1" Version="1.69.0.3785" />
   </ItemGroup>
   <ItemGroup Label="Extensions">
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Localization" Version="9.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
 
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.12" />
     <!-- Explicit rather than transitive via Kernel -> EF Core: the object-storage
          projects read their own configuration section and must not depend on an
          ORM happening to drag it in. -->
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
     <!-- Cloudflare R2 speaks the S3 API; this is the client, pointed at an R2 ServiceURL.
          Referenced ONLY by Sankore.Shared.ObjectStorage.S3, so the two hosts that store no
          object never ship it. -->

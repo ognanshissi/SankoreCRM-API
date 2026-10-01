@@ -1,3 +1,5 @@
+using Sankore.Modules.Kyc.PublicApi;
+
 namespace Sankore.Modules.Customers.Features.Lifecycle.Consumers;
 
 using System.Security.Cryptography;
@@ -9,7 +11,6 @@ using Microsoft.Extensions.Logging;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.PublicApi.Events;
-using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 using Sankore.Shared.Infrastructure.Messaging;
 

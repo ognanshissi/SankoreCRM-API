@@ -21,6 +21,8 @@ public sealed class TimelineConsumerTests : IDisposable
     private static readonly Guid ClientId = Guid.Parse("cccccccc-0000-0000-0000-000000000001");
     private static readonly Guid AbsorbedId = Guid.Parse("cccccccc-0000-0000-0000-000000000002");
     private static readonly Guid GroupId = Guid.Parse("dddddddd-0000-0000-0000-000000000001");
+    private static readonly string[] ImportedLeadEntryTypes =
+        ["LEAD_ACTIVITY_CALL", "LEAD_VISIT", "LEAD_REMINDER"];
     private static readonly Guid UserId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001");
     private static readonly Guid LeadId = Guid.Parse("eeeeeeee-0000-0000-0000-000000000001");
 
@@ -212,8 +214,7 @@ public sealed class TimelineConsumerTests : IDisposable
         var imported = projector.Calls.Where(c => c.SourceModule == TimelineSourceModules.Leads).ToList();
         imported.Should().HaveCount(3);
         imported.Should().OnlyContain(c => c.ClientId == ClientId);
-        imported.Select(c => c.EntryType).Should()
-            .BeEquivalentTo(new[] { "LEAD_ACTIVITY_CALL", "LEAD_VISIT", "LEAD_REMINDER" });
+        imported.Select(c => c.EntryType).Should().BeEquivalentTo(ImportedLeadEntryTypes);
         imported.Select(c => c.DedupKey).Should().OnlyHaveUniqueItems();
     }
 

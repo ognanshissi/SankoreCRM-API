@@ -1,8 +1,9 @@
+using Sankore.Modules.Kyc.PublicApi;
+
 namespace Sankore.Modules.Customers.Domain;
 
 using Sankore.Modules.Customers.Domain.Matching;
 using Sankore.Modules.Customers.Domain.Events;
-using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Shared.Kernel;
 
 /// <summary>

@@ -1,7 +1,9 @@
+using Sankore.Modules.Kyc.PublicApi;
+using Sankore.Shared.Kernel;
+
 namespace Sankore.Modules.Customers.Features.Timeline.Segments.UpdateSegmentRules;
 
 using FluentValidation;
-using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Customers.Domain;
 
 /// <summary>

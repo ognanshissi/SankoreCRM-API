@@ -188,7 +188,7 @@ public sealed class ListKycFilesHandlerTests : IDisposable
 
         page.AwaitingMeCount.Should().Be(1);
         page.Rows.Count(r => r.AwaitingMe).Should().Be(1);
-        page.Rows.First().AwaitingMe.Should().BeTrue("awaiting rows come first");
+        page.Rows[0].AwaitingMe.Should().BeTrue("awaiting rows come first");
     }
 
     [Fact]
