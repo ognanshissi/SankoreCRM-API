@@ -314,7 +314,7 @@ public sealed class Client : AggregateRoot
         if (maritalStatus is not null) MaritalStatus = maritalStatus;
         if (encryptedDeclaredIncome is not null) EncryptedDeclaredIncome = encryptedDeclaredIncome;
         if (declaredIncomeCurrency is not null) DeclaredIncomeCurrency = Clean(declaredIncomeCurrency);
-        if (!string.IsNullOrWhiteSpace(preferredLanguage)) PreferredLanguage = preferredLanguage.Trim();
+        if (!string.IsNullOrWhiteSpace(preferredLanguage)) PreferredLanguage = DefaultLanguage(preferredLanguage);
 
         Touch(actor);
         return Result.Ok();
@@ -791,8 +791,21 @@ public sealed class Client : AggregateRoot
             .Where(part => !string.IsNullOrWhiteSpace(part))
             .Select(part => part!.Trim()));
 
-    private static string DefaultLanguage(string? preferredLanguage) =>
-        string.IsNullOrWhiteSpace(preferredLanguage) ? "FR" : preferredLanguage.Trim();
+    /// <summary>System default language code, lower-case like every seeded email template.</summary>
+    public const string DefaultLanguageCode = LanguageCode.Default;
+
+    /// <summary>
+    /// Lower-cases the language and keeps only its primary subtag, so "FR", "Fr", "fr-FR" and
+    /// "fr_FR" are stored as one value.
+    ///
+    /// This used to trim only — and defaulted to "FR" upper-case — which put "fr", "Fr" and "FR"
+    /// in the same column as three distinct languages. The visible consequence was an email:
+    /// template locales are stored lower-case and resolved in PostgreSQL, where equality is
+    /// case-sensitive, so a client whose language read "FR" matched no template and received the
+    /// message's own JSON payload as its body.
+    /// </summary>
+    private static string DefaultLanguage(string? preferredLanguage)
+        => LanguageCode.Normalize(preferredLanguage);
 
     private static string? Clean(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -74,7 +74,13 @@ public sealed class AppUser: IdentityUser<Guid>
     /// </summary>
     public string? PreferredLanguage { get; private set; }
 
-    public void SetPreferredLanguage(string? language) => PreferredLanguage = language;
+    /// <summary>
+    /// Stores the code normalised — "FR", "Fr" and "fr-FR" are one language, not three. Blank
+    /// stays null, because "no preference" is meaningful here: ModuleEmailSender then falls back
+    /// to the tenant's default rather than assuming French.
+    /// </summary>
+    public void SetPreferredLanguage(string? language)
+        => PreferredLanguage = LanguageCode.NormalizeOrNull(language);
 
     private AppUser() { } // EF Core
 
@@ -146,7 +152,7 @@ public sealed class AppUser: IdentityUser<Guid>
         IEnumerable<string> languages, IEnumerable<string> specialties)
     {
         var user = Create(tenantId, agencyId, firstName, lastName, email);
-        user.SpokenLanguages = languages.ToList();
+        user.SpokenLanguages = NormalizeLanguages(languages);
         user.Specialties = specialties.ToList();
         user.IsAvailable = true;
         return user;
@@ -239,7 +245,7 @@ public sealed class AppUser: IdentityUser<Guid>
             FullName = fullName;
         }
         if (agencyId is not null) AgencyId = agencyId;
-        if (spokenLanguages is not null) SpokenLanguages = spokenLanguages;
+        if (spokenLanguages is not null) SpokenLanguages = NormalizeLanguages(spokenLanguages);
         if (specialties is not null) Specialties = specialties;
         if (enableNotifications is not null) EnableNotifications = enableNotifications.Value;
     }
@@ -286,6 +292,18 @@ public sealed class AppUser: IdentityUser<Guid>
         ActiveLeadsCount = Math.Max(0, ActiveLeadsCount + activeDelta);
         HotLeadsCount = Math.Max(0, HotLeadsCount + hotDelta);
     }
+
+    /// <summary>
+    /// Normalises each code and drops duplicates that only differed by case or subtag, keeping
+    /// the first occurrence so a deliberate ordering survives.
+    /// </summary>
+    private static List<string> NormalizeLanguages(IEnumerable<string> languages)
+        => languages
+            .Select(LanguageCode.NormalizeOrNull)
+            .Where(l => l is not null)
+            .Select(l => l!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 }
 
 public enum UserAccountType

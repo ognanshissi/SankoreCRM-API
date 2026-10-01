@@ -8,7 +8,7 @@ public class UserProfile
     public Guid TenantId { get; private set; }
     public Guid UserId { get; private set; }
     public AppUser? User { get; private set; }
-    public string DefaultLanguage { get; private set; } = "fr";
+    public string DefaultLanguage { get; private set; } = LanguageCode.Default;
 
     public Address Address { get; private set; } = null!;
 
@@ -32,7 +32,7 @@ public class UserProfile
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             UserId = userId,
-            DefaultLanguage = defaultLanguage,
+            DefaultLanguage = LanguageCode.Normalize(defaultLanguage),
             Address = new Address(),
             AdditionalEmail = string.Empty,
             JobTitle = string.Empty

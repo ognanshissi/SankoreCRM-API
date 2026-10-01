@@ -263,6 +263,23 @@ not an inbox table. It establishes `BackgroundJobContext.SetScope` **before** cr
 scope, because `ITenantContext` and `ICurrentUser` are built from it and a consumer has no HTTP
 context.
 
+### Language codes
+
+**Every write of a language code goes through `LanguageCode` (`Sankore.Shared.Kernel`)**:
+`Normalize` lower-cases and keeps the primary subtag ("FR", "Fr", "fr-FR" → "fr"), falling back
+to `LanguageCode.Default` ("fr"); `NormalizeOrNull` applies the same rule but keeps blank as
+`null`, for fields where "no preference" means "use the tenant default".
+
+It is in the Kernel because four places must agree and did not: `ScribanTemplateRenderer`,
+`Client`, `AppUser` and `UserProfile`. Email template locales are stored lower-case and resolved
+in PostgreSQL, where string equality is **case-sensitive**, so a client whose language read "FR"
+matched no template — and the renderer's "fr" fallback was itself skipped, its guard comparing
+case-INsensitively. Those clients were mailed the message's own JSON payload as its body.
+`Client.DefaultLanguage` made it likely by defaulting to `"FR"` upper-case.
+
+The renderer still normalises on read, so existing rows are safe without a migration; the write
+side is normalised so the column holds one value per language.
+
 ### Reading spreadsheets
 
 All three importers (users M12, clients M01, leads M13) accept CSV and .xlsx. **Read every

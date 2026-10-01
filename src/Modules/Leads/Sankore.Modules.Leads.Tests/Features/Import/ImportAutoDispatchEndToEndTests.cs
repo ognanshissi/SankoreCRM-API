@@ -309,9 +309,10 @@ public sealed class ImportAutoDispatchEndToEndTests : IDisposable
         // Default()'s own values were the ones applied.
         assignment.Strategy.Should().Be(DispatchingStrategy.CompatibilityScoring);
         assignment.RuleId.Should().BeNull("Default() is not a persisted rule");
+        // Read from Default() rather than hard-coded: the built-in SLA is a product decision that
+        // has already moved once, and a literal here would pin a value this test does not own.
         (assignment.SlaDeadline - assignment.CreatedAt).Should()
-            .BeCloseTo(TimeSpan.FromHours(2), TimeSpan.FromSeconds(5),
-                "DispatchingRule.Default().FirstContactSla");
+            .BeCloseTo(DispatchingRule.Default().FirstContactSla, TimeSpan.FromSeconds(5));
 
         var lead = await db.Leads.AsNoTracking().FirstAsync(l => l.Id == leadId);
         lead.CurrentAssignedId.Should().Be(agent.Id);

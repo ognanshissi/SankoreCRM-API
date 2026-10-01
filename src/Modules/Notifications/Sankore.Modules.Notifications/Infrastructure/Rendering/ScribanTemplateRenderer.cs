@@ -7,6 +7,7 @@ using Scriban;
 using Scriban.Runtime;
 using Sankore.Modules.Notifications.Domain;
 using Sankore.Modules.Notifications.Infrastructure;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Loads the active EmailTemplate from the database and renders it with Scriban.
@@ -26,6 +27,9 @@ internal sealed class ScribanTemplateRenderer(
     ILogger<ScribanTemplateRenderer> logger)
     : ITemplateRenderer
 {
+    /// <summary>System default locale; every template key is seeded in it.</summary>
+    private const string DefaultLocale = LanguageCode.Default;
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNameCaseInsensitive = true
@@ -38,15 +42,21 @@ internal sealed class ScribanTemplateRenderer(
         string templateDataJson,
         CancellationToken ct = default)
     {
-        var template = await ResolveTemplateAsync(tenantId, templateKey, locale, ct);
+        // Callers pass whatever their data holds: a client's PreferredLanguage is "fr", "FR",
+        // "Fr" or "fr-FR" depending on who typed it. Template locales are stored lower-case, and
+        // the lookup runs in PostgreSQL where string equality is case-SENSITIVE — so "FR" matched
+        // nothing and the message went out as its own raw JSON payload.
+        var normalizedLocale = LanguageCode.Normalize(locale);
+
+        var template = await ResolveTemplateAsync(tenantId, templateKey, normalizedLocale, ct);
 
         if (template is null)
         {
             logger.LogWarning(
                 "No active EmailTemplate found for Key={Key} Locale={Locale} Tenant={TenantId} — using stub fallback",
-                templateKey, locale, tenantId);
+                templateKey, normalizedLocale, tenantId);
             return new RenderedEmail(
-                $"[{locale}] {templateKey}",
+                $"[{normalizedLocale}] {templateKey}",
                 $"<pre>{templateDataJson}</pre>",
                 templateDataJson);
         }
@@ -87,13 +97,14 @@ internal sealed class ScribanTemplateRenderer(
 
         if (found is not null) return found;
 
-        // 3. Platform default + "fr" fallback (system default locale)
-        if (!string.Equals(locale, "fr", StringComparison.OrdinalIgnoreCase))
+        // 3. Platform default + "fr" fallback (system default locale). The caller's locale is
+        //    already normalised, so this comparison and the two above agree on what matches.
+        if (locale != DefaultLocale)
         {
             found = await db.EmailTemplates
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(
-                    t => t.TenantId == null && t.TemplateKey == key && t.Locale == "fr" && t.IsActive,
+                    t => t.TenantId == null && t.TemplateKey == key && t.Locale == DefaultLocale && t.IsActive,
                     ct);
         }
 

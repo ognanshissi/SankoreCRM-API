@@ -159,4 +159,97 @@ public sealed class ScribanTemplateRendererTests
         var act = async () => await renderer.RenderAsync(_tenantId, "broken", "fr", "{}");
         await act.Should().NotThrowAsync();
     }
+
+    // ── locale normalisation ────────────────────────────────────────────────
+    // A client converted from a lead had PreferredLanguage = "FR", which the consumer passes
+    // through verbatim. Template locales are stored lower-case and the lookup runs in PostgreSQL,
+    // where string equality is case-sensitive, so nothing matched — and the "fr" fallback was
+    // skipped because its guard compared case-INsensitively. The client received the template's
+    // own JSON payload as the message body.
+
+    [Theory]
+    [InlineData("FR")]
+    [InlineData("Fr")]
+    [InlineData("fr-FR")]
+    [InlineData("fr_FR")]
+    [InlineData("  fr  ")]
+    public async void Resolves_a_french_template_however_the_locale_is_spelled(string locale)
+    {
+        var renderer = BuildRendererWithDb(db =>
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                null, "client.welcome", "fr", 1,
+                "Bienvenue {{ full_name }}", "<p>Votre numéro : {{ client_number }}</p>")));
+
+        var result = await renderer.RenderAsync(
+            _tenantId, "client.welcome", locale,
+            """{"full_name":"Ambroise BAZIE","client_number":"AG000002-2026-000003"}""");
+
+        result.Subject.Should().Be("Bienvenue Ambroise BAZIE");
+        result.HtmlBody.Should().Contain("AG000002-2026-000003");
+        result.HtmlBody.Should().NotContain("full_name", "the raw payload must never reach the reader");
+    }
+
+    [Theory]
+    [InlineData("EN")]
+    [InlineData("en-GB")]
+    public async void Resolves_an_english_template_however_the_locale_is_spelled(string locale)
+    {
+        var renderer = BuildRendererWithDb(db =>
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                null, "client.welcome", "fr", 1, "Bienvenue", "<p>fr</p>"));
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                null, "client.welcome", "en", 1, "Welcome", "<p>en</p>"));
+        });
+
+        var result = await renderer.RenderAsync(_tenantId, "client.welcome", locale, "{}");
+
+        result.Subject.Should().Be("Welcome");
+    }
+
+    [Theory]
+    [InlineData("de")]
+    [InlineData("PT-BR")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async void An_unknown_or_blank_locale_falls_back_to_french(string locale)
+    {
+        var renderer = BuildRendererWithDb(db =>
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                null, "client.welcome", "fr", 1, "Bienvenue", "<p>fr</p>")));
+
+        var result = await renderer.RenderAsync(_tenantId, "client.welcome", locale, "{}");
+
+        result.Subject.Should().Be("Bienvenue");
+    }
+
+    [Fact]
+    public async void A_tenant_template_is_still_preferred_when_the_locale_needs_normalising()
+    {
+        var renderer = BuildRendererWithDb(db =>
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                null, "client.welcome", "fr", 1, "Platform", "<p>platform</p>"));
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                _tenantId, "client.welcome", "fr", 1, "Tenant", "<p>tenant</p>"));
+        });
+
+        var result = await renderer.RenderAsync(_tenantId, "client.welcome", "FR", "{}");
+
+        result.Subject.Should().Be("Tenant");
+    }
+
+    [Fact]
+    public async void The_stub_fallback_still_applies_when_the_key_itself_is_unknown()
+    {
+        // Normalisation must not hide a genuinely missing template.
+        var renderer = BuildRendererWithDb(db =>
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                null, "client.welcome", "fr", 1, "Bienvenue", "<p>fr</p>")));
+
+        var result = await renderer.RenderAsync(_tenantId, "no-such-key", "FR", """{"a":1}""");
+
+        result.Subject.Should().Contain("no-such-key");
+        result.HtmlBody.Should().Contain("\"a\":1");
+    }
 }

@@ -25,7 +25,10 @@ public class ClientAggregateTests
         client.KycStatus.Should().Be(KycStatus.NotStarted);
         client.RiskLevel.Should().Be(RiskLevel.Unknown);
         client.DisplayName.Should().Be("Awa Ouattara");
-        client.PreferredLanguage.Should().Be("FR");
+        // Lower-case on purpose: email template locales are stored lower-case and resolved in
+        // PostgreSQL, where equality is case-sensitive. "FR" used to be the default here and
+        // matched no template at all.
+        client.PreferredLanguage.Should().Be(Client.DefaultLanguageCode).And.Be("fr");
         client.CreatedAt.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(10));
         client.IsReadOnly.Should().BeFalse();
         client.DomainEvents.OfType<ClientCreatedDomainEvent>().Should().ContainSingle()
