@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Sankore.Modules.Kyc.Infrastructure.Storage;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.ObjectStorage;
 using Xunit;
 
 /// <summary>
@@ -19,7 +20,7 @@ using Xunit;
 /// was never swapped. Each one pins a property a reviewer would otherwise have to re-derive
 /// from the implementation.
 /// </summary>
-public sealed class LocalKycDocumentStoreTests : IDisposable
+public sealed class KycDocumentStoreTests : IDisposable
 {
     private static readonly Guid TenantA = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid TenantB = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -32,14 +33,24 @@ public sealed class LocalKycDocumentStoreTests : IDisposable
 
     private readonly string _key = NewKey();
 
-    private LocalKycDocumentStore CreateStore(long? maxBytes = null, string? key = null) =>
-        new(Options.Create(new KycStorageOptions
+    /// <summary>
+    /// Over the REAL filesystem backend, not a substitute. These tests are the compliance
+    /// argument, and most of them assert on what is actually on the volume — an in-memory
+    /// backend would prove the store encrypts something, not that an ID scan is unreadable
+    /// where it is kept.
+    /// </summary>
+    private KycDocumentStore CreateStore(long? maxBytes = null, string? key = null) =>
+        new(Backend(),
+            Options.Create(new KycStorageOptions
             {
                 BasePath = _root,
                 EncryptionKey = key ?? _key,
                 MaxBytes = maxBytes ?? 10L * 1024 * 1024
             }),
-            NullLogger<LocalKycDocumentStore>.Instance);
+            NullLogger<KycDocumentStore>.Instance);
+
+    private LocalObjectBackend Backend() =>
+        new(_root, NullLogger<LocalObjectBackend>.Instance);
 
     private static MemoryStream Jpeg(int size = 2048)
     {
@@ -385,9 +396,10 @@ public sealed class LocalKycDocumentStoreTests : IDisposable
     [InlineData("c2hvcnQ=")] // valid Base64, 5 bytes — not an AES-256 key
     public void A_missing_or_invalid_encryption_key_should_fail_at_construction(string? configured)
     {
-        var act = () => new LocalKycDocumentStore(
+        var act = () => new KycDocumentStore(
+            Backend(),
             Options.Create(new KycStorageOptions { BasePath = _root, EncryptionKey = configured }),
-            NullLogger<LocalKycDocumentStore>.Instance);
+            NullLogger<KycDocumentStore>.Instance);
 
         act.Should().Throw<InvalidOperationException>()
             .Which.Message.Should().Contain("Kyc:Storage:EncryptionKey",
@@ -403,7 +415,7 @@ public sealed class LocalKycDocumentStoreTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Kyc:Storage:BasePath"] = configured })
             .Build();
 
-        LocalKycDocumentStore.ResolveBasePath(config, HostEnvironment("/srv/app"))
+        KycStorageOptions.ResolveBasePath(config, HostEnvironment("/srv/app"))
             .Should().Be(Path.GetFullPath(configured));
     }
 
@@ -417,7 +429,7 @@ public sealed class LocalKycDocumentStoreTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Kyc:Storage:BasePath"] = configured })
             .Build();
 
-        LocalKycDocumentStore.ResolveBasePath(config, HostEnvironment("/srv/app"))
+        KycStorageOptions.ResolveBasePath(config, HostEnvironment("/srv/app"))
             .Should().Be(Path.Combine("/srv/app", "kyc-documents"));
     }
 

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Shared.ObjectStorage</RootNamespace>
+
+    <!--
+      The CONTRACT and the local backend: no heavy dependency, so every project that stores an
+      object may reference this one, Sankore.Shared.Infrastructure included (IFileStore is
+      implemented over IObjectBackend).
+
+      The S3 client deliberately is NOT here — it lives in Sankore.Shared.ObjectStorage.S3,
+      because Shared.Infrastructure is referenced by every host and neither Sankore.Admin nor
+      Sankore.Hangfire stores an object. See that project's own comment.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The backends and the migrator are exercised from Sankore.Shared.Infrastructure.Tests,
+         next to the IFileStore that sits on them. -->
+    <InternalsVisibleTo Include="Sankore.Shared.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

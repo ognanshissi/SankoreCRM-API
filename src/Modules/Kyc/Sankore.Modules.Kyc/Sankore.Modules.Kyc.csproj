@@ -26,6 +26,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
+    <!-- Object storage behind IObjectBackend. Its own project so the S3 SDK reaches only
+         what stores objects: Sankore.Shared.Infrastructure is referenced by every host,
+         including Sankore.Admin and Sankore.Hangfire, and neither stores one. -->
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.ObjectStorage\Sankore.Shared.ObjectStorage.csproj" />
     <ProjectReference Include="..\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
     <!-- Cross-module dependencies: PublicApi contracts ONLY, never a main assembly -->
     <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />

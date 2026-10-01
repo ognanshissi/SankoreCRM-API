@@ -3,36 +3,42 @@ namespace Sankore.Modules.Kyc.Infrastructure.Storage;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.ObjectStorage;
 
 /// <summary>
-/// Filesystem implementation of <see cref="IKycDocumentStore"/>, encrypting every object with
-/// AES-256-GCM before it touches the disk. The sibling of
-/// <c>Leads.Features.LeadSources.Sdk.LocalSdkFileStore</c>: same "local first, behind an
-/// interface, configurable root" shape, so swapping in S3/MinIO later touches one class.
+/// <see cref="IKycDocumentStore"/> over any <see cref="IObjectBackend"/>, encrypting every object
+/// with AES-256-GCM before it reaches one.
 ///
-/// On-disk layout — <c>{basePath}/{tenantToken}/{ab}/{objectId}.kycobj</c>, file content
+/// <para>
+/// The split with the backend is the point of this class, and it is a compliance split rather
+/// than an architectural preference: encryption, the shape of a reference, the accepted content
+/// types, the size ceiling and the plaintext digest all live HERE, above the medium. A deployment
+/// that moves its evidence from a mounted volume to a Cloudflare R2 bucket changes which backend
+/// is injected and nothing else — in particular it does not trade "encrypted by us, before the
+/// bytes leave the process" for "encrypted at rest by the provider", which is a different promise
+/// to a regulator and a much weaker one against a leaked API key.
+/// </para>
+///
+/// Object key — <c>{tenantToken}/{ab}/{objectId}.kycobj</c>, content
 /// <c>"KYC1" | nonce(12) | tag(16) | ciphertext</c>:
 /// <list type="bullet">
-/// <item>the tenant folder makes a mis-scoped read a missing file rather than a leak, and lets
-/// ops delete one tenant's evidence with a single <c>rm -rf</c> on offboarding;</item>
-/// <item>the two-character shard keeps directories listable when a branch uploads tens of
-/// thousands of documents;</item>
-/// <item>the tenant id and the ref are fed to GCM as associated data, so moving an object file
-/// into another tenant's folder does not make it readable there — the tag check fails.</item>
+/// <item>the tenant prefix makes a mis-scoped read a missing object rather than a leak, and lets
+/// ops drop one tenant's evidence with a single prefix delete on offboarding;</item>
+/// <item>the two-character shard keeps a directory listable when a branch uploads tens of
+/// thousands of documents, and spreads the keyspace on a bucket;</item>
+/// <item>the tenant id and the ref are fed to GCM as associated data, so re-filing an object
+/// under another tenant's prefix does not make it readable there — the tag check fails.</item>
 /// </list>
 /// </summary>
-internal sealed class LocalKycDocumentStore : IKycDocumentStore
+internal sealed class KycDocumentStore : IKycDocumentStore
 {
     private const int NonceSize = 12;
     private const int TagSize = 16;
     private const int KeySize = 32;
     private const string ObjectExtension = ".kycobj";
-    private const string DefaultFolderName = "kyc-documents";
 
     /// <summary>Format marker, so a future layout change is detectable instead of silently garbage.</summary>
     private static readonly byte[] Magic = "KYC1"u8.ToArray();
@@ -41,7 +47,7 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
 
     /// <summary>
     /// The exact shape <see cref="StoreAsync"/> issues: <c>k1.{16 hex}.{32 hex}</c>. Anything
-    /// else is rejected before a path is built, which is how path traversal is handled here —
+    /// else is rejected before a key is built, which is how path traversal is handled here —
     /// not by sanitising a caller-supplied name, but by never accepting one.
     /// <c>\z</c> rather than <c>$</c> deliberately: <c>$</c> also matches before a trailing
     /// newline, and <c>"k1.….\n/../etc/passwd"</c> must not slip through on the next change.
@@ -50,15 +56,17 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
         @"^k1\.[0-9a-f]{16}\.[0-9a-f]{32}\z",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private readonly IObjectBackend _backend;
     private readonly KycStorageOptions _options;
-    private readonly ILogger<LocalKycDocumentStore> _logger;
+    private readonly ILogger<KycDocumentStore> _logger;
     private readonly byte[] _key;
-    private readonly string _basePath;
 
-    public LocalKycDocumentStore(
+    public KycDocumentStore(
+        IObjectBackend backend,
         IOptions<KycStorageOptions> options,
-        ILogger<LocalKycDocumentStore> logger)
+        ILogger<KycDocumentStore> logger)
     {
+        _backend = backend;
         _options = options.Value;
         _logger = logger;
 
@@ -68,21 +76,6 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
         // naming the setting. Failing at construction turns that into a startup error that
         // says which configuration key to set.
         _key = ReadKey(_options.EncryptionKey);
-        _basePath = ResolveBasePath(_options, _logger);
-    }
-
-    /// <summary>
-    /// Resolves the object-store root for the host: <c>Kyc:Storage:BasePath</c> when configured
-    /// (point it at a mounted volume), otherwise <c>kyc-documents/</c> under the content root.
-    /// Mirrors <c>LocalSdkFileStore.ResolveBasePath</c>; the host calls it when binding
-    /// <see cref="KycStorageOptions"/> so the resolved path is visible in diagnostics.
-    /// </summary>
-    public static string ResolveBasePath(IConfiguration config, IHostEnvironment env)
-    {
-        var configured = config[$"{KycStorageOptions.SectionName}:BasePath"];
-        if (!string.IsNullOrWhiteSpace(configured)) return Path.GetFullPath(configured);
-
-        return Path.Combine(env.ContentRootPath, DefaultFolderName);
     }
 
     public async Task<KycStoredDocument> StoreAsync(
@@ -114,20 +107,13 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
             aes.Encrypt(nonce, plaintext, ciphertext, tag, AssociatedData(tenantId, storageRef));
         }
 
-        var path = BuildPath(TenantToken(tenantId), storageRef);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var stored = new byte[HeaderSize + ciphertext.Length];
+        Magic.CopyTo(stored, 0);
+        nonce.CopyTo(stored, Magic.Length);
+        tag.CopyTo(stored, Magic.Length + NonceSize);
+        ciphertext.CopyTo(stored, HeaderSize);
 
-        // Write aside then move: a crash mid-write would otherwise leave a truncated object that
-        // only surfaces much later, as a GCM tag mismatch indistinguishable from tampering.
-        var temporaryPath = path + ".tmp";
-        await using (var file = File.Create(temporaryPath))
-        {
-            await file.WriteAsync(Magic, ct);
-            await file.WriteAsync(nonce, ct);
-            await file.WriteAsync(tag, ct);
-            await file.WriteAsync(ciphertext, ct);
-        }
-        File.Move(temporaryPath, path, overwrite: false);
+        await _backend.PutAsync(BuildKey(TenantToken(tenantId), storageRef), stored, ct);
 
         var sha256 = Convert.ToHexString(SHA256.HashData(plaintext)).ToLowerInvariant();
 
@@ -140,7 +126,7 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
 
     public async Task<Stream?> OpenAsync(Guid tenantId, string storageRef, CancellationToken ct)
     {
-        if (!TryResolvePath(tenantId, storageRef, out var path))
+        if (!TryResolveKey(tenantId, storageRef, out var objectKey))
         {
             // Debug, not Warning: a stale ref after a tenant switch is normal traffic. A genuine
             // probing attempt shows up as a burst of 404s at the endpoint layer.
@@ -148,20 +134,20 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
             return null;
         }
 
-        var info = new FileInfo(path);
-        if (!info.Exists) return null;
+        // An object larger than the write-side limit cannot have been produced by this store, so
+        // the ceiling is handed to the backend rather than checked on the way back: it decides
+        // before the bytes are in memory, and answers null if the medium holds something bigger.
+        var raw = await _backend.GetAsync(objectKey, _options.MaxBytes + HeaderSize, ct);
+        if (raw is null) return null;
 
-        // An object larger than the write-side limit cannot have been produced by this store;
-        // refuse it rather than allocating whatever is on disk.
-        if (info.Length < HeaderSize || info.Length > _options.MaxBytes + HeaderSize)
+        if (raw.Length < HeaderSize)
         {
             _logger.LogWarning(
-                "KYC object {StorageRef} has an impossible length of {Length} bytes, ignoring",
-                storageRef, info.Length);
+                "KYC object {StorageRef} is {Length} bytes, shorter than its own header, ignoring",
+                storageRef, raw.Length);
             return null;
         }
 
-        var raw = await File.ReadAllBytesAsync(path, ct);
         var plaintext = Decrypt(raw, tenantId, storageRef);
 
         return new MemoryStream(plaintext, 0, plaintext.Length, writable: false, publiclyVisible: false);
@@ -197,14 +183,16 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
         return plaintext;
     }
 
-    public Task<bool> DeleteAsync(Guid tenantId, string storageRef, CancellationToken ct)
+    public async Task<bool> DeleteAsync(Guid tenantId, string storageRef, CancellationToken ct)
     {
-        if (!TryResolvePath(tenantId, storageRef, out var path) || !File.Exists(path))
-            return Task.FromResult(false);
+        if (!TryResolveKey(tenantId, storageRef, out var objectKey)) return false;
 
-        File.Delete(path);
-        _logger.LogInformation("Deleted KYC object {StorageRef} for tenant {TenantId}", storageRef, tenantId);
-        return Task.FromResult(true);
+        var removed = await _backend.DeleteAsync(objectKey, ct);
+
+        if (removed)
+            _logger.LogInformation("Deleted KYC object {StorageRef} for tenant {TenantId}", storageRef, tenantId);
+
+        return removed;
     }
 
     /// <summary>
@@ -240,9 +228,9 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
         return buffer.ToArray();
     }
 
-    private bool TryResolvePath(Guid tenantId, string storageRef, out string path)
+    private static bool TryResolveKey(Guid tenantId, string storageRef, out string objectKey)
     {
-        path = string.Empty;
+        objectKey = string.Empty;
         if (string.IsNullOrEmpty(storageRef) || !StorageRefShape.IsMatch(storageRef)) return false;
 
         var token = TenantToken(tenantId);
@@ -251,33 +239,32 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
         // simply does not match — no lookup table, nothing to forget to filter on.
         if (!string.Equals(storageRef.Split('.')[1], token, StringComparison.Ordinal)) return false;
 
-        var candidate = BuildPath(token, storageRef);
-
-        // Belt and braces behind the regex: if a future edit loosens the shape, the escape still
-        // has to get past this. Keep both.
-        if (!candidate.StartsWith(_basePath + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            return false;
-
-        path = candidate;
+        objectKey = BuildKey(token, storageRef);
         return true;
     }
 
-    private string BuildPath(string tenantToken, string storageRef)
+    /// <summary>
+    /// <c>/</c> on every platform, never <see cref="Path.DirectorySeparatorChar"/>: this is a key,
+    /// and a backend that happens to be a filesystem is the one that translates it. Building it
+    /// with the platform separator would give a Windows host different keys from a Linux one, and
+    /// a bucket filled from both would hold each document twice under two spellings.
+    /// </summary>
+    private static string BuildKey(string tenantToken, string storageRef)
     {
         var objectId = storageRef.Split('.')[2];
-        return Path.Combine(_basePath, tenantToken, objectId[..2], objectId + ObjectExtension);
+        return $"{tenantToken}/{objectId[..2]}/{objectId}{ObjectExtension}";
     }
 
     /// <summary>
-    /// Stable per-tenant folder name. A hash rather than the raw GUID so the ref — which the
-    /// caller hands to a browser — carries no tenant identifier to correlate on.
+    /// Stable per-tenant prefix. A hash rather than the raw GUID so the ref — which the caller
+    /// hands to a browser — carries no tenant identifier to correlate on.
     /// </summary>
     private static string TenantToken(Guid tenantId)
         => Convert.ToHexString(SHA256.HashData(tenantId.ToByteArray()))[..16].ToLowerInvariant();
 
     /// <summary>
     /// GCM associated data: authenticated, not encrypted. Binds the ciphertext to the tenant and
-    /// to its own ref, so relocating or renaming an object file cannot make it decrypt elsewhere.
+    /// to its own ref, so relocating or renaming an object cannot make it decrypt elsewhere.
     /// </summary>
     private static byte[] AssociatedData(Guid tenantId, string storageRef)
         => Encoding.UTF8.GetBytes($"kyc1|{tenantId:N}|{storageRef}");
@@ -302,22 +289,6 @@ internal sealed class LocalKycDocumentStore : IKycDocumentStore
         return new DomainException(
             $"KYC_DOCUMENT_INTEGRITY_FAILURE: stored KYC document '{storageRef}' could not be "
             + $"authenticated ({reason}).");
-    }
-
-    private static string ResolveBasePath(KycStorageOptions options, ILogger logger)
-    {
-        if (!string.IsNullOrWhiteSpace(options.BasePath)) return Path.GetFullPath(options.BasePath);
-
-        // AppContext.BaseDirectory is the build output: it survives a restart but not a
-        // redeploy. Acceptable for a dev box, never for an environment holding real evidence,
-        // hence the warning — the host is expected to fill BasePath via ResolveBasePath.
-        var fallback = Path.Combine(AppContext.BaseDirectory, DefaultFolderName);
-        logger.LogWarning(
-            "{Setting}:BasePath is not configured; KYC evidence will be written to {Fallback}, "
-            + "which a redeploy destroys",
-            KycStorageOptions.SectionName, fallback);
-
-        return fallback;
     }
 
     private static byte[] ReadKey(string? configured)

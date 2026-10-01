@@ -17,10 +17,14 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sankore.Modules.Kyc\Sankore.Modules.Kyc.csproj" />
+    <!-- Test-only: the host declares the R2 backend, and this project proves the module's
+         filesystem fallback stands down when it does. The module itself references no S3. -->
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.ObjectStorage.S3\Sankore.Shared.ObjectStorage.S3.csproj" />
   </ItemGroup>
 
 </Project>

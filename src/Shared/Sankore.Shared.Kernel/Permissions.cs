@@ -55,6 +55,20 @@ public static class Permissions
     public static readonly PermissionItem CanReadAudit =
         new("audit:read", "Read Audit Trail", ApplicationModules.Administration, "read");
 
+    /// <summary>
+    /// Starts the copy of stored objects from the filesystem to the configured bucket.
+    ///
+    /// <para>
+    /// The permission is NOT the whole guard, and cannot be: RoleSeeder grants every permission to
+    /// the Administrator role, and this operation walks every tenant's objects. MigrateObjectsHandler
+    /// additionally requires the System role. Both, on purpose — the permission is what a screen
+    /// hides a button on, the role check is what refuses the call.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanMigrateObjectStorage =
+        new("platform:storage:migrate", "Migrate Stored Objects",
+            ApplicationModules.Administration, "update");
+
     public static readonly PermissionItem CanUpdateUser =
         new("user:update", "Update User", ApplicationModules.Administration, "update");
 
@@ -406,6 +420,7 @@ public static class Permissions
         CanUpdateTerritory,
         CanDeleteTerritory,
         CanReadAudit,
+        CanMigrateObjectStorage,
         CanAssignRole,
         CanAssignUserAgency,
         CanAssignUserManager,

@@ -29,6 +29,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+    <!-- FileStore/ is an IFileStore over IObjectBackend: the medium lives there, the
+         reference shape and the size ceiling live here. -->
+    <ProjectReference Include="..\Sankore.Shared.ObjectStorage\Sankore.Shared.ObjectStorage.csproj" />
   </ItemGroup>
 
 </Project>

@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <RootNamespace>Sankore.Shared.Infrastructure.Tests</RootNamespace>
+    <RootNamespace>Sankore.Api.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,14 +13,13 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
-    <ProjectReference Include="..\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />
-    <ProjectReference Include="..\Sankore.Shared.ObjectStorage\Sankore.Shared.ObjectStorage.csproj" />
-    <ProjectReference Include="..\Sankore.Shared.ObjectStorage.S3\Sankore.Shared.ObjectStorage.S3.csproj" />
+    <ProjectReference Include="..\Sankore.Api\Sankore.Api.csproj" />
   </ItemGroup>
 
 </Project>

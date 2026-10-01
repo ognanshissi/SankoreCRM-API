@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!--
+      Same namespace as Sankore.Shared.ObjectStorage, on purpose: this is the S3 half of one
+      concept, and splitting the namespace would make every call site declare which assembly a
+      backend happens to live in.
+    -->
+    <RootNamespace>Sankore.Shared.ObjectStorage</RootNamespace>
+
+    <!--
+      WHY THIS IS A SEPARATE PROJECT.
+
+      Sankore.Shared.ObjectStorage holds the contract and the filesystem backend and has no heavy
+      dependency, so Sankore.Shared.Infrastructure may reference it — and must, since IFileStore
+      is implemented over it. Shared.Infrastructure is referenced by EVERY host, Sankore.Admin and
+      Sankore.Hangfire included, and neither of those stores an object: putting AWSSDK.S3 in the
+      project they all reference shipped an unused AWS client in two container images. Measured,
+      not assumed: `dotnet list package` with transitives named AWSSDK.S3 and AWSSDK.Core in
+      both.
+
+      So the S3 client lives here, and only the host that actually configures a bucket
+      (Sankore.Api) references this project. Same reasoning as Sankore.Shared.Spreadsheets keeping
+      ClosedXML off Sankore.Admin.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sankore.Shared.ObjectStorage\Sankore.Shared.ObjectStorage.csproj" />
+  </ItemGroup>
+
+</Project>

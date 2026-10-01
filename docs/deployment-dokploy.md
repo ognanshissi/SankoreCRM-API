@@ -65,16 +65,27 @@ openssl rand -base64 32   # → Secrets__EncryptionKey        (secrets vault mas
 openssl rand -base64 32   # → Customers__FieldEncryptionKey (M01 PII at rest)
 openssl rand -base64 32   # → Customers__BlindIndexKey      (M01 duplicate lookups)
 openssl rand -base64 32   # → Leads__BlindIndexKey          (lead phone dedup)
+openssl rand -base64 32   # → Kyc__FieldEncryptionKey       (M02 document numbers at rest)
+openssl rand -base64 32   # → Kyc__BlindIndexKey            (M02 duplicate-document lookups)
+openssl rand -base64 32   # → Kyc__Storage__EncryptionKey   (M02 identity-document IMAGES)
 openssl rand -base64 48   # → Jwt__SigningKey               (any string ≥ 32 bytes)
 openssl rand -hex 32      # → ApiKey / TenantStore__ApiKey   (the SAME value on both apps)
 openssl rand -base64 24   # → Hangfire__Dashboard__Password
 ```
 
-Four of these are **encryption keys, not settings**. Losing `Secrets__EncryptionKey` makes every
+Seven of these are **encryption keys, not settings**. Losing `Secrets__EncryptionKey` makes every
 stored SMTP password and provider API key permanently undecryptable; losing a `Customers__*` key
-does the same to client PII. Put them in whatever vault you already trust and back them up
-before the first deploy, not after. Rotating one is a data-migration project, so treat the first
-value you generate as permanent.
+does the same to client PII, and losing a `Kyc__*` key does it to the KYC evidence a regulator
+can demand — `Kyc__Storage__EncryptionKey` in particular is the only thing that can turn the
+stored identity-document images back into images. Put them in whatever vault you already trust and
+back them up before the first deploy, not after. Rotating one is a data-migration project, so
+treat the first value you generate as permanent.
+
+The three `Kyc__*` keys are deliberately distinct from the `Customers__*` ones and from each
+other: a KYC document number and a client's phone must not be decryptable with the same key, the
+column key and the image key protect data with different lifetimes, and each pair must be
+rotatable without the other. Generating one value and pasting it into all three defeats the point
+of having three.
 
 ---
 
@@ -171,6 +182,19 @@ Customers__FieldEncryptionKey=<base64 32 bytes>
 Customers__BlindIndexKey=<base64 32 bytes>
 Leads__BlindIndexKey=<base64 ≥ 32 bytes>
 
+# ── KYC (M02) — three SEPARATE keys, see §1 ─────────────────────────────
+# Omitting Storage__EncryptionKey does not fail the boot: the document store is
+# built on first use, so the symptom is a 500 on the first upload or read with
+# "Kyc:Storage:EncryptionKey is not configured". Set it before go-live, not after
+# the first agent tries to file a dossier.
+Kyc__FieldEncryptionKey=<base64 32 bytes>
+Kyc__BlindIndexKey=<base64 32 bytes>
+Kyc__Storage__EncryptionKey=<base64 32 bytes>
+# The biometry service is not part of this repository. Left empty, face comparison
+# answers BIOMETRY_NOT_CONFIGURED without touching the network, and a file stays in
+# Verifying instead of being wrongly rejected.
+Kyc__Biometry__BaseUrl=
+
 # ── tenant registry ─────────────────────────────────────────────────────
 TenantStore__BaseUrl=http://<admin-internal-host>:8080/
 TenantStore__ApiKey=<the SAME value as Sankore.Admin's ApiKey>
@@ -187,9 +211,37 @@ Notifications__Smtp__UseStartTls=true
 Notifications__Smtp__FromEmail=noreply@example.com
 Notifications__Smtp__FromName=Sankore
 
-# ── file storage (must be on the volume from the next step) ─────────────
+# ── file storage (must be on the volumes from the next step) ────────────
 FileStore__BasePath=/data/imports
 Leads__SdkStoragePath=/data/sdk
+Kyc__Storage__BasePath=/data/kyc-documents
+
+# ── object storage: Cloudflare R2 instead of the volumes above (optional) ─
+# Leave the whole block out and the three paths above are used — which is a
+# supported deployment, not a degraded one. Fill it in and KYC evidence and
+# import/export files move to buckets; the SDK files do NOT (they are public-read
+# and stay on /data/sdk).
+#
+# One account for the whole installation: these are platform credentials, not
+# per-tenant ones, so they live here and not in the secrets vault.
+#
+# A HALF-FILLED block fails the boot on purpose. Falling back to the filesystem
+# because a secret failed to inject would write evidence to a container volume a
+# redeploy discards, and nothing would report it.
+#
+# Create ONE BUCKET PER CONCERN, named exactly:
+#   kyc-documents   identity-document scans and selfies (already AES-256-GCM
+#                   encrypted by the application BEFORE upload — R2 never sees an
+#                   image, and server-side encryption does not replace that)
+#   imports         import spreadsheets and generated client exports
+# Both must be PRIVATE. The API streams every KYC document through an authenticated,
+# audited endpoint; there are no public or presigned URLs, deliberately, because a
+# signed link would audit only its issuance and not the read.
+# ObjectStorage__R2__AccountId=<cloudflare account id>
+# ObjectStorage__R2__AccessKeyId=<R2 access key id>
+# ObjectStorage__R2__SecretAccessKey=<R2 secret access key>
+# Only for an S3-compatible endpoint that is not R2, or a jurisdiction-specific one.
+# ObjectStorage__R2__ServiceUrl=
 
 # ── optional telemetry; omit to disable entirely ────────────────────────
 # ConnectionStrings__seq=http://<seq-host>:80
@@ -205,11 +257,23 @@ service-to-service and does not need to leave the overlay network.
 |---|---|---|
 | `/data/imports` | uploaded client/user/lead import files, read later by the Hangfire job | an import queued before a redeploy fails with `Stored file not found` |
 | `/data/sdk` | lead-capture SDK versions published through the API | published SDK versions vanish on redeploy; `/sdk/v1/forms.min.js` 404s for every embedded form in the wild |
+| `/data/kyc-documents` | KYC evidence — identity-document scans and selfies, each AES-256-GCM encrypted | **a redeploy destroys evidence a regulator can demand.** This is the one mount whose absence is not recoverable by re-running something |
 
 `LocalFileStore` defaults to the container's `/tmp`, so without the first mount an import that
 outlives one container is lost. `LocalSdkFileStore` defaults to the image's own
 `wwwroot/sdk` — `1.0.0/forms.min.js` ships inside the image and keeps working, but anything
 published afterwards does not survive.
+
+With the `ObjectStorage__R2__*` block filled in, the first two rows of this table become
+unnecessary — those files live in buckets and the mounts hold nothing. `/data/sdk` is still
+required either way: the SDK files are public-read and are served from the filesystem on purpose.
+Moving an existing installation is covered in §8.
+
+The KYC store falls back to a folder under the content root and **logs a warning saying the
+evidence will be written somewhere a redeploy destroys**. It is a warning rather than a refusal so
+a dev box works out of the box, which means the only thing standing between a production
+deployment and losing an ID-card scan is this mount. Grep the start-up log for
+`Kyc:Storage:BasePath is not configured` after the first deploy.
 
 ### Domain and health
 
@@ -371,6 +435,62 @@ pg_dump --format=custom -h <pg-host> -U <user> -d <db> > pre-deploy-$(date +%F).
 `docs/backup-runbook.md` has the scheduled, encrypted version of this, and
 `docs/postgres-recovery.md` the restore drill. Point the backup container at the Dokploy
 Postgres and both apply unchanged.
+
+### Moving existing files to R2
+
+Only needed when an installation already running on the volumes adopts `ObjectStorage__R2__*`.
+A fresh install has nothing to move.
+
+The object key a bucket holds **is** the path the volume held — `LocalObjectBackend` writes keys
+as relative paths and `R2ObjectBackend` sends the same string as a key. That is deliberate, and it
+is what makes this a copy rather than a conversion: an object written by one backend is found by
+the other, so a half-finished move still serves every document from whichever side holds it.
+
+```bash
+# One bucket per concern, same names as the volumes' contents.
+rclone copy /data/kyc-documents r2:kyc-documents --exclude "*.tmp" --checksum --progress
+rclone copy /data/imports       r2:imports       --exclude "*.tmp" --checksum --progress
+```
+
+`--exclude "*.tmp"` matters: a `.tmp` file is an interrupted write, never an object, and copying
+one puts a key in the bucket that no read resolves.
+
+Then set the `ObjectStorage__R2__*` variables and redeploy. **Keep the volumes mounted until you
+have read a document back through the API** — the AES-256-GCM key (`Kyc__Storage__EncryptionKey`)
+is unchanged by the move, so a document that fails to open after it is a copy problem, and the
+volume is the only remaining copy. Unmount them on the deploy after that.
+
+#### Or do it through the API, which audits it
+
+```bash
+curl -X POST https://api.example.com/api/v1/object-storage/kyc-documents/migration \
+     -H "Authorization: Bearer <JWT of the tenant's System account>"
+# → 202 {"concern":"kyc-documents","jobId":"91","sourceBasePath":"/data/kyc-documents",
+#        "destination":"R2ObjectBackend"}
+```
+
+Repeat with `imports`. The concerns are the only accepted values; there is no path parameter, so
+the endpoint cannot be pointed at an arbitrary folder.
+
+This runs `ObjectStoreMigrator` as a Hangfire job, which adds what `rclone` cannot: it re-reads
+every object from the bucket and compares it byte for byte before counting it as copied, and it
+writes the outcome to the audit trail — `ObjectStorageMigrationCompleted`, with the counts and the
+first 50 failing keys. Two audit rows exist per migration: the request, and the result. Query the
+second one before deciding the volume may go.
+
+It is resumable: a key already in the bucket is skipped, one failure is recorded and the run
+continues, and running it twice is safe. Follow the job in `/hangfire`.
+
+**It never deletes the source**, by construction rather than by configuration — there is no flag to
+pass. Retiring the volume is the unmount, after you have read a document back.
+
+Requirements, each of which answers with an explicit error rather than a misleading success:
+
+| Condition | Response |
+|---|---|
+| Caller is not the **System** account | `OBJECT_STORAGE_MIGRATION_REQUIRES_SYSTEM_ROLE` — a tenant Administrator cannot start a copy that walks every tenant's objects, and holding `platform:storage:migrate` is not enough |
+| `ObjectStorage__R2__*` not set | `OBJECT_STORAGE_NOT_CONFIGURED` — there would be no destination, and the copy would report every object "already present" |
+| The source folder does not exist | `OBJECT_STORAGE_SOURCE_EMPTY` — nothing to migrate, said out loud rather than logged as a clean run |
 
 ---
 

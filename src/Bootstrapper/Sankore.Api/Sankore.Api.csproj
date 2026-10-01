@@ -32,6 +32,9 @@
          namespaces directly. -->
     <ProjectReference Include="..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
     <ProjectReference Include="..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
+    <!-- The S3/R2 client. Referenced HERE and nowhere else: this is the only host that puts
+         an object in a bucket, so Sankore.Admin and Sankore.Hangfire ship no AWS client. -->
+    <ProjectReference Include="..\..\Shared\Sankore.Shared.ObjectStorage.S3\Sankore.Shared.ObjectStorage.S3.csproj" />
     <ProjectReference Include="..\..\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj" />
     <ProjectReference Include="..\..\Modules\Leads\Sankore.Modules.Leads\Sankore.Modules.Leads.csproj" />
     <ProjectReference Include="..\..\Modules\Workflow\Sankore.Modules.Workflow\Sankore.Modules.Workflow.csproj" />
@@ -51,6 +54,13 @@
 
   <ItemGroup>
     <Folder Include="Infrastructure\Audit\Migrations\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The host owns decision logic of its own now (the object-storage migration guards), and
+         those types are internal like every slice's. -->
+    <InternalsVisibleTo Include="Sankore.Api.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
 </Project>

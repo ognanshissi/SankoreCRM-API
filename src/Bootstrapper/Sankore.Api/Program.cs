@@ -19,6 +19,9 @@ using Sankore.Modules.Workflow;
 using Sankore.Modules.Notifications;
 using Sankore.Modules.Customers;
 using Sankore.Modules.Kyc;
+using Sankore.Shared.ObjectStorage;
+using Sankore.Api.Features.ObjectStorage;
+using Sankore.Api.Features.ObjectStorage.MigrateObjects;
 using Sankore.Modules.Leads.Features.Consumers;
 using Sankore.Modules.Notifications.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Consumers;
@@ -288,6 +291,10 @@ builder.Services.AddHangfire(cfg =>
            opts.UseNpgsqlConnection(connectionString)));
 builder.Services.AddHangfireServer();
 
+// Platform job: the one-shot copy of stored objects to the bucket. Transient like every module's
+// job type — Hangfire activates it from the container.
+builder.Services.AddTransient<MigrateObjectsJob>();
+
 // Redis distributed cache — used by Notifications module for provider resolution
 builder.AddRedisDistributedCache("redis");
 
@@ -328,6 +335,25 @@ builder.Services.AddSwaggerGen(options =>
 // 2. Module registration — one line per module, each module owns its own
 //    DbContext, handlers, validators, and endpoints internally.
 // ---------------------------------------------------------------------
+
+// Object storage, BEFORE the modules. Each module registers a filesystem fallback with TryAdd
+// under the same concern key, so whatever is declared here wins and the fallback stands down.
+// Ordering is the whole mechanism: registering these after AddKycModule would leave the
+// filesystem backend in place and KYC evidence on a container volume, silently.
+//
+// With ObjectStorage:R2 unset, these resolve to the same local roots the modules would have
+// chosen — a developer machine and a single-node install keep working with no configuration.
+// With it set, both concerns move to their own bucket and nothing above the backend changes:
+// KycDocumentStore still encrypts AES-256-GCM before a byte leaves the process.
+// One declaration per entry in ObjectStorageConcerns.All — the same list the migration endpoint
+// resolves its SOURCE folder from, so the two can never disagree about where a concern's files are.
+foreach (var concern in ObjectStorageConcerns.All)
+{
+    builder.Services.AddObjectBackend(
+        builder.Configuration,
+        concern.Name,
+        concern.ResolveLocalRoot(builder.Configuration, builder.Environment));
+}
 
 builder.Services.AddAdministrationModule(builder.Configuration);
 builder.Services.AddLeadsModule(builder.Configuration);
@@ -550,6 +576,7 @@ appVersion1.MapCustomersModuleEndpoints();
 appVersion1.MapKycModuleEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
+appVersion1.MapGroup("object-storage").MapMigrateObjects();
 
 app.MapBootstrapEndpoints();
 
