@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Kyc.Features.Files.CreateKycFile;
 using Sankore.Modules.Kyc.Features.Files.GetKycFile;
+using Sankore.Modules.Kyc.Features.Files.ListKycFiles;
 
 /// <summary>
 /// Area aggregator: one MapGroup, one call per slice. Adding a feature touches its own folder plus
@@ -17,6 +18,7 @@ internal static class KycFilesEndpoints
         var group = app.MapGroup("kyc-files").WithTags("KYC");
 
         group.MapCreateKycFile();
+        group.MapListKycFiles();
         group.MapGetKycFile();
 
         return app;

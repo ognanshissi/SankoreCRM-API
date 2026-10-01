@@ -20,6 +20,7 @@ internal sealed class KycIdentityDocumentConfiguration : IEntityTypeConfiguratio
         // jsonb, not text: these are queried for a single field during an investigation, and a
         // text column would force a full scan plus a parse per row.
         b.Property(d => d.OcrFieldsJson).HasColumnType("jsonb");
+        b.Property(d => d.OcrFieldConfidencesJson).HasColumnType("jsonb");
         b.Property(d => d.MrzDataJson).HasColumnType("jsonb");
 
         // THE index duplicate detection runs on. Not unique: the same person legitimately appears

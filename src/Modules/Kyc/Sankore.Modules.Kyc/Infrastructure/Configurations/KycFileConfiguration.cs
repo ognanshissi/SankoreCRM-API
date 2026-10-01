@@ -38,6 +38,13 @@ internal sealed class KycFileConfiguration : IEntityTypeConfiguration<KycFile>
         b.HasIndex(f => new { f.TenantId, f.Status })
             .HasDatabaseName("ix_kyc_files_status");
 
+        // The agency perimeter is a predicate on every list read, so it leads the index. Status
+        // second because the dashboard filters on both and almost always narrows by status within a
+        // perimeter, never the reverse. Rows with a null agency are indexed too: they are the ones
+        // only an unrestricted caller sees, and PostgreSQL keeps nulls in a btree.
+        b.HasIndex(f => new { f.TenantId, f.AgencyId, f.Status })
+            .HasDatabaseName("ix_kyc_files_agency_status");
+
         b.Ignore(f => f.DomainEvents);
         b.Ignore(f => f.IsOpen);
     }

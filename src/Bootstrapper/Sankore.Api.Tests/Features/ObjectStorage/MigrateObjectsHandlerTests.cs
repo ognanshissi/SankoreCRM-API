@@ -68,9 +68,12 @@ public sealed class MigrateObjectsHandlerTests : IDisposable
         var currentUser = Substitute.For<ICurrentUser>();
         currentUser.Id.Returns(OperatorId);
         currentUser.TenantId.Returns(TenantId);
+        // .Code, as a JWT claim carries it. The first version of this test used .Name — the French
+        // label — and so did the handler, so the two agreed and the test proved nothing about a
+        // real token.
         currentUser.Roles.Returns(systemRole
-            ? [Roles.System.Name]
-            : [Roles.Administrator.Name]);
+            ? [Roles.System.Code]
+            : [Roles.Administrator.Code]);
 
         var environment = Substitute.For<IHostEnvironment>();
         environment.ContentRootPath.Returns(Path.GetTempPath());

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sankore.Modules.Kyc.Infrastructure;
@@ -11,9 +12,11 @@ using Sankore.Modules.Kyc.Infrastructure;
 namespace Sankore.Modules.Kyc.Infrastructure.Migrations
 {
     [DbContext(typeof(KycDbContext))]
-    partial class KycDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001150849_AddOcrFieldConfidences")]
+    partial class AddOcrFieldConfidences
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -62,10 +65,6 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("character varying(24)")
                         .HasColumnName("level");
 
-                    b.Property<int>("LevelRank")
-                        .HasColumnType("integer")
-                        .HasColumnName("level_rank");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -76,9 +75,6 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                     b.HasIndex("KycFileId", "Level")
                         .IsUnique()
                         .HasDatabaseName("ux_kyc_approval_steps_file_level");
-
-                    b.HasIndex("KycFileId", "Decision", "LevelRank")
-                        .HasDatabaseName("ix_kyc_approval_steps_pending_rank");
 
                     b.ToTable("kyc_approval_steps", "kyc");
                 });
@@ -301,10 +297,6 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid?>("AgencyId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("agency_id");
-
                     b.Property<string>("Channel")
                         .IsRequired()
                         .HasMaxLength(24)
@@ -397,9 +389,6 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "Status")
                         .HasDatabaseName("ix_kyc_files_status");
-
-                    b.HasIndex("TenantId", "AgencyId", "Status")
-                        .HasDatabaseName("ix_kyc_files_agency_status");
 
                     b.ToTable("kyc_files", "kyc");
                 });

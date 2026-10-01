@@ -32,6 +32,26 @@ public sealed class KycApprovalStep : AggregateRoot
     public Guid KycFileId { get; private set; }
 
     public KycApprovalLevel Level { get; private set; }
+
+    /// <summary>
+    /// <see cref="Level"/>'s position on the ladder, persisted as a number.
+    ///
+    /// <para>
+    /// Not independent data: it is <c>(int)Level</c>, set by the only factory, so the two cannot
+    /// disagree. It exists because <see cref="Level"/> is stored as TEXT — readable in psql during
+    /// an audit, which is worth more than the bytes — and a text <c>ORDER BY</c> sorts the ladder
+    /// alphabetically. That happens to agree with it today and stops agreeing the first time a
+    /// level is renamed, which is why <c>DecideKycApprovalHandler</c> sorts in memory instead.
+    /// </para>
+    ///
+    /// <para>
+    /// In memory the enum already orders correctly; this column is what lets SQL do it. Without it,
+    /// "the files whose next rung is mine" cannot be a predicate, so a dashboard could not put them
+    /// first across a paged list — only inside the page it happened to fetch.
+    /// </para>
+    /// </summary>
+    public int LevelRank { get; private set; }
+
     public KycApprovalDecision Decision { get; private set; }
 
     public Guid? ApproverId { get; private set; }
@@ -49,6 +69,7 @@ public sealed class KycApprovalStep : AggregateRoot
             TenantId = tenantId,
             KycFileId = kycFileId,
             Level = level,
+            LevelRank = (int)level,
             Decision = KycApprovalDecision.Pending,
             CreatedAt = clock.GetUtcNow(),
         };

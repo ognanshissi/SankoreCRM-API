@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
@@ -24,6 +25,7 @@ using Sankore.Shared.Kernel;
 /// </summary>
 internal sealed class CreateKycFileHandler(
     KycDbContext db,
+    ICustomersModule customers,
     TimeProvider clock,
     [FromKeyedServices(nameof(KycDbContext))] IEventPublisher publisher,
     ILogger<CreateKycFileHandler> logger)
@@ -52,7 +54,8 @@ internal sealed class CreateKycFileHandler(
             channel: cmd.Channel,
             createdBy: cmd.InitiatedBy,
             clock: clock,
-            vigilanceLevel: cmd.VigilanceLevel);
+            vigilanceLevel: cmd.VigilanceLevel,
+            agencyId: await ResolveAgencyAsync(cmd, ct));
 
         db.KycFiles.Add(file);
 
@@ -98,6 +101,38 @@ internal sealed class CreateKycFileHandler(
         }
 
         return Result.Ok(new CreateKycFileResult(file.Id, AlreadyExisted: false));
+    }
+
+    /// <summary>
+    /// The customer's agency, copied once so the perimeter can be a SQL predicate forever after.
+    ///
+    /// <para>
+    /// Read from M01's contract and not from the creating agent: a file belongs to the branch that
+    /// holds the CUSTOMER, not to whoever happened to open it. A head-office compliance officer
+    /// opening a file for a branch customer must not move that file into head office.
+    /// </para>
+    ///
+    /// <para>
+    /// A customer M01 cannot resolve yields <c>null</c> and a warning, never a failure. The two
+    /// triggers of this command are M01's own event and a lead conversion, so a missing client is
+    /// either a race we must not lose or an archived one — and refusing to open the file would
+    /// leave MassTransit redelivering forever over a field that is only used for filtering. The
+    /// consequence of the null is documented on <see cref="KycFile.AgencyId"/>: restricted callers
+    /// do not see the file, which fails closed.
+    /// </para>
+    /// </summary>
+    private async Task<Guid?> ResolveAgencyAsync(CreateKycFileCommand cmd, CancellationToken ct)
+    {
+        var summary = await customers.GetClientSummaryAsync(cmd.TenantId, cmd.CustomerId, ct);
+
+        if (summary is not null) return summary.AgencyId;
+
+        logger.LogWarning(
+            "Opening KYC file for customer {CustomerId} without an agency: M01 returned no summary. "
+            + "The file will only be visible to unrestricted users until it is backfilled.",
+            cmd.CustomerId);
+
+        return null;
     }
 
     /// <summary>

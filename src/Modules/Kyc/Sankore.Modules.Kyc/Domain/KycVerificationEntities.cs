@@ -23,6 +23,20 @@ public sealed class KycIdentityDocument : AggregateRoot
 
     /// <summary>Raw OCR output, as JSON. Field VALUES are sensitive; the audit records names only.</summary>
     public string? OcrFieldsJson { get; private set; }
+
+    /// <summary>
+    /// The service's confidence per OCR field, 0..1, keyed like <see cref="OcrFieldsJson"/>.
+    ///
+    /// <para>
+    /// Stored because KYC-F-02 is "the fields read, <em>with their confidence</em>": an agent
+    /// correcting a reading needs to know which values the machine was unsure of, and a screen that
+    /// shows every field as equally certain sends them re-typing the ones that were already right.
+    /// The service reports it on the same call that produced the fields, so not keeping it meant
+    /// the information existed exactly once and was thrown away.
+    /// </para>
+    /// </summary>
+    public string? OcrFieldConfidencesJson { get; private set; }
+
     public string? MrzDataJson { get; private set; }
 
     /// <summary>Opaque reference into the encrypted document store. Never a filesystem path.</summary>
@@ -38,7 +52,8 @@ public sealed class KycIdentityDocument : AggregateRoot
         string encryptedNumber, string numberBlindIndex, TimeProvider clock,
         string? issuingCountry = null, DateOnly? expiryDate = null,
         string? ocrFieldsJson = null, string? mrzDataJson = null,
-        string? storageRef = null, string? serviceVersion = null)
+        string? storageRef = null, string? serviceVersion = null,
+        string? ocrFieldConfidencesJson = null)
     {
         if (string.IsNullOrWhiteSpace(numberBlindIndex))
             throw new DomainException("A document without a blind index could never be deduplicated.");
@@ -54,6 +69,7 @@ public sealed class KycIdentityDocument : AggregateRoot
             IssuingCountry = issuingCountry,
             ExpiryDate = expiryDate,
             OcrFieldsJson = ocrFieldsJson,
+            OcrFieldConfidencesJson = ocrFieldConfidencesJson,
             MrzDataJson = mrzDataJson,
             StorageRef = storageRef,
             ServiceVersion = serviceVersion,

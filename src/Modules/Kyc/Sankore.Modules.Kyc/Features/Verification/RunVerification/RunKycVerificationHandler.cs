@@ -353,7 +353,11 @@ internal sealed class RunKycVerificationHandler(
                 fields = WithoutDocumentNumber(ocr.Mrz.Fields),
             }),
             storageRef: cmd.DocumentStorageRef,
-            serviceVersion: ocr.ServiceVersion));
+            serviceVersion: ocr.ServiceVersion,
+            // Stripped on the SAME key rule as the fields themselves. A confidence left behind for
+            // a removed field would name the key the number arrived under, which is the one thing
+            // removing it was meant to stop saying.
+            ocrFieldConfidencesJson: JsonSerializer.Serialize(WithoutDocumentNumber(ocr.FieldConfidences))));
     }
 
     private void PersistFaceVerification(RunKycVerificationCommand cmd, KycFile file, FaceMatch match)
@@ -470,6 +474,10 @@ internal sealed class RunKycVerificationHandler(
 
     private static Dictionary<string, string> WithoutDocumentNumber(IReadOnlyDictionary<string, string> fields)
         => fields.Where(f => !IsDocumentNumberKey(f.Key)).ToDictionary(f => f.Key, f => f.Value);
+
+    /// <summary>Same rule, for the confidences — one generic would hide which rule is shared.</summary>
+    private static Dictionary<string, double> WithoutDocumentNumber(IReadOnlyDictionary<string, double> values)
+        => values.Where(v => !IsDocumentNumberKey(v.Key)).ToDictionary(v => v.Key, v => v.Value);
 
     private static string? FindFirst(IReadOnlyDictionary<string, string> fields, params string[] candidates)
     {

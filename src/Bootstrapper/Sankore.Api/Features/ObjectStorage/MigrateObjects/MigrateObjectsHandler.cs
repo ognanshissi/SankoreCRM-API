@@ -30,7 +30,10 @@ internal sealed class MigrateObjectsHandler(
         // operation a tenant's own administrator may start — and RoleSeeder grants every
         // permission to Administrator, which means the permission on the endpoint cannot be the
         // thing that draws that line. Checked here, where the role is visible.
-        if (!currentUser.Roles.Contains(Roles.System.Name, StringComparer.Ordinal))
+        // Roles.System.CODE, not .Name: RoleItem is (Code, Name) and Name is the French label
+        // ("Compte technique"). A JWT role claim carries the Code, so comparing against Name would
+        // refuse every real caller — including the one account allowed through here.
+        if (!currentUser.Roles.Contains(Roles.System.Code, StringComparer.Ordinal))
             return Result.Fail<MigrateObjectsResult>(
                 "OBJECT_STORAGE_MIGRATION_REQUIRES_SYSTEM_ROLE: moving stored objects affects every "
                 + "tenant of this installation and is reserved to the platform's System account.");

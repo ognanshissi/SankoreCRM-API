@@ -21,6 +21,11 @@ internal sealed class KycApprovalStepConfiguration : IEntityTypeConfiguration<Ky
             .IsUnique()
             .HasDatabaseName("ux_kyc_approval_steps_file_level");
 
+        // The "which rung is waiting" lookup: the lowest rank still pending, per file. Decision
+        // before rank because the predicate pins it to Pending and then takes a minimum.
+        b.HasIndex(s => new { s.KycFileId, s.Decision, s.LevelRank })
+            .HasDatabaseName("ix_kyc_approval_steps_pending_rank");
+
         b.Ignore(s => s.DomainEvents);
     }
 }

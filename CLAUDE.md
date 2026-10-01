@@ -22,6 +22,15 @@ dotnet run --project src/Bootstrapper/Sankore.Api
 # Run the Hangfire dashboard (http://localhost:5210/hangfire, basic auth)
 dotnet run --project src/Bootstrapper/Sankore.Hangfire
 
+# Emit the OpenAPI document for the front-end client generator. NO database needed: the host
+# builds, maps its endpoints, writes the file and exits — migrations, seeders and every background
+# worker are skipped, so regenerating a client cannot alter data or send mail.
+dotnet run --project src/Bootstrapper/Sankore.Api -- \
+  --emit-openapi ../SankoreFront/swaggers/sankore-crm-api-swagger.json
+# then, in SankoreFront: npm run openapi-generator
+# (swaggers/* is gitignored there, so each developer emits their own copy — an endpoint added here
+#  stays invisible to the front until somebody runs these two commands.)
+
 # Run via .NET Aspire (auto-provisions Postgres, RabbitMQ, Seq via Docker)
 dotnet run --project SankoreCRM.AppHost
 ```

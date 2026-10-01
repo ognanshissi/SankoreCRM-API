@@ -10,6 +10,7 @@ using NSubstitute;
 using Sankore.Modules.Customers.PublicApi.Events;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Files.Consumers;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Messaging;
@@ -74,6 +75,40 @@ public sealed class ClientCreatedKycConsumerTests : IDisposable
         file.TenantId.Should().Be(_tenantId);
         file.Channel.Should().Be(KycChannel.Agency);
         file.Status.Should().Be(KycFileStatus.Collecting);
+    }
+
+    [Fact]
+    public async Task The_file_is_filed_under_the_agency_M01_holds_the_customer_in()
+    {
+        var clientId = Guid.NewGuid();
+
+        await _consumer.Consume(Delivered.Of(Event(clientId, Guid.NewGuid())));
+
+        var file = (await AllFiles()).Should().ContainSingle().Subject;
+
+        // From M01's summary, NOT from the event's AgencyId and not from the creating agent: a
+        // head-office officer opening a branch customer's file must not move that file to head
+        // office. The event carries a different agency on purpose here, so a handler reading the
+        // wrong source fails this test.
+        file.AgencyId.Should().Be(ConsumerTestContainer.DefaultAgencyId);
+        file.AgencyId.Should().NotBe(_agencyId);
+    }
+
+    [Fact]
+    public async Task A_customer_M01_cannot_resolve_still_gets_a_file_with_no_agency()
+    {
+        using var sp = ConsumerTestContainer.Build(_db, clientKnown: false);
+        var consumer = new ClientCreatedKycConsumer(
+            new FixedScopeFactory(sp), NullLogger<ClientCreatedKycConsumer>.Instance);
+
+        await consumer.Consume(Delivered.Of(Event(Guid.NewGuid(), Guid.NewGuid())));
+
+        var file = (await AllFiles()).Should().ContainSingle(
+            "a hiccup in another module must not deny a customer the KYC file they are entitled to").Subject;
+
+        // Null, not Guid.Empty: the perimeter treats null as "unrestricted callers only", which
+        // fails closed. Guid.Empty would be a perimeter nobody belongs to that looks like a value.
+        file.AgencyId.Should().BeNull();
     }
 
     [Fact]
@@ -188,12 +223,20 @@ internal sealed class FixedScopeFactory(IServiceProvider sp) : IServiceScopeFact
 /// </summary>
 internal static class ConsumerTestContainer
 {
-    public static ServiceProvider Build(KycDbContext db)
+    /// <summary>The agency every seeded client belongs to, unless a test says otherwise.</summary>
+    public static readonly Guid DefaultAgencyId = Guid.Parse("aaaaaaaa-0000-0000-0000-00000000aaaa");
+
+    /// <param name="agencyId">
+    /// What M01 answers for the customer. <c>null</c> stands for a customer M01 cannot resolve at
+    /// all — an archived client, or a race — which must open the file anyway, without an agency.
+    /// </param>
+    public static ServiceProvider Build(KycDbContext db, Guid? agencyId = null, bool clientKnown = true)
     {
         var services = new ServiceCollection();
 
         services.AddSingleton(db);
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(CustomersModule(agencyId ?? DefaultAgencyId, clientKnown));
         services.AddKeyedSingleton(nameof(KycDbContext), Substitute.For<IEventPublisher>());
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
@@ -203,5 +246,31 @@ internal static class ConsumerTestContainer
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(KycModule).Assembly));
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// The agency a KYC file is filed under comes from M01, not from the agent who opened it. Only
+    /// the summary matters here, so the rest of the contract is left unimplemented.
+    /// </summary>
+    private static ICustomersModule CustomersModule(Guid agencyId, bool clientKnown)
+    {
+        var customers = Substitute.For<ICustomersModule>();
+
+        customers.GetClientSummaryAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(clientKnown
+                ? new ClientSummary(
+                    Id: Guid.NewGuid(),
+                    ClientNumber: "AG000001-2026-000001",
+                    ClientType: "Individual",
+                    DisplayName: "DEMO CLIENT",
+                    Status: "Active",
+                    AgencyId: agencyId,
+                    AdvisorUserId: null,
+                    KycStatus: "Pending",
+                    RiskLevel: "Standard",
+                    MergedIntoId: null)
+                : null);
+
+        return customers;
     }
 }

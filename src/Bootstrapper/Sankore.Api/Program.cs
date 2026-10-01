@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Sankore.Api.Features.Audit.GetAuditEntries;
 using Sankore.Api.Features.Bootstrap;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sankore.Api.Infrastructure;
 using Sankore.Api.Infrastructure.Audit;
 using Sankore.Modules.Leads;
@@ -37,6 +38,18 @@ using Sankore.Shared.Infrastructure.Localization;
 using Sankore.Shared.Infrastructure.Secrets;
 using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
+
+// Emitting the OpenAPI document is a build-time concern, not a run. The front-end client in
+// SankoreFront is generated from swaggers/sankore-crm-api-swagger.json, and producing that file
+// used to mean booting the whole API — which means a reachable, already-migrated PostgreSQL, for
+// a document that describes routes and schemas and depends on no row anywhere. With this flag the
+// host builds, maps its endpoints, writes the document and exits:
+//
+//   dotnet run --project src/Bootstrapper/Sankore.Api -- --emit-openapi <path>
+//
+// Nothing is migrated and nothing is seeded in that mode, deliberately: a developer regenerating
+// a client must not be able to alter a database by doing so.
+var emitOpenApiTo = OpenApiEmitter.OutputPathFrom(args);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -289,7 +302,9 @@ builder.Services.AddHangfire(cfg =>
        .UseRecommendedSerializerSettings()
        .UsePostgreSqlStorage(opts =>
            opts.UseNpgsqlConnection(connectionString)));
-builder.Services.AddHangfireServer();
+// Not in emit mode: the document describes routes, and the one thing that would still reach for
+// PostgreSQL while writing it is this worker starting up.
+if (emitOpenApiTo is null) builder.Services.AddHangfireServer();
 
 // Platform job: the one-shot copy of stored objects to the bucket. Transient like every module's
 // job type — Hangfire activates it from the container.
@@ -373,6 +388,22 @@ builder.Services.AddCustomersModule(builder.Configuration);      // M01
 builder.Services.AddKycModule(builder.Configuration);            // M02
 // builder.Services.AddLoansModule(builder.Configuration);       // M04 — same pattern
 
+// Emit mode starts the host — it has to, the document is built from the endpoint data sources and
+// those only materialise on start. Starting also starts every background worker, and THAT is a real
+// side effect: the outbox processors and the email outbox would publish events and send mail for the
+// few seconds the host is up, on a machine whose database answers. Writing a JSON file must not
+// send an email, so they are removed rather than merely expected to fail.
+if (emitOpenApiTo is not null)
+{
+    builder.Services.RemoveAll<IHostedService>();
+
+    // Port 0: the host has to START for the endpoint data sources to materialise, but it has no
+    // reason to be reachable, and binding a fixed port makes the command fail on any machine where
+    // something already holds it — the launch profile's 5000 is taken by AirPlay on macOS. An
+    // ephemeral port is always free, and UseUrls overrides the profile.
+    builder.WebHost.UseUrls("http://127.0.0.1:0");
+}
+
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
@@ -382,8 +413,10 @@ app.LogCorsOrigins();
 // 3. Ensure database schemas exist (creates tables when no migrations are applied yet)
 // ---------------------------------------------------------------------
 
-using (var scope = app.Services.CreateScope())
+if (emitOpenApiTo is null)
 {
+    using var scope = app.Services.CreateScope();
+
     // Audit schema — independent of all module schemas.
     var auditDb = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
     await auditDb.Database.MigrateAsync();
@@ -434,6 +467,13 @@ if (app.Environment.IsDevelopment())
 // database (a leftover `dotnet run`, a rolling restart) can lose the race and
 // throw PostgreSqlDistributedLockException. Log and carry on rather than
 // taking the whole API down — the jobs are already registered in that case.
+//
+// Skipped entirely when emitting the OpenAPI document: scheduling reads the tenant registry over
+// HTTP and takes locks in Hangfire's storage, neither of which belongs in a command that writes a
+// JSON file. Guarded BEFORE the try rather than thrown from inside it — landing in that catch would
+// log "Failed to register recurring Hangfire jobs", which is alarming and, here, untrue.
+if (emitOpenApiTo is null)
+{
 try
 {
     var tenantStore = app.Services.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>();
@@ -541,6 +581,7 @@ catch (Exception ex)
         + "SLA escalation, nurturing, lead recycling and scheduled pulls will not run on this "
         + "instance. This usually means another instance is already running against the same database.");
 }
+}
 
 app.UseExceptionHandler();
 app.UseHttpLogging();
@@ -585,6 +626,14 @@ app.MapPublicIngestEndpoints();
 
 // app.MapKycEndpoints();
 // app.MapLoansEndpoints();
+
+// After every Map* call: the document is built from the endpoint data sources, so a route mapped
+// below this line would be missing from the generated client without anything failing.
+if (emitOpenApiTo is not null)
+{
+    await OpenApiEmitter.WriteAsync(app, emitOpenApiTo);
+    return;
+}
 
 app.Run();
 

@@ -25,6 +25,26 @@ public sealed class KycFile : AggregateRoot
     /// <summary>Opaque reference to the customer record owned by M01.</summary>
     public Guid CustomerId { get; private set; }
 
+    /// <summary>
+    /// The agency the customer belongs to, copied from M01 when the file is opened.
+    ///
+    /// <para>
+    /// Denormalised rather than resolved on read, and that is a correctness requirement, not a
+    /// performance one: the agency perimeter has to be a SQL predicate. Resolving it per row and
+    /// filtering afterwards would compute a list's total count and page boundaries BEFORE the
+    /// perimeter applied — short pages and a lying counter.
+    /// </para>
+    ///
+    /// <para>
+    /// Nullable, and <c>null</c> means <b>visible only to an unrestricted caller</b>. It is the
+    /// state of a file opened while M01 could not answer, and of every row that predates this
+    /// column. Failing closed on visibility rather than on creation is deliberate: a transient
+    /// hiccup in another module must not stop a customer from getting the KYC file they are
+    /// entitled to, and must not hand their file to the wrong branch either.
+    /// </para>
+    /// </summary>
+    public Guid? AgencyId { get; private set; }
+
     public KycFileStatus Status { get; private set; }
     public KycTier Tier { get; private set; }
     public KycChannel Channel { get; private set; }
@@ -69,7 +89,8 @@ public sealed class KycFile : AggregateRoot
         Guid createdBy,
         TimeProvider clock,
         KycVigilanceLevel vigilanceLevel = KycVigilanceLevel.Standard,
-        Guid? id = null)
+        Guid? id = null,
+        Guid? agencyId = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
         if (customerId == Guid.Empty) throw new DomainException("CustomerId is required.");
@@ -87,6 +108,9 @@ public sealed class KycFile : AggregateRoot
             Tier = KycTier.None,
             Channel = channel,
             VigilanceLevel = vigilanceLevel,
+            // Guid.Empty is not an agency: a caller that passes it means "unknown", and storing it
+            // would create a perimeter nobody belongs to while looking like a real value.
+            AgencyId = agencyId == Guid.Empty ? null : agencyId,
             CreatedAt = now,
             UpdatedAt = now,
             CreatedBy = createdBy,

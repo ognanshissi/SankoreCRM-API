@@ -3,6 +3,7 @@ namespace Sankore.Modules.Kyc.Features.Verification;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Kyc.Features.Verification.GetVerification;
 using Sankore.Modules.Kyc.Features.Verification.RunVerification;
 
 /// <summary>
@@ -21,6 +22,7 @@ internal static class VerificationEndpoints
         var group = app.MapGroup("kyc-files").WithTags("KYC");
 
         group.MapRunKycVerification();
+        group.MapGetKycVerification();
 
         return app;
     }
