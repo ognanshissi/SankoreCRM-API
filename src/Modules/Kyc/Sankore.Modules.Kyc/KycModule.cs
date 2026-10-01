@@ -14,7 +14,9 @@ using Sankore.Modules.Kyc.Features.Corrections;
 using Sankore.Modules.Kyc.Features.Documents;
 using Sankore.Modules.Kyc.Features.Duplicates;
 using Sankore.Modules.Kyc.Features.Files;
+using Sankore.Modules.Kyc.Features.Limits;
 using Sankore.Modules.Kyc.Features.Reviews;
+using Sankore.Modules.Kyc.Features.Settings;
 using Sankore.Modules.Kyc.Features.Verification;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.Infrastructure.Crypto;
@@ -183,12 +185,14 @@ public static class KycModule
     public static IEndpointRouteBuilder MapKycModuleEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapKycFilesEndpoints();
+        app.MapKycLimitsEndpoints();
         app.MapKycVerificationEndpoints();
         app.MapKycCorrectionsEndpoints();
         app.MapKycDuplicatesEndpoints();
         app.MapKycDocumentsEndpoints();
         app.MapKycApprovalEndpoints();
         app.MapKycReviewsEndpoints();
+        app.MapKycSettingsEndpoints();
         return app;
     }
 }

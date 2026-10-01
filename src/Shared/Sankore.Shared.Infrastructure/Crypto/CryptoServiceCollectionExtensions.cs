@@ -1,7 +1,6 @@
 namespace Sankore.Shared.Infrastructure.Crypto;
 
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>

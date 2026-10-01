@@ -26,6 +26,13 @@ public static class KycSettingKeys
     public const string SimplifiedFlowWindowDays = "simplified-flow-window-days";
     public const string SimplifiedAlertPct = "simplified-alert-pct";
 
+    /// <summary>
+    /// Currency the two ceilings above are expressed in, ISO 4217. They are stored as bare
+    /// decimals, so without this a reader has to assume one — and "XOF" is an assumption, not a
+    /// fact, for a tenant outside the franc zone.
+    /// </summary>
+    public const string CapsCurrency = "caps-currency";
+
     // ── Periodic review ─────────────────────────────────────────────────────
     public const string ReviewYearsHigh = "review-years-high";
     public const string ReviewYearsStandard = "review-years-standard";
@@ -52,6 +59,8 @@ public static class KycSettingKeys
             "Largeur de la fenêtre de calcul du flux, en jours glissants."),
         new(SimplifiedAlertPct, "80", TypeInt,
             "Pourcentage du plafond de flux qui déclenche l'alerte à l'agent."),
+        new(CapsCurrency, "XOF", TypeString,
+            "Devise des plafonds du KYC simplifié (code ISO 4217)."),
 
         new(ReviewYearsHigh, "1", TypeInt,
             "Périodicité de revue pour un risque élevé, en années."),
@@ -71,6 +80,17 @@ public static class KycSettingKeys
 
     private static readonly Dictionary<string, KycSettingDefault> ByKey =
         Defaults.ToDictionary(d => d.Key, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Keys whose value is baked into the per-customer ceilings cache of <c>KycModuleFacade</c>.
+    /// Writing one of them must drop that cache, or the new ceiling only bites when the entries
+    /// expire — up to five minutes during which operations are measured against the old policy.
+    /// </summary>
+    public static bool AffectsLimits(string key)
+        => key.Equals(SimplifiedMaxBalance, StringComparison.OrdinalIgnoreCase)
+        || key.Equals(SimplifiedMaxMonthlyFlow, StringComparison.OrdinalIgnoreCase)
+        || key.Equals(SimplifiedFlowWindowDays, StringComparison.OrdinalIgnoreCase)
+        || key.Equals(SimplifiedAlertPct, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The declared default, or null when the key is not part of the closed list.</summary>
     public static KycSettingDefault? Find(string key)

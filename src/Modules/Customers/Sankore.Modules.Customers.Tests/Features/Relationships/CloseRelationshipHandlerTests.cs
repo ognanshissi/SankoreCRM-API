@@ -12,13 +12,15 @@ using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel.Authorization;
 using Xunit;
 
-public sealed class CloseRelationshipHandlerTests
+public sealed class CloseRelationshipHandlerTests : IDisposable
 {
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid AgencyId = Guid.NewGuid();
     private static readonly Guid UserId = Guid.NewGuid();
 
     private readonly TestCustomersDbContextFactory _factory = new(TenantId);
+
+    public void Dispose() => _factory.Dispose();
 
     private CloseRelationshipHandler CreateHandler(
         CustomersDbContext db,

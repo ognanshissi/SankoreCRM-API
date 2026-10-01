@@ -87,7 +87,6 @@
          Referenced ONLY by Sankore.Shared.ObjectStorage.S3, so the two hosts that store no
          object never ship it. -->
     <PackageVersion Include="AWSSDK.S3" Version="4.0.104" />
-    <PackageVersion Include="Microsoft.AspNetCore.App" Version="10.0.10" />
   </ItemGroup>
   <!--  Aspire  -->
   <ItemGroup Label="Aspire">

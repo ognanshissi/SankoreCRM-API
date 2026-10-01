@@ -13,7 +13,7 @@ using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel.Authorization;
 using Xunit;
 
-public sealed class AddRelationshipHandlerTests
+public sealed class AddRelationshipHandlerTests : IDisposable
 {
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid AgencyId = Guid.NewGuid();
@@ -23,6 +23,8 @@ public sealed class AddRelationshipHandlerTests
     private readonly IFieldEncryptor _encryptor = TestDoubles.Encryptor();
     private readonly IBlindIndexer _indexer = TestDoubles.Indexer();
     private readonly IEventPublisher _publisher = Substitute.For<IEventPublisher>();
+
+    public void Dispose() => _factory.Dispose();
 
     private AddRelationshipHandler CreateHandler(
         CustomersDbContext db,

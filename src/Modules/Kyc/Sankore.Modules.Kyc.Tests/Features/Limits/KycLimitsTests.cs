@@ -158,7 +158,10 @@ public sealed class KycLimitsTests : IDisposable
         await new KycTierChangedCacheConsumer(
             _cache, NullLogger<KycTierChangedCacheConsumer>.Instance).Consume(context);
 
-        _cache.GetString(KycModuleFacade.LimitsCacheKey(_tenantId, _customerId))
+        var generation = await KycModuleFacade.ReadLimitsGenerationAsync(
+            _cache, _tenantId, CancellationToken.None);
+
+        _cache.GetString(KycModuleFacade.LimitsCacheKey(_tenantId, _customerId, generation))
             .Should().BeNull("the next read must go back to the file");
     }
 

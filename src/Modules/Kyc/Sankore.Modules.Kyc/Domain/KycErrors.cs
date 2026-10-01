@@ -25,4 +25,11 @@ public static class KycErrors
 
     public const string SettingUnknown = "KYC_SETTING_UNKNOWN";
     public const string SettingInvalidValue = "KYC_SETTING_INVALID_VALUE";
+
+    /// <summary>
+    /// Well-typed but meaningless — a zero flow window, a 150 % alert threshold. Separate from
+    /// <see cref="SettingInvalidValue"/> so a screen can say "hors limites" instead of "mal typé",
+    /// which sends an administrator looking for a formatting mistake that is not there.
+    /// </summary>
+    public const string SettingValueOutOfRange = "KYC_SETTING_VALUE_OUT_OF_RANGE";
 }

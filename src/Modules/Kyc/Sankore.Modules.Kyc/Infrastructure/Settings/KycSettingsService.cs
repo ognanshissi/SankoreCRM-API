@@ -58,6 +58,12 @@ internal sealed class KycSettingsService(KycDbContext db, TimeProvider clock) : 
         if (!IsWellTyped(value, definition.ValueType))
             return Result.Fail(KycErrors.SettingInvalidValue);
 
+        // Range, not only type. Checked HERE rather than in the endpoint's validator because this is
+        // the single write path: a seeder, a job or another module dispatching the command directly
+        // must not be able to store a value that cannot mean anything.
+        if (KycSettingRanges.Validate(definition.Key, value) is not null)
+            return Result.Fail(KycErrors.SettingValueOutOfRange);
+
         // AsTracking is not optional: the context is NoTracking by default, so without it the
         // update mutates a detached entity and SaveChangesAsync writes nothing — the screen
         // reports success and the ceiling never moves.
@@ -67,7 +73,9 @@ internal sealed class KycSettingsService(KycDbContext db, TimeProvider clock) : 
             .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.Key == key, ct);
 
         if (existing is null)
-            db.KycSettings.Add(KycSetting.FromDefault(tenantId, definition with { Value = value }, clock));
+            // FromValue, not FromDefault: a row an administrator creates must name its author, or the
+            // first change to a key is the one change nobody can attribute.
+            db.KycSettings.Add(KycSetting.FromValue(tenantId, definition, value, actor, clock));
         else
             existing.Update(value, actor, clock);
 

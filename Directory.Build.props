@@ -24,8 +24,26 @@
     <NoWarn>CS1591</NoWarn>
   </PropertyGroup>
 
+  <!--
+    Release gate. This used to be a blanket <TreatWarningsAsErrors>true</TreatWarningsAsErrors>,
+    which gave a test method named with underscores the same power to stop a deploy as a
+    package vulnerability. With ~2800 advisory warnings outstanding the gate was unreachable,
+    so a Release build simply never ran — and NU1903 (a high-severity advisory on
+    System.Security.Cryptography.Xml, reached through DataProtection) sat behind it unnoticed.
+
+    An explicit list instead. Every family here is currently at ZERO, so it can only fire on a
+    regression, and the rules NOT listed stay visible as warnings rather than being silenced
+    with NoWarn. Promote a family into this list once it has been driven to zero; see the
+    remaining ones in .editorconfig's closing comment.
+  -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors>
+      $(WarningsAsErrors);
+      NU1605;NU1902;NU1903;
+      CS0105;CS0618;CS9124;
+      CA1001;CA1826;CA1861;
+      NETSDK1080
+    </WarningsAsErrors>
   </PropertyGroup>
 
 </Project>

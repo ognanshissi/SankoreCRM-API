@@ -1,15 +1,95 @@
-# Root EditorConfig. Only carries analyzer severities that must hold across the whole
-# modular monolith; the quality bar itself lives in Directory.Build.props
-# (AnalysisMode=Recommended, TreatWarningsAsErrors in Release).
+# Root EditorConfig. Carries the analyzer policy for the whole modular monolith; the
+# quality bar it tunes is set in Directory.Build.props (AnalysisMode=Recommended).
+#
+# Three tiers, and the tier a rule lands in is a deliberate choice:
+#   none       — the rule contradicts a convention this codebase chose on purpose, or
+#                does not apply to a C#-only internal application.
+#   suggestion — real guidance, but about performance rather than correctness. Visible
+#                in the IDE, never blocks a build.
+#   (default)  — everything else stays a warning. Correctness rules are NOT listed here;
+#                they must keep firing. See Directory.Build.props for which ones also
+#                fail the build.
 
 root = true
 
-# EF Core writes these files, we don't. `dotnet ef migrations add` emits
-# `columns: new[] { "tenant_id", ... }` for every composite index, so CA1861
-# ("prefer static readonly fields over constant array arguments") fires a few times per
-# migration and there is no way to make the generator stop. Hand-hoisting the arrays would
-# make every file diverge from what the generator produces, and the next migration would
-# reintroduce the warning anyway. The rule also has no payoff here: a migration's Up/Down
-# runs once per database, so the allocation it warns about never repeats.
+# ---------------------------------------------------------------------------------------
+# Tier "none" — conventions this codebase owns.
+# ---------------------------------------------------------------------------------------
+
+[*.cs]
+
+# `Sankore.Shared.*` collides with the VB keyword `Shared`. Nothing consumes these
+# assemblies from VB, and the namespace is the architecture's own vocabulary
+# (Shared.Kernel, Shared.Infrastructure, Shared.Spreadsheets).
+dotnet_diagnostic.CA1716.severity = none
+
+# `Result<T>.Success(...)` / `Result<T>.Failure(...)` are the Kernel's discriminated-union
+# factories, returned by every handler. The rule's advice (move them off the generic type)
+# would break the single most-used idiom in the solution.
+dotnet_diagnostic.CA1000.severity = none
+
+# Domain vocabulary the rule mistakes for a framework suffix: `Permission`,
+# `RolePermission` (CA1711) and the marital-status value `Single` (CA1720).
+dotnet_diagnostic.CA1711.severity = none
+dotnet_diagnostic.CA1720.severity = none
+
+# Parameter names deliberately read better than the interface's; renaming to match a base
+# declaration would make handlers less readable, not more.
+dotnet_diagnostic.CA1725.severity = none
+
+# ---------------------------------------------------------------------------------------
+# Tier "suggestion" — performance guidance. Worth doing, never worth blocking a deploy.
+# ---------------------------------------------------------------------------------------
+
+# Logging: CA1848 wants LoggerMessage delegates instead of LogInformation(...), CA1873
+# flags log arguments evaluated even when the level is off. ~870 call sites. Converting
+# them is a worthwhile, mechanical pass — but it is its own piece of work, and a logging
+# idiom must not gate a release.
+dotnet_diagnostic.CA1848.severity = suggestion
+dotnet_diagnostic.CA1873.severity = suggestion
+
+# Micro-optimisations: StringComparison overload for case-insensitive compares, concrete
+# return types, static members, cached JsonSerializerOptions, redundant initialisers,
+# generic overloads, Count over Any(), sealed internal types.
+dotnet_diagnostic.CA1862.severity = suggestion
+dotnet_diagnostic.CA1859.severity = suggestion
+dotnet_diagnostic.CA1822.severity = suggestion
+dotnet_diagnostic.CA1869.severity = suggestion
+dotnet_diagnostic.CA1805.severity = suggestion
+dotnet_diagnostic.CA2263.severity = suggestion
+dotnet_diagnostic.CA1860.severity = suggestion
+dotnet_diagnostic.CA1852.severity = suggestion
+
+# ---------------------------------------------------------------------------------------
+# Deliberately NOT relaxed anywhere, despite the site count:
+#   CA1304 / CA1305 / CA1310 / CA1311 — culture-sensitive string and parse operations.
+# This codebase has already shipped two production bugs from exactly that class: .xlsx
+# cells read with the process culture (a fr-FR host read `5,300489` as not-a-number and
+# 02/04/1987 as 4 February), and a language code stored "FR" that matched no template in
+# case-sensitive PostgreSQL. Both are documented in CLAUDE.md. Silencing this family to
+# make a build green would retire the only automated warning about the next one.
+# ---------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------------
+# Test projects.
+# ---------------------------------------------------------------------------------------
+
+[**/*.Tests/**.cs]
+
+# Test names are sentences: `A_file_whose_next_rung_my_role_signs_is_flagged_and_counted`.
+# That is the convention throughout the suites and it is how a failure reads in CI output.
+# Scoped to test projects on purpose — production identifiers still get the rule.
+dotnet_diagnostic.CA1707.severity = none
+
+# ---------------------------------------------------------------------------------------
+# EF Core migrations — generated files.
+# ---------------------------------------------------------------------------------------
+
+# EF writes these; we don't. `dotnet ef migrations add` emits
+# `columns: new[] { "tenant_id", ... }` for every composite index, so CA1861 fires a few
+# times per migration with no way to make the generator stop. Hand-hoisting the arrays
+# would make each file diverge from the generator's output and the next migration would
+# reintroduce it. The rule has no payoff here either: a migration's Up/Down runs once per
+# database, so the allocation it warns about never repeats.
 [**/Migrations/*.cs]
 dotnet_diagnostic.CA1861.severity = none

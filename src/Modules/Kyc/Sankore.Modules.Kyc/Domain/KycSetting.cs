@@ -31,6 +31,25 @@ public sealed class KycSetting : AggregateRoot
             UpdatedAt = clock.GetUtcNow(),
         };
 
+    /// <summary>
+    /// A row created by someone, as opposed to by the seeder.
+    ///
+    /// <para>
+    /// <see cref="FromDefault"/> leaves <see cref="UpdatedBy"/> null, which is right for a seeded
+    /// row — nobody decided it. It was wrong for the FIRST write of a key by an administrator: the
+    /// row carried no author, so "who lowered this ceiling" had no answer until somebody changed it a
+    /// second time. The audit trail recorded the command, but the row an admin screen displays did
+    /// not.
+    /// </para>
+    /// </summary>
+    public static KycSetting FromValue(
+        Guid tenantId, KycSettingDefault definition, string value, Guid actor, TimeProvider clock)
+    {
+        var setting = FromDefault(tenantId, definition, clock);
+        setting.Update(value, actor, clock);
+        return setting;
+    }
+
     public void Update(string value, Guid actor, TimeProvider clock)
     {
         Value = value;

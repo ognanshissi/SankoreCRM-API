@@ -42,7 +42,7 @@ public sealed class AgencyAuthorizationBehaviorTests
     {
         public Guid Id { get; } = id;
         public Guid TenantId { get; } = tenantId;
-        public string DisplayName => isAuthenticated ? "tester" : "anonymous";
+        public string DisplayName => IsAuthenticated ? "tester" : "anonymous";
         public bool IsAuthenticated { get; } = isAuthenticated;
         public IReadOnlyList<string> Roles => [];
     }

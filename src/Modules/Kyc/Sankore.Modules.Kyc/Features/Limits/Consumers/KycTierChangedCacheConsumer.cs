@@ -29,8 +29,13 @@ public sealed class KycTierChangedCacheConsumer(
         // SYSTEM placeholder: nothing to invalidate for a tenant that does not exist.
         if (evt.TenantId == Guid.Empty) return;
 
+        // The key carries the tenant's cache generation, so it has to be resolved rather than
+        // rebuilt from the ids alone — otherwise this removes a key nothing ever wrote.
+        var generation = await KycModuleFacade.ReadLimitsGenerationAsync(
+            cache, evt.TenantId, context.CancellationToken);
+
         await cache.RemoveAsync(
-            KycModuleFacade.LimitsCacheKey(evt.TenantId, evt.CustomerEntityId),
+            KycModuleFacade.LimitsCacheKey(evt.TenantId, evt.CustomerEntityId, generation),
             context.CancellationToken);
 
         logger.LogInformation(

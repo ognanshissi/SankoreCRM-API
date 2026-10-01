@@ -9,7 +9,7 @@ using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Kernel.Authorization;
 using Xunit;
 
-public sealed class ListContactPointsHandlerTests
+public sealed class ListContactPointsHandlerTests : IDisposable
 {
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid AgencyId = Guid.NewGuid();
@@ -18,6 +18,8 @@ public sealed class ListContactPointsHandlerTests
     private readonly TestCustomersDbContextFactory _factory = new(TenantId);
     private readonly IFieldEncryptor _encryptor = TestDoubles.Encryptor();
     private readonly IBlindIndexer _indexer = TestDoubles.Indexer();
+
+    public void Dispose() => _factory.Dispose();
 
     private ListContactPointsHandler CreateHandler(
         CustomersDbContext db,

@@ -60,14 +60,57 @@ public sealed class KycModuleFacade(
     public Task<bool> IsRetentionClearedAsync(Guid tenantId, Guid customerEntityId, CancellationToken ct)
         => Task.FromResult(false);
 
-    /// <summary>Cache key for a customer's ceilings. Invalidated by the tier-changed consumer.</summary>
-    internal static string LimitsCacheKey(Guid tenantId, Guid customerEntityId)
-        => $"kyc:limits:{tenantId}:{customerEntityId}";
+    /// <summary>
+    /// Cache key for a customer's ceilings, stamped with the tenant's cache GENERATION.
+    ///
+    /// <para>
+    /// The generation exists because a ceiling is now writable over HTTP, and a distributed cache
+    /// cannot be asked to drop "every entry of this tenant": the keys are per customer and nothing
+    /// enumerates them. Changing the generation makes all of them unreachable in one write, so a
+    /// lowered ceiling bites immediately instead of when the last entry expires — up to five minutes
+    /// during which operations would be measured against the policy the administrator just revoked.
+    /// </para>
+    /// </summary>
+    internal static string LimitsCacheKey(Guid tenantId, Guid customerEntityId, string generation)
+        => $"kyc:limits:{generation}:{tenantId}:{customerEntityId}";
+
+    /// <summary>Where the tenant's cache generation is stored. Written without expiration.</summary>
+    internal static string LimitsGenerationKey(Guid tenantId) => $"kyc:limits-gen:{tenantId}";
+
+    /// <summary>
+    /// The tenant's current generation, or <c>"0"</c> when none has ever been written. A lost
+    /// generation entry is harmless: unknown keys are a cache MISS, and a miss recomputes.
+    /// </summary>
+    internal static async Task<string> ReadLimitsGenerationAsync(
+        IDistributedCache cache, Guid tenantId, CancellationToken ct)
+        => await cache.GetStringAsync(LimitsGenerationKey(tenantId), ct) ?? "0";
+
+    /// <summary>
+    /// Drops every cached ceiling of a tenant at once, by moving its generation. Called when a
+    /// parameter that feeds <see cref="KycLimits"/> is written — see
+    /// <c>KycSettingKeys.AffectsLimits</c>.
+    ///
+    /// <para>
+    /// A fresh token rather than an incremented counter: two administrators saving at the same
+    /// moment would read the same counter and write the same successor, leaving one of the two
+    /// invalidations without effect.
+    /// </para>
+    /// </summary>
+    internal static Task InvalidateTenantLimitsAsync(
+        IDistributedCache cache, Guid tenantId, CancellationToken ct)
+        => cache.SetStringAsync(
+            LimitsGenerationKey(tenantId),
+            Guid.NewGuid().ToString("N"),
+            // No expiration: if this entry vanished, the generation would fall back to "0" and a
+            // pre-invalidation entry could still be served for the rest of its own five minutes.
+            new DistributedCacheEntryOptions(),
+            ct);
 
     public async Task<KycLimits?> GetLimitsAsync(
         Guid tenantId, Guid customerEntityId, CancellationToken ct)
     {
-        var key = LimitsCacheKey(tenantId, customerEntityId);
+        var generation = await ReadLimitsGenerationAsync(cache, tenantId, ct);
+        var key = LimitsCacheKey(tenantId, customerEntityId, generation);
 
         var cached = await cache.GetStringAsync(key, ct);
         if (cached is not null)

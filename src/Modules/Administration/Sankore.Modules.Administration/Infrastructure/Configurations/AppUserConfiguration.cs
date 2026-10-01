@@ -56,15 +56,18 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
         builder.Property(u => u.SpokenLanguages).HasColumnType("text[]");
         builder.Property(u => u.Specialties).HasColumnType("text[]");
 
-        builder.HasCheckConstraint(
-            "CK_User_AgencyId_RequiredForStandard",
-            "(\"AccountType\" != 'Standard') OR (\"AgencyId\" IS NOT NULL)"
-        );
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint(
+                "CK_User_AgencyId_RequiredForStandard",
+                "(\"AccountType\" != 'Standard') OR (\"AgencyId\" IS NOT NULL)"
+            );
 
-        builder.HasCheckConstraint(
-            "CK_User_System_NoAgency",
-            "(\"AccountType\" != 'System') OR (\"AgencyId\" IS NULL)"
-        );
+            t.HasCheckConstraint(
+                "CK_User_System_NoAgency",
+                "(\"AccountType\" != 'System') OR (\"AgencyId\" IS NULL)"
+            );
+        });
         
         builder.HasIndex(u => new { u.TenantId, u.AgencyId });
         builder.HasIndex(u => new { u.TenantId, u.NormalizedEmail }).IsUnique();
