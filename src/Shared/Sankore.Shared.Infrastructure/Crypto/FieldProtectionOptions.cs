@@ -11,6 +11,12 @@ namespace Sankore.Shared.Infrastructure.Crypto;
 /// </summary>
 public sealed class FieldProtectionOptions
 {
+    /// <summary>
+    /// Configuration section these keys were bound from. Carried so an error message can name the
+    /// setting the operator must actually fix, instead of always pointing at "Customers:".
+    /// </summary>
+    public string SectionName { get; set; } = "Customers";
+
     /// <summary>Base64-encoded 32-byte AES-256-GCM key.</summary>
     public string FieldEncryptionKey { get; set; } = default!;
 

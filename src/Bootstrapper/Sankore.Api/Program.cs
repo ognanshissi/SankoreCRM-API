@@ -18,6 +18,7 @@ using Sankore.Modules.Administration;
 using Sankore.Modules.Workflow;
 using Sankore.Modules.Notifications;
 using Sankore.Modules.Customers;
+using Sankore.Modules.Kyc;
 using Sankore.Modules.Leads.Features.Consumers;
 using Sankore.Modules.Notifications.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Consumers;
@@ -220,6 +221,16 @@ builder.Services.AddMassTransit(x =>
     // Leads module consumers (US-M13-080 — task generation from events)
     // Auto-qualification + auto-dispatch of captured leads. Inert unless
     // Leads:AutoDispatchOnCapture is true — see LeadModuleSettings.
+    // M02 KYC — the two automatic triggers of KYC-B-01. A converted lead reaches BOTH
+    // (M13 publishes KycRequested, M01 publishes ClientCreated for the client it creates on the
+    // way); the command they share is idempotent, so the second one finds the file and stops.
+    // Drops a customer's cached ceilings the instant their tier moves — the 5-minute TTL on the
+    // limits is a floor, not the mechanism. A downgrade must bite at once.
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Limits.Consumers.KycTierChangedCacheConsumer>();
+
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Files.Consumers.ClientCreatedKycConsumer>();
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Files.Consumers.KycRequestedConsumer>();
+
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer>();
     x.AddConsumer<LeadDispatchedTaskConsumer>();
     x.AddConsumer<LeadDispatchingFailedTaskConsumer>();
@@ -327,9 +338,13 @@ builder.Services.AddCustomersModule(builder.Configuration);      // M01
 // Stub registrations for modules not yet scaffolded (US-M13-171/172).
 // ICustomerModule is NO LONGER stubbed: the Customers module (M01) registers
 // LegacyCustomerModuleAdapter for it, so Leads now talks to real client records.
-builder.Services.AddScoped<Sankore.Modules.Kyc.PublicApi.IKycModule,
-    Sankore.Api.Stubs.StubKycModule>();
-// builder.Services.AddKycModule(builder.Configuration);         // M02 — same pattern
+// M02 KYC. AddKycModule registers KycModuleFacade for IKycModule, which REPLACES
+// StubKycModule — and that swap is not neutral: the stub answered NotStarted to every status
+// question. M01's retention job and its anonymisation handler both call this contract, so they
+// now see real statuses. IsRetentionClearedAsync deliberately still answers false: the retention
+// rule is not implemented, and loosening it would let a nightly job anonymise customers whose
+// KYC evidence a regulator may still demand.
+builder.Services.AddKycModule(builder.Configuration);            // M02
 // builder.Services.AddLoansModule(builder.Configuration);       // M04 — same pattern
 
 var app = builder.Build();
@@ -365,6 +380,9 @@ using (var scope = app.Services.CreateScope())
     // Migrates the "customers" schema, then seeds this tenant's M01 parameters and
     // legal forms idempotently (US-M01-BE-01).
     await CustomersModule.InitializeAsync(scope.ServiceProvider);
+    // Migrates the "kyc" schema, then seeds each tenant's M02 parameters (ceilings, review
+    // periodicity, grace period) idempotently.
+    await KycModule.InitializeAsync(scope.ServiceProvider);
 }
 
 // ---------------------------------------------------------------------
@@ -462,6 +480,16 @@ try
         job => job.ExecuteAsync(),
         "30 3 * * *");                                   // nightly (US-M01-BE-28)
 
+    // ── KYC module (M02) ──────────────────────────────────────────────────────
+    // GLOBAL like M01's: it walks the active tenants itself and enqueues one opaque per-tenant
+    // job, so a new tenant needs no new recurring registration. 01:00 is before M01's 02:00 and
+    // 03:00 sweeps — a review that downgrades a tier should land before the nightly scoring reads
+    // it.
+    AddOrUpdate<Sankore.Modules.Kyc.Features.Reviews.KycReviewOrchestratorJob>(
+        "kyc-review-orchestrator",
+        job => job.ExecuteAsync(),
+        "0 1 * * *");                                    // daily (KYC-B-07)
+
     AddOrUpdate<Sankore.Modules.Customers.Features.Compliance.Retention.IdentifyRetentionCandidatesOrchestratorJob>(
         "customers-retention-candidates-orchestrator",
         job => job.ExecuteAsync(),
@@ -519,6 +547,7 @@ appVersion1.MapLeadsEndpoints();
 appVersion1.MapWorkflowModuleEndpoints();
 appVersion1.MapNotificationsModuleEndpoints();
 appVersion1.MapCustomersModuleEndpoints();
+appVersion1.MapKycModuleEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 

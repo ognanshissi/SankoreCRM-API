@@ -28,7 +28,7 @@ public sealed class AesGcmFieldEncryptor : IFieldEncryptor
     {
         // Lazy so a misconfigured key surfaces as a clear error on first use
         // rather than while the DI container is being built.
-        _key = new Lazy<byte[]>(() => ReadKey(options.Value.FieldEncryptionKey));
+        _key = new Lazy<byte[]>(() => ReadKey(options.Value.FieldEncryptionKey, options.Value.SectionName));
     }
 
     public string? Encrypt(string? plaintext)
@@ -88,14 +88,14 @@ public sealed class AesGcmFieldEncryptor : IFieldEncryptor
         return Encoding.UTF8.GetString(plainBytes);
     }
 
-    private static byte[] ReadKey(string? configured)
+    private static byte[] ReadKey(string? configured, string section)
     {
         const string guidance =
             "Generate one with: Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))";
 
         if (string.IsNullOrWhiteSpace(configured))
             throw new InvalidOperationException(
-                $"Customers:FieldEncryptionKey is not configured (Base64, {KeySize} bytes). {guidance}");
+                $"{section}:FieldEncryptionKey is not configured (Base64, {KeySize} bytes). {guidance}");
 
         byte[] key;
         try
@@ -105,12 +105,12 @@ public sealed class AesGcmFieldEncryptor : IFieldEncryptor
         catch (FormatException ex)
         {
             throw new InvalidOperationException(
-                $"Customers:FieldEncryptionKey is not valid Base64. {guidance}", ex);
+                $"{section}:FieldEncryptionKey is not valid Base64. {guidance}", ex);
         }
 
         if (key.Length != KeySize)
             throw new InvalidOperationException(
-                $"Customers:FieldEncryptionKey must be exactly {KeySize} bytes once Base64-decoded "
+                $"{section}:FieldEncryptionKey must be exactly {KeySize} bytes once Base64-decoded "
                 + $"(AES-256), but {key.Length} were provided. {guidance}");
 
         return key;

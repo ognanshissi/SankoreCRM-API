@@ -21,7 +21,7 @@ public sealed class HmacBlindIndexer : IBlindIndexer
 
     public HmacBlindIndexer(IOptions<FieldProtectionOptions> options)
     {
-        _key = new Lazy<byte[]>(() => ReadKey(options.Value.BlindIndexKey));
+        _key = new Lazy<byte[]>(() => ReadKey(options.Value.BlindIndexKey, options.Value.SectionName));
     }
 
     public string Compute(BlindIndexPurpose purpose, string value)
@@ -69,14 +69,14 @@ public sealed class HmacBlindIndexer : IBlindIndexer
         return trimmed;
     }
 
-    private static byte[] ReadKey(string? configured)
+    private static byte[] ReadKey(string? configured, string section)
     {
         const string guidance =
             "Generate one with: Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))";
 
         if (string.IsNullOrWhiteSpace(configured))
             throw new InvalidOperationException(
-                $"Customers:BlindIndexKey is not configured (Base64, ≥ {MinimumKeySize} bytes). {guidance}");
+                $"{section}:BlindIndexKey is not configured (Base64, ≥ {MinimumKeySize} bytes). {guidance}");
 
         byte[] key;
         try
@@ -86,12 +86,12 @@ public sealed class HmacBlindIndexer : IBlindIndexer
         catch (FormatException ex)
         {
             throw new InvalidOperationException(
-                $"Customers:BlindIndexKey is not valid Base64. {guidance}", ex);
+                $"{section}:BlindIndexKey is not valid Base64. {guidance}", ex);
         }
 
         if (key.Length < MinimumKeySize)
             throw new InvalidOperationException(
-                $"Customers:BlindIndexKey must be at least {MinimumKeySize} bytes once Base64-decoded, "
+                $"{section}:BlindIndexKey must be at least {MinimumKeySize} bytes once Base64-decoded, "
                 + $"but {key.Length} were provided. {guidance}");
 
         return key;

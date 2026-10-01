@@ -18,4 +18,11 @@ internal sealed class StubKycModule : IKycModule
     /// </summary>
     public Task<bool> IsRetentionClearedAsync(Guid tenantId, Guid customerEntityId, CancellationToken ct)
         => Task.FromResult(false);
+
+    /// <summary>Fail-closed as well: no file, no permission to operate.</summary>
+    public Task<KycLimits?> GetLimitsAsync(Guid tenantId, Guid customerEntityId, CancellationToken ct)
+        => Task.FromResult<KycLimits?>(null);
+
+    public Task<KycFlowUsage> GetFlowUsageAsync(Guid tenantId, Guid customerEntityId, CancellationToken ct)
+        => Task.FromResult(KycFlowUsage.Unknown);
 }

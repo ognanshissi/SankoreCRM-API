@@ -350,8 +350,43 @@ public static class Permissions
     public static readonly PermissionItem CanExportCustomers =
         new("customers:export", "Export a Customer Search Result", ApplicationModules.Customers, "export");
 
+    // ── KYC module (M02) ───────────────────────────────────────────────────
+    // Read and the two write verbs are separate because a KYC file is evidence: an agent
+    // collects and corrects, a manager decides, and only compliance lifts a duplicate flag.
+    // Revealing a document number is its own permission for the same reason it is in M01 —
+    // the value is encrypted at rest and the reveal is audited.
+
+    public static readonly PermissionItem CanReadKycFile =
+        new("kyc:read", "Read KYC File", ApplicationModules.Kyc, "read");
+
+    public static readonly PermissionItem CanManageKycFile =
+        new("kyc:manage", "Collect and correct KYC data", ApplicationModules.Kyc, "manage");
+
+    public static readonly PermissionItem CanRunKycVerification =
+        new("kyc:verify", "Run the biometric verification of a KYC file", ApplicationModules.Kyc, "verify");
+
+    public static readonly PermissionItem CanApproveKycFile =
+        new("kyc:approve", "Decide on a KYC file in the approval circuit", ApplicationModules.Kyc, "approve");
+
+    /// <summary>Lifting a suspected-duplicate flag is a compliance act, never an agency one.</summary>
+    public static readonly PermissionItem CanClearKycDuplicateFlag =
+        new("kyc:duplicate:clear", "Clear a suspected duplicate document flag", ApplicationModules.Kyc, "duplicate:clear");
+
+    public static readonly PermissionItem CanRevealKycDocumentNumber =
+        new("kyc:document:reveal", "Reveal an identity document number", ApplicationModules.Kyc, "document:reveal");
+
+    public static readonly PermissionItem CanManageKycSettings =
+        new("kyc:settings:manage", "Change the tenant KYC parameters", ApplicationModules.Kyc, "settings:manage");
+
     public static readonly PermissionItem[] All =
     [
+        CanReadKycFile,
+        CanManageKycFile,
+        CanRunKycVerification,
+        CanApproveKycFile,
+        CanClearKycDuplicateFlag,
+        CanRevealKycDocumentNumber,
+        CanManageKycSettings,
         CanCreateLoan,
         CanCreateAgency,
         CanReadAgency,

@@ -9,4 +9,5 @@ public abstract class ApplicationModules
     public const string Customers = "Customers Module";
     public const string Workflow = "Workflow Module";
     public const string Notifications = "Notifications Module";
+    public const string Kyc = "KYC Module";
 }

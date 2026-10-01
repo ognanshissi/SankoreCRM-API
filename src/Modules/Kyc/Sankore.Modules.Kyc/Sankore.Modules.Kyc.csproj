@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Modules.Kyc</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Localization" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Hangfire.Core" />
+    <!-- Hangfire.Core drags Newtonsoft.Json 11.0.1 (GHSA-5crp-9r3c-p9vr). Pinned direct
+         reference to 13.0.3, same override the other modules apply. -->
+    <PackageReference Include="Newtonsoft.Json" />
+    <!-- Resilience for the biometry HTTP client (same stack as the Leads puller). -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
+    <!-- Cross-module dependencies: PublicApi contracts ONLY, never a main assembly -->
+    <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Notifications\Sankore.Modules.Notifications.PublicApi\Sankore.Modules.Notifications.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Workflow\Sankore.Modules.Workflow.PublicApi\Sankore.Modules.Workflow.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Customers\Sankore.Modules.Customers.PublicApi\Sankore.Modules.Customers.PublicApi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sankore.Modules.Kyc.Tests" />
+    <!-- NSubstitute proxies this module's internal interfaces (IKycDocumentStore, IBiometryClient).
+         Castle generates those proxies into DynamicProxyGenAssembly2, which needs its own grant —
+         without it a substitute fails at RUNTIME with "Can not create proxy ... not accessible",
+         not at compile time. Same line as Sankore.Modules.Notifications. -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

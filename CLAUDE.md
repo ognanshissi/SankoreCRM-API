@@ -386,6 +386,61 @@ is read back as a space and the token no longer verifies. That is what `CreateUs
 (`activation_url`) and `ForgotPasswordHandler` (`reset_url`) do; `CreateUserHandlerTests`
 guards it.
 
+### KYC module specifics (M02)
+
+`KycDbContext` — schema `kyc`, migrations history in `kyc`. The customer is referenced by an
+**opaque `CustomerId`**, never an FK into `customers`. Contract:
+`Sankore.Modules.Kyc.PublicApi.IKycModule`, which replaced `StubKycModule` — so M01's retention job
+and anonymisation handler now see real statuses. `IsRetentionClearedAsync` still answers `false`
+deliberately: the retention rule is not implemented and loosening it would let a nightly job
+anonymise customers whose evidence a regulator may still demand.
+
+**Ten internal statuses, six in the contract.** `KycFileStatus` (Collecting → Verifying →
+Validating → Simplified/Full → UnderReview → Expired, plus ComplementRequired, Rejected,
+Suspended) folds onto `PublicApi.KycStatus` through `KycStatusMapping.ToPublicStatus`. Two
+judgement calls live there: `UnderReview` → `Approved` (a review in progress does not un-validate
+a customer), and `Suspended` → `Rejected` (fail-closed — a gate must never read a compliance block
+as "still processing"). The transition table is declarative in `KycFile`; handlers never compare
+statuses themselves.
+
+**Four eyes is owned by M02, not by the workflow engine.** `KycFile.Approve` and `Reject` refuse
+`LastSubmittedBy` with `KYC_SELF_APPROVAL_FORBIDDEN` — M01 learned on client merges that the engine
+runs the circuit but enforces no self-approval rule. The aggregate only sees the final approval and
+the rejections, so `DecideKycApprovalHandler` repeats the check on EVERY rung: an intermediate
+approval touches no aggregate method, and without it the submitter could sign level 1 of their own
+file.
+
+**The approval ladder** (`KycApprovalCircuit`): `Low` → agent alone; `Standard` → agent then branch
+manager; `High` or `DuplicateSuspected` → plus the compliance officer. The low-risk ladder is a
+deliberate arbitrage by the product owner, departing from KYC-B-05's original "risque faible ou
+standard : agent puis chef d'agence". Independently of the rating, a file that has reached the
+tenant's `face-match-max-attempts` gains the branch manager — two failed comparisons are a signal
+about the capture, not about the customer. That clause is the ONLY thing that adds a second
+signature to a low-risk file, and a test pins it as such.
+
+**One open file per customer**, guaranteed by the filtered unique index
+`ux_kyc_files_open_per_customer` and not by the read in `CreateKycFileHandler`. Two triggers reach
+that command for the same customer — M01's `ClientCreatedEvent` and M13's
+`KycRequestedIntegrationEvent`, both fired for a converted lead — so the unique violation is caught
+and reported as success carrying the winner's id.
+
+**Field protection is KEYED, not a second `AddFieldProtection` call.** Inject
+`[FromKeyedServices(KycFieldProtection.Key)] IFieldEncryptor` / `IBlindIndexer`. The shared helper
+binds one `FieldProtectionOptions` and one singleton for the whole container, so a second section
+would silently hand M01's data to M02's key; it now throws, and `KycFieldProtection` is the way
+round. Keys: `Kyc:FieldEncryptionKey`, `Kyc:BlindIndexKey`, and `Kyc:Storage:EncryptionKey` for the
+document images — three distinct secrets.
+
+**Tenant parameters live in M02** (`kyc_settings`, `IKycSettings`, `KycSettingKeys.Defaults`,
+seeded per tenant), not in M12: M12 exposes no generic settings store, and a compliance ceiling
+belongs to the module that enforces it. Same shape as M01's `customer_settings`.
+
+**Biometry failures are results, never exceptions.** `BiometryResult<T>` separates `Rejected`
+(unusable capture — record it, ask the agent for a better photo) from `Unavailable` (the service
+told us nothing — leave the file in `Verifying` and let Hangfire replay). Recording an outage as a
+rejection would reject an honest client over our own downtime. `FakeBiometryClient` is the double
+for every test; the Flask service is not in this repository.
+
 ### Adding a new module
 
 Use `Sankore.Modules.Administration` as the template: PublicApi project (interface only) + main project (DbContext + domain + Features/) + Tests project. Register in `Program.cs` with `builder.Services.Add{Module}Module(...)` and `appVersion1.Map{Module}ModuleEndpoints()`. Initialize in the startup scope if the module needs migration or seeding.
