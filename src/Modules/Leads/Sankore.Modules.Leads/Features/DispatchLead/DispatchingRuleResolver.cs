@@ -15,7 +15,8 @@ using Sankore.Modules.Leads.Infrastructure;
 ///
 /// Resolution order:
 /// <list type="number">
-/// <item>the rule pinned on the lead source the lead was ingested through;</item>
+/// <item>the rule pinned on the source the lead was ingested through
+///       (<see cref="Lead.LeadSourceConfigId"/>);</item>
 /// <item>the active rule with the highest <c>Priority</c>;</item>
 /// <item><see cref="DispatchingRule.Default"/>.</item>
 /// </list>
@@ -47,22 +48,32 @@ internal sealed class DispatchingRuleResolver(LeadsDbContext db)
     }
 
     /// <summary>
-    /// The rule configured on the lead source this lead came through, when it came through one.
-    /// A <see cref="Lead"/> holds no source-config id — only the coarse <see cref="LeadSource"/>
-    /// enum — so the link goes through <see cref="LeadIngestion"/>, which records both. Leads
-    /// created by a file import or straight from the UI have no ingestion row and fall through.
+    /// The rule configured on the source this lead came through, when it came through one.
+    /// <see cref="Lead.LeadSourceConfigId"/> is null for a lead typed into the UI, imported from
+    /// a file, or produced by a merge — those fall straight through to priority, at no query cost.
+    ///
+    /// This used to join <see cref="LeadIngestion"/> to reach the source, because a lead carried
+    /// no source-config id. That cost a round trip on EVERY strategy-less dispatch, including the
+    /// majority of leads which have no ingestion row and so learned nothing from it. Reading the
+    /// column directly also removes a subtlety the join got wrong: it ordered by
+    /// <c>LeadIngestion.Id</c>, a random v4 Guid rather than the chronological
+    /// <c>IngestedAt</c>, and ordered before the join rather than after — so "the most recent
+    /// ingestion wins" was never what the SQL actually expressed.
+    ///
+    /// The id is an opaque reference with no foreign key, so it can outlive the source it names;
+    /// an id that resolves to nothing simply falls through, same as no id at all.
     /// </summary>
     private async Task<DispatchingRule?> PinnedBySourceAsync(Lead lead, CancellationToken ct)
     {
-        var ruleId = await db.LeadIngestions
-            .Where(i => i.LeadId == lead.Id)
-            .OrderByDescending(i => i.Id)
-            .Join(db.LeadSourceConfigs,
-                  ingestion => ingestion.SourceId,
-                  source => source.Id,
-                  (_, source) => source.DefaultDispatchingRuleId)
+        if (lead.LeadSourceConfigId is not { } sourceId) return null;
+
+        var ruleId = await db.LeadSourceConfigs
+            .Where(s => s.Id == sourceId)
+            .Select(s => s.DefaultDispatchingRuleId)
             .FirstOrDefaultAsync(ct);
 
+        // Covers three cases at once: the source pins no rule, the source no longer exists, and
+        // a rule id of Guid.Empty (what DispatchingRule.Default() carries, never a stored rule).
         if (ruleId is null || ruleId == Guid.Empty) return null;
 
         return await db.DispatchingRules

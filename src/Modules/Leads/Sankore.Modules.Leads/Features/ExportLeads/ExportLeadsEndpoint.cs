@@ -30,10 +30,13 @@ public static class ExportLeadsEndpoint
         Guid? ownerId = null,
         Guid? agencyId = null,
         string? search = null,
-        string? tag = null)
+        string? tag = null,
+        Guid? leadSourceConfigId = null)
     {
+        // Appended last: the query record is positional.
         var result = await sender.Send(
-            new ExportLeadsQuery(status, pipelineStage, source, ownerId, agencyId, search, tag), ct);
+            new ExportLeadsQuery(
+                status, pipelineStage, source, ownerId, agencyId, search, tag, leadSourceConfigId), ct);
 
         return result.IsSuccess
             ? Results.File(result.Value, "text/csv; charset=utf-8", "leads.csv")

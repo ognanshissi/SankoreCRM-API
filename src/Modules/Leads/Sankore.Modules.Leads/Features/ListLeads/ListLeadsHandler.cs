@@ -24,6 +24,10 @@ internal sealed class ListLeadsHandler(LeadsDbContext db)
         if (query.Source.HasValue)
             q = q.Where(l => l.Source == query.Source.Value);
 
+        // Narrows to one configured source, which the coarse Source enum cannot express.
+        if (query.LeadSourceConfigId.HasValue)
+            q = q.Where(l => l.LeadSourceConfigId == query.LeadSourceConfigId.Value);
+
         if (query.OwnerId.HasValue)
             q = q.Where(l => l.OwnerId == query.OwnerId.Value);
 
@@ -100,8 +104,39 @@ internal sealed class ListLeadsHandler(LeadsDbContext db)
                 lead.ConvertedToCustomerId,
                 lead.NationalId,
                 lead.CustomerReference,
-                lead.ProspectType.ToString()))
+                lead.ProspectType.ToString(),
+                // Appended last on purpose — this construction is fully positional, and the
+                // record's neighbours are same-typed, so an inserted argument would bind
+                // silently to the wrong member.
+                lead.LeadSourceConfigId))
             .ToListAsync(ct);
+
+        // Code and label come from a second read rather than a join in the projection above: a
+        // correlated subquery would run once per row, and the tenant's source table is small
+        // enough to hand back as a lookup. An id that resolves to nothing stays null — the
+        // reference is opaque, so a source may have been archived since the lead arrived.
+        var sourceIds = items
+            .Where(i => i.LeadSourceConfigId.HasValue)
+            .Select(i => i.LeadSourceConfigId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (sourceIds.Count > 0)
+        {
+            var sources = await db.LeadSourceConfigs
+                .AsNoTracking()
+                .Where(s => sourceIds.Contains(s.Id))
+                .Select(s => new { s.Id, s.Code, s.Label })
+                .ToListAsync(ct);
+
+            var byId = sources.ToDictionary(s => s.Id);
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (items[i].LeadSourceConfigId is { } id && byId.TryGetValue(id, out var src))
+                    items[i] = items[i] with { LeadSourceCode = src.Code, LeadSourceLabel = src.Label };
+            }
+        }
 
         return Result.Ok(new PagedResult<LeadDto>(items, total, page, size));
     }

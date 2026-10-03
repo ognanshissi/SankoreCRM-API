@@ -17,6 +17,17 @@ internal sealed class GetLeadHandler(LeadsDbContext db)
         if (lead is null)
             return Result.Fail<LeadDto>("LEAD_NOT_FOUND");
 
+        // Resolved for display. Stays null when the lead carries no configured source, and also
+        // when the id no longer resolves: the reference is opaque with no foreign key, so the
+        // source may have been archived since the lead arrived.
+        var source = lead.LeadSourceConfigId is { } sourceId
+            ? await db.LeadSourceConfigs
+                .AsNoTracking()
+                .Where(s => s.Id == sourceId)
+                .Select(s => new { s.Code, s.Label })
+                .FirstOrDefaultAsync(ct)
+            : null;
+
         return Result.Ok(new LeadDto(
             Id:                       lead.Id,
             TenantId:                 lead.TenantId,
@@ -61,6 +72,9 @@ internal sealed class GetLeadHandler(LeadsDbContext db)
             ConvertedToCustomerId:    lead.ConvertedToCustomerId,
             NationalId:               lead.NationalId,
             CustomerReference:        lead.CustomerReference,
-            ProspectType:             lead.ProspectType.ToString()));
+            ProspectType:             lead.ProspectType.ToString(),
+            LeadSourceConfigId:       lead.LeadSourceConfigId,
+            LeadSourceCode:           source?.Code,
+            LeadSourceLabel:          source?.Label));
     }
 }

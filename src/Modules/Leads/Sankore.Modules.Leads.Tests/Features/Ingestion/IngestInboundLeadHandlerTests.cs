@@ -75,6 +75,12 @@ public sealed class IngestInboundLeadHandlerTests : IDisposable
         var lead = verify.Leads.Single(l => l.Id == result.Value.LeadId);
         lead.FullName.Should().Be("Amadou Diallo");
         lead.IsTest.Should().BeFalse();
+
+        // The source now lands on the lead itself, not only on the side ingestion row. Every
+        // inbound path — web form and webhook alike — funnels through this handler, so this one
+        // assertion covers them all. The coarse Source enum stays Web by design.
+        lead.LeadSourceConfigId.Should().Be(source.Id);
+        lead.Source.Should().Be(Domain.LeadSource.Web);
     }
 
     // ── Idempotence ─────────────────────────────────────────────────────

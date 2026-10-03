@@ -99,6 +99,15 @@ internal sealed class LeadConfiguration : IEntityTypeConfiguration<Lead>
         builder.HasIndex(l => l.FullName);
         builder.HasIndex(l => l.ExpiresAt);
 
+        // Serves the LeadSourceConfigId filter on ListLeads. Partial on purpose: leads typed in
+        // the UI or imported from a file carry no source config, they are the majority, and no
+        // query wants them — so imports pay no index-write cost. The dispatching resolver reads
+        // this column by lead primary key and needs no index of its own.
+        // No .Property() mapping: a plain Guid? maps to a nullable uuid under the module's
+        // snake-case convention, which is why LeadAssignment.RuleId has no entry either.
+        builder.HasIndex(l => new { l.TenantId, l.LeadSourceConfigId })
+               .HasFilter("lead_source_config_id IS NOT NULL");
+
         // Domain events are transient, never persisted.
         builder.Ignore(l => l.DomainEvents);
     }

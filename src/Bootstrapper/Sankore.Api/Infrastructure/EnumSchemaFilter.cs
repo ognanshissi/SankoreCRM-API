@@ -13,18 +13,27 @@ public sealed class EnumSchemaFilter : ISchemaFilter
 {
     public void Apply(OpenApiSchema schema, SchemaFilterContext context)
     {
-        if (!context.Type.IsEnum) return;
+        // Unwrap Nullable<T> before the test. typeof(LeadGender?).IsEnum is FALSE — a nullable
+        // enum is a struct wrapping one — so guarding on context.Type.IsEnum silently skipped
+        // every OPTIONAL enum in the API while rewriting every required one. The contract came
+        // out split: LeadSourceListDto.status read back as "Active" while the filter that
+        // selects it, LeadSourceStatus? on the query, was documented as integer 0..5. That hit
+        // 54 places (27 query parameters, 27 schema properties), and the generated TypeScript
+        // client turned each of them into a numeric enum even though it is configured for
+        // string enums — the magic numbers the front had to pass came from here.
+        var enumType = Nullable.GetUnderlyingType(context.Type) ?? context.Type;
+        if (!enumType.IsEnum) return;
 
         schema.Type   = "string";
         schema.Format = null;
         schema.Enum.Clear();
 
-        foreach (var name in Enum.GetNames(context.Type))
+        foreach (var name in Enum.GetNames(enumType))
             schema.Enum.Add(new OpenApiString(name));
 
         // Surface the member list in the description so it is readable even in
         // plain-text tool-tips (Scalar, Redoc, generated SDK docs, etc.).
-        var values = string.Join(", ", Enum.GetNames(context.Type));
+        var values = string.Join(", ", Enum.GetNames(enumType));
         schema.Description = string.IsNullOrWhiteSpace(schema.Description)
             ? $"One of: {values}"
             : $"{schema.Description} — One of: {values}";

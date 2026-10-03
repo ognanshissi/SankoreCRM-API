@@ -20,6 +20,7 @@ public sealed class LeadTestBuilder
     private string _language = "Wolof";
     private GeoPoint _location = new(14.6928, -17.4467); // Dakar Plateau
     private Guid? _agencyId;
+    private Guid? _leadSourceConfigId;
 
     public static LeadTestBuilder Create() => new();
 
@@ -53,6 +54,12 @@ public sealed class LeadTestBuilder
         return this;
     }
 
+    public LeadTestBuilder WithSourceConfig(Guid leadSourceConfigId)
+    {
+        _leadSourceConfigId = leadSourceConfigId;
+        return this;
+    }
+
     public Lead Build()
     {
         var lead = Lead.Capture(
@@ -64,7 +71,8 @@ public sealed class LeadTestBuilder
             preferredLanguage: _language,
             location: _location,
             preferredAgencyId: _agencyId,
-            clock: TimeProvider.System);
+            clock: TimeProvider.System,
+            leadSourceConfigId: _leadSourceConfigId);
 
         lead.Qualify(75); // moves to Qualified (score ≥ 60) by default for dispatching tests
         lead.ClearDomainEvents();

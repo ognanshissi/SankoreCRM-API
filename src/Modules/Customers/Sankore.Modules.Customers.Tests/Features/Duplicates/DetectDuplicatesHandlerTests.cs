@@ -262,6 +262,61 @@ public sealed class DetectDuplicatesHandlerTests : IDisposable
         result.Value.CandidatesCreated.Should().Be(0);
     }
 
+    [Fact]
+    public async Task A_client_whose_two_phonetic_keys_are_identical_does_not_abort_the_run()
+    {
+        // Regression. "Kouassi Kouassi" folds to ONE phonetic key for both the given and the
+        // family name, and BuildBlocks files both keys under the same "PH:" namespace — so this
+        // client used to be appended to that block twice. The pair loop then read two positions
+        // holding the same id and asked DuplicateCandidate.Detect to pair the client with itself,
+        // which throws DomainException "A client cannot duplicate itself." A single such client
+        // took down the whole tenant's detection run, including every unrelated pair in it.
+        await using var db = _factory.CreateContext();
+
+        // Its OWN document number, not the shared one: the self-pair must clear the threshold on
+        // its own signals without also matching the unrelated pair below. Both halves of the
+        // premise matter — identical keys put the client in one block twice, and the identity
+        // document (weight 60, on top of 25 both-phonetic + 20 birth date + 5 agency) is what
+        // carries the self-comparison past the threshold of 70. Without a document the self-score
+        // is 50, the pair is dropped before Detect, and the bug stays invisible.
+        var selfKeyed = await SeedTwinAsync(
+            db, "Kouassi", "Kouassi", "ABJ-2026-000010", documentNumber: "CI0099999999");
+        selfKeyed.PhoneticKeyPrimary.Should().Be(
+            selfKeyed.PhoneticKeySecondary,
+            "the premise of this test: both names must fold to the same key");
+        selfKeyed.IdentityDocumentNumberBlindIndex.Should().NotBeNull(
+            "the other half of the premise: the self-comparison must reach the threshold");
+
+        // A real pair in the same run, to prove the run completes rather than merely not throwing.
+        var first = await SeedTwinAsync(db, "Awa", "Ouattara", "ABJ-2026-000011", documentNumber: SharedDocumentNumber);
+        var second = await SeedTwinAsync(db, "Awa", "Ouattara", "ABJ-2026-000012", documentNumber: SharedDocumentNumber);
+
+        var result = await Handler(db).Handle(new DetectDuplicatesCommand(_tenantId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+
+        // Load-bearing, and not redundant with IsSuccess. The per-pair try/catch in the handler
+        // would ALSO keep this run succeeding if the block dedupe were removed — it would just
+        // swallow the self-pair and carry on. Asserting the counter is what keeps this test honest
+        // about the fix it exists for: the self-pair must never be formed, not merely survived.
+        result.Value.CandidatesFailed.Should().Be(
+            0, "the self-pair must never reach the aggregate, not be rescued by the per-pair catch");
+
+        await using var verify = _factory.CreateContext();
+        var candidates = verify.DuplicateCandidates.IgnoreQueryFilters().ToList();
+
+        candidates.Should().NotContain(
+            c => c.ClientAId == c.ClientBId,
+            "no candidate may pair a client with itself");
+        candidates.Should().NotContain(
+            c => c.ClientAId == selfKeyed.Id || c.ClientBId == selfKeyed.Id,
+            "the self-keyed client matches nobody else here, so it yields no candidate at all");
+
+        var (a, b) = DuplicatesTestDoubles.Canonical(first.Id, second.Id);
+        candidates.Should().ContainSingle(c => c.ClientAId == a && c.ClientBId == b,
+            "the unrelated pair in the same run must still be detected");
+    }
+
     private async Task<Client> SeedTwinAsync(
         CustomersDbContext db,
         string first,

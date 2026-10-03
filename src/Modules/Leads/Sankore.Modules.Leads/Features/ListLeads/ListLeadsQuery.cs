@@ -15,5 +15,6 @@ internal sealed record ListLeadsQuery(
     Guid? AgencyId = null,
     string? Search = null,
     string? Tag = null,
-    LeadIntentLevel? IntentLevel = null
+    LeadIntentLevel? IntentLevel = null,
+    Guid? LeadSourceConfigId = null
 ) : IRequest<Result<PagedResult<LeadDto>>>;

@@ -40,6 +40,27 @@ public sealed class Lead : AggregateRoot
     public LeadStatus Status { get; private set; }
     public PipelineStage PipelineStage { get; private set; }
     public LeadSource Source { get; private set; }
+
+    /// <summary>
+    /// The configured <c>LeadSourceConfig</c> this lead was ingested through, or null when there
+    /// is none — a lead typed into the UI, imported from a file, or produced by a merge never
+    /// arrived through a configured source, and null says exactly that.
+    ///
+    /// Distinct from <see cref="Source"/> and not derivable from it: that enum is a coarse
+    /// reporting axis (<c>LeadSource</c>), while a source config carries a different one
+    /// (<c>LeadChannelType</c>) plus the dispatching rule, cost-per-lead and dedup window that
+    /// actually govern this lead. Before this column existed the link lived only on
+    /// <c>LeadIngestion.SourceId</c>, so every reader had to join through a side table.
+    ///
+    /// An OPAQUE reference: no physical foreign key, same as <c>LeadAssignment.RuleId</c>. A
+    /// source that is later archived or deleted leaves a dangling id here, and readers must
+    /// degrade gracefully rather than assume it resolves.
+    ///
+    /// Server-set only. It is never bound from an HTTP request body — see the note on
+    /// <c>CaptureLeadCommand.LeadSourceConfigId</c> for why.
+    /// </summary>
+    public Guid? LeadSourceConfigId { get; private set; }
+
     public LeadChannel? Channel { get; private set; }
     public string? Campaign { get; private set; }
     public string? ExternalReference { get; private set; }
@@ -140,7 +161,8 @@ public sealed class Lead : AggregateRoot
         string? socialPublicationId = null,
         string? socialInteractionId = null,
         Money? acquisitionCost = null,
-        bool isTest = false)
+        bool isTest = false,
+        Guid? leadSourceConfigId = null)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Lead must have a name.");
@@ -202,6 +224,7 @@ public sealed class Lead : AggregateRoot
             SocialInteractionId   = socialInteractionId?.Trim(),
             AcquisitionCost       = acquisitionCost,
             IsTest                = isTest,
+            LeadSourceConfigId    = leadSourceConfigId,
         };
 
         lead.RaiseDomainEvent(new LeadCapturedDomainEvent(lead.Id));

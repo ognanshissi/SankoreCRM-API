@@ -65,7 +65,7 @@ internal sealed class DetectDuplicatesHandler(
             .ToListAsync(ct);
 
         if (inputs.Count < 2)
-            return Result.Ok(new DetectDuplicatesResult(inputs.Count, 0, 0, 0, 0));
+            return Result.Ok(new DetectDuplicatesResult(inputs.Count, 0, 0, 0, 0, 0));
 
         var byId = inputs.ToDictionary(i => i.ClientId);
         var blocks = BuildBlocks(inputs);
@@ -89,7 +89,7 @@ internal sealed class DetectDuplicatesHandler(
 
         var fingerprints = new Dictionary<Guid, string>(inputs.Count);
         var comparedPairs = new HashSet<(Guid, Guid)>();
-        int compared = 0, created = 0, refreshed = 0, skipped = 0;
+        int compared = 0, created = 0, refreshed = 0, skipped = 0, failed = 0;
 
         foreach (var block in blocks.Values)
         {
@@ -108,46 +108,79 @@ internal sealed class DetectDuplicatesHandler(
                     var b = byId[bId];
                     compared++;
 
-                    var score = ClientMatchScorer.Score(a, b);
-                    if (score.Score < threshold)
-                        continue;
-
-                    var fingerprintA = Fingerprint(fingerprints, a);
-                    var fingerprintB = Fingerprint(fingerprints, b);
-                    var reasonsJson = SerializeReasons(score);
-
-                    if (existingByPair.TryGetValue((aId, bId), out var candidate))
+                    // One pair must not be able to end the sweep. A tenant-wide run can hold
+                    // millions of pairs, and a single row whose data breaks an aggregate invariant
+                    // used to abort all of them: one client with two identical phonetic keys threw
+                    // "A client cannot duplicate itself." and every other candidate in that run —
+                    // created, refreshed or merely confirmed — was lost with it. A reviewer saw no
+                    // duplicates at all, which reads exactly like "there are none".
+                    //
+                    // Only DomainException is caught, deliberately. It is the aggregate saying THIS
+                    // pair is not admissible, which is per-pair by definition and safe to skip.
+                    // Anything else — a cancellation, a broken DbContext, a bug in the scorer — is
+                    // not a property of the pair, and swallowing it would turn a failed run into a
+                    // quietly incomplete one, which is worse than a loud failure for a job whose
+                    // whole output is "these are the duplicates".
+                    //
+                    // Nothing partial can be committed on this path: Detect() throws before the row
+                    // is added to the context, and Refresh() is assignments plus Math.Clamp with no
+                    // validation, so it cannot fail halfway through mutating a tracked entity. If
+                    // Refresh ever gains a guard, the failed candidate must be detached here.
+                    try
                     {
-                        switch (candidate.Status)
+                        var score = ClientMatchScorer.Score(a, b);
+                        if (score.Score < threshold)
+                            continue;
+
+                        var fingerprintA = Fingerprint(fingerprints, a);
+                        var fingerprintB = Fingerprint(fingerprints, b);
+                        var reasonsJson = SerializeReasons(score);
+
+                        if (existingByPair.TryGetValue((aId, bId), out var candidate))
                         {
-                            // Already merged by a human: the pair is settled forever.
-                            case DuplicateCandidateStatus.Merged:
-                                skipped++;
-                                continue;
+                            switch (candidate.Status)
+                            {
+                                // Already merged by a human: the pair is settled forever.
+                                case DuplicateCandidateStatus.Merged:
+                                    skipped++;
+                                    continue;
 
-                            // Explicitly rejected: do not nag the reviewer again as long as the
-                            // compared data has not moved. A changed fingerprint on either side
-                            // means the comparison is no longer the one that was rejected, so the
-                            // pair legitimately comes back to review.
-                            case DuplicateCandidateStatus.Rejected
-                                when candidate.FingerprintA == fingerprintA
-                                  && candidate.FingerprintB == fingerprintB:
-                                skipped++;
-                                continue;
+                                // Explicitly rejected: do not nag the reviewer again as long as the
+                                // compared data has not moved. A changed fingerprint on either side
+                                // means the comparison is no longer the one that was rejected, so the
+                                // pair legitimately comes back to review.
+                                case DuplicateCandidateStatus.Rejected
+                                    when candidate.FingerprintA == fingerprintA
+                                      && candidate.FingerprintB == fingerprintB:
+                                    skipped++;
+                                    continue;
 
-                            default:
-                                candidate.Refresh(score.Score, reasonsJson, fingerprintA, fingerprintB, now);
-                                refreshed++;
-                                continue;
+                                default:
+                                    candidate.Refresh(score.Score, reasonsJson, fingerprintA, fingerprintB, now);
+                                    refreshed++;
+                                    continue;
+                            }
                         }
+
+                        var row = DuplicateCandidate.Detect(
+                            tenantId, aId, bId, score.Score, reasonsJson, fingerprintA, fingerprintB, now);
+
+                        db.DuplicateCandidates.Add(row);
+                        existingByPair[(aId, bId)] = row;
+                        created++;
                     }
+                    catch (DomainException ex)
+                    {
+                        failed++;
 
-                    var row = DuplicateCandidate.Detect(
-                        tenantId, aId, bId, score.Score, reasonsJson, fingerprintA, fingerprintB, now);
-
-                    db.DuplicateCandidates.Add(row);
-                    existingByPair[(aId, bId)] = row;
-                    created++;
+                        // Client ids only — a Guid identifies the row to investigate without putting
+                        // any of the personal data this feature never decrypts into a log.
+                        logger.LogWarning(
+                            ex,
+                            "Duplicate detection: pair ({ClientAId}, {ClientBId}) rejected by the domain "
+                            + "for tenant {TenantId}; skipped, the run continues.",
+                            aId, bId, tenantId);
+                    }
                 }
             }
         }
@@ -157,10 +190,20 @@ internal sealed class DetectDuplicatesHandler(
 
         logger.LogInformation(
             "Duplicate detection for tenant {TenantId}: {Clients} client(s), {Pairs} pair(s) compared, " +
-            "{Created} created, {Refreshed} refreshed, {Skipped} skipped (threshold {Threshold}).",
-            tenantId, inputs.Count, compared, created, refreshed, skipped, threshold);
+            "{Created} created, {Refreshed} refreshed, {Skipped} skipped, {Failed} failed (threshold {Threshold}).",
+            tenantId, inputs.Count, compared, created, refreshed, skipped, failed, threshold);
 
-        return Result.Ok(new DetectDuplicatesResult(inputs.Count, compared, created, refreshed, skipped));
+        // A run that skipped pairs still succeeded, but silence would hide it: the counter is in the
+        // result so the job logs it, and a non-zero value is a data problem to go and look at.
+        if (failed > 0)
+        {
+            logger.LogWarning(
+                "Duplicate detection for tenant {TenantId} completed with {Failed} pair(s) skipped on "
+                + "a domain error; their candidates were neither created nor refreshed.",
+                tenantId, failed);
+        }
+
+        return Result.Ok(new DetectDuplicatesResult(inputs.Count, compared, created, refreshed, skipped, failed));
     }
 
     /// <summary>
@@ -172,12 +215,29 @@ internal sealed class DetectDuplicatesHandler(
     {
         var blocks = new Dictionary<string, List<Guid>>(StringComparer.Ordinal);
 
+        // A client must appear at most ONCE per block. Two of its keys can legitimately be equal
+        // — a client whose given and family names fold to the same phonetic key, which West
+        // African naming makes routine ("Kouassi Kouassi", and the calculator folds ou/w, dj/j,
+        // kh/k and doubled letters before Double Metaphone, so near-misses collide too) — and
+        // both phonetic keys share the "PH:" namespace on purpose, so that client used to be
+        // appended to the same bucket twice. The pair loop below then read two positions holding
+        // the same id and asked DuplicateCandidate.Detect to pair a client with itself, which it
+        // rightly refuses: one such client aborted the whole tenant's run with
+        // "A client cannot duplicate itself."
+        var seen = new HashSet<(string BlockKey, Guid ClientId)>();
+
         void Add(string? key, string prefix, Guid clientId)
         {
             if (string.IsNullOrWhiteSpace(key))
                 return;
 
             var blockKey = prefix + key;
+
+            // Deduplicated here rather than skipped at the call site: the invariant belongs to the
+            // block, so it keeps holding if another key is ever filed under an existing namespace.
+            if (!seen.Add((blockKey, clientId)))
+                return;
+
             if (!blocks.TryGetValue(blockKey, out var bucket))
                 blocks[blockKey] = bucket = [];
 

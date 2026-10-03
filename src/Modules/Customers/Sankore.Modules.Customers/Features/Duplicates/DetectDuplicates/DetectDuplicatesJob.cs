@@ -40,5 +40,15 @@ public sealed class DetectDuplicatesJob(IServiceScopeFactory scopeFactory)
         logger.LogInformation(
             "Duplicate detection done for tenant {TenantId}: {Created} new candidate(s), {Refreshed} refreshed.",
             tenantId, result.Value.CandidatesCreated, result.Value.CandidatesRefreshed);
+
+        // A run that dropped pairs still reports IsSuccess, so without this the Hangfire log would
+        // read as a clean sweep. Whoever is watching the job needs to see the gap.
+        if (result.Value.CandidatesFailed > 0)
+        {
+            logger.LogWarning(
+                "Duplicate detection for tenant {TenantId} skipped {Failed} pair(s) on a domain error; "
+                + "the handler logged each pair's client ids.",
+                tenantId, result.Value.CandidatesFailed);
+        }
     }
 }

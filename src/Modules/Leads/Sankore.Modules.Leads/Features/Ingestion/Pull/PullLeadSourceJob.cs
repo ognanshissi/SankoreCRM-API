@@ -226,6 +226,7 @@ public sealed class PullLeadSourceJob(IServiceScopeFactory scopeFactory)
             FirstName:         GetField("firstName"),
             LastName:          GetField("lastName"),
             Email:             GetField("email"),
-            AgencyId:          source.DefaultAgencyId);
+            AgencyId:          source.DefaultAgencyId,
+            LeadSourceConfigId: source.Id);
     }
 }

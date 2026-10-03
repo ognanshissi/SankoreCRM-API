@@ -51,4 +51,18 @@ public sealed record LeadDto(
     Guid? ConvertedToCustomerId,
     string? NationalId,
     string? CustomerReference,
-    string ProspectType);
+    string ProspectType,
+    /// <param name="LeadSourceConfigId">
+    /// The configured source the lead arrived through, null when there is none (typed into the
+    /// UI, imported from a file, produced by a merge). Distinct from <c>Source</c>, which is a
+    /// coarse enum and cannot name a specific configured form or webhook.
+    /// </param>
+    Guid? LeadSourceConfigId = null,
+    /// <param name="LeadSourceCode">
+    /// The source's <c>Code</c>, resolved for display. Null when the lead carries no source, and
+    /// also when the id no longer resolves — the reference is opaque with no foreign key, so a
+    /// source can be archived out from under it.
+    /// </param>
+    string? LeadSourceCode = null,
+    /// <param name="LeadSourceLabel">The source's human-readable <c>Label</c>, same caveats.</param>
+    string? LeadSourceLabel = null);

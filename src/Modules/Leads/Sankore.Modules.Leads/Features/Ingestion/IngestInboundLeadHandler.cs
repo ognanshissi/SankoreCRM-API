@@ -169,7 +169,11 @@ internal sealed class IngestInboundLeadHandler(
             tenantId:          cmd.TenantId,
             fullName:          fullName!,
             phoneNumber:       phone!,
-            source:            LeadSource.Web, // Source enum legacy — actual source tracked via LeadIngestion
+            // The coarse enum stays Web for every inbound source: it feeds
+            // LeadScoreCalculator.SourceQualityScore, whose thresholds are measured and
+            // documented, so changing it here would move auto-qualification outcomes. The real
+            // source is leadSourceConfigId below.
+            source:            LeadSource.Web,
             interestedProduct: product ?? "Unknown",
             preferredLanguage: lang ?? "FR",
             location:          new GeoPoint(lat, lng),
@@ -193,7 +197,9 @@ internal sealed class IngestInboundLeadHandler(
             landingPage:       landingPage,
             referrer:          referrer,
             acquisitionCost:   source.CostPerLead,
-            isTest:            isTest);
+            isTest:            isTest,
+            // Safe to trust: the config was loaded and tenant-checked above.
+            leadSourceConfigId: cmd.SourceId);
 
         db.Leads.Add(lead);
 

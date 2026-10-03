@@ -128,7 +128,8 @@ public sealed class CaptureLeadHandler(
             prospectType:         cmd.ProspectType,
             nationalId:           cmd.NationalId,
             customerReference:    cmd.CustomerReference,
-            phoneBlindIndex:      phoneIndex);
+            phoneBlindIndex:      phoneIndex,
+            leadSourceConfigId:   cmd.LeadSourceConfigId);
 
         db.Leads.Add(lead);
 

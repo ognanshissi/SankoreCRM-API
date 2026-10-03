@@ -36,6 +36,16 @@ internal sealed class SourceQualityHandler(LeadsDbContext db)
 
         var sourceIds = ingestionStats.Keys.ToList();
 
+        // Still stitched through the ingestion rows, deliberately, now that Lead carries
+        // LeadSourceConfigId. Grouping the leads directly by that column would be one query
+        // instead of three — but it is NOT the same population, and the difference is not
+        // academic: a 'Duplicate' ingestion row points at the SURVIVING lead while carrying the
+        // INCOMING source id, so a lead can legitimately appear under a source whose payload was
+        // dropped. Re-basing Contacted/Converted on the column would silently move leads between
+        // sources and change numbers already published to every tenant. Received/Rejected/
+        // Duplicates cannot come from `leads` at all — two of those categories have no lead —
+        // and From/To here filter IngestedAt, not CapturedAt. Worth simplifying in its own
+        // change, with before/after figures; not as a side effect of adding the column.
         // Get accepted lead IDs for the period
         var acceptedLeadIds = await ingestQ
             .Where(i => sourceIds.Contains(i.SourceId)

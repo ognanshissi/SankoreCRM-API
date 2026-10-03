@@ -29,7 +29,13 @@ public sealed record DetectDuplicatesResult(
     int PairsCompared,
     int CandidatesCreated,
     int CandidatesRefreshed,
-    int CandidatesSkipped);
+    int CandidatesSkipped,
+    /// <param name="CandidatesFailed">
+    /// Pairs the domain refused, skipped so one bad pair cannot abort a tenant-wide sweep. Non-zero
+    /// means a data problem worth investigating — the run completed, but those pairs produced no
+    /// candidate; the handler logs each one with both client ids.
+    /// </param>
+    int CandidatesFailed);
 
 /// <summary>
 /// One matched criterion, as persisted in <c>DuplicateCandidate.ReasonsJson</c> and returned to the

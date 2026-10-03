@@ -28,7 +28,7 @@ public sealed class DetectDuplicatesJobTests
                 // Captured from inside the dispatch: this is the identity the audit behavior sees.
                 actor = BackgroundJobContext.CurrentUser;
                 ambientTenant = BackgroundJobContext.CurrentTenant;
-                return Result.Ok(new DetectDuplicatesResult(0, 0, 0, 0, 0));
+                return Result.Ok(new DetectDuplicatesResult(0, 0, 0, 0, 0, 0));
             });
 
         await using var provider = Provider(sender);
@@ -48,7 +48,7 @@ public sealed class DetectDuplicatesJobTests
         var tenantId = Guid.NewGuid();
         var sender = Substitute.For<ISender>();
         sender.Send(Arg.Any<DetectDuplicatesCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Ok(new DetectDuplicatesResult(0, 0, 0, 0, 0)));
+            .Returns(Result.Ok(new DetectDuplicatesResult(0, 0, 0, 0, 0, 0)));
 
         await using var provider = Provider(sender);
         await new DetectDuplicatesJob(provider.GetRequiredService<IServiceScopeFactory>())

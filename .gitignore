@@ -11,6 +11,14 @@
 # Build results
 [Bb]in/
 [Oo]bj/
+
+# `dotnet ef` (tools older than the runtime) passes its build-host output path with a WINDOWS
+# separator, so on macOS/Linux the backslash lands in the filename and the folder is literally
+# called `bin\Debug` — which `[Bb]in/` above cannot match, because no directory named `bin`
+# exists. Result: ~40 Roslyn/MSBuild build-host DLLs per project showing up as untracked after
+# every migration command. Nothing in the solution produces these.
+[Bb]in\\[Dd]ebug/
+[Bb]in\\[Rr]elease/
 [Ee]xt/
 [Ll]og/
 [Ll]ogs/

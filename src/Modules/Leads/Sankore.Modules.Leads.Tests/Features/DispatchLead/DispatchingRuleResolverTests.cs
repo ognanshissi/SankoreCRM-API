@@ -11,6 +11,11 @@ using Xunit;
 /// The rule used to be selected BY the strategy the caller named, so nothing could start from
 /// the lead — and LeadSourceConfig.DefaultDispatchingRuleId, stored and exposed in the API since
 /// F13.37, was read by no dispatching code at all.
+///
+/// The link is now Lead.LeadSourceConfigId, read directly. It used to be reached by joining
+/// LeadIngestion, so these tests used to seed an ingestion row to express "this lead came
+/// through that source"; they set the column instead. A lead with no source config — UI capture,
+/// file import, merge — falls through to priority without querying anything.
 /// </summary>
 public sealed class DispatchingRuleResolverTests : IDisposable
 {
@@ -21,7 +26,7 @@ public sealed class DispatchingRuleResolverTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    private Lead Fresh() => Lead.Capture(
+    private Lead Fresh(Guid? sourceConfigId = null) => Lead.Capture(
         tenantId: _tenantId,
         fullName: "Awa Ouattara",
         phoneNumber: "+2250708091801",
@@ -30,7 +35,8 @@ public sealed class DispatchingRuleResolverTests : IDisposable
         preferredLanguage: "FR",
         location: new GeoPoint(5.3, -4.0),
         preferredAgencyId: null,
-        clock: TimeProvider.System);
+        clock: TimeProvider.System,
+        leadSourceConfigId: sourceConfigId);
 
     private DispatchingRule Rule(string name, DispatchingStrategy strategy, int priority) =>
         DispatchingRule.Create(
@@ -99,10 +105,8 @@ public sealed class DispatchingRuleResolverTests : IDisposable
             defaultDispatchingRuleId: pinned.Id);
         db.LeadSourceConfigs.Add(source);
 
-        var lead = Fresh();
+        var lead = Fresh(source.Id);
         db.Leads.Add(lead);
-        db.LeadIngestions.Add(LeadIngestion.Create(
-            _tenantId, lead.Id, source.Id, TimeProvider.System));
         await db.SaveChangesAsync();
 
         var rule = await new DispatchingRuleResolver(db)
@@ -112,9 +116,10 @@ public sealed class DispatchingRuleResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task A_lead_with_no_ingestion_row_falls_through_to_priority()
+    public async Task A_lead_with_no_source_config_falls_through_to_priority()
     {
-        // File imports and UI-created leads have no ingestion row at all.
+        // File imports, UI capture and merges carry no source config at all.
+        // This is also the case that now costs ZERO queries instead of one.
         await using var db = _factory.CreateContext();
         var highest = Rule("Haute", DispatchingStrategy.RoundRobin, priority: 5);
         db.DispatchingRules.Add(highest);
@@ -141,15 +146,56 @@ public sealed class DispatchingRuleResolverTests : IDisposable
             defaultDispatchingRuleId: pinned.Id);
         db.LeadSourceConfigs.Add(source);
 
-        var lead = Fresh();
+        var lead = Fresh(source.Id);
         db.Leads.Add(lead);
-        db.LeadIngestions.Add(LeadIngestion.Create(
-            _tenantId, lead.Id, source.Id, TimeProvider.System));
         await db.SaveChangesAsync();
 
         var rule = await new DispatchingRuleResolver(db)
             .ResolveAsync(lead, requestedStrategy: null, CancellationToken.None);
 
         rule.Id.Should().Be(active.Id);
+    }
+
+    [Fact]
+    public async Task A_source_config_id_that_no_longer_resolves_falls_through_to_priority()
+    {
+        // LeadSourceConfigId is an opaque reference with NO foreign key, so it can outlive the
+        // source it names — an archived or deleted source leaves a dangling id. Dispatching must
+        // degrade to priority rather than throw or route by a rule it cannot find.
+        await using var db = _factory.CreateContext();
+        var highest = Rule("Haute", DispatchingStrategy.RoundRobin, priority: 7);
+        db.DispatchingRules.Add(highest);
+
+        var lead = Fresh(Guid.NewGuid()); // points at nothing
+        db.Leads.Add(lead);
+        await db.SaveChangesAsync();
+
+        var rule = await new DispatchingRuleResolver(db)
+            .ResolveAsync(lead, requestedStrategy: null, CancellationToken.None);
+
+        rule.Id.Should().Be(highest.Id);
+    }
+
+    [Fact]
+    public async Task A_source_that_pins_no_rule_falls_through_to_priority()
+    {
+        // The common case: a source exists and the lead came through it, but nobody configured
+        // a DefaultDispatchingRuleId on it. Guards the null/Guid.Empty check in the resolver.
+        await using var db = _factory.CreateContext();
+        var highest = Rule("Haute", DispatchingStrategy.RoundRobin, priority: 3);
+        db.DispatchingRules.Add(highest);
+
+        var source = LeadSourceConfig.Create(
+            _tenantId, "WEB3", "Formulaire sans règle", LeadChannelType.WebForm, displayOrder: 0);
+        db.LeadSourceConfigs.Add(source);
+
+        var lead = Fresh(source.Id);
+        db.Leads.Add(lead);
+        await db.SaveChangesAsync();
+
+        var rule = await new DispatchingRuleResolver(db)
+            .ResolveAsync(lead, requestedStrategy: null, CancellationToken.None);
+
+        rule.Id.Should().Be(highest.Id);
     }
 }

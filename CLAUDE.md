@@ -25,8 +25,12 @@ dotnet run --project src/Bootstrapper/Sankore.Hangfire
 # Emit the OpenAPI document for the front-end client generator. NO database needed: the host
 # builds, maps its endpoints, writes the file and exits — migrations, seeders and every background
 # worker are skipped, so regenerating a client cannot alter data or send mail.
+# Pass an ABSOLUTE path. `dotnet run` resolves a relative one against the PROJECT directory,
+# not your shell's, so `../SankoreFront/...` silently lands in
+# src/Bootstrapper/SankoreFront/ and the front-end file is never updated — the emitter logs
+# the full path it wrote, which is the only clue.
 dotnet run --project src/Bootstrapper/Sankore.Api -- \
-  --emit-openapi ../SankoreFront/swaggers/sankore-crm-api-swagger.json
+  --emit-openapi "$(cd .. && pwd)/SankoreFront/swaggers/sankore-crm-api-swagger.json"
 # then, in SankoreFront: npm run openapi-generator
 # (swaggers/* is gitignored there, so each developer emits their own copy — an endpoint added here
 #  stays invisible to the front until somebody runs these two commands.)
@@ -249,11 +253,35 @@ for a walk-in** (`LeadSource.Agency`, source quality 20/20) and **45 for a file 
 (`LeadSource.FileImport`, 5/20). A complete row of `docs/sample-lead-import.xlsx` scores 30.
 
 **Which rule applies is resolved from the lead**, by `DispatchingRuleResolver`: the rule pinned
-on the source the lead was ingested through (`LeadSourceConfig.DefaultDispatchingRuleId`, via
-`LeadIngestion` — a `Lead` holds no source-config id), else the highest-priority active rule,
+on the source the lead was ingested through (`LeadSourceConfig.DefaultDispatchingRuleId`, reached
+directly through `Lead.LeadSourceConfigId`), else the highest-priority active rule,
 else `DispatchingRule.Default()`. The rule then carries the strategy. A caller that names a
 strategy explicitly still gets the rule tuned for it, so the manual dispatch screen is unchanged.
 `LeadAssignment.RuleId` records which rule produced an assignment (null = built-in defaults).
+
+**`Lead.LeadSourceConfigId`** is the lead's own reference to the `LeadSourceConfig` it arrived
+through. It is **null** for a lead typed into the UI, imported from a file, or produced by a
+merge — none of those arrived through a configured source, and null says exactly that. It is
+distinct from `Lead.Source` and not derivable from it: that enum is a coarse reporting axis
+(`LeadSource`) while a source config carries a different one (`LeadChannelType`) with no mapping
+between them, so both are kept. An **opaque reference with no foreign key**, like
+`LeadAssignment.RuleId`: an archived source leaves a dangling id and every reader degrades to
+null rather than assuming it resolves.
+
+It is **server-set only** and deliberately absent from `CaptureLeadRequest` /
+`SystemCaptureLeadRequest`. Nothing validates the id, so a client able to set it could name any
+source in the tenant and thereby inherit its dispatching rule — choosing which agent pool
+receives its leads, past the administrator's configuration — and bill its `CostPerLead` against
+that source in `GET lead-sources/quality`. For the same reason `ReplayIngestionJob` **overwrites**
+it from the ingestion row instead of defaulting it: `RawPayloadJson` is remote input and is
+deserialized straight into a `CaptureLeadCommand`.
+
+Before it existed the link lived only on `LeadIngestion.SourceId`, so `DispatchingRuleResolver`
+joined through that side table on every strategy-less dispatch — including the majority of leads
+that have no ingestion row at all. `SourceQualityHandler` still measures through the ingestion
+rows **on purpose**: a `Duplicate` ingestion points at the surviving lead while carrying the
+incoming source id, so grouping leads by the new column would move leads between sources and
+change figures already published to tenants.
 
 `DispatchingRuleSeeder` (run from `LeadsModule.InitializeAsync`) gives every tenant one visible
 rule named **"Par défaut"**, carrying exactly `DispatchingRule.Default()`'s values — so the

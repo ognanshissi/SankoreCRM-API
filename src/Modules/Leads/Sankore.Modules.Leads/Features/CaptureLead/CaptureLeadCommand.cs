@@ -50,7 +50,21 @@ public sealed record CaptureLeadCommand(
     /// <summary>
     /// When true, bypasses the duplicate gate entirely and forces creation regardless of matches.
     /// </summary>
-    bool Force = false
+    bool Force = false,
+    /// <summary>
+    /// The configured source this lead arrived through, or null when there is none (manual UI
+    /// capture, file import).
+    ///
+    /// SERVER-SET ONLY — deliberately absent from <c>CaptureLeadRequest</c> and
+    /// <c>SystemCaptureLeadRequest</c>. Nothing validates this id, so a client able to set it
+    /// could name any source in the tenant and thereby inherit its
+    /// <c>DefaultDispatchingRuleId</c> — choosing which rule, and so which agent pool, routes
+    /// its leads past the administrator's configuration — and distort ROI reporting, which
+    /// prices a source at CostPerLead × leads received. Every caller that legitimately knows an
+    /// id is server-side: PullLeadSourceJob, ReplayIngestionJob, and the ingest handler which
+    /// sets it from an already tenant-checked config.
+    /// </summary>
+    Guid? LeadSourceConfigId = null
 ) : IRequest<Result<CaptureLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

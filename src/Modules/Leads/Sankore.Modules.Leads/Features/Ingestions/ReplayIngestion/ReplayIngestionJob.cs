@@ -57,6 +57,13 @@ public sealed class ReplayIngestionJob(IServiceScopeFactory scopeFactory)
                 return;
             }
 
+            // Overwrite unconditionally — never `??`. RawPayloadJson is whatever the remote
+            // caller posted for a web or webhook source, and it is deserialized straight into
+            // the command above, so a payload carrying its own "leadSourceConfigId" would let
+            // that caller claim any source in the tenant. The ingestion row is the only
+            // trustworthy statement of where this payload came from.
+            cmd = cmd with { LeadSourceConfigId = ingestion.SourceId };
+
             var result = await sender.Send(cmd, CancellationToken.None);
 
             if (result.IsSuccess)

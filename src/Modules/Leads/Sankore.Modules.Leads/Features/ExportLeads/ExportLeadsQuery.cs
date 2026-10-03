@@ -11,5 +11,6 @@ public sealed record ExportLeadsQuery(
     Guid? OwnerId,
     Guid? AgencyId,
     string? Search,
-    string? Tag
+    string? Tag,
+    Guid? LeadSourceConfigId = null
 ) : IRequest<Result<byte[]>>;
