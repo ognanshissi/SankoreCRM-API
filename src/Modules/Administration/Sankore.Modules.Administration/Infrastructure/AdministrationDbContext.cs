@@ -20,7 +20,15 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<PermissionAttribution> PermissionAttributions => Set<PermissionAttribution>();
     public DbSet<ProductSpeciality> ProductSpecialities => Set<ProductSpeciality>();
     public DbSet<Territory> Territories => Set<Territory>();
-    public DbSet<UserRole> UserRoles => Set<UserRole>();
+    /// <summary>
+    /// The tenant-scoped audit mirror of role grants (table <c>user_roles</c>, own Id, soft
+    /// revoke via <c>IsActive</c>) — NOT Identity's <c>IdentityUserRole&lt;Guid&gt;</c> join
+    /// table, which this deliberately shadows and which login still reads through
+    /// <c>UserManager.GetRolesAsync</c>. `new` is explicit so the shadowing reads as intended
+    /// rather than as a missing `override`: every grant must be written to BOTH stores
+    /// (see AssignRole, RevokeRole, BulkAssignRole, AgencyManagerRoleCoordinator).
+    /// </summary>
+    public new DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<TenantNotificationSettings> TenantNotificationSettings => Set<TenantNotificationSettings>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<CompanyInfo> CompanyInfos => Set<CompanyInfo>();

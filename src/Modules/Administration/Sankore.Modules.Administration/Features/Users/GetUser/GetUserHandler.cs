@@ -1,14 +1,12 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Infrastructure;
-using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Users.GetUser;
 
 internal sealed class GetUserHandler(
-    AdministrationDbContext db,
-    ICurrentUser currentUser
+    AdministrationDbContext db
 ) : IRequestHandler<GetUserQuery, Result<UserDto>>
 {
     public async Task<Result<UserDto>> Handle(GetUserQuery request, CancellationToken ct)

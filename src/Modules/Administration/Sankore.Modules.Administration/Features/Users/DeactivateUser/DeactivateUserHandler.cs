@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
@@ -10,6 +11,7 @@ namespace Sankore.Modules.Administration.Features.Users.DeactivateUser;
 
 internal sealed class DeactivateUserHandler(
     AdministrationDbContext db,
+    UserManager<AppUser> userManager,
     [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher
 ) : IRequestHandler<DeactivateUserCommand, Result>
 {
@@ -34,9 +36,36 @@ internal sealed class DeactivateUserHandler(
         // 3. Domain transition — Status → Disabled, DeactivatedAt = now.
         var deactivatedEvent = user.Deactivate();
 
-        // 4. Revoke all active role assignments (audit trail + prevents login via role checks).
+        // 4. Revoke all active role assignments — in BOTH stores.
+        //
+        //    db.UserRoles is only the tenant-scoped audit mirror; the roles that actually
+        //    grant access are Identity's own, which is what login reads through
+        //    UserManager.GetRolesAsync (see AdministrationDbContext.UserRoles and the note on
+        //    BulkAssignRoleHandler). Revoking the mirror alone used to leave the Identity rows
+        //    intact, so this step's claim to prevent role-based access was not true: the
+        //    Status guard in LoginHandler blocked the login, but the instant the account was
+        //    reactivated the old roles were back in the JWT while every read of the mirror
+        //    reported none. An administrator looking at GET users/{id} saw a user with no
+        //    roles who in fact still had all of them.
+        //
+        //    Fail closed: the grants end here, and reactivation deliberately does NOT restore
+        //    them — ReactivateUserHandler says why.
         foreach (var userRole in user.UserRoles)
             userRole.Revoke();
+
+        var identityRoles = await userManager.GetRolesAsync(user);
+        if (identityRoles.Count > 0)
+        {
+            var removal = await userManager.RemoveFromRolesAsync(user, identityRoles);
+            if (!removal.Succeeded)
+            {
+                // Before SaveChangesAsync and before the event: refusing here leaves the user
+                // active rather than half-deactivated with roles that still grant access.
+                return Result.Fail(
+                    "Failed to revoke the user's roles: "
+                    + string.Join("; ", removal.Errors.Select(e => e.Description)));
+            }
+        }
 
         // 5. Persist: user state + role revocations committed atomically by TransactionBehavior.
         await db.SaveChangesAsync(ct);

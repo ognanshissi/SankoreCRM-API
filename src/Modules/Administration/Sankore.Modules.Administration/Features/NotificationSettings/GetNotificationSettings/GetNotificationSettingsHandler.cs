@@ -2,14 +2,12 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
-using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.NotificationSettings.GetNotificationSettings;
 
 internal sealed class GetNotificationSettingsHandler(
-    AdministrationDbContext db,
-    ICurrentUser currentUser)
+    AdministrationDbContext db)
     : IRequestHandler<GetNotificationSettingsQuery, Result<NotificationSettingsDto>>
 {
     public async Task<Result<NotificationSettingsDto>> Handle(

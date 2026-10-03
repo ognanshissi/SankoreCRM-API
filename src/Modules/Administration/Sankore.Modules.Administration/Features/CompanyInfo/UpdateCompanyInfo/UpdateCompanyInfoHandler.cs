@@ -6,8 +6,7 @@ using Sankore.Shared.Kernel;
 namespace Sankore.Modules.Administration.Features.CompanyInfo.UpdateCompanyInfo;
 
 internal sealed class UpdateCompanyInfoHandler(
-    AdministrationDbContext db,
-    ITenantContext tenantContext)
+    AdministrationDbContext db)
     : IRequestHandler<UpdateCompanyInfoCommand, Result>
 {
     public async Task<Result> Handle(UpdateCompanyInfoCommand request, CancellationToken ct)

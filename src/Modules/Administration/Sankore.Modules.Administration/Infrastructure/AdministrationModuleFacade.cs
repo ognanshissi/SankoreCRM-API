@@ -11,7 +11,7 @@ using Sankore.Modules.Administration.PublicApi;
 /// Internal on purpose: consumers depend on IAdministrationModule (PublicApi),
 /// never on this class or on AdministrationDbContext directly.
 /// </summary>
-internal sealed class AdministrationModuleFacade(AdministrationDbContext db, UserManager<AppUser> userManager) : IAdministrationModule
+internal sealed class AdministrationModuleFacade(AdministrationDbContext db) : IAdministrationModule
 {
     // public async Task<IReadOnlyList<AgentSummary>> GetAvailableAgentsAsync(
     //     Guid tenantId, Guid? agencyId, CancellationToken ct)

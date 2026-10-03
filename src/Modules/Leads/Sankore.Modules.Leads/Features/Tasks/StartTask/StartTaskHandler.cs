@@ -2,14 +2,12 @@ namespace Sankore.Modules.Leads.Features.Tasks.StartTask;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 internal sealed class StartTaskHandler(
     LeadsDbContext db,
-    AgentCapacityService capacityService,
     ICurrentUser currentUser)
     : IRequestHandler<StartTaskCommand, Result>
 {

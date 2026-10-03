@@ -58,9 +58,12 @@ internal sealed class AgentCapacityService(
     }
 
     /// <summary>
-    /// Explicitly removes the cached count for an agent after any task
-    /// status or assignment mutation. Called by CompleteTask, CancelTask,
-    /// StartTask, AssignTask and DispatchTask handlers.
+    /// Explicitly removes the cached count for an agent after a mutation that can change
+    /// the count. Called by CompleteTask, CancelTask, AssignTask and DispatchTask.
+    /// NOT by StartTask: the count includes both Pending and InProgress, so moving a task
+    /// from one to the other leaves it unchanged and invalidating would be a wasted round
+    /// trip. This comment used to list StartTask, which injected the service without ever
+    /// calling it.
     /// </summary>
     public async Task InvalidateAsync(Guid tenantId, Guid agentId, CancellationToken ct)
     {

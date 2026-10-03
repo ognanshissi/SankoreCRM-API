@@ -1,5 +1,7 @@
 namespace Sankore.Modules.Leads.Features.Ingestion;
 
+using System.Globalization;
+
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
@@ -160,8 +162,8 @@ internal sealed class IngestInboundLeadHandler(
         mapped.TryGetValue("landingPage", out var landingPage);
         mapped.TryGetValue("referrer", out var referrer);
 
-        double.TryParse(mapped.GetValueOrDefault("latitude"), out var lat);
-        double.TryParse(mapped.GetValueOrDefault("longitude"), out var lng);
+        var lat = ParseCoordinate(mapped.GetValueOrDefault("latitude"));
+        var lng = ParseCoordinate(mapped.GetValueOrDefault("longitude"));
 
         var lead = Lead.Capture(
             tenantId:          cmd.TenantId,
@@ -206,4 +208,17 @@ internal sealed class IngestInboundLeadHandler(
         return Result.Ok(new IngestInboundLeadResult(
             ingestion.Id, lead.Id, ingestion.Status));
     }
+
+    /// <summary>
+    /// A coordinate arrives here as JSON or form text, which always uses a decimal POINT —
+    /// the culture of the host that happens to run the process is irrelevant to it. The
+    /// parameterless <c>double.TryParse</c> used the current culture, so on a fr-FR host
+    /// "5.300489" failed to parse and the lead silently landed on (0, 0); the same value
+    /// parsed correctly on an invariant-culture machine, so no test caught it. This is the
+    /// rule <see cref="Import.LeadRowParser"/> already applies to imported rows.
+    /// </summary>
+    private static double ParseCoordinate(string? raw)
+        => double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : 0;
 }

@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Administration.Tests.Features.Users.DeactivateUser;
 
 using FluentAssertions;
+using Microsoft.AspNetCore.Identity;
 using NSubstitute;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Domain.Events;
@@ -47,13 +48,22 @@ public sealed class DeactivateUserHandlerTests : IDisposable
 
         var publisher = Substitute.For<IEventPublisher>();
         await using var db = _factory.CreateContext();
-        var handler = new DeactivateUserHandler(db, publisher);
+        var um = IdentityMockFactory.BuildUserManager();
+        um.GetRolesAsync(Arg.Any<AppUser>()).Returns(["Agent", "Cashier"]);
+        um.RemoveFromRolesAsync(Arg.Any<AppUser>(), Arg.Any<IEnumerable<string>>())
+            .Returns(IdentityResult.Success);
+        var handler = new DeactivateUserHandler(db, um, publisher);
 
         // ACT
         var result = await handler.Handle(new DeactivateUserCommand(user.Id), CancellationToken.None);
 
         // ASSERT
         result.IsSuccess.Should().BeTrue();
+
+        // The grants that actually gate access are Identity's, not the audit mirror's.
+        await um.Received(1).RemoveFromRolesAsync(
+            Arg.Is<AppUser>(u => u.Id == user.Id),
+            Arg.Is<IEnumerable<string>>(r => r.Contains("Agent") && r.Contains("Cashier")));
 
         await using var verify = _factory.CreateContext();
         var saved = verify.Users.Single(u => u.Id == user.Id);
@@ -77,7 +87,9 @@ public sealed class DeactivateUserHandlerTests : IDisposable
     {
         var publisher = Substitute.For<IEventPublisher>();
         await using var db = _factory.CreateContext();
-        var handler = new DeactivateUserHandler(db, publisher);
+        var um = IdentityMockFactory.BuildUserManager();
+        um.GetRolesAsync(Arg.Any<AppUser>()).Returns([]);
+        var handler = new DeactivateUserHandler(db, um, publisher);
 
         var result = await handler.Handle(
             new DeactivateUserCommand(Guid.NewGuid()), CancellationToken.None);
@@ -107,7 +119,9 @@ public sealed class DeactivateUserHandlerTests : IDisposable
 
         var publisher = Substitute.For<IEventPublisher>();
         await using var db = _factory.CreateContext();
-        var handler = new DeactivateUserHandler(db, publisher);
+        var um = IdentityMockFactory.BuildUserManager();
+        um.GetRolesAsync(Arg.Any<AppUser>()).Returns([]);
+        var handler = new DeactivateUserHandler(db, um, publisher);
 
         // ACT
         var result = await handler.Handle(new DeactivateUserCommand(user.Id), CancellationToken.None);
@@ -117,5 +131,66 @@ public sealed class DeactivateUserHandlerTests : IDisposable
         result.Error.Should().Contain("already disabled");
         await publisher.DidNotReceive().PublishAsync(
             Arg.Any<UserDeactivatedEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── Fail closed: Identity refuses the removal ─────────────────────────
+
+    [Fact]
+    public async Task Leaves_the_user_active_when_Identity_refuses_to_remove_the_roles()
+    {
+        await using var seed = _factory.CreateContext();
+        var agency = Agency.Create(_tenantId, "HQ0003", "Agence HQ", "", AgencyType.HeadQuarter, null, null);
+        seed.Agencies.Add(agency);
+        var user = AppUser.Create(_tenantId, agency.Id, "Awa", "Diop", "awa@test.sn");
+        user.Activate();
+        seed.Users.Add(user);
+        seed.Set<UserRole>().Add(UserRole.Assign(_tenantId, user.Id, Guid.NewGuid(), Guid.NewGuid()));
+        await seed.SaveChangesAsync();
+
+        var publisher = Substitute.For<IEventPublisher>();
+        await using var db = _factory.CreateContext();
+        var um = IdentityMockFactory.BuildUserManager();
+        um.GetRolesAsync(Arg.Any<AppUser>()).Returns(["Agent"]);
+        um.RemoveFromRolesAsync(Arg.Any<AppUser>(), Arg.Any<IEnumerable<string>>())
+            .Returns(IdentityResult.Failed(new IdentityError { Description = "store unavailable" }));
+        var handler = new DeactivateUserHandler(db, um, publisher);
+
+        var result = await handler.Handle(new DeactivateUserCommand(user.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("store unavailable");
+
+        // Nothing was committed and no module was told the user is gone: half-deactivating
+        // a user whose roles still grant access is the one outcome worth refusing.
+        await using var verify = _factory.CreateContext();
+        verify.Users.Single(u => u.Id == user.Id).Status.Should().Be(UserStatus.Active);
+        await publisher.DidNotReceive().PublishAsync(
+            Arg.Any<UserDeactivatedEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── No roles to remove: Identity is not called at all ─────────────────
+
+    [Fact]
+    public async Task Does_not_call_Identity_when_the_user_holds_no_role()
+    {
+        await using var seed = _factory.CreateContext();
+        var agency = Agency.Create(_tenantId, "HQ0004", "Agence HQ", "", AgencyType.HeadQuarter, null, null);
+        seed.Agencies.Add(agency);
+        var user = AppUser.Create(_tenantId, agency.Id, "Ibrahim", "Keita", "ibrahim@test.sn");
+        user.Activate();
+        seed.Users.Add(user);
+        await seed.SaveChangesAsync();
+
+        var publisher = Substitute.For<IEventPublisher>();
+        await using var db = _factory.CreateContext();
+        var um = IdentityMockFactory.BuildUserManager();
+        um.GetRolesAsync(Arg.Any<AppUser>()).Returns([]);
+        var handler = new DeactivateUserHandler(db, um, publisher);
+
+        var result = await handler.Handle(new DeactivateUserCommand(user.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await um.DidNotReceive().RemoveFromRolesAsync(
+            Arg.Any<AppUser>(), Arg.Any<IEnumerable<string>>());
     }
 }
