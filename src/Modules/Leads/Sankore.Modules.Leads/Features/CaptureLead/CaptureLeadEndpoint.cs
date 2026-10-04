@@ -67,7 +67,8 @@ public static class CaptureLeadEndpoint
             CustomerReference:        req.CustomerReference,
             GateMode:                 req.GateMode ?? DuplicateGateMode.Block,
             MinConfidenceThreshold:   req.MinConfidenceThreshold ?? IdentityMatchScorer.MinConfidence,
-            Force:                    req.Force), ct);
+            Force:                    req.Force,
+            LeadSourceConfigId: req.LeadSourceConfigId), ct);
 
         if (!result.IsSuccess)
             return Results.Problem(title: "Lead capture failed", detail: result.Error, statusCode: 422);
@@ -123,4 +124,5 @@ public sealed record CaptureLeadRequest(
     /// <summary>
     /// Set to true to bypass the duplicate gate entirely and force creation.
     /// </summary>
-    bool Force = false);
+    bool Force = false,
+    Guid? LeadSourceConfigId = null);

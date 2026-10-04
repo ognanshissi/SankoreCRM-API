@@ -151,7 +151,22 @@ AdministrationModule.cs                                   ← calls app.MapXxxEn
 
 **Authorization:** `AddSankoreAuthorization()` auto-generates one policy per entry in `Permissions.All` (policy name = `permission.Code`, e.g. `"agency:create"`). Add new permissions to `Sankore.Shared.Kernel/Permissions.cs` and include in `Permissions.All`. Endpoints call `.RequireAuthorization("permission:code")`.
 
-**Messaging:** MassTransit in-memory by default. Set `Messaging:UseRabbitMq=true` for RabbitMQ.
+**Messaging:** MassTransit over **RabbitMQ by default** — `Messaging:UseRabbitMq` is `true` in both
+`appsettings.json` and `appsettings.Development.json`. In-memory is the opt-out (`false`), and it is
+what a brokerless `dotnet run` needs: with no broker reachable the bus retries forever, logging
+`Connection Failed: rabbitmq://localhost/ ... Connection refused`, while the API keeps answering
+HTTP — so the symptom reads as log noise even though no integration event is being delivered.
+
+Where the broker lives depends on how you start the host, and the two are not interchangeable.
+Under **Aspire**, `AddRabbitMQ("rabbitmq")` + `WithReference(rmq)` inject
+`ConnectionStrings:rabbitmq` (`amqp://guest:<generated>@localhost:<random host port>`): the port is
+ephemeral and the password is regenerated per run, so neither can be configured by hand — the
+connection string is read first for exactly that reason. `Messaging:RabbitMqHost` is only the
+**docker-compose** fallback, where 5672 is mapped and the credentials stay guest/guest.
+
+Both transport branches must call `cfg.ConfigureEndpoints(context)`. Without it no receive endpoint
+is bound and the registered consumers never run, with nothing in the logs: publishing to an exchange
+that has no queue **succeeds**.
 
 **Background jobs (Hangfire):** `Sankore.Api` owns execution — it calls `AddHangfireServer()` and registers every recurring job at startup. `Sankore.Hangfire` is a separate host that mounts *only* the dashboard (`/hangfire`) against the same Postgres storage, behind HTTP Basic auth (`Hangfire:Dashboard:Username` / `:Password`, denies everything when unset). It references the Leads and Administration assemblies purely so job types resolve for display — it registers none of their services and runs no Hangfire server.
 

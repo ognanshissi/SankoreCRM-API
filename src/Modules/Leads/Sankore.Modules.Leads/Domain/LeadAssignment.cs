@@ -30,6 +30,25 @@ public sealed class LeadAssignment
     public DateTimeOffset? FirstContactAt { get; private set; }
 
     /// <summary>
+    /// When this assignment stopped being the lead's current one — a reassignment to another agent
+    /// or a return to the dispatching queue. <c>null</c> for the assignment in force.
+    ///
+    /// <para>
+    /// It exists because an assignment can only ever be closed through <see cref="RecordFirstContact"/>,
+    /// which <c>RecordFirstContactHandler</c> only ever calls on <c>Lead.CurrentAssignmentId</c>. A
+    /// replaced row therefore kept <see cref="FirstContactAt"/> null for ever, and
+    /// <c>CheckSlaBreachesJob</c> — which scans the rows, not the lead's pointer — mailed an
+    /// SLA-breach alert to the PREVIOUS agent every day the lead stayed open, while
+    /// <c>GetSlaBreaches</c> and <c>GetAgentPerformance</c> counted the same row as still waiting
+    /// for a first contact.
+    /// </para>
+    /// </summary>
+    public DateTimeOffset? SupersededAt { get; private set; }
+
+    /// <summary>True once this row has been replaced: history, not an open piece of work.</summary>
+    public bool IsSuperseded => SupersededAt is not null;
+
+    /// <summary>
     /// JSON breakdown of per-factor contributions used to compute
     /// <see cref="CompatibilityScore"/> (language, product, geography,
     /// workload, performance, agency). Persisted for post-hoc audit of
@@ -76,5 +95,24 @@ public sealed class LeadAssignment
 
     public void RecordFirstContact(DateTimeOffset at) => FirstContactAt ??= at;
 
-    public bool HasBreachedSla(DateTimeOffset now) => FirstContactAt is null && now > SlaDeadline;
+    /// <summary>
+    /// Closes this assignment as superseded. Idempotent, and it does NOT touch
+    /// <see cref="FirstContactAt"/>: "the agent never called" and "the lead was taken off them"
+    /// are different facts, and flattening the second into the first would silently improve every
+    /// agent's contact rate.
+    ///
+    /// <para>
+    /// Called by <c>Lead.AssignTo</c> and <c>Lead.ReturnToQueue</c>, which is the only reason the
+    /// invariant holds — those are the only two methods that move
+    /// <c>Lead.CurrentAssignmentId</c>, so a row cannot stop being current without passing here.
+    /// </para>
+    /// </summary>
+    public void Supersede(DateTimeOffset at) => SupersededAt ??= at;
+
+    /// <summary>
+    /// A superseded assignment never breaches: nobody owes a first contact on a lead that has been
+    /// taken off them, and the SLA of the work follows the assignment that replaced it.
+    /// </summary>
+    public bool HasBreachedSla(DateTimeOffset now)
+        => !IsSuperseded && FirstContactAt is null && now > SlaDeadline;
 }

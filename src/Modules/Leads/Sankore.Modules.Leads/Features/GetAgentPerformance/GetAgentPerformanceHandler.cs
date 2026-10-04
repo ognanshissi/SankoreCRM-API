@@ -58,6 +58,12 @@ internal sealed class GetAgentPerformanceHandler(
             }
         }
 
+        // An assignment that was taken off an agent before they ever called is not a missed
+        // contact: it inflated both `total` and `notContacted`, so every reassignment lowered the
+        // previous agent's SLA rate for work that stopped being theirs. One they DID contact stays
+        // in, superseded or not — that is real work.
+        assignmentsQ = assignmentsQ.Where(a => a.SupersededAt == null || a.FirstContactAt != null);
+
         var assignments = await assignmentsQ.ToListAsync(ct);
 
         if (assignments.Count == 0)

@@ -87,11 +87,76 @@ public sealed class Lead : AggregateRoot
     public Guid? PreferredAgencyId { get; private set; }
 
     // ── Ownership & assignment ───────────────────────────────────────────────
-    /// <summary>Lead Owner — the commercial responsible. Distinct from the agent assigned to a task.</summary>
+    //
+    // Three ids that answer three different questions, and whose names do not make that obvious:
+    //   OwnerId             → who is responsible for the relationship (a user)
+    //   CurrentAssignmentId → which dispatch record is in force      (a LeadAssignment row)
+    //   CurrentAssignedId   → who that record names                 (a user, copied from it)
+    //
+    // Every combination is legal and meaningful: an owner with no assignment (captured with an
+    // owner, never dispatched), an assignment with no owner (routed by the engine, nobody named
+    // responsible), or both pointing at different people (a manager owns the relationship, an
+    // agent works the current task).
+
+    /// <summary>
+    /// Lead Owner — the commercial responsible for the relationship. A management decision, not a
+    /// routing one: it comes from the capture (an import column, a counter entry) or from
+    /// <see cref="SetOwner"/> via <c>UpdateLeadOwnerCommand</c> / <c>BulkAssignOwnerCommand</c>,
+    /// every change is mirrored into <see cref="LeadOwnerAssignmentHistory"/>, and
+    /// <c>ListLeads</c> filters on it.
+    ///
+    /// <para>
+    /// Dispatching NEVER writes this — deliberately. <c>LeadAutoDispatchConsumer</c> skips a lead
+    /// whose capture already named an owner (<c>LeadCapturedEvent.HasExplicitOwner</c>), because
+    /// auto-dispatch must not overrule a human decision and, after the fact, nothing can tell
+    /// whether this field came from the capture or from a later assignment.
+    /// </para>
+    /// </summary>
     public Guid? OwnerId { get; private set; }
+
     public Guid? AgencyId { get; private set; }
+
+    /// <summary>
+    /// The agent named by <see cref="CurrentAssignmentId"/>'s row — a denormalised copy of
+    /// <c>LeadAssignment.AgentId</c>, so the read side never has to join: the <c>ListLeads</c>
+    /// projection, <c>GetAgentPerformance</c>'s grouping and <c>LeadsModuleFacade</c> all read it
+    /// directly. A user id of the Administration module, hence no foreign key — another schema.
+    ///
+    /// <para>
+    /// It is NOT the owner, and one letter is all that separates it from
+    /// <see cref="CurrentAssignmentId"/> while the two point at different tables; both being
+    /// <c>Guid?</c>, reading one for the other compiles. It moves as a pair with that field —
+    /// <see cref="AssignTo"/> sets both, <see cref="ReturnToQueue"/> clears both, and nothing else
+    /// may touch either.
+    /// </para>
+    /// </summary>
     public Guid? CurrentAssignedId { get; private set; }
+
+    /// <summary>
+    /// Capture-only provenance: the field agent who collected this lead. Never updated afterwards,
+    /// and unrelated to ownership or to dispatching.
+    /// </summary>
     public Guid? AgentCollectedLeadId { get; private set; }
+
+    /// <summary>
+    /// The <see cref="LeadAssignment"/> currently in force — the work order rather than the person:
+    /// the strategy that picked the agent, the compatibility score and its factors, the rule that
+    /// produced it, the SLA deadline, the first contact, and whether a supervisor overrode the
+    /// engine. <c>RecordFirstContactHandler</c> and <c>GetNextActionHandler</c> join through it for
+    /// exactly those.
+    ///
+    /// <para>
+    /// Null means "not currently assigned", which is also what puts the lead back in the dispatch
+    /// queue (<see cref="ReturnToQueue"/>). Non-null is the idempotency key of auto-dispatch: a
+    /// replayed <c>LeadCapturedEvent</c> finds it set and the consumer stops, which is exact
+    /// because the assignment and the lead are written in the same transaction.
+    /// </para>
+    ///
+    /// <para>
+    /// Only the CURRENT one. Previous assignments are not lost — they remain as
+    /// <see cref="LeadAssignment"/> rows, which is what the assignment history reads.
+    /// </para>
+    /// </summary>
     public Guid? CurrentAssignmentId { get; private set; }
 
     // ── Attribution & UTM (F13.37-BE-04) ───────────────────────────────────
@@ -285,17 +350,26 @@ public sealed class Lead : AggregateRoot
         return Result.Ok();
     }
 
-    /// <summary>Assigns the lead to an agent via a freshly created LeadAssignment.</summary>
     /// <summary>
     /// Records a dispatching assignment. Any lead that is still live may be dispatched — a
     /// captured lead is routed to an agent precisely so that someone qualifies it. Only the
     /// terminal statuses refuse: there is nobody to work a lead that is already converted, lost,
     /// disqualified or archived.
     /// </summary>
-    public Result AssignTo(LeadAssignment assignment)
+    /// <param name="currentAssignment">
+    /// The assignment this one replaces, loaded by the caller, or <c>null</c> when the lead has
+    /// none. It is a REQUIRED parameter rather than an optional one, and a mismatch is refused:
+    /// the row has to be closed here, and this aggregate holds no navigation to reach it by
+    /// itself. See <see cref="CloseCurrentAssignment"/> for what goes wrong when it is not.
+    /// </param>
+    public Result AssignTo(LeadAssignment assignment, LeadAssignment? currentAssignment)
     {
         if (!IsDispatchable)
             return Result.Fail("LEAD_NOT_DISPATCHABLE");
+
+        var closing = CloseCurrentAssignment(currentAssignment);
+        if (closing.IsFailure)
+            return closing;
 
         CurrentAssignmentId = assignment.Id;
         CurrentAssignedId   = assignment.AgentId;
@@ -306,15 +380,51 @@ public sealed class Lead : AggregateRoot
     }
 
     /// <summary>Reverts to Qualified so the lead re-enters the dispatching queue.</summary>
-    public Result ReturnToQueue()
+    /// <param name="currentAssignment">
+    /// The assignment being given up, loaded by the caller. Required for the same reason as in
+    /// <see cref="AssignTo"/>: leaving it open is what used to keep alerting its agent.
+    /// </param>
+    public Result ReturnToQueue(LeadAssignment? currentAssignment)
     {
         if (CurrentAssignmentId is null)
             return Result.Fail("LEAD_IS_NOT_CURRENTLY_ASSIGNED");
+
+        var closing = CloseCurrentAssignment(currentAssignment);
+        if (closing.IsFailure)
+            return closing;
 
         CurrentAssignmentId = null;
         CurrentAssignedId   = null;
         Status              = LeadStatus.Qualified;
         UpdatedAt           = DateTimeOffset.UtcNow;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Stamps the outgoing assignment as superseded, so exactly one row of a lead is ever open.
+    ///
+    /// <para>
+    /// The caller has to hand the row over because <c>LeadAssignment</c> is mapped with
+    /// <c>HasOne&lt;Lead&gt;().WithMany()</c> and no navigation property: this aggregate can see
+    /// the id of its current assignment and nothing else. Rather than let a caller silently skip
+    /// the step — which is precisely the bug this closes, a replaced row alerting its former agent
+    /// every day through <c>CheckSlaBreachesJob</c> — a lead that HAS a current assignment and is
+    /// handed <c>null</c> is refused with <c>CURRENT_ASSIGNMENT_REQUIRED</c>, and a row that is not
+    /// the current one with <c>CURRENT_ASSIGNMENT_MISMATCH</c>.
+    /// </para>
+    /// </summary>
+    private Result CloseCurrentAssignment(LeadAssignment? currentAssignment)
+    {
+        if (CurrentAssignmentId is null)
+            return Result.Ok();
+
+        if (currentAssignment is null)
+            return Result.Fail("CURRENT_ASSIGNMENT_REQUIRED");
+
+        if (currentAssignment.Id != CurrentAssignmentId.Value)
+            return Result.Fail("CURRENT_ASSIGNMENT_MISMATCH");
+
+        currentAssignment.Supersede(DateTimeOffset.UtcNow);
         return Result.Ok();
     }
 

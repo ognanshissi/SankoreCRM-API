@@ -17,4 +17,6 @@ public sealed record AssignmentDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset SlaDeadline,
     DateTimeOffset? FirstContactAt,
-    bool SlaBreached);
+    bool SlaBreached,
+    /// <summary>When this assignment was replaced; null for the one in force.</summary>
+    DateTimeOffset? SupersededAt = null);

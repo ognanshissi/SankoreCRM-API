@@ -270,9 +270,36 @@ builder.Services.AddMassTransit(x =>
 
     if (useRabbitMq)
     {
+        // Aspire's connection string FIRST, the bare host name only as a fallback.
+        //
+        // The AppHost provisions the broker with `AddRabbitMQ("rabbitmq")` and hands it to this
+        // project with `WithReference(rmq)`, which injects ConnectionStrings:rabbitmq —
+        // amqp://guest:<generated password>@localhost:<random host port>. Neither half of that is
+        // guessable: Aspire publishes 5672 on an ephemeral port and generates the password per run.
+        // Reading only Messaging:RabbitMqHost therefore dialled amqp://guest:guest@localhost:5672,
+        // where nothing listens, and the bus spent the whole session logging
+        // "Connection Failed: rabbitmq://localhost/ ... Connection refused (127.0.0.1:5672)" while
+        // every integration event stayed undelivered. The API answered HTTP throughout, which is
+        // why it reads as noise rather than as an outage.
+        //
+        // The fallback is what docker-compose needs: that stack maps 5672 and keeps guest/guest, so
+        // it has no connection string to inject.
+        var rabbitMqConnectionString = builder.Configuration.GetConnectionString("rabbitmq");
+
         x.UsingRabbitMq((context, cfg) =>
         {
-            cfg.Host(builder.Configuration["Messaging:RabbitMqHost"] ?? "localhost");
+            if (!string.IsNullOrWhiteSpace(rabbitMqConnectionString))
+                cfg.Host(new Uri(rabbitMqConnectionString));
+            else
+                cfg.Host(builder.Configuration["Messaging:RabbitMqHost"] ?? "localhost");
+
+            // Not optional, and it was missing here while the in-memory branch had it: without
+            // ConfigureEndpoints, MassTransit binds no receive endpoint for the consumers
+            // registered above. A reachable broker would then have published every event into
+            // exchanges nothing was reading — KYC files never opened on a client creation, leads
+            // never auto-dispatched, timelines never projected — with no error anywhere, because
+            // publishing to an exchange without a queue succeeds.
+            cfg.ConfigureEndpoints(context);
         });
     }
     else

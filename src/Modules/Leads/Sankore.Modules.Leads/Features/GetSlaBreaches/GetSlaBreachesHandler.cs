@@ -19,7 +19,8 @@ internal sealed class GetSlaBreachesHandler(LeadsDbContext db, TimeProvider cloc
         var breachesQuery =
             from assignment in db.LeadAssignments
             join lead in db.Leads on assignment.LeadId equals lead.Id
-            where assignment.FirstContactAt == null
+            where assignment.SupersededAt == null          // a replaced assignment owes nothing
+               && assignment.FirstContactAt == null
                && assignment.SlaDeadline < now
                && lead.Status != LeadStatus.Converted
                && lead.Status != LeadStatus.Archived

@@ -24,5 +24,26 @@ public sealed class DispatchLeadValidator : AbstractValidator<DispatchLeadComman
         RuleFor(x => x.Strategy)
             .IsInEnum()
             .WithMessage(_ => localizer["Lead.Strategy.Unknown"]);
+
+        // Naming an agent and naming a strategy are two different requests: a strategy ranks a
+        // pool, an explicit agent skips the ranking entirely. Accepting both would mean silently
+        // ignoring one of them, so refuse instead of guessing which the caller meant.
+        RuleFor(x => x.Strategy)
+            .Null()
+            .When(x => x.AgentId.HasValue)
+            .WithMessage("Strategy cannot be combined with an explicit AgentId.");
+
+        // An override has to say why: the row is written with WasManualOverride = true and the
+        // reason is the only thing that explains it afterwards.
+        RuleFor(x => x.OverrideReason)
+            .NotEmpty()
+            .MaximumLength(500)
+            .When(x => x.AgentId.HasValue)
+            .WithMessage("OverrideReason is required when an explicit AgentId is given.");
+
+        RuleFor(x => x.OverrideReason)
+            .Empty()
+            .When(x => !x.AgentId.HasValue)
+            .WithMessage("OverrideReason only applies to an explicit AgentId.");
     }
 }

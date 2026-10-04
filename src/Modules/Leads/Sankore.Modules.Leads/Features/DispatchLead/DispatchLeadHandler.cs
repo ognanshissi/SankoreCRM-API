@@ -48,6 +48,13 @@ internal sealed class DispatchLeadHandler(
         if (!lead.IsDispatchable)
             return Result.Fail<DispatchLeadResult>("LEAD_NOT_DISPATCHABLE");
 
+        // The assignment being replaced, if any. Loaded once for both paths below: the aggregate
+        // closes it (LeadAssignment.Supersede) and cannot reach it by itself — there is no
+        // navigation from Lead to its assignments. AsTracking, since it is about to be mutated.
+        var outgoingAssignment = lead.CurrentAssignmentId is { } currentId
+            ? await db.LeadAssignments.AsTracking().FirstOrDefaultAsync(a => a.Id == currentId, ct)
+            : null;
+
         // 2. Load available agents from the Users module (cross-module contract — PublicApi only)
         var candidates = await usersModule.GetAvailableAgentsAsync(
             tenantId: cmd.TenantId,
@@ -70,6 +77,88 @@ internal sealed class DispatchLeadHandler(
 
         // The rule carries the strategy; an explicit request still wins.
         var effectiveStrategy = cmd.Strategy ?? rules.Strategy;
+
+        // 3b. Explicit agent: the supervisor override. Everything that says WHETHER this agent
+        //     may receive leads still applies — the Users module must list them as available for
+        //     the lead's agency (step 2 above), and the rule's exclusion list still binds, since
+        //     that list is an administrator saying "not this one" and a caller should not be able
+        //     to walk past it by naming them.
+        //
+        //     What is deliberately skipped: the ranking (there is nothing to rank), and the two
+        //     LOAD heuristics — MaxTasksPerAgent and the anti-monopoly threshold. Those exist to
+        //     shape how the ENGINE spreads leads around; vetoing a named human decision is not
+        //     their job, and a supervisor told "ANTI_MONOPOLY_BLOCKED" after choosing a specific
+        //     person has no way to act on it. The bypass is not silent: the assignment is written
+        //     through CreateManualOverride with WasManualOverride = true and the caller's reason,
+        //     which GetAssignmentHistory already shows, and it is logged as a warning. It is also
+        //     self-correcting for capacity — the agent is then over MaxTasksPerAgent, so the
+        //     saturation filter in step 5a excludes them from automatic dispatch until they are
+        //     back under it.
+        if (cmd.AgentId is { } explicitAgentId)
+        {
+            var named = candidates.FirstOrDefault(a => a.Id == explicitAgentId);
+
+            if (named is null)
+            {
+                // Covers every "may not receive this lead" case the Users module encodes: unknown
+                // id, inactive account, wrong agency for the lead, not available. Reported as one
+                // code because the pool is a cross-module contract and the reason is not ours.
+                logger.LogWarning(
+                    "Lead {LeadId}: explicit agent {AgentId} is not an available agent for agency {AgencyId}",
+                    lead.Id, explicitAgentId, lead.PreferredAgencyId);
+                return Result.Fail<DispatchLeadResult>("AGENT_NOT_ELIGIBLE");
+            }
+
+            var explicitRules = await ruleResolver.ResolveAsync(lead, requestedStrategy: null, ct);
+
+            if (explicitRules.ExcludedAgentIds.Contains(explicitAgentId))
+            {
+                logger.LogWarning(
+                    "Lead {LeadId}: explicit agent {AgentId} is on the rule's exclusion list",
+                    lead.Id, explicitAgentId);
+                return Result.Fail<DispatchLeadResult>("AGENT_EXCLUDED_BY_RULE");
+            }
+
+            var manualAssignment = LeadAssignment.CreateManualOverride(
+                tenantId: cmd.TenantId,
+                leadId: lead.Id,
+                agentId: named.Id,
+                reason: cmd.OverrideReason!,
+                slaDeadline: clock.GetUtcNow().Add(explicitRules.FirstContactSla),
+                createdAt: clock.GetUtcNow());
+
+            var manualResult = lead.AssignTo(manualAssignment, outgoingAssignment);
+            if (manualResult.IsFailure)
+                return Result.Fail<DispatchLeadResult>(manualResult.Error!);
+
+            db.LeadAssignments.Add(manualAssignment);
+
+            await publisher.PublishAsync(
+                new LeadDispatchedEvent(
+                    LeadId: lead.Id,
+                    TenantId: cmd.TenantId,
+                    AgentId: named.Id,
+                    // The strategy the row records for an override — CreateManualOverride's own
+                    // choice — is a placeholder, not a claim that scoring ran.
+                    Strategy: manualAssignment.Strategy,
+                    Score: manualAssignment.CompatibilityScore,
+                    SlaDeadline: manualAssignment.SlaDeadline),
+                ct);
+
+            await db.SaveChangesAsync(ct);
+
+            logger.LogWarning(
+                "Lead {LeadId} assigned to agent {AgentId} by explicit override (reason: {Reason}); "
+                + "ranking, task capacity and anti-monopoly were not applied",
+                lead.Id, named.Id, cmd.OverrideReason);
+
+            return Result.Ok(new DispatchLeadResult(
+                AssignmentId: manualAssignment.Id,
+                AgentId: named.Id,
+                AgentName: named.FullName,
+                CompatibilityScore: manualAssignment.CompatibilityScore,
+                SlaDeadline: manualAssignment.SlaDeadline));
+        }
 
         // 4. Filter out permanently excluded agents before strategy evaluation.
         var eligible_candidates = rules.ExcludedAgentIds.Count > 0
@@ -141,7 +230,7 @@ internal sealed class DispatchLeadHandler(
             // null rather than as an id that matches no row.
             ruleId: rules.Id == Guid.Empty ? null : rules.Id);
 
-        var assignResult = lead.AssignTo(assignment);
+        var assignResult = lead.AssignTo(assignment, outgoingAssignment);
         if (assignResult.IsFailure)
             return Result.Fail<DispatchLeadResult>(assignResult.Error!);
 

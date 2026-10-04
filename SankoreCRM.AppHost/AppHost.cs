@@ -55,7 +55,7 @@ var tempo = builder.AddContainer("tempo", "grafana/tempo", "2.5.0")
     .WithEndpoint(port: 4317, targetPort: 4317, scheme: "http", name: "tempo-otlp-grpc")
     .WithLifetime(ContainerLifetime.Persistent);
 
-// Prometheus — scrapes /metrics from sankore-api (port 5000, pinned below).
+// Prometheus — scrapes /metrics from sankore-api (port 5080, pinned below).
 // Grafana datasource: http://sankore-prometheus:9090
 var prometheus = builder.AddContainer("prometheus", "prom/prometheus", "v2.52.0")
     .WithContainerName("sankore-prometheus")
@@ -89,8 +89,16 @@ builder.AddProject<Projects.Sankore_Api>("sankore-api")
     .WithReference(rmq)
     .WithReference(seq)
     .WithReference(redis)
-    // Pin HTTP port so Prometheus static config (host.docker.internal:5000) is stable.
-    .WithEnvironment("ASPNETCORE_HTTP_PORTS", "5000")
+    // Pin HTTP port so Prometheus static config (host.docker.internal:5080) is stable, and so
+    // the front-end's environment.ts can hardcode an address that stays put.
+    //
+    // 5080 and NOT 5000: on macOS, port 5000 belongs to the AirPlay Receiver (the ControlCenter
+    // process) whenever it is enabled, which is the default. Kestrel then fails to bind, Aspire
+    // hands the API a random port instead, and the pin silently stops being a pin — Prometheus
+    // scrapes nothing and the front-end talks to AirPlay. Nothing logs that as an error, so the
+    // symptom is "the API is up but unreachable at the address everything is configured for".
+    // Keep this port free of the OS: do not move it back to 5000.
+    .WithEnvironment("ASPNETCORE_HTTP_PORTS", "5080")
     // Send traces also to Tempo so they appear in Grafana (alongside Aspire Dashboard).
     .WithEnvironment("SANKORE_TEMPO_OTLP_ENDPOINT", tempo.GetEndpoint("tempo-otlp-grpc"))
     // MailDev SMTP — plain, no TLS

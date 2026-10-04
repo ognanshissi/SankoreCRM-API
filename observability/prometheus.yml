@@ -4,9 +4,11 @@ global:
 
 scrape_configs:
   # Scrape the sankore-api /metrics endpoint exposed by the Prometheus OTel exporter.
-  # The API is pinned to port 5000 via ASPNETCORE_HTTP_PORTS in AppHost.cs.
+  # The API is pinned to port 5080 via ASPNETCORE_HTTP_PORTS in AppHost.cs. Not 5000: macOS
+  # AirPlay Receiver owns that one by default, so Kestrel cannot bind it and Aspire silently
+  # assigns a random port — this target would then scrape nothing.
   # host.docker.internal resolves to the Docker host (macOS/Windows native; Linux needs --add-host).
   - job_name: sankore-api
     static_configs:
-      - targets: ['host.docker.internal:5000']
+      - targets: ['host.docker.internal:5080']
     metrics_path: /metrics

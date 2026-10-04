@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Sankore.Modules.Leads.Features.CaptureLead;
 using Sankore.Modules.Leads.Features.CloseLead;
 using Sankore.Modules.Leads.Features.DispatchLead;
+using Sankore.Modules.Leads.Features.DispatchLead.PreviewDispatch;
 using Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 using Sankore.Modules.Leads.Features.GetLead;
 using Sankore.Modules.Leads.Features.ConvertLead;
@@ -227,6 +228,7 @@ public static class LeadsModule
         group.MapUpdatePipelineStage();
         group.MapCloseLead();
         group.MapDispatchLead();
+        group.MapPreviewDispatch();
 
         // Phase 2 — Qualification & Scoring
         group.MapQualifyLead();

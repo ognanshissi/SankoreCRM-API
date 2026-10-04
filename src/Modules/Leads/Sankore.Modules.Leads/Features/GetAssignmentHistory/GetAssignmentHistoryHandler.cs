@@ -30,7 +30,11 @@ internal sealed class GetAssignmentHistoryHandler(LeadsDbContext db)
                 a.CreatedAt,
                 a.SlaDeadline,
                 a.FirstContactAt,
-                a.FirstContactAt == null && now > a.SlaDeadline))
+                // Mirrors LeadAssignment.HasBreachedSla: a superseded row is history, and marking
+                // it "SLA breached" in the screen that explains a lead's routing blames an agent
+                // for a lead that had already been taken off them.
+                a.SupersededAt == null && a.FirstContactAt == null && now > a.SlaDeadline,
+                a.SupersededAt))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<AssignmentDto>>(assignments);

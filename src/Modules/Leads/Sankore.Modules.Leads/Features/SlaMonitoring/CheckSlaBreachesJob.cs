@@ -50,6 +50,11 @@ public sealed class CheckSlaBreachesJob(IServiceScopeFactory scopeFactory)
             .AsTracking()
             .IgnoreQueryFilters()
             .Where(a => a.TenantId == tenantId
+                     // Open assignments only. A superseded row can never be closed —
+                     // RecordFirstContactHandler only ever stamps Lead.CurrentAssignmentId — so
+                     // before this predicate every reassignment left behind a row that mailed its
+                     // former agent an SLA alert every single day the lead stayed open.
+                     && a.SupersededAt == null
                      && a.FirstContactAt == null
                      && a.SlaDeadline < now)
             .ToListAsync();
@@ -142,8 +147,21 @@ public sealed class CheckSlaBreachesJob(IServiceScopeFactory scopeFactory)
                 slaDeadline: newSlaDeadline,
                 createdAt:   now);
 
-            // Record first contact on the breached assignment to stop re-processing
-            assignment.RecordFirstContact(now);
+            // The escalated row becomes the lead's current assignment, which supersedes the breached
+            // one. It used to be "closed" with RecordFirstContact(now) purely as a stop-reprocessing
+            // flag — i.e. by recording a call that never happened, so the row then counted as a late
+            // CONTACT in GetAgentPerformance. And the escalated row, never being made the lead's
+            // current one, could never be closed at all: RecordFirstContactHandler only ever stamps
+            // Lead.CurrentAssignmentId, so once it breached in turn it would have alerted for ever.
+            var escalationResult = lead.AssignTo(escalatedAssignment, assignment);
+
+            if (escalationResult.IsFailure)
+            {
+                logger.LogWarning(
+                    "Assignment {AssignmentId}: escalation refused ({Error})",
+                    assignment.Id, escalationResult.Error);
+                continue;
+            }
 
             db.LeadAssignments.Add(escalatedAssignment);
 

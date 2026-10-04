@@ -5,6 +5,7 @@ namespace Sankore.Modules.Administration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.PublicApi;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// The single door into the Users module for the rest of the system.
@@ -13,25 +14,94 @@ using Sankore.Modules.Administration.PublicApi;
 /// </summary>
 internal sealed class AdministrationModuleFacade(AdministrationDbContext db) : IAdministrationModule
 {
-    // public async Task<IReadOnlyList<AgentSummary>> GetAvailableAgentsAsync(
-    //     Guid tenantId, Guid? agencyId, CancellationToken ct)
-    // {
-    //     var query = db.Users
-    //         .Where(u => u.TenantId == tenantId
-    //                  && u.Role == UserRole.CommercialAgent
-    //                  && u.IsAvailable);
-    //
-    //     if (agencyId.HasValue)
-    //         query = query.Where(u => u.AgencyId == agencyId.Value);
-    //
-    //     var agents = await query.ToListAsync(ct);
-    //
-    //     return agents.Select(ToSummary).ToList();
-    // }
+    /// <summary>
+    /// Roles that put a user in the lead-dispatch pool.
+    ///
+    /// <para>
+    /// BOTH agent roles, not only <c>CommercialAgent</c>: <c>RoleSeeder</c> seeds the two, nothing
+    /// in this solution distinguishes them, and which one an administrator picked when creating a
+    /// commercial team is not something the dispatcher should depend on — the symptom of guessing
+    /// wrong is <c>NO_AGENT_AVAILABLE</c> on every lead of a tenant whose agents all hold the other
+    /// one. Narrowing the pool is a one-line change here, and it is the only place to make it.
+    /// </para>
+    /// </summary>
+    private static readonly string[] DispatchableRoleCodes =
+    [
+        Roles.CommercialAgent.Code,
+        Roles.Agent.Code,
+    ];
 
-    public Task<IReadOnlyList<AgentSummary>> GetAvailableAgentsAsync(Guid tenantId, Guid? agencyId, CancellationToken ct)
+    /// <summary>
+    /// The agents M13 may route a lead to. "Available" is four conditions, not one — see below —
+    /// and the caller is told nothing about which failed: <c>DispatchLeadHandler</c> reports a
+    /// single <c>AGENT_NOT_ELIGIBLE</c> precisely because the reason belongs to this module.
+    ///
+    /// <para>
+    /// <paramref name="agencyId"/> is the lead's <c>PreferredAgencyId</c> and matches the agency
+    /// EXACTLY — not its subtree. Widening it to descendants would route a lead to a counter of
+    /// another branch while the screen says the lead is preferred at this one, which is a product
+    /// decision and not a detail of this query. A preferred agency that holds no agent of its own
+    /// (a head office, typically) therefore yields an empty pool, and the handler publishes
+    /// <c>LeadDispatchingFailedEvent(NO_AGENT_AVAILABLE)</c> — visible, rather than silently
+    /// dispatched somewhere else.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<AgentSummary>> GetAvailableAgentsAsync(
+        Guid tenantId, Guid? agencyId, CancellationToken ct)
     {
-        throw new NotImplementedException();
+        // Role membership is read from the tenant-scoped MIRROR (db.UserRoles, table user_roles),
+        // not from Identity's join table. The mirror is the only one of the two that carries a
+        // TenantId and a soft revoke: reading Identity's would keep handing leads to an agent whose
+        // grant was revoked, since a revoke only flips IsActive here. Every grant path writes both
+        // stores — see the DbSet's own remark.
+        //
+        // Materialised as a List: on .NET 10 an array's Contains binds to the ReadOnlySpan<T>
+        // extension and no longer translates to SQL.
+        var dispatchableRoles = DispatchableRoleCodes.ToList();
+
+        var agentIds = await db.UserRoles
+            .IgnoreQueryFilters()
+            .Where(ur => ur.TenantId == tenantId && ur.IsActive)
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.Name })
+            .Where(x => x.Name != null && dispatchableRoles.Contains(x.Name))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (agentIds.Count == 0)
+            return [];
+
+        // IgnoreQueryFilters plus an explicit tenant predicate, like every other method here: the
+        // callers are a MediatR handler, a MassTransit consumer and a Hangfire job, and the ambient
+        // ITenantContext is not necessarily the tenant being asked about.
+        var query = db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.TenantId == tenantId
+                     && agentIds.Contains(u.Id)
+                     // The explicit "I am taking leads" flag (AppUser.SetAvailability).
+                     && u.IsAvailable
+                     // Active only: a PendingActivation account has never logged in, and a Disabled
+                     // or Locked one cannot. Assigning a lead to any of them parks it on somebody
+                     // who will not see it, and the SLA clock starts anyway.
+                     && u.Status == UserStatus.Active
+                     // A root account and a technical account are not a commercial team, even when
+                     // somebody granted them an agent role.
+                     && !u.IsSuperUser
+                     && u.AccountType == UserAccountType.Standard
+                     // No agency, no routing: AgentSummary flattens a null agency to Guid.Empty,
+                     // which the geographic and agency-matching scorers would read as a real
+                     // agency. Excluded rather than summarised wrongly.
+                     && u.AgencyId != null);
+
+        if (agencyId.HasValue)
+            query = query.Where(u => u.AgencyId == agencyId.Value);
+
+        // Ordered by id so the pool is stable between two calls. The strategies rank it themselves,
+        // but they rank on load and conversion rate, where ties are common — an unordered pool makes
+        // a tie resolve differently on each dispatch, which is impossible to reproduce.
+        var agents = await query.OrderBy(u => u.Id).ToListAsync(ct);
+
+        return agents.Select(ToSummary).ToList();
     }
 
     /// <summary>

@@ -60,6 +60,8 @@ internal sealed class UpdateLeadOwnerHandler(
         var result = lead.SetOwner(cmd.OwnerId);
         if (result.IsFailure)
             return result;
+        
+        db.Leads.Update(lead);
 
         var history = LeadOwnerAssignmentHistory.Create(
             tenantId:         lead.TenantId,

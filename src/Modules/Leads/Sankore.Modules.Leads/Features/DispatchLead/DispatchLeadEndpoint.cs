@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// HTTP facade for this slice. Deliberately trivial: it reads the tenant
@@ -20,7 +21,15 @@ public static class DispatchLeadEndpoint
         app.MapPost("{leadId:guid}/dispatch", Handle)
             .WithName("DispatchLead")
             .WithTags("Leads")
-            .RequireAuthorization("Leads.Dispatch")
+            // "Leads.Dispatch" was not a policy. AddSankoreAuthorization registers exactly one
+            // policy per Permissions.All entry, named after permission.Code ("lead:..."), and
+            // there is no IAuthorizationPolicyProvider to resolve anything else — so this name,
+            // the only non-conforming one left in the module, made the endpoint throw
+            // "The AuthorizationPolicy named: 'Leads.Dispatch' was not found" on every
+            // authenticated call. Manual dispatch was therefore impossible, which is why a lead
+            // whose auto-dispatch failed could only be given an owner by hand — and an owner is
+            // not an assignment, so RecordFirstContact kept refusing it.
+            .RequireAuthorization(Permissions.CanAssignLead.Code)
             .Produces<DispatchLeadResult>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -42,7 +51,7 @@ public static class DispatchLeadEndpoint
         var tenantId = http.User.GetTenantId();
 
         var result = await sender.Send(
-            new DispatchLeadCommand(leadId, tenantId, req.Strategy), ct);
+            new DispatchLeadCommand(leadId, tenantId, req.Strategy, req.AgentId, req.OverrideReason), ct);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
@@ -54,7 +63,17 @@ public static class DispatchLeadEndpoint
 }
 
 /// <param name="Strategy">
-/// Omit it to let the applicable dispatching rule decide; name one to force it.
+/// Omit it to let the applicable dispatching rule decide; name one to force it. Cannot be
+/// combined with <paramref name="AgentId"/>.
 /// </param>
+/// <param name="AgentId">
+/// Assign to this agent instead of ranking candidates — the supervisor override. The agent must
+/// still be available for the lead's agency and must not be on the rule's exclusion list;
+/// task-capacity and anti-monopoly limits are not applied. Requires
+/// <paramref name="OverrideReason"/>.
+/// </param>
+/// <param name="OverrideReason">Why this agent was chosen by hand. Required with AgentId.</param>
 public sealed record DispatchLeadRequest(
-    DispatchingStrategy? Strategy = null);
+    DispatchingStrategy? Strategy = null,
+    Guid? AgentId = null,
+    string? OverrideReason = null);
