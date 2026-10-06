@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Kyc.Features.Settings.GetKycSetting;
 using Sankore.Modules.Kyc.Features.Settings.ListKycSettings;
+using Sankore.Modules.Kyc.Features.Settings.SetBiometryToken;
 using Sankore.Modules.Kyc.Features.Settings.UpdateKycSetting;
 
 /// <summary>
@@ -27,6 +28,11 @@ internal static class SettingsEndpoints
         group.MapListKycSettings();
         group.MapGetKycSetting();
         group.MapUpdateKycSetting();
+
+        // Lives in this area because it is a per-tenant KYC parameter like the others and shares
+        // their permission — but it is NOT a kyc_settings row: a credential belongs in the vault,
+        // so it has its own slice rather than a key in the typed list.
+        group.MapBiometryToken();
 
         return app;
     }

@@ -154,8 +154,29 @@ public static class KycModule
         services.AddHttpClient(Infrastructure.Biometry.HttpBiometryClient.HttpClientName)
             .AddHttpMessageHandler<Infrastructure.Biometry.BoundedResponseHandler>();
 
-        services.AddScoped<Infrastructure.Biometry.IBiometryClient,
-                           Infrastructure.Biometry.HttpBiometryClient>();
+        // UseFake is honoured HERE, which is what its own documentation always claimed and what
+        // this registration did not do: IBiometryClient was wired to the HTTP client
+        // unconditionally, so the flag was dead configuration. The consequence was worse than a
+        // no-op — with no way to store a service token either, every biometry call in a dev
+        // environment short-circuited to BIOMETRY_NOT_CONFIGURED and the fake, built precisely to
+        // run the flow without Flask, was reachable only from tests.
+        //
+        // Fake in dev, HTTP everywhere else. Registered as the same scoped IBiometryClient so
+        // nothing downstream can tell the difference — FakeBiometryClient answers a plausible
+        // success for every endpoint unless a test forces an outcome.
+        var useFake = config.GetValue<bool>(
+            $"{Infrastructure.Biometry.BiometryOptions.SectionName}:UseFake");
+
+        if (useFake)
+        {
+            services.AddScoped<Infrastructure.Biometry.IBiometryClient>(
+                _ => new Infrastructure.Biometry.FakeBiometryClient());
+        }
+        else
+        {
+            services.AddScoped<Infrastructure.Biometry.IBiometryClient,
+                               Infrastructure.Biometry.HttpBiometryClient>();
+        }
 
         // Keeps the service's own OCR / face answers for a later /v1/score, encrypted with this
         // module's key. Scoped like the encryptor it wraps.

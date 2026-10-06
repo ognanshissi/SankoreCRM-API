@@ -22,6 +22,25 @@
 
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <NoWarn>CS1591</NoWarn>
+
+    <!--
+      Keep the default item globs out of the build output. The SDK already tries to: it appends
+      "bin\Debug//**;obj\Debug//**" to DefaultItemExcludes — with a WINDOWS separator, because it
+      builds those patterns from $(BaseOutputPath), whose default is "bin\". On macOS and Linux a
+      backslash is an ordinary filename character, so those two patterns match nothing and the
+      exclusion silently does nothing.
+
+      For a library that is harmless. For a Web SDK project it is not: the web SDK includes
+      "**/*.json" as Content by default, so appsettings.json, deps.json, runtimeconfig.json and
+      the staticwebassets manifests get picked up FROM bin and copied one level deeper — into
+      bin/Debug/net10.0/bin/Debug/net10.0/. Each build adds another level. We reached 71 levels
+      and 161 files, and the build then failed with MSB3030 trying to copy a runtimeconfig.json
+      out of a nested path that no longer held one.
+
+      Forward slashes, which do match here. Repo-wide rather than per project, because any new
+      host would inherit the same trap.
+    -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!--

@@ -1,0 +1,34 @@
+<Project>
+
+  <!--
+    Drop any Content/None item that points INSIDE the build output, before target paths are
+    assigned. This is a guard, not a style choice.
+
+    The SDK tries to exclude the output from its default item globs, but builds those patterns
+    from $(BaseOutputPath), whose default is "bin\" — with a Windows separator. On macOS and
+    Linux a backslash is an ordinary filename character, so the SDK's own "bin\Debug//**" and
+    "obj\Debug//**" patterns match nothing and the exclusion silently does nothing. Adding
+    forward-slash patterns to $(DefaultItemExcludes) is necessary but turned out NOT to be
+    sufficient here: items pointing into bin still reached _CopyOutOfDateSourceItemsToOutputDirectory
+    via _GetCopyToOutputDirectoryItemsFromThisProject, so something other than the default glob
+    contributes them.
+
+    The symptom was a web host copying its own output one level deeper on each build —
+    bin/Debug/net10.0/bin/Debug/net10.0/... — carrying appsettings.json, deps.json,
+    runtimeconfig.json and the staticwebassets manifests down with it. It reached 71 levels and
+    161 files before the build failed with MSB3030, unable to copy a runtimeconfig.json out of a
+    nested path that no longer contained one.
+
+    Removing by glob at this point is independent of which item group added them, which is why it
+    is done here rather than by tightening an exclusion.
+  -->
+  <Target Name="SankoreStripOutputDirectoryItems" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <Content Remove="bin/**" />
+      <Content Remove="obj/**" />
+      <None Remove="bin/**" />
+      <None Remove="obj/**" />
+    </ItemGroup>
+  </Target>
+
+</Project>
