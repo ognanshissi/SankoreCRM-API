@@ -37,14 +37,28 @@ public sealed class FourEyesOnEveryLevelTests : IDisposable
     }
 
     /// <summary>A file in Validating, submitted by <see cref="_submitter"/>, with a 3-rung circuit.</summary>
-    private async Task<KycFile> SeedAsync()
+    /// <param name="manuallyValidatedBy">
+    /// When set, the file reaches validation on this person's word instead of on a score — and they
+    /// become the SECOND actor the rule must refuse on every rung.
+    /// </param>
+    private async Task<KycFile> SeedAsync(Guid? manuallyValidatedBy = null)
     {
         var file = KycFile.Open(
             _tenantId, Guid.NewGuid(), KycChannel.Agency, _submitter, TimeProvider.System,
             vigilanceLevel: KycVigilanceLevel.High);
 
         file.SubmitForVerification(_submitter, TimeProvider.System);
-        file.RecordVerification(85, KycConfidenceLevel.High, TimeProvider.System);
+
+        if (manuallyValidatedBy is { } validator)
+        {
+            file.ManuallyValidate(
+                validator, "Service biométrique indisponible, pièces contrôlées à la main",
+                TimeProvider.System).IsSuccess.Should().BeTrue();
+        }
+        else
+        {
+            file.RecordVerification(85, KycConfidenceLevel.High, TimeProvider.System);
+        }
 
         await using var db = _factory.CreateContext();
         db.KycFiles.Add(file);
@@ -121,5 +135,63 @@ public sealed class FourEyesOnEveryLevelTests : IDisposable
 
         step.Decision.Should().Be(KycApprovalDecision.Approved);
         step.ApproverId.Should().NotBe(_submitter);
+    }
+
+    // ── the second anchor: whoever validated the evidence by hand ───────────
+
+    /// <summary>
+    /// A manually validated file has no biometric score behind it, so the ladder is the only
+    /// control left — and a ladder signed by the person who opened it is not a control. The hole is
+    /// the same shape as the submitter's: an intermediate rung reaches no aggregate method.
+    /// </summary>
+    [Fact]
+    public async Task The_manual_validator_cannot_sign_the_first_rung_either()
+    {
+        var validator = Guid.NewGuid();
+        var file = await SeedAsync(manuallyValidatedBy: validator);
+
+        var result = await Handler(validator).Handle(
+            new DecideKycApprovalCommand(
+                file.Id, KycApprovalLevel.Agent, KycApprovalDecision.Approved, "RAS"),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(KycErrors.SelfApprovalForbidden);
+
+        await using var db = _factory.CreateContext();
+        var step = await db.KycApprovalSteps
+            .FirstAsync(s => s.KycFileId == file.Id && s.Level == KycApprovalLevel.Agent);
+
+        step.Decision.Should().Be(KycApprovalDecision.Pending);
+        step.ApproverId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Nor_refuse_the_file_they_validated_by_hand()
+    {
+        var validator = Guid.NewGuid();
+        var file = await SeedAsync(manuallyValidatedBy: validator);
+
+        var result = await Handler(validator).Handle(
+            new DecideKycApprovalCommand(
+                file.Id, KycApprovalLevel.Agent, KycApprovalDecision.Rejected, "Finalement non"),
+            CancellationToken.None);
+
+        result.Error.Should().Be(KycErrors.SelfApprovalForbidden);
+    }
+
+    [Fact]
+    public async Task Somebody_else_can_still_sign_a_manually_validated_file()
+    {
+        // The rule must narrow who signs, not make the file unsignable — that would turn the
+        // escape hatch into a dead end.
+        var file = await SeedAsync(manuallyValidatedBy: Guid.NewGuid());
+
+        var result = await Handler(Guid.NewGuid()).Handle(
+            new DecideKycApprovalCommand(
+                file.Id, KycApprovalLevel.Agent, KycApprovalDecision.Approved, "Vérifié"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
     }
 }

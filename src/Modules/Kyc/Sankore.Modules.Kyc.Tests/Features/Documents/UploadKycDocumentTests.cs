@@ -79,7 +79,7 @@ public sealed class UploadKycDocumentTests : IDisposable
             kycFileId, KycDocumentKind.IdentityDocumentFront, file,
             _factory.CreateContext(),
             store ?? StoreReturning("k1.abc.def"),
-            User(), NullLoggerFactory.Instance, CancellationToken.None);
+            User(), TimeProvider.System, NullLoggerFactory.Instance, CancellationToken.None);
 
     private static IKycDocumentStore StoreReturning(string storageRef)
     {
@@ -209,4 +209,45 @@ public sealed class UploadKycDocumentTests : IDisposable
         StatusOf(await UploadAsync(file.Id, Image(type: "image/gif"), store))
             .Should().Be(StatusCodes.Status400BadRequest);
     }
+
+    // ── the registry row ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The row is what makes a document a thing rather than a loose reference: without it a file's
+    /// images cannot be listed, a validator has nothing to accept or refuse, and the image stream
+    /// cannot even confirm the ref belongs to this file until a verification has run.
+    /// </summary>
+    [Fact]
+    public async Task A_successful_upload_registers_exactly_one_pending_document()
+    {
+        var file = await SeedAsync(KycFileStatus.Collecting);
+
+        StatusOf(await UploadAsync(file.Id, Image())).Should().Be(StatusCodes.Status201Created);
+
+        await using var db = _factory.CreateContext();
+        var documents = db.KycDocuments.Where(d => d.KycFileId == file.Id).ToList();
+
+        documents.Should().HaveCount(1);
+        documents[0].ReviewDecision.Should().Be(KycDocumentReviewDecision.Pending);
+        documents[0].Kind.Should().Be(KycDocumentKind.IdentityDocumentFront);
+        documents[0].StorageRef.Should().Be("k1.abc.def");
+        documents[0].Sha256.Should().Be("sha", "the digest of the PLAINTEXT, kept as the store gave it");
+        documents[0].SizeBytes.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task A_refused_upload_registers_nothing()
+    {
+        var file = await SeedAsync(KycFileStatus.Full);
+
+        await UploadAsync(file.Id, Image());
+
+        await using var db = _factory.CreateContext();
+        db.KycDocuments.Should().BeEmpty();
+    }
+
+    // Not covered here: the orphan compensation (a failed registration deleting the object it
+    // already stored). Driving it needs a context whose SaveChangesAsync fails, and KycDbContext is
+    // sealed — unsealing production code to reach a catch block is a worse trade than saying so.
+    // Verify it by hand against Postgres.
 }

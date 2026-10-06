@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Kyc.Features.Verification.GetVerification;
+using Sankore.Modules.Kyc.Features.Verification.ManualValidation;
 using Sankore.Modules.Kyc.Features.Verification.RunVerification;
 
 /// <summary>
@@ -23,6 +24,7 @@ internal static class VerificationEndpoints
 
         group.MapRunKycVerification();
         group.MapGetKycVerification();
+        group.MapManuallyValidateKycFile();
 
         return app;
     }

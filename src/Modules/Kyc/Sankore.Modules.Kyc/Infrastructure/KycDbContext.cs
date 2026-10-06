@@ -26,6 +26,12 @@ public sealed class KycDbContext(DbContextOptions<KycDbContext> options, ITenant
     public DbSet<KycApprovalStep> KycApprovalSteps => Set<KycApprovalStep>();
     public DbSet<KycReviewSchedule> KycReviewSchedules => Set<KycReviewSchedule>();
 
+    /// <summary>
+    /// The images attached to a file, and the verdict a validator gave each one. One row per
+    /// upload; nothing here is ever edited except to record that decision.
+    /// </summary>
+    public DbSet<KycDocument> KycDocuments => Set<KycDocument>();
+
     /// <summary>Append-only: who opened which KYC image, and when.</summary>
     public DbSet<KycDocumentAccessLog> KycDocumentAccessLogs => Set<KycDocumentAccessLog>();
     public DbSet<KycSetting> KycSettings => Set<KycSetting>();
@@ -84,6 +90,7 @@ public sealed class KycDbContext(DbContextOptions<KycDbContext> options, ITenant
         modelBuilder.Entity<KycFieldCorrection>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycApprovalStep>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycReviewSchedule>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<KycDocument>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycDocumentAccessLog>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
     }
 }

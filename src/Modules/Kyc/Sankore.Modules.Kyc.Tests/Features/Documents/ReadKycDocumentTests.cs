@@ -206,4 +206,53 @@ public sealed class ReadKycDocumentTests : IDisposable
 
         StatusOf(result).Should().Be(StatusCodes.Status200OK);
     }
+    // ── the registry is also a source of ownership ──────────────────────────
+
+    /// <summary>
+    /// Until the registry existed, this check could only see refs a VERIFICATION had recorded — so a
+    /// freshly uploaded image was unreadable, which made a document impossible to review by hand,
+    /// and an IdentityDocumentBack was unreadable permanently because no table ever referenced one.
+    /// </summary>
+    [Theory]
+    [InlineData(KycDocumentKind.IdentityDocumentFront)]
+    [InlineData(KycDocumentKind.IdentityDocumentBack)]
+    [InlineData(KycDocumentKind.Selfie)]
+    public async Task An_uploaded_image_opens_before_any_verification_has_read_it(KycDocumentKind kind)
+    {
+        // No KycIdentityDocument and no KycFaceVerification: only the registry row the upload wrote.
+        var file = await SeedAsync(documentRef: null);
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.KycDocuments.Add(KycDocument.Register(
+                _tenantId, file.Id, kind,
+                storageRef: Ref, contentType: "image/jpeg", sizeBytes: 11,
+                sha256: new string('c', 64), uploadedBy: _actorId, clock: TimeProvider.System));
+
+            await db.SaveChangesAsync();
+        }
+
+        StatusOf(await ReadAsync(file.Id, Ref)).Should().Be(StatusCodes.Status200OK);
+    }
+
+    [Fact]
+    public async Task A_registry_row_of_another_file_still_does_not_open_through_this_one()
+    {
+        // The new clause must widen WHICH refs are known, not weaken the rule that a ref opens only
+        // through the file it belongs to.
+        var file = await SeedAsync(documentRef: null);
+        var other = await SeedAsync(documentRef: null);
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.KycDocuments.Add(KycDocument.Register(
+                _tenantId, other.Id, KycDocumentKind.Selfie,
+                storageRef: Ref, contentType: "image/jpeg", sizeBytes: 11,
+                sha256: new string('c', 64), uploadedBy: _actorId, clock: TimeProvider.System));
+
+            await db.SaveChangesAsync();
+        }
+
+        StatusOf(await ReadAsync(file.Id, Ref)).Should().Be(StatusCodes.Status404NotFound);
+    }
 }

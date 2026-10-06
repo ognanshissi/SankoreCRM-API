@@ -20,6 +20,10 @@ internal sealed class KycFileConfiguration : IEntityTypeConfiguration<KycFile>
         b.Property(f => f.VigilanceLevel).HasConversion<string>().HasMaxLength(16).IsRequired();
         b.Property(f => f.ConfidenceLevel).HasConversion<string>().HasMaxLength(16);
 
+        // Same width as KycApprovalStep.Comment and KycDocument.RefusalReason — the three places an
+        // operator's motive is stored — so the validator's cap and the column agree.
+        b.Property(f => f.ManualValidationReason).HasMaxLength(2000);
+
         b.Property(f => f.Version).IsRowVersion();
 
         // One OPEN file per customer. Rejected and suspended files stay as evidence, so the

@@ -389,6 +389,26 @@ public static class Permissions
     public static readonly PermissionItem CanRevealKycDocumentNumber =
         new("kyc:document:reveal", "Reveal an identity document number", ApplicationModules.Kyc, "document:reveal");
 
+    /// <summary>
+    /// Accept or refuse an uploaded document, and validate a file's evidence by hand when the
+    /// biometric service cannot.
+    ///
+    /// <para>
+    /// Separate from <c>kyc:approve</c>, which signs a rung of the approval circuit under the
+    /// four-eyes rule. This one is a single actor's judgement on an image: one decision, one author,
+    /// audited. The circuit still gates the FILE afterwards, so the two are not substitutes — and
+    /// whoever validates a file by hand is barred from then signing its ladder.
+    /// </para>
+    ///
+    /// <para>
+    /// Also separate from <c>kyc:document:reveal</c>, which gates SEEING the bytes. A validator
+    /// needs both in practice; they are distinct because revealing is audited per access and
+    /// deciding is audited per decision.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanValidateKycDocument =
+        new("kyc:document:validate", "Accept or refuse a KYC document", ApplicationModules.Kyc, "document:validate");
+
     public static readonly PermissionItem CanManageKycSettings =
         new("kyc:settings:manage", "Change the tenant KYC parameters", ApplicationModules.Kyc, "settings:manage");
 
@@ -400,6 +420,7 @@ public static class Permissions
         CanApproveKycFile,
         CanClearKycDuplicateFlag,
         CanRevealKycDocumentNumber,
+        CanValidateKycDocument,
         CanManageKycSettings,
         CanCreateLoan,
         CanCreateAgency,

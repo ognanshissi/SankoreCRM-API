@@ -77,6 +77,30 @@ public sealed class KycFile : AggregateRoot
     /// </summary>
     public Guid? LastSubmittedBy { get; private set; }
 
+    /// <summary>
+    /// Who validated this file's evidence by hand instead of on a biometric score, and when.
+    ///
+    /// <para>
+    /// Null on every file the machine decided, which is the normal path. When set, it is evidence
+    /// that the file entered the approval circuit on a human's word — and it is read by the
+    /// four-eyes guard in <see cref="Approve"/> and <see cref="Reject"/>, because somebody who
+    /// asserted the evidence must not also sign for it.
+    /// </para>
+    /// </summary>
+    public Guid? ManuallyValidatedBy { get; private set; }
+
+    public DateTimeOffset? ManuallyValidatedAt { get; private set; }
+
+    /// <summary>
+    /// On what grounds. Mandatory, and stored on the aggregate rather than left to
+    /// <c>audit.entries</c> alone: manual validation bypasses the machine evidence entirely, and
+    /// BCEAO instruction n°003-03-2025 is about being able to show who decided what — the same
+    /// reason <c>KycApprovalStep.Comment</c> is a column.
+    ///
+    /// <para>An operator's motive, never a field value — see <c>KycDocument.RefusalReason</c>.</para>
+    /// </summary>
+    public string? ManualValidationReason { get; private set; }
+
     /// <summary>PostgreSQL xmin — optimistic concurrency, as in every other module.</summary>
     public uint Version { get; private set; }
 
@@ -133,7 +157,17 @@ public sealed class KycFile : AggregateRoot
             KycFileStatus.Simplified, KycFileStatus.Full,
             KycFileStatus.ComplementRequired, KycFileStatus.Rejected
         ],
-        [KycFileStatus.ComplementRequired] = [KycFileStatus.Verifying],
+        // Validating is reachable from here ONLY through ManuallyValidate, and that edge is the
+        // manual-validation feature itself rather than a convenience.
+        //
+        // Until it existed, the single way out of ComplementRequired was another machine
+        // verification — so a capture the service keeps refusing had no exit at all. The
+        // biometry-unavailable case never needed this edge (RunKycVerificationHandler saves the
+        // file in Verifying and the Hangfire replay resumes from there, and Verifying → Validating
+        // was already allowed); the capture-rejected loop did, because CaptureRejectedAsync calls
+        // RequestComplement inside the same invocation, so the file is never observed sitting in
+        // Verifying between two refusals.
+        [KycFileStatus.ComplementRequired] = [KycFileStatus.Verifying, KycFileStatus.Validating],
         [KycFileStatus.Simplified] = [KycFileStatus.Validating, KycFileStatus.UnderReview, KycFileStatus.Suspended],
         [KycFileStatus.Full] = [KycFileStatus.UnderReview, KycFileStatus.Simplified, KycFileStatus.Suspended],
         [KycFileStatus.UnderReview] =
@@ -214,6 +248,53 @@ public sealed class KycFile : AggregateRoot
     public Result RequestComplement(TimeProvider clock) => MoveTo(KycFileStatus.ComplementRequired, clock);
 
     /// <summary>
+    /// A validator asserts, by hand, that this file's evidence is good enough to be decided — and
+    /// sends it into the approval circuit without a biometric score to show for it.
+    ///
+    /// <para>
+    /// The escape hatch for a file the machine cannot resolve: a service that is down, or a worn
+    /// document it keeps refusing. <see cref="RecordVerification"/> is the only other route into
+    /// <see cref="KycFileStatus.Validating"/> and it requires a non-rejected level, so without this
+    /// an honest customer cycles ComplementRequired → Verifying → ComplementRequired indefinitely.
+    /// </para>
+    ///
+    /// <para>
+    /// It does NOT touch <see cref="LastSubmittedBy"/>. That is the four-eyes anchor on the agent
+    /// who submitted the file, and moving it here would quietly relabel who produced the evidence —
+    /// and hand the real agent the right to approve their own file. The validator is recorded in
+    /// <see cref="ManuallyValidatedBy"/> instead, which <see cref="Approve"/> reads as a second
+    /// anchor.
+    /// </para>
+    ///
+    /// <para>
+    /// The vigilance level is deliberately left alone. Raising it would look like a cheap way to
+    /// widen the approval ladder, but <see cref="KycVigilanceLevel"/> also selects the review
+    /// periodicity (<c>review-years-*</c>), so a file validated by hand would silently acquire a
+    /// shorter re-review cycle. The ladder is widened where ladders are decided — in
+    /// <c>KycApprovalCircuit</c>, which adds the branch manager when this field is set.
+    /// </para>
+    /// </summary>
+    public Result ManuallyValidate(Guid validatedBy, string reason, TimeProvider clock)
+    {
+        // A programming error, not a business outcome, so it throws like the blank ids in Open: an
+        // authorized endpoint always has a caller, and Guid.Empty is the SYSTEM placeholder — a
+        // background job must never be able to validate evidence on a human's behalf.
+        if (validatedBy == Guid.Empty)
+            throw new DomainException("Manual validation requires a real validator.");
+
+        if (string.IsNullOrWhiteSpace(reason))
+            return Result.Fail(KycErrors.ManualValidationReasonRequired);
+
+        var moved = MoveTo(KycFileStatus.Validating, clock);
+        if (moved.IsFailure) return moved;
+
+        ManuallyValidatedBy = validatedBy;
+        ManuallyValidatedAt = clock.GetUtcNow();
+        ManualValidationReason = reason.Trim();
+        return Result.Ok();
+    }
+
+    /// <summary>
     /// Final approval. The tier decides which ceilings apply downstream, so it is set here and
     /// nowhere else.
     /// </summary>
@@ -225,7 +306,13 @@ public sealed class KycFile : AggregateRoot
         // The four-eyes rule is owned here, not by the workflow engine. M01 learned the same thing
         // on client merges: the engine runs the circuit but enforces no self-approval, so the
         // module that cares has to check.
-        if (LastSubmittedBy == approvedBy)
+        //
+        // TWO anchors, not one. LastSubmittedBy is the agent who produced the evidence;
+        // ManuallyValidatedBy is whoever asserted it was good without a machine score. On a
+        // manually validated file the ladder is the only remaining control, and a ladder signed by
+        // the person who opened it is not a control — KYC-B-05's "jamais valider un dossier qu'il a
+        // créé" is exactly about this.
+        if (approvedBy == LastSubmittedBy || approvedBy == ManuallyValidatedBy)
             return Result.Fail(KycErrors.SelfApprovalForbidden);
 
         var target = tier == KycTier.Simplified ? KycFileStatus.Simplified : KycFileStatus.Full;
@@ -241,7 +328,8 @@ public sealed class KycFile : AggregateRoot
 
     public Result Reject(Guid rejectedBy, TimeProvider clock)
     {
-        if (LastSubmittedBy == rejectedBy)
+        // Both anchors, as in Approve.
+        if (rejectedBy == LastSubmittedBy || rejectedBy == ManuallyValidatedBy)
             return Result.Fail(KycErrors.SelfApprovalForbidden);
 
         return MoveTo(KycFileStatus.Rejected, clock);

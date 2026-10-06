@@ -95,7 +95,12 @@ internal sealed class DecideKycApprovalHandler(
         // guard the agent who submitted a file could sign level 1 of it themselves and the
         // circuit would show their signature. KYC-B-05 says "jamais valider un dossier qu'il a
         // créé" — it does not say "except on the rungs that are only a signature".
-        if (file.LastSubmittedBy == currentUser.Id)
+        //
+        // ManuallyValidatedBy is the second anchor, and it needs the same treatment for the same
+        // reason: on a file validated by hand the ladder is the only control left, and an
+        // intermediate rung reaches no aggregate method — so without it the validator could sign
+        // level 1 of a file they themselves put into the circuit.
+        if (currentUser.Id == file.LastSubmittedBy || currentUser.Id == file.ManuallyValidatedBy)
             return Result.Fail<DecideKycApprovalResult>(KycErrors.SelfApprovalForbidden);
 
         // Read BEFORE the aggregate is touched: Approve sets the tier, and KycTierChangedEvent is

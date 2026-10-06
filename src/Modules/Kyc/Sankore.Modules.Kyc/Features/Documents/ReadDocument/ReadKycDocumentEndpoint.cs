@@ -71,8 +71,16 @@ internal static class ReadKycDocumentEndpoint
         // The ref must belong to THIS file. Without the check, a caller holding any valid ref
         // could read it through any file id they are allowed to see — the file id would be
         // decoration and the audit row would name the wrong file.
-        var belongs = await db.KycIdentityDocuments
+        //
+        // The registry is checked FIRST because it is the only table that knows about an image
+        // before a verification has run. Until it existed, this check could only see refs that
+        // verification had already recorded, so a freshly uploaded document was unreadable — which
+        // made a document impossible to review by hand — and an IdentityDocumentBack was
+        // unreadable permanently, since no table ever referenced one.
+        var belongs = await db.KycDocuments
             .AnyAsync(d => d.KycFileId == kycFileId && d.StorageRef == storageRef, ct)
+            || await db.KycIdentityDocuments
+                .AnyAsync(d => d.KycFileId == kycFileId && d.StorageRef == storageRef, ct)
             || await db.KycFaceVerifications
                 .AnyAsync(v => v.KycFileId == kycFileId && v.SelfieStorageRef == storageRef, ct);
 

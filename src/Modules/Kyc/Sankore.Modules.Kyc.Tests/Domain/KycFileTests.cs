@@ -100,6 +100,140 @@ public sealed class KycFileTests
         act.Should().Throw<Sankore.Shared.Kernel.DomainException>();
     }
 
+    // ── manual validation ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// The escape hatch. Both source statuses matter and for different reasons: a file parks in
+    /// Verifying when the biometric service is unreachable, and lands back in ComplementRequired
+    /// every time the service refuses a capture — which, before this existed, had no exit.
+    /// </summary>
+    [Theory]
+    [InlineData(KycFileStatus.Verifying)]
+    [InlineData(KycFileStatus.ComplementRequired)]
+    public void A_file_the_machine_could_not_resolve_can_be_validated_by_hand(KycFileStatus from)
+    {
+        var file = At(from);
+
+        var result = file.ManuallyValidate(Manager, "Service biométrique indisponible depuis 48h", TimeProvider.System);
+
+        result.IsSuccess.Should().BeTrue();
+        file.Status.Should().Be(KycFileStatus.Validating);
+        file.ManuallyValidatedBy.Should().Be(Manager);
+        file.ManuallyValidatedAt.Should().NotBeNull();
+        file.ManualValidationReason.Should().Be("Service biométrique indisponible depuis 48h");
+    }
+
+    [Theory]
+    [InlineData(KycFileStatus.Collecting)]
+    [InlineData(KycFileStatus.Validating)]
+    [InlineData(KycFileStatus.Full)]
+    [InlineData(KycFileStatus.Rejected)]
+    public void Manual_validation_is_refused_from_any_other_status(KycFileStatus from)
+    {
+        var file = At(from);
+
+        var result = file.ManuallyValidate(Manager, "Un motif parfaitement valable", TimeProvider.System);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(KycErrors.InvalidTransition);
+        file.ManuallyValidatedBy.Should().BeNull("a refused move must leave no trace of an actor");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Manual_validation_without_a_motive_is_refused(string blank)
+    {
+        // Checked in the aggregate as well as the validator: overriding the machine with no stated
+        // grounds is the one thing this feature must not allow, and the aggregate is what a
+        // consumer or a job would reach.
+        var file = At(KycFileStatus.Verifying);
+
+        var result = file.ManuallyValidate(Manager, blank, TimeProvider.System);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(KycErrors.ManualValidationReasonRequired);
+        file.Status.Should().Be(KycFileStatus.Verifying);
+    }
+
+    [Fact]
+    public void Manual_validation_by_the_SYSTEM_account_is_a_programming_error()
+    {
+        // Guid.Empty is the SYSTEM placeholder background jobs run under. Overriding the machine is
+        // inherently a human act, so a job reaching this is a bug, not a refusable outcome.
+        var file = At(KycFileStatus.Verifying);
+
+        var act = () => file.ManuallyValidate(Guid.Empty, "Un motif parfaitement valable", TimeProvider.System);
+
+        act.Should().Throw<Sankore.Shared.Kernel.DomainException>();
+    }
+
+    [Fact]
+    public void Manual_validation_does_not_relabel_who_submitted_the_file()
+    {
+        // LastSubmittedBy is the four-eyes anchor on the agent who built the file. Moving it here
+        // would both launder the real author out of the record and hand them the right to approve
+        // their own file.
+        var file = At(KycFileStatus.Verifying);
+
+        file.ManuallyValidate(Manager, "Pièce usée, refusée trois fois par le service", TimeProvider.System);
+
+        file.LastSubmittedBy.Should().Be(Agent);
+    }
+
+    [Fact]
+    public void Manual_validation_leaves_the_vigilance_level_alone()
+    {
+        // Tempting to raise it to widen the approval ladder, but vigilance also selects the review
+        // periodicity: a file validated by hand would quietly acquire a shorter re-review cycle.
+        // KycApprovalCircuit widens the ladder instead.
+        var file = At(KycFileStatus.Verifying);
+        var before = file.VigilanceLevel;
+
+        file.ManuallyValidate(Manager, "Service biométrique en panne, pièce vérifiée visuellement", TimeProvider.System);
+
+        file.VigilanceLevel.Should().Be(before);
+    }
+
+    [Fact]
+    public void The_manual_validator_cannot_then_approve_the_file()
+    {
+        // The ladder is the only control left on a file with no biometric score behind it, and a
+        // ladder signed by the person who opened it is not a control. KYC-B-05.
+        var file = At(KycFileStatus.Verifying);
+        file.ManuallyValidate(Manager, "Service indisponible, pièces contrôlées à la main", TimeProvider.System);
+
+        var result = file.Approve(KycTier.Full, Manager, TimeProvider.System);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(KycErrors.SelfApprovalForbidden);
+    }
+
+    [Fact]
+    public void The_manual_validator_cannot_then_reject_the_file()
+    {
+        var file = At(KycFileStatus.Verifying);
+        file.ManuallyValidate(Manager, "Service indisponible, pièces contrôlées à la main", TimeProvider.System);
+
+        var result = file.Reject(Manager, TimeProvider.System);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(KycErrors.SelfApprovalForbidden);
+    }
+
+    [Fact]
+    public void Somebody_else_can_still_approve_a_manually_validated_file()
+    {
+        // The feature would be useless if manual validation made a file unapprovable by anyone.
+        var file = At(KycFileStatus.Verifying);
+        file.ManuallyValidate(Manager, "Service indisponible, pièces contrôlées à la main", TimeProvider.System);
+
+        var result = file.Approve(KycTier.Simplified, Guid.NewGuid(), TimeProvider.System);
+
+        result.IsSuccess.Should().BeTrue();
+        file.Status.Should().Be(KycFileStatus.Simplified);
+    }
+
     // ── the transition table ────────────────────────────────────────────────
 
     [Theory]
@@ -108,6 +242,9 @@ public sealed class KycFileTests
     [InlineData(KycFileStatus.Verifying, KycFileStatus.ComplementRequired)]
     [InlineData(KycFileStatus.Validating, KycFileStatus.Full)]
     [InlineData(KycFileStatus.ComplementRequired, KycFileStatus.Verifying)]
+    // Reachable only through ManuallyValidate, and the edge IS the manual-validation feature:
+    // before it, a capture the biometric service kept refusing had no way out at all.
+    [InlineData(KycFileStatus.ComplementRequired, KycFileStatus.Validating)]
     [InlineData(KycFileStatus.Full, KycFileStatus.UnderReview)]
     [InlineData(KycFileStatus.Full, KycFileStatus.Simplified)]
     [InlineData(KycFileStatus.UnderReview, KycFileStatus.Expired)]

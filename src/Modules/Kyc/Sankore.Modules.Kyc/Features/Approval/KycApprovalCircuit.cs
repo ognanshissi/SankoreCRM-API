@@ -64,6 +64,19 @@ internal sealed class KycApprovalCircuit(IKycSettings settings)
         if (maxAttempts > 0 && file.FaceMatchAttempts >= maxAttempts)
             levels.Add(KycApprovalLevel.BranchManager);
 
+        // Same reasoning, same remedy, different cause: a file validated by hand has no biometric
+        // score behind it at all, so somebody other than the validator has to look before it is
+        // approved.
+        //
+        // Without this clause the four-eyes anchor on ManuallyValidatedBy would make a LOW-risk
+        // file unsignable — its ladder is the agent alone, and the one person forbidden from
+        // signing it is the one who just validated it. Widening the ladder here rather than by
+        // raising the file's vigilance level keeps the change to WHO SIGNS: vigilance also selects
+        // the review periodicity, and a file manually validated today should not quietly acquire a
+        // shorter re-review cycle as a side effect.
+        if (file.ManuallyValidatedBy is not null)
+            levels.Add(KycApprovalLevel.BranchManager);
+
         return [.. levels];
     }
 }
