@@ -6,9 +6,15 @@ using Sankore.Modules.Administration.PublicApi;
 /// <summary>
 /// A single scored candidate produced by a strategy. Higher CompatibilityScore
 /// wins, subject to the anti-monopoly filter applied afterward by the handler.
-/// FactorsJson carries the per-factor breakdown for dispatch audit (US-M13-072).
 /// </summary>
-public sealed record ScoredCandidate(AgentSummary Agent, double CompatibilityScore, string FactorsJson = "{}");
+/// <param name="Factors">
+/// The per-factor breakdown behind the score, for dispatch audit (US-M13-072) and for the
+/// dispatch preview. NULL for the strategies that rank by load alone — round-robin and weighted
+/// round-robin compute no breakdown, and inventing an empty one would read as "every factor
+/// scored zero" rather than "not applicable".
+/// </param>
+public sealed record ScoredCandidate(
+    AgentSummary Agent, double CompatibilityScore, CompatibilityFactors? Factors = null);
 
 /// <summary>
 /// Strategy abstraction (F13.9): each dispatching strategy configured by a

@@ -179,9 +179,24 @@ public sealed class PreviewDispatchHandlerTests : IDisposable
 
         var candidate = result.Value.Candidates.Single();
         candidate.CompatibilityScore.Should().BeGreaterThan(0);
-        candidate.CompatibilityFactorsJson.Should().NotBeNullOrWhiteSpace(
-            "the per-factor breakdown is what lets the screen explain a score");
         candidate.FullName.Should().Be("Awa Fall");
+
+        // Typed, so the breakdown can be asserted rather than merely checked for not being
+        // blank — which is what a JSON string allowed and which proved nothing.
+        var factors = candidate.Factors;
+        factors.Should().NotBeNull("CompatibilityScoring computes a breakdown");
+        factors!.Language.Matched.Should().BeTrue("the agent speaks the lead's language");
+        factors.Language.Contribution.Should().BeGreaterThan(0);
+        factors.Product.Matched.Should().BeTrue("the agent is specialised in the product");
+        factors.Performance.ConversionRate30d.Should().BeApproximately(0.9, 0.001);
+        factors.Workload.MaxTasks.Should().Be(result.Value.MaxTasksPerAgent);
+
+        // The sum of the contributions is the score the candidate reports.
+        var summed = factors.Language.Contribution + factors.Product.Contribution
+            + factors.Geography.Contribution + factors.Workload.Contribution
+            + factors.Performance.Contribution + factors.Agency.Contribution;
+        summed.Should().BeApproximately(candidate.CompatibilityScore, 0.01,
+            "the breakdown must explain the total, not merely accompany it");
     }
 
     [Fact]

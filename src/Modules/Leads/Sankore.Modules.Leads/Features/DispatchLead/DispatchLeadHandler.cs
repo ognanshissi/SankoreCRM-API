@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Features.DispatchLead;
 
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -225,7 +226,9 @@ internal sealed class DispatchLeadHandler(
             compatibilityScore: winner.CompatibilityScore,
             slaDeadline: clock.GetUtcNow().Add(rules.FirstContactSla),
             createdAt: clock.GetUtcNow(),
-            compatibilityFactorsJson: winner.FactorsJson,
+            // Serialized here, at the edge: the column is an audit record of what was
+            // computed, and keeping it a string leaves existing rows readable.
+            compatibilityFactorsJson: JsonSerializer.Serialize(winner.Factors),
             // Guid.Empty is DispatchingRule.Default()'s id: record "no configured rule" as
             // null rather than as an id that matches no row.
             ruleId: rules.Id == Guid.Empty ? null : rules.Id);

@@ -53,18 +53,21 @@ internal sealed class CompatibilityScoringStrategy(
             if (cache is not null)
             {
                 // Key encodes the task count so any change auto-busts the entry.
-                var cacheKey = $"compat-score:{agent.Id}:{lead.Id}:{rules.Id}:t{openTaskCount}";
+                // "-v2" because the cached payload changed shape when the factors became a
+                // typed object: a v1 entry would deserialize with its factors silently missing,
+                // and the entries outlive a deploy. A new prefix retires them instead.
+                var cacheKey = $"compat-score-v2:{agent.Id}:{lead.Id}:{rules.Id}:t{openTaskCount}";
                 var cached   = await cache.GetStringAsync(cacheKey, ct);
 
                 if (cached is not null)
                 {
                     var cached_obj = JsonSerializer.Deserialize<CachedScore>(cached)!;
-                    scoreResult    = new CompatibilityScoreResult(cached_obj.Ts, cached_obj.Fj);
+                    scoreResult    = new CompatibilityScoreResult(cached_obj.Ts, cached_obj.F!);
                 }
                 else
                 {
                     scoreResult = scorer.Score(lead, agent, rules, openTaskCount);
-                    var payload = JsonSerializer.Serialize(new CachedScore(scoreResult.TotalScore, scoreResult.FactorsJson));
+                    var payload = JsonSerializer.Serialize(new CachedScore(scoreResult.TotalScore, scoreResult.Factors));
                     await cache.SetStringAsync(cacheKey, payload, CacheOpts, ct);
                 }
             }
@@ -73,12 +76,12 @@ internal sealed class CompatibilityScoringStrategy(
                 scoreResult = scorer.Score(lead, agent, rules, openTaskCount);
             }
 
-            results.Add(new ScoredCandidate(agent, scoreResult.TotalScore, scoreResult.FactorsJson));
+            results.Add(new ScoredCandidate(agent, scoreResult.TotalScore, scoreResult.Factors));
         }
 
         return results.OrderByDescending(c => c.CompatibilityScore).ToList();
     }
 
     // Thin DTO kept private to this file — avoids polluting the namespace.
-    private sealed record CachedScore(double Ts, string Fj);
+    private sealed record CachedScore(double Ts, CompatibilityFactors? F);
 }

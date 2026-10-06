@@ -37,6 +37,11 @@ public sealed record DispatchPreviewResult(
 /// The score the configured strategy actually computes — not an estimate. This is what the
 /// front-end could only approximate before, and the reason the screen reached for a POST.
 /// </param>
+/// <param name="Factors">
+/// The breakdown behind that score, typed. Null when the applicable strategy computes none —
+/// round-robin and weighted round-robin rank by load alone — so a client must treat it as
+/// optional rather than render six zeroes.
+/// </param>
 /// <param name="IsEligible">
 /// True when nothing blocks this agent. Blocked candidates are returned rather than filtered out
 /// so the screen can show them greyed with a reason; hiding them is what makes "why is this
@@ -47,7 +52,7 @@ public sealed record DispatchPreviewCandidate(
     string FullName,
     Guid AgencyId,
     double CompatibilityScore,
-    string CompatibilityFactorsJson,
+    CompatibilityFactors? Factors,
     int OpenTaskCount,
     int HotLeadsCount,
     bool IsExcludedByRule,

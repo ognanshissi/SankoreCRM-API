@@ -1,6 +1,5 @@
 namespace Sankore.Modules.Leads.Features.DispatchLead;
 
-using System.Text.Json;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Administration.PublicApi;
 
@@ -65,28 +64,46 @@ internal sealed class CompatibilityScorer
             Math.Clamp(languageContrib + productContrib + geoContrib + workloadContrib + perfContrib + agencyContrib, 0, 100),
             2);
 
-        var factorsJson = JsonSerializer.Serialize(new
-        {
-            language    = new { matched = languageMatch, weight = rules.Weights.Language, contribution = languageContrib },
-            product     = new { matched = productMatch, weight = rules.Weights.Product, contribution = productContrib },
-            geography   = new { distanceKm = distanceKm.HasValue ? Math.Round(distanceKm.Value, 2) : (double?)null, decayFactor, weight = rules.Weights.Geography, contribution = geoContrib },
-            workload    = new
-            {
-                activeLeads       = agent.ActiveLeadsCount,
-                maxLeads          = rules.MaxLeadsPerAgent,
-                leadLoadRatio     = Math.Round(leadLoadRatio, 3),
-                openTasks         = openTaskCount,
-                maxTasks          = rules.MaxTasksPerAgent,
-                taskLoadRatio     = Math.Round(taskLoadRatio, 3),
-                combinedLoadRatio = Math.Round(combinedLoadRatio, 3),
-                weight            = rules.Weights.Workload,
-                contribution      = workloadContrib
-            },
-            performance = new { conversionRate30d = agent.ConversionRate30d, weight = rules.Weights.Performance, contribution = perfContrib },
-            agency      = new { matched = agencyMatch, agentAgencyId = agent.AgencyId, preferredAgencyId = lead.PreferredAgencyId, weight = rules.Weights.Agency, contribution = agencyContrib }
-        });
+        // Returned typed. It was serialized here, which forced every reader — including the
+        // preview API's clients — to re-declare the shape and parse a blob. The two audit columns
+        // that store it serialize at their own edge instead.
+        var factors = new CompatibilityFactors(
+            Language: new LanguageFactor(
+                Matched: languageMatch,
+                Weight: rules.Weights.Language,
+                Contribution: languageContrib),
+            Product: new ProductFactor(
+                Matched: productMatch,
+                Weight: rules.Weights.Product,
+                Contribution: productContrib),
+            Geography: new GeographyFactor(
+                // Null stays null: "no location on one side" is not "distance zero".
+                DistanceKm: distanceKm.HasValue ? Math.Round(distanceKm.Value, 2) : null,
+                DecayFactor: decayFactor,
+                Weight: rules.Weights.Geography,
+                Contribution: geoContrib),
+            Workload: new WorkloadFactor(
+                ActiveLeads: agent.ActiveLeadsCount,
+                MaxLeads: rules.MaxLeadsPerAgent,
+                LeadLoadRatio: Math.Round(leadLoadRatio, 3),
+                OpenTasks: openTaskCount,
+                MaxTasks: rules.MaxTasksPerAgent,
+                TaskLoadRatio: Math.Round(taskLoadRatio, 3),
+                CombinedLoadRatio: Math.Round(combinedLoadRatio, 3),
+                Weight: rules.Weights.Workload,
+                Contribution: workloadContrib),
+            Performance: new PerformanceFactor(
+                ConversionRate30d: agent.ConversionRate30d,
+                Weight: rules.Weights.Performance,
+                Contribution: perfContrib),
+            Agency: new AgencyFactor(
+                Matched: agencyMatch,
+                AgentAgencyId: agent.AgencyId,
+                PreferredAgencyId: lead.PreferredAgencyId,
+                Weight: rules.Weights.Agency,
+                Contribution: agencyContrib));
 
-        return new CompatibilityScoreResult(total, factorsJson);
+        return new CompatibilityScoreResult(total, factors);
     }
 
     private static double DistanceDecay(double km) => km switch
@@ -104,4 +121,4 @@ internal sealed class CompatibilityScorer
 /// per-factor contributions — used both for ranking (score) and for
 /// persisting the audit trail on the winning assignment (factorsJson).
 /// </summary>
-internal sealed record CompatibilityScoreResult(double TotalScore, string FactorsJson);
+internal sealed record CompatibilityScoreResult(double TotalScore, CompatibilityFactors Factors);

@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Features.Tasks.DispatchTask;
 
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using MassTransit;
@@ -133,7 +134,8 @@ internal sealed class DispatchTaskHandler(
         var winner = ranked.First();
 
         // 8. Persist scored dispatch — stores compatibility audit on the task
-        var dispatchResult = task.Dispatch(winner.Agent.Id, winner.CompatibilityScore, winner.FactorsJson);
+        var dispatchResult = task.Dispatch(
+            winner.Agent.Id, winner.CompatibilityScore, JsonSerializer.Serialize(winner.Factors));
         if (dispatchResult.IsFailure)
             return Result.Fail<DispatchTaskResult>(dispatchResult.Error!);
 
@@ -158,6 +160,6 @@ internal sealed class DispatchTaskHandler(
             AgentId:                  winner.Agent.Id,
             AgentName:                winner.Agent.FullName,
             CompatibilityScore:       winner.CompatibilityScore,
-            CompatibilityFactorsJson: winner.FactorsJson));
+            CompatibilityFactorsJson: JsonSerializer.Serialize(winner.Factors)));
     }
 }

@@ -103,7 +103,7 @@ internal sealed class PreviewDispatchHandler(
                     FullName: c.Agent.FullName,
                     AgencyId: c.Agent.AgencyId,
                     CompatibilityScore: c.CompatibilityScore,
-                    CompatibilityFactorsJson: c.FactorsJson,
+                    Factors: c.Factors,
                     OpenTaskCount: openTasks,
                     HotLeadsCount: c.Agent.HotLeadsCount,
                     IsExcludedByRule: excluded,
