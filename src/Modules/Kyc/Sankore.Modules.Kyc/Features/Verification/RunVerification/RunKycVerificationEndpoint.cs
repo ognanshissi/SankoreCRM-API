@@ -20,7 +20,9 @@ internal static class RunKycVerificationEndpoint
                 "Reads the identity document, compares the faces and scores the file. The images "
                 + "must already be in the KYC document store; this endpoint takes their "
                 + "references. 200 when the file was scored or the capture was refused, 202 when "
-                + "the biometric service could not be reached and the attempt was queued.")
+                + "the biometric service could not be reached and the attempt was queued. "
+                + "documentType says which document was photographed (CNI by default): the service "
+                + "picks its extraction template from it.")
             .RequireAuthorization(Permissions.CanRunKycVerification.Code)
             .Produces<RunKycVerificationResponse>(StatusCodes.Status200OK)
             .Produces<RunKycVerificationResponse>(StatusCodes.Status202Accepted)
@@ -46,7 +48,8 @@ internal static class RunKycVerificationEndpoint
             KycFileId: kycFileId,
             DocumentStorageRef: req.DocumentStorageRef,
             SelfieStorageRef: req.SelfieStorageRef,
-            RequestedBy: currentUser.Id), ct);
+            RequestedBy: currentUser.Id,
+            DocumentType: req.DocumentType), ct);
 
         if (result.IsFailure)
         {
@@ -80,9 +83,16 @@ internal static class RunKycVerificationEndpoint
 /// Reference returned when the identity-document image was uploaded to the KYC document store.
 /// Uploading belongs to its own slice; this endpoint never receives bytes.
 /// </param>
+/// <param name="DocumentType">
+/// Which identity document was photographed — CNI, Passport, Cedeao or Consulaire. The biometric
+/// service requires it and reads the document differently for each, so a wrong value is a wrong
+/// reading rather than an error. It defaults to CNI, which is what a counter capture in the zone
+/// almost always is; a front that captures a passport must send it.
+/// </param>
 internal sealed record RunKycVerificationRequest(
     string DocumentStorageRef,
-    string SelfieStorageRef);
+    string SelfieStorageRef,
+    KycDocumentType DocumentType = KycDocumentType.Cni);
 
 /// <summary>
 /// Deliberately thin. The document number, the OCR fields and the MRZ never appear here: revealing

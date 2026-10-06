@@ -3,6 +3,7 @@ namespace Sankore.Modules.Kyc.Features.Verification;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Verification.RunVerification;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 
@@ -29,6 +30,11 @@ public sealed class ReplayKycVerificationJob(IServiceScopeFactory scopeFactory)
     /// submission: replacing them with SYSTEM here would also replace the file's
     /// <c>LastSubmittedBy</c>, and the four-eyes rule would then let them approve their own file.
     /// </param>
+    /// <param name="documentType">
+    /// Carried through the replay rather than defaulted: a retry that re-declared every document
+    /// as a CNI would have the service read a passport with the wrong template, and the file would
+    /// come back "unreadable" for a reason no log mentions.
+    /// </param>
     /// <param name="attempt">
     /// Which attempt this is. Passed straight to the command, which decides whether a further
     /// replay is queued — the budget lives in one place, next to the decision that spends it.
@@ -39,6 +45,7 @@ public sealed class ReplayKycVerificationJob(IServiceScopeFactory scopeFactory)
         string documentStorageRef,
         string selfieStorageRef,
         Guid requestedBy,
+        KycDocumentType documentType,
         int attempt)
     {
         // Set BEFORE the scope is created: ICurrentUser and ITenantContext are resolved from this
@@ -59,6 +66,7 @@ public sealed class ReplayKycVerificationJob(IServiceScopeFactory scopeFactory)
                 DocumentStorageRef: documentStorageRef,
                 SelfieStorageRef: selfieStorageRef,
                 RequestedBy: requestedBy,
+                DocumentType: documentType,
                 Attempt: attempt));
 
             if (result.IsFailure)

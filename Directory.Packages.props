@@ -5,6 +5,10 @@
   <ItemGroup Label="Testing">
     <PackageVersion Include="FluentAssertions" Version="6.12.1" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
+    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Client" Version="10.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageVersion>
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageVersion Include="NSubstitute" Version="5.1.0" />
     <PackageVersion Include="xunit" Version="2.9.2" />
@@ -60,6 +64,15 @@
     <PackageVersion Include="QuestPDF" Version="2024.12.2" />
     <PackageVersion Include="ncrontab" Version="3.3.3" />
   </ItemGroup>
+  <ItemGroup Label="GeneratedClients">
+    <!-- The biometry client generated at build time from biometry-openapi.json (Sankore.Api).
+         Microsoft.Extensions.ApiDescription.Client only declares the OpenApiReference item and
+         then calls a target named Generate<CodeGenerator>; NSwag.ApiDescription.Client is what
+         supplies GenerateNSwagCSharp. Without it the build fails with
+         "MSB4057: The target GenerateNSwagCSharp does not exist in the project", which names
+         neither package. -->
+    <PackageVersion Include="NSwag.ApiDescription.Client" Version="14.7.1" />
+  </ItemGroup>
   <ItemGroup Label="SecurityOverrides">
     <!-- Hangfire.Core drags in 11.0.1, which is vulnerable; this pin overrides it.
          Floor raised to 13.0.4 by Microsoft.EntityFrameworkCore.Design 10.x, which
@@ -76,7 +89,6 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.12" />
     <!-- Explicit rather than transitive via Kernel -> EF Core: the object-storage
          projects read their own configuration section and must not depend on an

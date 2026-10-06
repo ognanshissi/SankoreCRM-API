@@ -101,13 +101,22 @@ internal sealed class FakeBiometryClient : IBiometryClient
 
     public ScoreRequest? LastScoreRequest { get; private set; }
 
+    /// <summary>
+    /// The document type the last call declared. The real service REQUIRES it — it picks its field
+    /// template from it — so a test that forgets to pass one is a test that would not run against
+    /// the real client.
+    /// </summary>
+    public Domain.KycDocumentType? LastDeclaredDocumentType { get; private set; }
+
     public Task<BiometryResult<OcrReading>> ReadDocumentAsync(
-        Guid tenantId, BiometryImage image, string correlationId, CancellationToken ct)
+        Guid tenantId, BiometryImage image, Domain.KycDocumentType declaredType,
+        string correlationId, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
         Calls.Add(new BiometryCall("ocr", tenantId, correlationId));
         LastDocumentImage = image;
+        LastDeclaredDocumentType = declaredType;
 
         return Task.FromResult(ForcedDocumentReading ?? BiometryResult<OcrReading>.Success(
             new OcrReading(

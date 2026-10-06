@@ -16,6 +16,10 @@ internal sealed class RunKycVerificationValidator : AbstractValidator<RunKycVeri
         RuleFor(x => x.DocumentStorageRef).NotEmpty();
         RuleFor(x => x.SelfieStorageRef).NotEmpty();
 
+        // A value outside the enum would reach the service as an unknown doc_type and come back as
+        // a 422 that reads like a bad photograph.
+        RuleFor(x => x.DocumentType).IsInEnum();
+
         // The replay counts on this one, and an Attempt of 0 would reset the retry budget every
         // round — an outage would then queue itself forever.
         RuleFor(x => x.Attempt).GreaterThan(0);

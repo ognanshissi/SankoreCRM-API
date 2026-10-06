@@ -21,6 +21,34 @@
     <PackageReference Include="Newtonsoft.Json" />
     <!-- Resilience for the biometry HTTP client (same stack as the Leads puller). -->
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+
+    <!-- Biometry client generated from the service's own OpenAPI document, below. Declared HERE
+         and not in the bootstrapper: HttpBiometryClient is the consumer and lives in this module,
+         and a module may not reference a host. Both packages are build-time only. -->
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Client">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="NSwag.ApiDescription.Client" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Flask biometric service's contract, checked in next to the client that calls it.
+         Regenerated on every build, so a service-side rename breaks the build instead of
+         silently yielding nulls — which is exactly what the previous hand-written wire records
+         did: not one of their field names matched this document.
+
+         SingleClientFromPathSegments: the default emits one class per tag (OCR, Santé, Score,
+         Visage) while ClassName imposes one name, so the four collided and nothing compiled.
+         UseHttpRequestMessageCreationMethod: lets BiometryApiClient override the request factory
+         to add the per-tenant bearer token and the correlation header, which NSwag has no other
+         hook for. JsonLibrary: this module serialises with System.Text.Json everywhere else. -->
+    <OpenApiReference Include="Infrastructure\Biometry\biometry-openapi.json"
+                      CodeGenerator="NSwagCSharp"
+                      ClassName="BiometryGeneratedClient"
+                      Namespace="Sankore.Modules.Kyc.Infrastructure.Biometry.Generated">
+      <Options>/GenerateClientInterfaces:true /GenerateDtoTypes:true /OperationGenerationMode:SingleClientFromPathSegments /UseHttpRequestMessageCreationMethod:true /JsonLibrary:SystemTextJson /GenerateOptionalParameters:false</Options>
+    </OpenApiReference>
   </ItemGroup>
 
   <ItemGroup>

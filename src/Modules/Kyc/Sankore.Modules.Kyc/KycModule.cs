@@ -143,11 +143,23 @@ public static class KycModule
         // Biometry service client. The per-attempt timeout lives inside HttpBiometryClient; this
         // handler is what retries a transient 5xx and opens the circuit when the service is down —
         // the two are not substitutes. Same stack as the Leads puller.
+        // BoundedResponseHandler is INSIDE the resilience handler's chain on purpose: an oversized
+        // answer is refused per attempt, so a misrouted URL answering with a 5 MB login page is
+        // never buffered, retried, and buffered again.
         services.AddHttpClient(Infrastructure.Biometry.HttpBiometryClient.HttpClientName)
             .AddStandardResilienceHandler();
 
+        services.AddTransient<Infrastructure.Biometry.BoundedResponseHandler>();
+
+        services.AddHttpClient(Infrastructure.Biometry.HttpBiometryClient.HttpClientName)
+            .AddHttpMessageHandler<Infrastructure.Biometry.BoundedResponseHandler>();
+
         services.AddScoped<Infrastructure.Biometry.IBiometryClient,
                            Infrastructure.Biometry.HttpBiometryClient>();
+
+        // Keeps the service's own OCR / face answers for a later /v1/score, encrypted with this
+        // module's key. Scoped like the encryptor it wraps.
+        services.AddScoped<Infrastructure.Biometry.BiometryPayloadProtector>();
 
         services.Configure<Infrastructure.Biometry.BiometryOptions>(
             config.GetSection(Infrastructure.Biometry.BiometryOptions.SectionName));

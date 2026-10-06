@@ -42,6 +42,26 @@ public sealed class KycIdentityDocument : AggregateRoot
     /// <summary>Opaque reference into the encrypted document store. Never a filesystem path.</summary>
     public string? StorageRef { get; private set; }
 
+    /// <summary>
+    /// The biometric service's OWN answer to <c>/v1/ocr</c>, encrypted (AES-GCM, same key as
+    /// <see cref="EncryptedNumber"/>).
+    ///
+    /// <para>
+    /// It exists because <c>/v1/score</c> is stateless and takes that answer back verbatim: the
+    /// projections beside it drop the per-field source, the anomalies, the image quality and the
+    /// MRZ checks, all of which the score is computed from — so without this a re-score after a
+    /// field correction could only hand the scorer a different document, or nothing at all.
+    /// </para>
+    ///
+    /// <para>
+    /// ENCRYPTED and not a plain jsonb column, unlike every other blob here: this payload contains
+    /// the document number, in <c>fields</c> and again in <c>mrz</c>. That is precisely why
+    /// <see cref="OcrFieldsJson"/> has the number stripped out of it — storing the service's answer
+    /// in clear would undo, one column over, what <see cref="EncryptedNumber"/> exists to do.
+    /// </para>
+    /// </summary>
+    public string? EncryptedOcrPayload { get; private set; }
+
     public string? ServiceVersion { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
@@ -53,7 +73,7 @@ public sealed class KycIdentityDocument : AggregateRoot
         string? issuingCountry = null, DateOnly? expiryDate = null,
         string? ocrFieldsJson = null, string? mrzDataJson = null,
         string? storageRef = null, string? serviceVersion = null,
-        string? ocrFieldConfidencesJson = null)
+        string? ocrFieldConfidencesJson = null, string? encryptedOcrPayload = null)
     {
         if (string.IsNullOrWhiteSpace(numberBlindIndex))
             throw new DomainException("A document without a blind index could never be deduplicated.");
@@ -73,6 +93,7 @@ public sealed class KycIdentityDocument : AggregateRoot
             MrzDataJson = mrzDataJson,
             StorageRef = storageRef,
             ServiceVersion = serviceVersion,
+            EncryptedOcrPayload = encryptedOcrPayload,
             CreatedAt = clock.GetUtcNow(),
         };
     }
@@ -98,6 +119,18 @@ public sealed class KycFaceVerification : AggregateRoot
     public string? QualityScoresJson { get; private set; }
     public string? ModelVersion { get; private set; }
 
+    /// <summary>
+    /// The service's OWN answer to <c>/v1/face-match</c>, encrypted. Same reason as
+    /// <see cref="KycIdentityDocument.EncryptedOcrPayload"/>: the scorer is handed it back
+    /// verbatim, and <see cref="QualityScoresJson"/> keeps only two of its numbers.
+    ///
+    /// <para>
+    /// It carries no document number, but it is encrypted all the same — it describes a named
+    /// person's face, and a quality or detection score is biometric data about them.
+    /// </para>
+    /// </summary>
+    public string? EncryptedFacePayload { get; private set; }
+
     /// <summary>1-based attempt number on this file.</summary>
     public int Attempt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -107,7 +140,8 @@ public sealed class KycFaceVerification : AggregateRoot
     public static KycFaceVerification Create(
         Guid tenantId, Guid kycFileId, int attempt, double similarityScore, bool isMatch,
         TimeProvider clock, string? selfieStorageRef = null,
-        string? qualityScoresJson = null, string? modelVersion = null)
+        string? qualityScoresJson = null, string? modelVersion = null,
+        string? encryptedFacePayload = null)
         => new()
         {
             Id = Guid.NewGuid(),
@@ -119,6 +153,7 @@ public sealed class KycFaceVerification : AggregateRoot
             SelfieStorageRef = selfieStorageRef,
             QualityScoresJson = qualityScoresJson,
             ModelVersion = modelVersion,
+            EncryptedFacePayload = encryptedFacePayload,
             CreatedAt = clock.GetUtcNow(),
         };
 }

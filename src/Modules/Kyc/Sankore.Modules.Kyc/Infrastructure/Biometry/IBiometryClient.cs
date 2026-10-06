@@ -1,5 +1,7 @@
 namespace Sankore.Modules.Kyc.Infrastructure.Biometry;
 
+using Sankore.Modules.Kyc.Domain;
+
 /// <summary>
 /// The boundary in front of the external biometric service (OCR, face matching, scoring).
 ///
@@ -13,8 +15,14 @@ namespace Sankore.Modules.Kyc.Infrastructure.Biometry;
 /// </summary>
 internal interface IBiometryClient
 {
+    /// <param name="declaredType">
+    /// What the agent says they photographed. Required by the service — it picks the field
+    /// template from it — and it is NOT derivable here: the document's type is something the OCR
+    /// answer reports, so reading it first would need the very call it is an argument of.
+    /// </param>
     Task<BiometryResult<OcrReading>> ReadDocumentAsync(
-        Guid tenantId, BiometryImage image, string correlationId, CancellationToken ct);
+        Guid tenantId, BiometryImage image, KycDocumentType declaredType,
+        string correlationId, CancellationToken ct);
 
     Task<BiometryResult<FaceMatch>> MatchFaceAsync(
         Guid tenantId, BiometryImage documentPortrait, BiometryImage selfie,
@@ -146,12 +154,22 @@ internal sealed record BiometryImage(byte[] Content, string ContentType, string?
 /// Stored with the verification: a decision must stay traceable to the model that produced it,
 /// including after the Flask service is upgraded.
 /// </param>
+/// <param name="Raw">
+/// The service's own answer, kept verbatim so <see cref="IBiometryClient.ScoreAsync"/> can hand it
+/// straight back. The scorer is stateless and the contract is explicit about it — "le module .NET
+/// renvoie tels quels les résultats de /v1/ocr et /v1/face-match" — and the projection above is
+/// LOSSY: it drops the per-field source, the anomalies, the image quality and the MRZ checks, all
+/// of which the score is computed from. Rebuilding a request out of this record would therefore
+/// have the scorer grade a different document than the one that was read.
+/// <para>Null only for <see cref="FakeBiometryClient"/>, which never reaches a real scorer.</para>
+/// </param>
 internal sealed record OcrReading(
     string DocumentType,
     IReadOnlyDictionary<string, string> Fields,
     IReadOnlyDictionary<string, double> FieldConfidences,
     MrzReading? Mrz,
-    string ServiceVersion);
+    string ServiceVersion,
+    Generated.OcrResponse? Raw = null);
 
 /// <summary>
 /// Machine-readable zone. <paramref name="ChecksumValid"/> false is reported as a reading, not as
@@ -166,24 +184,47 @@ internal sealed record MrzReading(
 /// <summary>Result of comparing the document portrait with the selfie.</summary>
 /// <param name="Similarity">0..1 as the model reports it.</param>
 /// <param name="IsMatch">The service's own verdict against its threshold — we do not re-derive it.</param>
+/// <param name="Threshold">
+/// The threshold <paramref name="IsMatch"/> was decided against, as the service reports it. Shown
+/// to a reviewer asking why 0.71 was a match and 0.69 was not — never used to re-derive the
+/// verdict, which stays the model's.
+/// </param>
+/// <param name="Raw">The service's own answer, for the scorer. Same reason as on <see cref="OcrReading"/>.</param>
 internal sealed record FaceMatch(
     double Similarity,
     bool IsMatch,
     double PortraitQuality,
     double SelfieQuality,
     string ModelVersion,
-    string ServiceVersion);
+    string ServiceVersion,
+    double Threshold = 0,
+    Generated.FaceMatchResponse? Raw = null);
 
 /// <summary>Everything the stateless scorer needs; it keeps no session between our calls.</summary>
 /// <param name="DeclaredFields">
 /// What the agent typed, so the service can cross-check it against the OCR reading. Keys are the
 /// same field names the OCR uses.
 /// </param>
+/// <param name="Channel">
+/// How the customer was enrolled. Required by the service and used in its weighting — a remote
+/// capture is not graded like one taken at a counter — so it is the KYC file's own channel,
+/// mapped, rather than a constant.
+/// </param>
+/// <param name="RiskLevel">
+/// The file's vigilance level. Required for the same reason: the scorer is stricter on a
+/// high-risk file.
+/// </param>
+/// <param name="CorrectedFieldNames">
+/// Names of the fields the agent corrected after the reading, which the scorer penalises. Names
+/// only — the service asks for no values, and this record reaches neither the audit trail nor a
+/// log, but a date of birth has no business travelling where it is not needed.
+/// </param>
 internal sealed record ScoreRequest(
     OcrReading? Ocr,
     FaceMatch? FaceMatch,
-    IReadOnlyDictionary<string, string>? DeclaredFields = null,
-    string? DocumentType = null);
+    KycChannel Channel,
+    KycVigilanceLevel RiskLevel,
+    IReadOnlyList<string>? CorrectedFieldNames = null);
 
 /// <summary>The global verdict.</summary>
 /// <param name="Score">0..100.</param>

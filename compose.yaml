@@ -23,6 +23,7 @@
         condition: service_healthy
     restart: always
     networks:
+      - "sankore-internal"
       - "default"
 
   sankore.hangfire:
@@ -46,6 +47,7 @@
     restart: always
     networks:
       - "default"
+      - "sankore-internal"
 
   sankore.database:
     image: ${DOCKER_REGISTRY:-sankore.database}
@@ -68,6 +70,7 @@
     restart: unless-stopped
     networks:
       - "default"
+      - "sankore-internal"
 
   sankore.rabbitmq:
     image: rabbitmq:3.13-management-alpine
@@ -86,10 +89,11 @@
       retries: 10
     restart: unless-stopped
     networks:
+      - "sankore-internal"
       - "default"
 
 networks:
-  default:
-    driver: bridge
+  sankore-internal:
+    internal: true
 
 

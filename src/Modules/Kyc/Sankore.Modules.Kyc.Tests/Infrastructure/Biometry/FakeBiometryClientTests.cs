@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Tests.Infrastructure.Biometry;
 
 using FluentAssertions;
+using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure.Biometry;
 using Xunit;
 
@@ -16,9 +17,9 @@ public sealed class FakeBiometryClientTests
     {
         var fake = new FakeBiometryClient();
 
-        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), Correlation, CancellationToken.None);
+        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), KycDocumentType.Cni, Correlation, CancellationToken.None);
         var face = await fake.MatchFaceAsync(Tenant, Image(1), Image(2), Correlation, CancellationToken.None);
-        var score = await fake.ScoreAsync(Tenant, new ScoreRequest(ocr.Value, face.Value), Correlation, CancellationToken.None);
+        var score = await fake.ScoreAsync(Tenant, new ScoreRequest(ocr.Value, face.Value, KycChannel.Agency, KycVigilanceLevel.Standard), Correlation, CancellationToken.None);
 
         ocr.IsSuccess.Should().BeTrue();
         ocr.Value.DocumentType.Should().Be("CNI");
@@ -45,8 +46,8 @@ public sealed class FakeBiometryClientTests
         // keep passing tomorrow and on someone else's machine.
         var fake = new FakeBiometryClient();
 
-        var first = await fake.ReadDocumentAsync(Tenant, Image(1, 2, 3), Correlation, CancellationToken.None);
-        var second = await fake.ReadDocumentAsync(Tenant, Image(9, 9, 9), "another-id", CancellationToken.None);
+        var first = await fake.ReadDocumentAsync(Tenant, Image(1, 2, 3), KycDocumentType.Cni, Correlation, CancellationToken.None);
+        var second = await fake.ReadDocumentAsync(Tenant, Image(9, 9, 9), KycDocumentType.Cni, "another-id", CancellationToken.None);
 
         second.Value.Should().BeEquivalentTo(first.Value);
     }
@@ -60,7 +61,7 @@ public sealed class FakeBiometryClientTests
         };
 
         var face = await fake.MatchFaceAsync(Tenant, Image(1), Image(2), Correlation, CancellationToken.None);
-        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), Correlation, CancellationToken.None);
+        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), KycDocumentType.Cni, Correlation, CancellationToken.None);
 
         face.IsRejected.Should().BeTrue();
         face.Code.Should().Be(BiometryCodes.NoFaceDetected);
@@ -73,8 +74,8 @@ public sealed class FakeBiometryClientTests
     {
         var fake = FakeBiometryClient.Rejecting(BiometryCodes.DocumentUnreadable);
 
-        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), Correlation, CancellationToken.None);
-        var score = await fake.ScoreAsync(Tenant, new ScoreRequest(null, null), Correlation, CancellationToken.None);
+        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), KycDocumentType.Cni, Correlation, CancellationToken.None);
+        var score = await fake.ScoreAsync(Tenant, new ScoreRequest(null, null, KycChannel.Agency, KycVigilanceLevel.Standard), Correlation, CancellationToken.None);
 
         ocr.IsRejected.Should().BeTrue();
         ocr.Code.Should().Be(BiometryCodes.DocumentUnreadable);
@@ -86,7 +87,7 @@ public sealed class FakeBiometryClientTests
     {
         var fake = FakeBiometryClient.Unavailable(BiometryCodes.ModelsNotReady);
 
-        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), Correlation, CancellationToken.None);
+        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), KycDocumentType.Cni, Correlation, CancellationToken.None);
 
         ocr.IsUnavailable.Should().BeTrue();
         ocr.IsRejected.Should().BeFalse();
@@ -122,7 +123,7 @@ public sealed class FakeBiometryClientTests
         var fake = new FakeBiometryClient { Score = 37 };
         fake.Flags.Add("EXPIRED_DOCUMENT");
 
-        var score = await fake.ScoreAsync(Tenant, new ScoreRequest(null, null), Correlation, CancellationToken.None);
+        var score = await fake.ScoreAsync(Tenant, new ScoreRequest(null, null, KycChannel.Agency, KycVigilanceLevel.Standard), Correlation, CancellationToken.None);
 
         score.Value.Score.Should().Be(37);
         score.Value.Level.Should().Be(BiometryConfidenceLevel.Low);
@@ -137,7 +138,7 @@ public sealed class FakeBiometryClientTests
         fake.Fields["expiry_date"] = "2019-01-31";
         fake.MrzRaw = null;
 
-        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), Correlation, CancellationToken.None);
+        var ocr = await fake.ReadDocumentAsync(Tenant, Image(1), KycDocumentType.Cni, Correlation, CancellationToken.None);
 
         ocr.Value.Fields["expiry_date"].Should().Be("2019-01-31");
         ocr.Value.Fields["surname"].Should().Be("OUATTARA");
@@ -148,9 +149,11 @@ public sealed class FakeBiometryClientTests
     public async Task Records_who_called_it_and_under_which_correlation_id()
     {
         var fake = new FakeBiometryClient();
-        var request = new ScoreRequest(null, null, DocumentType: "PASSPORT");
+        var request = new ScoreRequest(
+            null, null, KycChannel.Web, KycVigilanceLevel.High,
+            CorrectedFieldNames: ["surname"]);
 
-        await fake.ReadDocumentAsync(Tenant, Image(1), Correlation, CancellationToken.None);
+        await fake.ReadDocumentAsync(Tenant, Image(1), KycDocumentType.Cni, Correlation, CancellationToken.None);
         await fake.MatchFaceAsync(Tenant, Image(1), Image(2), Correlation, CancellationToken.None);
         await fake.ScoreAsync(Tenant, request, Correlation, CancellationToken.None);
 
@@ -169,7 +172,7 @@ public sealed class FakeBiometryClientTests
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
 
-        var act = async () => await fake.ReadDocumentAsync(Tenant, Image(1), Correlation, cancelled.Token);
+        var act = async () => await fake.ReadDocumentAsync(Tenant, Image(1), KycDocumentType.Cni, Correlation, cancelled.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }

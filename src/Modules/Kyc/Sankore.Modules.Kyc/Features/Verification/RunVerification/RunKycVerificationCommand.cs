@@ -30,12 +30,19 @@ using Sankore.Shared.Kernel;
 /// biometric service could not be reached. It is the only thing that stops an outage from
 /// re-queuing itself forever; see <see cref="RunKycVerificationHandler"/>.
 /// </param>
+/// <param name="DocumentType">
+/// The kind of identity document the agent photographed. An INPUT, not a reading: the biometric
+/// service requires it on <c>POST /v1/ocr</c> because it selects the field template from it, and it
+/// cannot be inferred here — the document's type is part of the OCR answer, so deriving it would
+/// need the very call it is an argument of. Carried through the replay for the same reason.
+/// </param>
 internal sealed record RunKycVerificationCommand(
     Guid TenantId,
     Guid KycFileId,
     string DocumentStorageRef,
     string SelfieStorageRef,
     Guid RequestedBy,
+    KycDocumentType DocumentType = KycDocumentType.Cni,
     int Attempt = 1
 ) : IRequest<Result<RunKycVerificationResult>>, ICommand, IResourceCommand
 {

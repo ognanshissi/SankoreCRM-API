@@ -50,6 +50,7 @@ internal sealed class RunKycVerificationHandler(
     KycDbContext db,
     IKycDocumentStore documentStore,
     IBiometryClient biometry,
+    BiometryPayloadProtector payloads,
     [FromKeyedServices(KycFieldProtection.Key)] IFieldEncryptor encryptor,
     [FromKeyedServices(KycFieldProtection.Key)] IBlindIndexer indexer,
     [FromKeyedServices(nameof(KycDbContext))] IEventPublisher publisher,
@@ -121,7 +122,11 @@ internal sealed class RunKycVerificationHandler(
         var correlationId = Guid.NewGuid().ToString();
 
         // ── 1. Read the document ────────────────────────────────────────────
-        var ocr = await biometry.ReadDocumentAsync(cmd.TenantId, document, correlationId, ct);
+        // The declared type comes from the agent through the command: the service needs it to pick
+        // its field template, and it cannot be derived here — the document's type is something the
+        // OCR answer reports, so reading it first would require the very call it is an argument of.
+        var ocr = await biometry.ReadDocumentAsync(
+            cmd.TenantId, document, cmd.DocumentType, correlationId, ct);
 
         if (ocr.IsUnavailable)
             return await UnreachableAsync(cmd, file, ocr.Code!, ocr.Detail, ct);
@@ -147,9 +152,16 @@ internal sealed class RunKycVerificationHandler(
             return await CaptureRejectedAsync(cmd, file, face.Code!, ct);
 
         // ── 3. Score the whole thing ────────────────────────────────────────
+        // The two readings are handed back as the service produced them — ScoreRequest carries
+        // their raw payloads — plus the two things the scorer weighs them against: how the
+        // customer was enrolled and how closely this file must be watched.
         var score = await biometry.ScoreAsync(
             cmd.TenantId,
-            new ScoreRequest(ocr.Value, face.Value, DeclaredFields: null, DocumentType: ocr.Value.DocumentType),
+            new ScoreRequest(
+                Ocr: ocr.Value,
+                FaceMatch: face.Value,
+                Channel: file.Channel,
+                RiskLevel: file.VigilanceLevel),
             correlationId,
             ct);
 
@@ -303,7 +315,7 @@ internal sealed class RunKycVerificationHandler(
                 job => job.ExecuteAsync(
                     cmd.KycFileId, cmd.TenantId,
                     cmd.DocumentStorageRef, cmd.SelfieStorageRef,
-                    cmd.RequestedBy, next),
+                    cmd.RequestedBy, cmd.DocumentType, next),
                 delay);
 
             logger.LogWarning(
@@ -357,7 +369,11 @@ internal sealed class RunKycVerificationHandler(
             // Stripped on the SAME key rule as the fields themselves. A confidence left behind for
             // a removed field would name the key the number arrived under, which is the one thing
             // removing it was meant to stop saying.
-            ocrFieldConfidencesJson: JsonSerializer.Serialize(WithoutDocumentNumber(ocr.FieldConfidences))));
+            ocrFieldConfidencesJson: JsonSerializer.Serialize(WithoutDocumentNumber(ocr.FieldConfidences)),
+            // The service's own answer, encrypted, because /v1/score takes it back verbatim and
+            // the two blobs above are projections of it with the number removed. Encrypted and not
+            // jsonb for exactly that reason: this one still contains the number.
+            encryptedOcrPayload: payloads.Protect(ocr.Raw)));
     }
 
     private void PersistFaceVerification(RunKycVerificationCommand cmd, KycFile file, FaceMatch match)
@@ -379,7 +395,8 @@ internal sealed class RunKycVerificationHandler(
                 portrait = match.PortraitQuality,
                 selfie = match.SelfieQuality,
             }),
-            modelVersion: match.ModelVersion));
+            modelVersion: match.ModelVersion,
+            encryptedFacePayload: payloads.Protect(match.Raw)));
     }
 
     /// <summary>

@@ -23,6 +23,11 @@ internal sealed class KycIdentityDocumentConfiguration : IEntityTypeConfiguratio
         b.Property(d => d.OcrFieldConfidencesJson).HasColumnType("jsonb");
         b.Property(d => d.MrzDataJson).HasColumnType("jsonb");
 
+        // TEXT and not jsonb, unlike its three neighbours: the value is an AES-GCM payload
+        // ("v1:nonce:tag:ciphertext"), so Postgres would reject it as JSON — and there is nothing
+        // to query inside it, which is the whole point of encrypting it.
+        b.Property(d => d.EncryptedOcrPayload);
+
         // THE index duplicate detection runs on. Not unique: the same person legitimately appears
         // on a rejected file and a new one, and uniqueness would block re-enrolment after a
         // refusal. The rule is a flag plus a compliance decision, not a constraint.
@@ -46,6 +51,9 @@ internal sealed class KycFaceVerificationConfiguration : IEntityTypeConfiguratio
         b.Property(v => v.SelfieStorageRef).HasMaxLength(200);
         b.Property(v => v.ModelVersion).HasMaxLength(50);
         b.Property(v => v.QualityScoresJson).HasColumnType("jsonb");
+
+        // Ciphertext, so text — see EncryptedOcrPayload.
+        b.Property(v => v.EncryptedFacePayload);
 
         b.HasIndex(v => new { v.KycFileId, v.Attempt })
             .IsUnique()

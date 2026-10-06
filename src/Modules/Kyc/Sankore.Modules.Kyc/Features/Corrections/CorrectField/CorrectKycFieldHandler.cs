@@ -7,6 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.Infrastructure.Biometry;
+// Aliased rather than imported: the generated namespace has a ScoreRequest of its own, and the
+// one this file builds is the module's.
+using WireFaceMatch = Sankore.Modules.Kyc.Infrastructure.Biometry.Generated.FaceMatchResponse;
+using WireOcr = Sankore.Modules.Kyc.Infrastructure.Biometry.Generated.OcrResponse;
 using Sankore.Modules.Kyc.Infrastructure.Crypto;
 using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Kernel;
@@ -31,6 +35,7 @@ internal sealed class CorrectKycFieldHandler(
     KycDbContext db,
     TimeProvider clock,
     IBiometryClient biometry,
+    BiometryPayloadProtector payloads,
     // Keyed: a KYC document number and an M01 client's phone must not be decryptable with the
     // same key. See KycFieldProtection for why a second AddFieldProtection call cannot be used.
     [FromKeyedServices(KycFieldProtection.Key)] IFieldEncryptor encryptor)
@@ -89,7 +94,7 @@ internal sealed class CorrectKycFieldHandler(
 
         db.KycFieldCorrections.Add(correction);
 
-        var scored = await ScoreAsync(file, document, fields, fieldName, ct);
+        var scored = await ScoreAsync(file, document, fieldName, cmd.NewValue, ct);
 
         if (scored.IsSuccess)
         {
@@ -130,40 +135,97 @@ internal sealed class CorrectKycFieldHandler(
             ScoreUnavailableCode: scored.IsSuccess ? null : scored.Code));
     }
 
-    private Task<BiometryResult<ConfidenceScore>> ScoreAsync(
+    /// <summary>
+    /// Re-scores the file from the service's OWN stored answers, with the correction applied.
+    ///
+    /// <para>
+    /// <c>/v1/score</c> is stateless and takes the answers to <c>/v1/ocr</c> and
+    /// <c>/v1/face-match</c> back verbatim, so they are read out of
+    /// <c>KycIdentityDocument.EncryptedOcrPayload</c> and
+    /// <c>KycFaceVerification.EncryptedFacePayload</c> rather than rebuilt: the projections stored
+    /// beside them drop the per-field source, the anomalies, the image quality and the MRZ checks,
+    /// which is most of what the score is computed from.
+    /// </para>
+    ///
+    /// <para>
+    /// A file verified before those columns existed has no payload, and then the score is reported
+    /// as unavailable rather than computed from a reconstruction — the correction itself still
+    /// stands, and the caller learns why through
+    /// <c>CorrectKycFieldResult.ScoreUnavailableCode</c>.
+    /// </para>
+    /// </summary>
+    private async Task<BiometryResult<ConfidenceScore>> ScoreAsync(
         KycFile file,
         KycIdentityDocument document,
-        Dictionary<string, string> fields,
         string correctedFieldName,
+        string correctedValue,
         CancellationToken ct)
     {
-        var reading = new OcrReading(
-            DocumentType: document.DocType,
-            Fields: fields,
-            // The corrected field is reported at full confidence: an agent read it off the
-            // document with their own eyes, which is strictly better evidence than the OCR's own
-            // guess. The other fields' confidences were never persisted, so they are simply
-            // absent rather than invented — the contract allows a field to be missing here.
-            FieldConfidences: new Dictionary<string, double> { [correctedFieldName] = 1.0 },
-            // Not re-submitted: the MRZ is unchanged evidence and re-deriving it from the
-            // corrected fields would hand the scorer a zone the document does not carry.
-            Mrz: null,
-            ServiceVersion: document.ServiceVersion ?? string.Empty);
+        var ocrPayload = payloads.UnprotectOcr(document.EncryptedOcrPayload);
 
-        return biometry.ScoreAsync(
+        // The latest attempt: the one the file's current score was computed from.
+        var face = await db.KycFaceVerifications
+            .Where(v => v.KycFileId == file.Id)
+            .OrderByDescending(v => v.Attempt)
+            .FirstOrDefaultAsync(ct);
+
+        var facePayload = payloads.UnprotectFace(face?.EncryptedFacePayload);
+
+        if (ocrPayload is null || facePayload is null)
+        {
+            return BiometryResult<ConfidenceScore>.Unavailable(
+                BiometryCodes.UnexpectedResponse,
+                "This file was verified before the service's own answers were kept, so it cannot "
+                + "be re-scored without a new verification.");
+        }
+
+        // The correction goes INTO the payload the scorer re-reads. Without it the scorer would
+        // re-grade the value the machine misread, the score would come back identical, and the
+        // agent would conclude the feature does nothing.
+        BiometryPayloadProtector.ApplyCorrection(ocrPayload, correctedFieldName, correctedValue);
+
+        return await biometry.ScoreAsync(
             file.TenantId,
             new ScoreRequest(
-                Ocr: reading,
-                // The face match is unchanged evidence the scorer already weighed. It is stored
-                // here as JSON quality scores rather than as the scalars ScoreRequest wants, so
-                // reconstructing a FaceMatch would mean inventing the quality numbers.
-                FaceMatch: null,
-                DeclaredFields: fields,
-                DocumentType: document.DocType),
+                Ocr: OcrReadingFrom(ocrPayload, document),
+                FaceMatch: FaceMatchFrom(facePayload, face!),
+                // The scorer weighs both: a remote capture and a high-risk file are not graded
+                // like a counter capture on a low-risk one, so they come off the file rather than
+                // being assumed.
+                Channel: file.Channel,
+                RiskLevel: file.VigilanceLevel,
+                // The service penalises a corrected reading, and it asks for names only — no
+                // values travel here.
+                CorrectedFieldNames: [correctedFieldName]),
             // The file id, so a support request can be traced across the two deployments' logs.
             correlationId: file.Id.ToString(),
             ct);
     }
+
+    /// <summary>
+    /// Wraps the stored payload in the shape <see cref="ScoreRequest"/> takes. Only
+    /// <c>Raw</c> reaches the service; the projected fields are what this module reads.
+    /// </summary>
+    private static OcrReading OcrReadingFrom(
+        WireOcr payload, KycIdentityDocument document)
+        => new(
+            DocumentType: document.DocType,
+            Fields: new Dictionary<string, string>(),
+            FieldConfidences: new Dictionary<string, double>(),
+            Mrz: null,
+            ServiceVersion: document.ServiceVersion ?? string.Empty,
+            Raw: payload);
+
+    private static FaceMatch FaceMatchFrom(
+        WireFaceMatch payload, KycFaceVerification verification)
+        => new(
+            Similarity: verification.SimilarityScore,
+            IsMatch: verification.IsMatch,
+            PortraitQuality: 0,
+            SelfieQuality: 0,
+            ModelVersion: verification.ModelVersion ?? string.Empty,
+            ServiceVersion: verification.ModelVersion ?? string.Empty,
+            Raw: payload);
 
     /// <summary>
     /// The biometry service has no "rejected" confidence level — that outcome arrives as a

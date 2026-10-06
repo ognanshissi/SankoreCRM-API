@@ -3,6 +3,8 @@ namespace Sankore.Modules.Kyc.Tests.Features.Corrections;
 using System.Security.Cryptography;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Generated = Sankore.Modules.Kyc.Infrastructure.Biometry.Generated;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Sankore.Modules.Kyc.Domain;
@@ -54,7 +56,14 @@ public sealed class CorrectKycFieldHandlerTests : IDisposable
         _factory.Dispose();
     }
 
-    private CorrectKycFieldHandler Handler() => new(_db, _clock, _biometry, _encryptor);
+    private CorrectKycFieldHandler Handler() => new(_db, _clock, _biometry, Payloads(), _encryptor);
+
+    /// <summary>
+    /// A real protector over the same AES key the test encrypts with: the stored payload is what
+    /// the re-score reads back, so stubbing it would skip the round-trip this slice depends on.
+    /// </summary>
+    private BiometryPayloadProtector Payloads() => new(
+        _encryptor, NullLogger<BiometryPayloadProtector>.Instance);
 
     private async Task<KycFile> SeedFileAsync(bool withDocument = true)
     {
@@ -75,12 +84,54 @@ public sealed class CorrectKycFieldHandlerTests : IDisposable
                     ["surname"] = Misread,
                     ["given_names"] = "AWA",
                 }),
-                serviceVersion: "flask-1.2.3"));
+                serviceVersion: "flask-1.2.3",
+                // The service's OWN answer, encrypted, which is what /v1/score is handed back —
+                // the projection above is not a faithful substitute for it.
+                encryptedOcrPayload: Payloads().Protect(WireOcr())));
+
+            // The latest face attempt, with its own payload: the scorer requires both answers.
+            _db.KycFaceVerifications.Add(KycFaceVerification.Create(
+                tenantId: _tenantId,
+                kycFileId: file.Id,
+                attempt: 1,
+                similarityScore: 0.91,
+                isMatch: true,
+                clock: _clock,
+                modelVersion: "flask-1.2.3",
+                encryptedFacePayload: Payloads().Protect(WireFace())));
         }
 
         await _db.SaveChangesAsync();
         return file;
     }
+
+    /// <summary>The OCR answer as the service produces it, with the misread surname.</summary>
+    private static Generated.OcrResponse WireOcr() => new()
+    {
+        Doc_type = Generated.DocType.CNI,
+        Fields = new Dictionary<string, Generated.FieldValue>
+        {
+            ["surname"] = new() { Value = Misread, Confidence = 0.62, Source = "VISUAL" },
+            ["given_names"] = new() { Value = "AWA", Confidence = 0.95, Source = "VISUAL" },
+        },
+        Anomalies = [],
+        Quality = new Generated.QualityInfo { Score = 0.8, Preprocessed = true },
+        Model_versions = new Generated.ModelVersions { Service = "flask-1.2.3" },
+    };
+
+    private static Generated.FaceMatchResponse WireFace() => new()
+    {
+        Similarity_score = 0.91,
+        Is_match = true,
+        Threshold = 0.62,
+        Detection_scores = new Dictionary<string, double>(),
+        Quality = new Generated.FaceQuality
+        {
+            Selfie = new Generated.QualityInfo { Score = 0.77, Preprocessed = false },
+            Document = new Generated.QualityInfo { Score = 0.8, Preprocessed = true },
+        },
+        Model_versions = new Generated.ModelVersions { Service = "flask-1.2.3" },
+    };
 
     private CorrectKycFieldCommand Command(Guid fileId, string source = "OCR") =>
         new(fileId, "surname", source, Corrected, _agentId);
@@ -163,8 +214,52 @@ public sealed class CorrectKycFieldHandlerTests : IDisposable
 
         await Handler().Handle(Command(file.Id), CancellationToken.None);
 
-        _biometry.LastScoreRequest!.Ocr!.Fields["surname"].Should().Be(Corrected);
-        _biometry.LastScoreRequest.DocumentType.Should().Be("CNI");
+        // Inside the payload the scorer actually re-reads — correcting only the module's own
+        // projection would have left the service re-grading the misread value, and the score would
+        // have come back identical.
+        var sent = _biometry.LastScoreRequest!.Ocr!.Raw!;
+        sent.Fields["surname"].Value.Should().Be(Corrected);
+        sent.Fields["surname"].Confidence.Should().Be(1, "an agent read it off the document");
+        sent.Fields["surname"].Source.Should().Be("AGENT");
+        sent.Fields["given_names"].Value.Should().Be("AWA", "the other fields are untouched");
+
+        // The service penalises a corrected reading, so it is told WHICH field moved — by name,
+        // never by value.
+        _biometry.LastScoreRequest.CorrectedFieldNames.Should().ContainSingle()
+            .Which.Should().Be("surname");
+
+        // Both are required by the scorer and both come off the file rather than being assumed.
+        _biometry.LastScoreRequest.Channel.Should().Be(KycChannel.Agency);
+        _biometry.LastScoreRequest.RiskLevel.Should().Be(KycVigilanceLevel.Standard);
+    }
+
+    [Fact]
+    public async Task A_file_verified_before_the_payloads_were_kept_is_not_re_scored_from_a_reconstruction()
+    {
+        // /v1/score grades the answers it produced. For an older file there are none, and rebuilding
+        // them from this module's projections would have the scorer grade a document whose
+        // anomalies, quality and MRZ checks were missing. The correction still stands and the
+        // caller is told why the score did not move.
+        var file = KycFile.Open(_tenantId, Guid.NewGuid(), KycChannel.Agency, _agentId, _clock);
+        _db.KycFiles.Add(file);
+        _db.KycIdentityDocuments.Add(KycIdentityDocument.Create(
+            tenantId: _tenantId,
+            kycFileId: file.Id,
+            docType: "CNI",
+            encryptedNumber: _encryptor.Encrypt("CI0012345678")!,
+            numberBlindIndex: "some-blind-index",
+            clock: _clock,
+            ocrFieldsJson: JsonSerializer.Serialize(new Dictionary<string, string> { ["surname"] = Misread }),
+            serviceVersion: "flask-1.2.3"));
+        await _db.SaveChangesAsync();
+
+        var result = await Handler().Handle(Command(file.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.NewScore.Should().BeNull();
+        result.Value.ScoreUnavailableCode.Should().Be(BiometryCodes.UnexpectedResponse);
+
+        (await _db.KycFieldCorrections.ToListAsync()).Should().ContainSingle();
     }
 
     [Fact]
@@ -189,7 +284,7 @@ public sealed class CorrectKycFieldHandlerTests : IDisposable
         // because a Flask deployment is down would simply make them type it again.
         var file = await SeedFileAsync();
         var handler = new CorrectKycFieldHandler(
-            _db, _clock, FakeBiometryClient.Unavailable(), _encryptor);
+            _db, _clock, FakeBiometryClient.Unavailable(), Payloads(), _encryptor);
 
         var result = await handler.Handle(Command(file.Id), CancellationToken.None);
 

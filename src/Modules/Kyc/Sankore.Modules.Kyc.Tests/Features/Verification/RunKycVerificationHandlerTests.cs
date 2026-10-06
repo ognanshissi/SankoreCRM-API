@@ -97,7 +97,9 @@ public sealed class RunKycVerificationHandlerTests : IDisposable
             .Returns(Result.Ok(new StartKycApprovalResult(
                 Guid.NewGuid(), ["Agent", "BranchManager"], AlreadyStarted: false, WorkflowInstanceId: null)));
 
-        return new(_db, _store, biometry, _encryptor, _indexer, _publisher, _hangfire,
+        return new(_db, _store, biometry,
+            new BiometryPayloadProtector(_encryptor, NullLogger<BiometryPayloadProtector>.Instance),
+            _encryptor, _indexer, _publisher, _hangfire,
             settings, sender, TimeProvider.System,
             NullLogger<RunKycVerificationHandler>.Instance);
     }

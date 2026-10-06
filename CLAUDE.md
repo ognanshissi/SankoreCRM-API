@@ -487,6 +487,39 @@ document images — three distinct secrets.
 seeded per tenant), not in M12: M12 exposes no generic settings store, and a compliance ceiling
 belongs to the module that enforces it. Same shape as M01's `customer_settings`.
 
+**The biometry client is GENERATED** from the service's own OpenAPI document, which lives in
+`src/Modules/Kyc/.../Infrastructure/Biometry/` and is regenerated on every build (NSwag, via
+`OpenApiReference`). It is declared in the MODULE and not in the bootstrapper: `HttpBiometryClient`
+is the consumer, and a module may not reference a host. Before it, the wire records were
+hand-written and not one field name matched the document — the service reports
+`model_versions.service` where the mappers demanded `service_version`, so every call mapped to null
+and answered `BIOMETRY_UNEXPECTED_RESPONSE`: every file stuck in Verifying, retried three times,
+against a service answering perfectly.
+
+Two things the generation needs. `biometry-openapi.json` is the **3.0 rewrite** of the service's
+3.1 document (`biometry-openapi.source.json`), produced by
+`tools/normalize-openapi-nullable.py`: NJsonSchema v11 turns `anyOf: [T, null]` into an empty
+marker class, which silently makes `mrz`, `birth_date` and even `FieldValue.value` unreachable from
+C#. Re-run the script after every refresh — forget it and the build fails on the mappers, which is
+the intended failure. And `/UseHttpRequestMessageCreationMethod` exists so a partial class can put
+the per-tenant token and the correlation id on each request: `DefaultRequestHeaders` on the pooled
+client is how one tenant calls with another's token.
+
+**`POST kyc-files/{id}/verify` carries a `documentType`** (CNI | Passport | Cedeao | Consulaire,
+default CNI). `/v1/ocr` requires it to pick its extraction template, and it cannot be derived — the
+type is part of the OCR *answer*. It is carried through `ReplayKycVerificationJob` too, or a retry
+re-reads a passport as a CNI.
+
+**`/v1/score` is stateless and takes the service's own answers back verbatim**, so
+`KycIdentityDocument.EncryptedOcrPayload` and `KycFaceVerification.EncryptedFacePayload` keep them
+(`BiometryPayloadProtector`, module key). Encrypted and not jsonb like their neighbours: the OCR
+payload repeats the document number in `fields` and in `mrz`, which is the value `EncryptedNumber`
+exists to protect — the same reason `OcrFieldsJson` has it stripped. A field correction patches the
+corrected value INTO that payload (confidence 1, source `AGENT`) before re-scoring; correcting only
+the projection would have the scorer re-grade the misreading and return the same score. A file
+verified before those columns existed is not re-scored at all: the correction stands and the caller
+gets `ScoreUnavailableCode`, rather than a score computed from a reconstruction.
+
 **Biometry failures are results, never exceptions.** `BiometryResult<T>` separates `Rejected`
 (unusable capture — record it, ask the agent for a better photo) from `Unavailable` (the service
 told us nothing — leave the file in `Verifying` and let Hangfire replay). Recording an outage as a

@@ -49,6 +49,29 @@ public enum KycTier
 }
 
 /// <summary>How the customer was enrolled. Drives nothing on its own; it is evidence.</summary>
+/// <summary>
+/// The kind of identity document being read, as DECLARED by the agent at capture.
+///
+/// <para>
+/// It is an input and not a reading: <c>POST /v1/ocr</c> requires it, because the extractor uses a
+/// different field template per document. The OCR answer carries a type too — what the service
+/// believes it read — and that is the one persisted on the evidence; this one only says what the
+/// agent put in front of the camera.
+/// </para>
+///
+/// <para>The four the biometric service supports; its enum is the authority on this list.</para>
+/// </summary>
+public enum KycDocumentType
+{
+    /// <summary>Carte nationale d'identité.</summary>
+    Cni,
+    Passport,
+    /// <summary>Carte d'identité biométrique CEDEAO/ECOWAS.</summary>
+    Cedeao,
+    /// <summary>Carte consulaire.</summary>
+    Consulaire,
+}
+
 public enum KycChannel
 {
     Agency,
