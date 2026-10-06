@@ -36,6 +36,8 @@
 # Visual Studio 15+ auto generated files
 Generated\ Files/
 
+src/Bootstrapper/Sankore.Api/kyc-documents/*
+
 # Local History for Visual Studio
 .localhistory/
 

@@ -63,6 +63,11 @@ public sealed class OutboxProcessor<TDbContext>(
 
         foreach (var message in pending)
         {
+            // Stop taking new work once shutdown starts, rather than beginning a publish that
+            // will be cancelled a moment later and charged to the message as a failure.
+            if (ct.IsCancellationRequested)
+                break;
+
             try
             {
                 var eventType = Type.GetType(message.EventType)
@@ -76,6 +81,20 @@ public sealed class OutboxProcessor<TDbContext>(
                 message.ProcessedAt = DateTimeOffset.UtcNow;
                 db.Set<OutboxMessage>().Update(message);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Shutdown is not a delivery failure, and must not spend one of the message's
+                // attempts. It used to: the broad catch below counted a cancelled publish like any
+                // other error, so a host stopped mid-send left the row with RetryCount incremented
+                // and LastError "A task was canceled." Since the pending query filters on
+                // RetryCount < MaxRetries, five such restarts would retire a message that had
+                // never actually failed — silently, because a row that stops matching a WHERE
+                // clause raises nothing. The next poll republishes it untouched instead.
+                logger.LogDebug(
+                    "Outbox publish of {MessageId} interrupted by shutdown; left for the next run",
+                    message.Id);
+                break;
+            }
             catch (Exception ex)
             {
                 message.RetryCount++;
@@ -84,10 +103,24 @@ public sealed class OutboxProcessor<TDbContext>(
                 logger.LogWarning(ex,
                     "Failed to publish outbox message {MessageId} (attempt {Attempt}/{Max})",
                     message.Id, message.RetryCount, MaxRetries);
+
+                // The row simply stops being selected after this. Saying so once is the only
+                // notice anyone gets that an event will never be delivered.
+                if (message.RetryCount >= MaxRetries)
+                {
+                    logger.LogError(
+                        "Outbox message {MessageId} ({EventType}) reached {Max} attempts and will "
+                        + "NOT be retried. Last error: {LastError}",
+                        message.Id, message.EventType, MaxRetries, message.LastError);
+                }
             }
         }
 
+        // CancellationToken.None on purpose. This save is bookkeeping for work already done: if a
+        // shutdown cancels it, messages this batch successfully published stay unprocessed and are
+        // published again on the next boot. The outbox is at-least-once, so a duplicate is legal —
+        // but taking one for the sake of abandoning an UPDATE already in hand is a poor trade.
         if (pending.Count > 0)
-            await db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(CancellationToken.None);
     }
 }

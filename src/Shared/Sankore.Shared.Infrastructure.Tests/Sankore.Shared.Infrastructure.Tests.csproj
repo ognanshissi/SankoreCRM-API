@@ -14,6 +14,11 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <!-- OutboxProcessor is a hosted service over a DbContext and IBus: covering it needs a real
+         (in-memory) context and a stand-in bus. Both versions are pinned centrally. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="MassTransit" />
   </ItemGroup>
 
   <ItemGroup>
