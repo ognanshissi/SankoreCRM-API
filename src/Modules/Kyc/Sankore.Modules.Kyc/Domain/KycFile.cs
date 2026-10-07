@@ -101,6 +101,25 @@ public sealed class KycFile : AggregateRoot
     /// </summary>
     public string? ManualValidationReason { get; private set; }
 
+    /// <summary>
+    /// The M12 workflow instance mirroring this file's CURRENT pass through validation, if one could
+    /// be started.
+    ///
+    /// <para>
+    /// Nullable, and null is ordinary: the mirror is best-effort, a tenant may have deleted its
+    /// <c>KycFile</c> template, and a file whose instance could not be started must still be
+    /// approvable. Nothing reads this to decide anything — M02 owns the circuit; the instance is a
+    /// reflection of it, for the cross-module inbox, the audit trail and the statistics.
+    /// </para>
+    ///
+    /// <para>
+    /// CLEARED when the file leaves validation for a complement, so the next pass opens a fresh
+    /// instance. One instance per round is what makes M12's cycle times count attempts honestly
+    /// instead of showing a single run that was interrupted twice.
+    /// </para>
+    /// </summary>
+    public Guid? WorkflowInstanceId { get; private set; }
+
     /// <summary>PostgreSQL xmin — optimistic concurrency, as in every other module.</summary>
     public uint Version { get; private set; }
 
@@ -387,6 +406,29 @@ public sealed class KycFile : AggregateRoot
         NextReviewDate = due;
         UpdatedAt = clock.GetUtcNow();
     }
+
+    /// <summary>
+    /// Remembers which workflow instance mirrors this round of validation.
+    ///
+    /// <para>
+    /// Deliberately does NOT stamp <see cref="UpdatedAt"/>: linking a mirror is bookkeeping about
+    /// this file, not a change to it, and letting it move the timestamp would make a traceability
+    /// detail look like activity on a dossier to every screen that sorts by it.
+    /// </para>
+    /// </summary>
+    public void LinkWorkflowInstance(Guid instanceId)
+    {
+        if (instanceId == Guid.Empty)
+            throw new DomainException("A workflow instance id is required.");
+
+        WorkflowInstanceId = instanceId;
+    }
+
+    /// <summary>
+    /// Forgets the mirrored instance, so the next entry into validation starts a new one. Called
+    /// when the file goes back for a complement — the round is over.
+    /// </summary>
+    public void ClearWorkflowInstance() => WorkflowInstanceId = null;
 }
 
 /// <summary>Raised on every status change so the slice can publish the matching integration event.</summary>

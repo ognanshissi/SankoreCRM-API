@@ -6,6 +6,7 @@ using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Files.GetKycFile;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.Tests.TestSupport;
+using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.Authorization;
@@ -58,7 +59,9 @@ public sealed class GetKycFileAgencyPerimeterTests : IDisposable
         scope.GetAccessibleAgencyIdsAsync(_tenantId, _userId, Arg.Any<CancellationToken>())
             .Returns(perimeter);
 
-        return new GetKycFileHandler(_db, currentUser, scope);
+        // The mirrored workflow status is best-effort and irrelevant to the perimeter: the
+        // substitute's default failure leaves it null, which is what a file with no mirror reads as.
+        return new GetKycFileHandler(_db, currentUser, scope, Substitute.For<IWorkflowModule>());
     }
 
     private async Task<KycFile> SeedAsync(Guid? agencyId)

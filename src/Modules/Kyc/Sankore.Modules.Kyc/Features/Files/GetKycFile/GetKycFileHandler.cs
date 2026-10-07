@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
+using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.Authorization;
@@ -11,7 +12,8 @@ using Sankore.Shared.Kernel.Authorization;
 internal sealed class GetKycFileHandler(
     KycDbContext db,
     ICurrentUser currentUser,
-    IAgencyScopeProvider agencyScope)
+    IAgencyScopeProvider agencyScope,
+    IWorkflowModule workflow)
     : IRequestHandler<GetKycFileQuery, Result<KycFileDto>>
 {
     public async Task<Result<KycFileDto>> Handle(GetKycFileQuery request, CancellationToken ct)
@@ -63,11 +65,46 @@ internal sealed class GetKycFileHandler(
                 f.NextReviewDate,
                 f.ValidatedAt,
                 f.CreatedAt,
-                f.UpdatedAt))
+                f.UpdatedAt,
+                f.WorkflowInstanceId))
             .FirstOrDefaultAsync(ct);
 
-        return dto is null
-            ? Result.Fail<KycFileDto>(KycErrors.FileNotFound)
-            : Result.Ok(dto);
+        if (dto is null)
+            return Result.Fail<KycFileDto>(KycErrors.FileNotFound);
+
+        return Result.Ok(dto with { WorkflowStatus = await ReadWorkflowStatusAsync(dto, ct) });
+    }
+
+    /// <summary>
+    /// The state of the file's mirrored workflow instance, or null when there is none to read.
+    ///
+    /// <para>
+    /// Carried on this read rather than left to M12's own HTTP surface for two reasons: it costs one
+    /// lookup by primary key instead of a second round trip from the screen, and reading it through
+    /// M12's instance endpoint would demand <c>workflow:instance:view</c> from a KYC validator who
+    /// has no other business there.
+    /// </para>
+    ///
+    /// <para>
+    /// It exists because the mirror can disagree with this file and must do so VISIBLY. A rung that
+    /// blows its SLA leaves the instance <c>TimedOut</c> while the file sits in <c>Validating</c>,
+    /// governed by M02 as always — an operator needs to see that the deadline was missed, not
+    /// discover it in a log. Best-effort: a failure here must not break a file read, so it comes
+    /// back null and the screen simply shows nothing.
+    /// </para>
+    /// </summary>
+    private async Task<string?> ReadWorkflowStatusAsync(KycFileDto dto, CancellationToken ct)
+    {
+        if (dto.WorkflowInstanceId is not { } instanceId) return null;
+
+        try
+        {
+            var status = await workflow.GetInstanceStatusAsync(instanceId, currentUser.TenantId, ct);
+            return status.IsSuccess ? status.Value.Status : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

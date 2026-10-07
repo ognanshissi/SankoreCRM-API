@@ -40,7 +40,11 @@ internal sealed class StartKycApprovalHandler(
     {
         // IgnoreQueryFilters + explicit tenant: the sender is a consumer or a job, so the ambient
         // tenant is not the one being processed.
+        // AsTracking: the mirror's instance id is written onto the file below, and the context is
+        // NoTracking by default — without it LinkWorkflowInstance would mutate a detached instance
+        // and SaveChanges would write nothing.
         var file = await db.KycFiles
+            .AsTracking()
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(f => f.Id == cmd.KycFileId && f.TenantId == cmd.TenantId, ct);
 
@@ -49,8 +53,15 @@ internal sealed class StartKycApprovalHandler(
 
         var existing = await LoadLevelsAsync(cmd, ct);
         if (existing.Count > 0)
+        {
+            // The circuit is already there, but this round may still need a mirror: a complement
+            // request cancels the instance and clears the id, and the steps are REUSED on the way
+            // back. That is why these paths used to return null and the link was lost.
+            var mirrored = await EnsureWorkflowAsync(cmd, file, existing, ct);
+
             return Result.Ok(new StartKycApprovalResult(
-                file.Id, Describe(existing), AlreadyStarted: true, WorkflowInstanceId: null));
+                file.Id, Describe(existing), AlreadyStarted: true, mirrored));
+        }
 
         var levels = await circuit.ResolveAsync(file, ct);
 
@@ -75,15 +86,21 @@ internal sealed class StartKycApprovalHandler(
 
             var winner = await LoadLevelsAsync(cmd, ct);
 
-            return winner.Count > 0
-                ? Result.Ok(new StartKycApprovalResult(
-                    file.Id, Describe(winner), AlreadyStarted: true, WorkflowInstanceId: null))
-                : Result.Fail<StartKycApprovalResult>(KycErrors.InvalidTransition);
+            if (winner.Count == 0)
+                return Result.Fail<StartKycApprovalResult>(KycErrors.InvalidTransition);
+
+            // The loser does not start a second workflow — that would put two approval tasks in
+            // front of the same branch manager — but it does link the file to one if the winner
+            // somehow left it without.
+            var mirrored = await EnsureWorkflowAsync(cmd, file, winner, ct);
+
+            return Result.Ok(new StartKycApprovalResult(
+                file.Id, Describe(winner), AlreadyStarted: true, mirrored));
         }
 
         // Started AFTER the steps are committed, and only when this call is the one that created
         // them: the workflow is a record of a circuit that exists, not the thing that creates it.
-        var workflowInstanceId = await StartWorkflowAsync(cmd, ct);
+        var workflowInstanceId = await EnsureWorkflowAsync(cmd, file, levels, ct);
 
         logger.LogInformation(
             "Approval circuit opened on KYC file {KycFileId}: {Levels}",
@@ -94,22 +111,51 @@ internal sealed class StartKycApprovalHandler(
     }
 
     /// <summary>
-    /// M12 gives the approvers a task list and an audit trail of the chain, but it is NOT what
-    /// guarantees anything: the engine enforces no self-approval rule of its own — M01 learned
-    /// that on client merges — so M02 keeps four eyes in <c>KycFile.Approve</c>. A missing
+    /// Makes sure this round of validation has a workflow instance behind it, and remembers which.
+    ///
+    /// <para>
+    /// M12 gives the approvers a cross-module task list, an audit trail of the chain and the cycle
+    /// times, but it is NOT what guarantees anything: the engine enforces no self-approval rule of
+    /// its own — M01 learned that on client merges — so M02 keeps four eyes in
+    /// <c>KycFile.Approve</c> and on every rung of <c>DecideKycApprovalHandler</c>. A missing
     /// template, or a workflow module that throws, therefore degrades to a log line: the steps are
     /// already written and the circuit works without it. Blocking here would leave a file in
     /// Validating with nobody able to sign it, over a traceability nicety.
+    /// </para>
+    ///
+    /// <para>
+    /// Idempotent on the file: a file that already carries an instance id keeps it, so a replayed
+    /// verification cannot open a second instance for one round.
+    /// </para>
     /// </summary>
-    private async Task<Guid?> StartWorkflowAsync(StartKycApprovalCommand cmd, CancellationToken ct)
+    /// <param name="levels">
+    /// The rungs this file actually has. Passed to M12 so the instance skips the steps that do not
+    /// apply — a low-risk file is the agent alone, and an instance showing a branch-manager step
+    /// waiting would be inviting a decision nobody will be asked for. The ladder itself stays
+    /// M02's: see <c>WorkflowStartRequest.RequiredStepOrders</c>.
+    /// </param>
+    private async Task<Guid?> EnsureWorkflowAsync(
+        StartKycApprovalCommand cmd,
+        KycFile file,
+        IReadOnlyList<KycApprovalLevel> levels,
+        CancellationToken ct)
     {
+        if (file.WorkflowInstanceId is { } already) return already;
+
         try
         {
             var started = await workflow.StartWorkflowAsync(
-                new WorkflowStartRequest(WorkflowEntityType, cmd.KycFileId, cmd.StartedBy, cmd.TenantId),
+                new WorkflowStartRequest(
+                    WorkflowEntityType, cmd.KycFileId, cmd.StartedBy, cmd.TenantId,
+                    RequiredStepOrders: [.. levels.Select(level => (int)level)]),
                 ct);
 
-            if (started.IsSuccess) return started.Value;
+            if (started.IsSuccess)
+            {
+                file.LinkWorkflowInstance(started.Value);
+                await db.SaveChangesAsync(ct);
+                return started.Value;
+            }
 
             logger.LogWarning(
                 "No workflow instance for the approval circuit of KYC file {KycFileId} "

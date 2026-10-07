@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.PublicApi;
+using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
@@ -39,6 +40,7 @@ internal sealed class DecideKycApprovalHandler(
     KycDbContext db,
     ICurrentUser currentUser,
     [FromKeyedServices(nameof(KycDbContext))] IEventPublisher publisher,
+    IWorkflowModule workflow,
     TimeProvider clock,
     ILogger<DecideKycApprovalHandler> logger)
     : IRequestHandler<DecideKycApprovalCommand, Result<DecideKycApprovalResult>>
@@ -136,6 +138,8 @@ internal sealed class DecideKycApprovalHandler(
 
         await db.SaveChangesAsync(ct);
 
+        await MirrorToWorkflowAsync(cmd, file, ct);
+
         logger.LogInformation(
             "KYC file {KycFileId} — {Level} decided {Decision} by {UserId}; file is now {Status}",
             file.Id, cmd.Level, cmd.Decision, currentUser.Id, file.Status);
@@ -145,6 +149,79 @@ internal sealed class DecideKycApprovalHandler(
         return Result.Ok(new DecideKycApprovalResult(
             file.Id, cmd.Level.ToString(), cmd.Decision.ToString(),
             file.Status.ToString(), file.Tier.ToString(), completed));
+    }
+
+    /// <summary>
+    /// Records this decision on the file's M12 instance, so the cross-module inbox, the audit trail
+    /// and the cycle times follow the circuit instead of drifting from it.
+    ///
+    /// <para>
+    /// <b>Best-effort, and that is the point.</b> The decision is already committed when this runs,
+    /// and every failure path — no instance, a tenant with no template, an instance M12 timed out,
+    /// the module throwing — is a log line. A compliance decision must never be rolled back because
+    /// a traceability record could not be written; <c>StartKycApprovalHandler</c> made the same
+    /// trade when it opened the instance.
+    /// </para>
+    ///
+    /// <para>
+    /// A complement request <b>cancels</b> the instance and clears the link rather than rejecting
+    /// it: the file is going back to its author, not being refused, and the next pass gets a fresh
+    /// instance so the statistics count attempts instead of showing one interrupted run. The file is
+    /// saved again for that, which is why this runs after the main save and not inside it.
+    /// </para>
+    /// </summary>
+    private async Task MirrorToWorkflowAsync(
+        DecideKycApprovalCommand cmd, KycFile file, CancellationToken ct)
+    {
+        if (file.WorkflowInstanceId is not { } instanceId) return;
+
+        var decision = cmd.Decision switch
+        {
+            KycApprovalDecision.Approved => WorkflowDecision.Approved,
+            KycApprovalDecision.Rejected => WorkflowDecision.Rejected,
+            KycApprovalDecision.ComplementRequired => WorkflowDecision.Cancelled,
+            _ => (WorkflowDecision?)null,
+        };
+
+        if (decision is null) return;
+
+        try
+        {
+            var recorded = await workflow.RecordDecisionAsync(
+                new RecordWorkflowDecisionRequest(
+                    InstanceId: instanceId,
+                    TenantId: file.TenantId,
+                    // The rung's position, which is what M12 matches on. KycApprovalLevel's numeric
+                    // values ARE the ladder order — the same number KycApprovalStep.LevelRank holds.
+                    StepOrder: (int)cmd.Level,
+                    Decision: decision.Value,
+                    ActedByUserId: currentUser.Id,
+                    Comment: cmd.Comment),
+                ct);
+
+            if (recorded.IsFailure)
+            {
+                logger.LogWarning(
+                    "KYC file {KycFileId}: the {Decision} on {Level} was not mirrored onto workflow "
+                    + "instance {InstanceId}: {Error}. M02 remains the record of the decision.",
+                    file.Id, cmd.Decision, cmd.Level, instanceId, recorded.Error);
+
+                return;
+            }
+
+            if (decision.Value == WorkflowDecision.Cancelled)
+            {
+                file.ClearWorkflowInstance();
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "KYC file {KycFileId}: mirroring the {Decision} on {Level} onto workflow instance "
+                + "{InstanceId} failed. M02 remains the record of the decision.",
+                file.Id, cmd.Decision, cmd.Level, instanceId);
+        }
     }
 
     /// <summary>

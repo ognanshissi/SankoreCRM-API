@@ -90,7 +90,8 @@ public sealed class WorkflowInstance : AggregateRoot
         string contextJson = "{}",
         IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowRule>>? rulesByStepDefId = null,
         IReadOnlyDictionary<string, object>? context = null,
-        IRuleEvaluator? evaluator = null)
+        IRuleEvaluator? evaluator = null,
+        IReadOnlyCollection<int>? requiredStepOrders = null)
     {
         if (!template.IsActive)
             throw new DomainException("Cannot start a workflow from an inactive template.");
@@ -112,6 +113,20 @@ public sealed class WorkflowInstance : AggregateRoot
 
         foreach (var def in template.Steps.OrderBy(s => s.Order))
             instance._steps.Add(WorkflowInstanceStep.Create(template.TenantId, instance.Id, def));
+
+        // Steps the caller says do not apply to this entity are skipped BEFORE the first advance, so
+        // the instance opens on the first rung that really applies and never shows a step awaiting a
+        // decision nobody will be asked for.
+        //
+        // This is for a caller whose ladder is computed per entity — M02's KYC circuit is one or
+        // three rungs depending on the file. Rule-based SkipIf/RequireIf below stays the way a
+        // template expresses its OWN conditions; the two are independent and a step skipped here is
+        // simply never offered to the evaluator.
+        if (requiredStepOrders is not null)
+        {
+            foreach (var step in instance._steps.Where(s => !requiredStepOrders.Contains(s.Order)))
+                step.Skip();
+        }
 
         instance.AdvanceToNextStep(rulesByStepDefId, context, evaluator);
         return instance;

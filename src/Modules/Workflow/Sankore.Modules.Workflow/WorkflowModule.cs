@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Workflow.Features.Analytics;
 using Sankore.Modules.Workflow.Features.Instances;
 using Sankore.Modules.Workflow.Features.Tasks;
@@ -18,8 +19,10 @@ using Sankore.Modules.Workflow.Infrastructure.Rules;
 using Sankore.Modules.Workflow.Infrastructure.Actions;
 using Sankore.Modules.Workflow.Infrastructure.Actions.Executors;
 using Sankore.Modules.Workflow.Infrastructure.Consumers;
+using Sankore.Modules.Workflow.Infrastructure.Seeders;
 using Sankore.Modules.Workflow.Infrastructure.Triggers;
 using Sankore.Modules.Workflow.PublicApi;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Workflow;
 
@@ -71,12 +74,18 @@ public static class WorkflowModule
     }
 
     /// <summary>
-    /// Runs EF migrations. Call once at startup inside a scoped block in Program.cs.
+    /// Runs EF migrations, then seeds the built-in templates other modules resolve by entity type.
+    /// Call once at startup inside a scoped block in Program.cs.
     /// </summary>
     public static async Task InitializeAsync(IServiceProvider sp)
     {
         var db = sp.GetRequiredService<WorkflowDbContext>();
         await db.Database.MigrateAsync();
+
+        await WorkflowTemplateSeeder.SeedAsync(
+            db,
+            sp.GetRequiredService<ITenantStore>(),
+            sp.GetRequiredService<ILogger<WorkflowDbContext>>());
     }
 
     public static IEndpointRouteBuilder MapWorkflowModuleEndpoints(this IEndpointRouteBuilder app)

@@ -8,6 +8,7 @@ using NSubstitute;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Approval.Decide;
 using Sankore.Modules.Kyc.Tests.TestSupport;
+using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Messaging;
 using Xunit;
@@ -78,7 +79,7 @@ public sealed class FourEyesOnEveryLevelTests : IDisposable
 
     private DecideKycApprovalHandler Handler(Guid approver) =>
         new(_factory.CreateContext(), User(approver),
-            Substitute.For<IEventPublisher>(), TimeProvider.System,
+            Substitute.For<IEventPublisher>(), Substitute.For<IWorkflowModule>(), TimeProvider.System,
             NullLogger<DecideKycApprovalHandler>.Instance);
 
     [Fact]

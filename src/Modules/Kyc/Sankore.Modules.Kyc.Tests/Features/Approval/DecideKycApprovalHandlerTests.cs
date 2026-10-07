@@ -37,6 +37,7 @@ public sealed class DecideKycApprovalHandlerTests : IDisposable
     private readonly TimeProvider _clock = TimeProvider.System;
     private readonly IEventPublisher _publisher = Substitute.For<IEventPublisher>();
     private readonly ICurrentUser _currentUser = Substitute.For<ICurrentUser>();
+    private readonly IWorkflowModule _workflow = Substitute.For<IWorkflowModule>();
     private readonly DecideKycApprovalHandler _handler;
 
     public DecideKycApprovalHandlerTests()
@@ -47,8 +48,10 @@ public sealed class DecideKycApprovalHandlerTests : IDisposable
         _currentUser.TenantId.Returns(_tenantId);
         _currentUser.Id.Returns(_approverId);
 
+        // The mirror onto M12 is best-effort; these tests are about the circuit, so the substitute's
+        // default (a null Result) stands in for "no instance to record against".
         _handler = new DecideKycApprovalHandler(
-            _db, _currentUser, _publisher, _clock,
+            _db, _currentUser, _publisher, _workflow, _clock,
             NullLogger<DecideKycApprovalHandler>.Instance);
     }
 

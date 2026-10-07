@@ -25,4 +25,6 @@ public sealed record KycFileDto(
     DateOnly? NextReviewDate,
     DateTimeOffset? ValidatedAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid? WorkflowInstanceId = null,
+    string? WorkflowStatus = null);

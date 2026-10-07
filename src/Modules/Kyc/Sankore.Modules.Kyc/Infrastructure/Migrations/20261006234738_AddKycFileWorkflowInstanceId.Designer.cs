@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sankore.Modules.Kyc.Infrastructure;
@@ -11,9 +12,11 @@ using Sankore.Modules.Kyc.Infrastructure;
 namespace Sankore.Modules.Kyc.Infrastructure.Migrations
 {
     [DbContext(typeof(KycDbContext))]
-    partial class KycDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006234738_AddKycFileWorkflowInstanceId")]
+    partial class AddKycFileWorkflowInstanceId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
