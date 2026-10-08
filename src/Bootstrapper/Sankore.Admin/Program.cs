@@ -70,8 +70,12 @@ using (var scope = app.Services.CreateScope())
     await TenantSeeder.SeedAsync(adminDbContext);
 }
 
-if (app.Environment.IsDevelopment())
+// Served only where SwaggerExposure allows (Development by default) and always behind HTTP Basic
+// auth. The gate must come first: UseSwagger answers the request itself. Note that UseApiKeyAuth
+// below never protected these routes — it is registered after them.
+if (SwaggerExposure.IsEnabled(app.Configuration, app.Environment))
 {
+    app.UseSwaggerBasicAuth();
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {

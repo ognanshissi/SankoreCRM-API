@@ -414,8 +414,12 @@ if (emitOpenApiTo is null)
 // 4. HTTP pipeline
 // ---------------------------------------------------------------------
 
-if (app.Environment.IsDevelopment())
+// The Swagger UI and the OpenAPI document are a complete map of this API plus a client for it,
+// so they are served only where SwaggerExposure allows (Development by default) and always behind
+// HTTP Basic auth. The gate must come first: UseSwagger answers the request itself.
+if (SwaggerExposure.IsEnabled(app.Configuration, app.Environment))
 {
+    app.UseSwaggerBasicAuth();
     app.UseSwagger();
     app.UseSwaggerUI();
 }

@@ -366,6 +366,19 @@ configured, the filter allows that only in Development and answers 503 elsewhere
 that creates a super-user fails closed. Both share `ApiKeyValidator.Matches`, which compares in
 constant time.
 
+**Swagger is behind HTTP Basic auth** on both hosts (`Sankore.Api`, `Sankore.Admin`).
+`SwaggerExposure.IsEnabled` decides whether `/swagger` is mapped at all — `Swagger:Enabled` when
+set, otherwise Development only, which is the behaviour the inline `IsDevelopment()` checks had — and
+`UseSwaggerBasicAuth()` (`Shared.Infrastructure/Auth/`) guards `/swagger` and `/openapi` against
+`Swagger:Auth:Username` / `Swagger:Auth:Password`, compared in constant time. It must be registered
+**before** `UseSwagger()`, which answers the request itself. Like `ApiKeyEndpointFilter` and unlike
+`ApiKeyMiddleware`, a missing password is tolerated **only in Development** (a local `dotnet run`
+must not start prompting; dev credentials sit in `appsettings.Development.json`) and answers 503
+elsewhere: a host that publishes the API map and forgot the password serves no documentation rather
+than open documentation. The gate is HTTP-only, so `--emit-openapi` is unaffected — it reads
+`ISwaggerProvider` in-process. In Sankore.Admin this also closes a real hole: `UseApiKeyAuth()` is
+registered *after* the Swagger block and so never covered those routes.
+
 Deployment specifics live in `docs/deployment-dokploy.md`.
 
 ### Secrets vault
