@@ -54,7 +54,7 @@ public sealed class ConvertLeadHandlerTests : IDisposable
         currentUser.TenantId.Returns(_tenantId);
 
         return new ConvertLeadHandler(
-            _factory.CreateContext(), currentUser, _legacyCustomers, _customers, _publisher);
+            _factory.CreateContext(), currentUser, _customers, _publisher);
     }
 
     private void CustomersReturn(CreateFromLeadResult result) =>
@@ -213,7 +213,7 @@ public sealed class ConvertLeadHandlerTests : IDisposable
     {
         var lead = await SeedLeadAsync();
         var existingId = Guid.NewGuid();
-        _legacyCustomers.ExistsAsync(_tenantId, existingId, Arg.Any<CancellationToken>()).Returns(true);
+        _customers.ExistsAsync(_tenantId, existingId, Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await Handler().Handle(
             new ConvertLeadCommand(lead.Id, CustomerId: existingId, Force: true), CancellationToken.None);
@@ -229,7 +229,7 @@ public sealed class ConvertLeadHandlerTests : IDisposable
     public async Task An_unknown_customer_id_is_refused_before_anything_is_created()
     {
         var lead = await SeedLeadAsync();
-        _legacyCustomers.ExistsAsync(_tenantId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
+        _customers.ExistsAsync(_tenantId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await Handler().Handle(
             new ConvertLeadCommand(lead.Id, CustomerId: Guid.NewGuid(), Force: true),

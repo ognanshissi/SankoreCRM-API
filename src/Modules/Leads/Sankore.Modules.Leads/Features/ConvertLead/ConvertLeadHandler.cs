@@ -18,7 +18,6 @@ using Sankore.Shared.Kernel;
 internal sealed class ConvertLeadHandler(
     LeadsDbContext db,
     ICurrentUser currentUser,
-    ICustomerModule customerModule,
     ICustomersModule customersModule,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<ConvertLeadCommand, Result<ConvertLeadResult>>
@@ -36,7 +35,7 @@ internal sealed class ConvertLeadHandler(
         // ── US-M13-171: Validate existing customer if provided ──────────
         if (cmd.CustomerId.HasValue)
         {
-            var exists = await customerModule.ExistsAsync(
+            var exists = await customersModule.ExistsAsync(
                 lead.TenantId, cmd.CustomerId.Value, ct);
 
             if (!exists)

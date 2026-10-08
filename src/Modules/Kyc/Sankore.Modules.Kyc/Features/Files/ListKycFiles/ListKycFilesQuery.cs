@@ -43,10 +43,25 @@ public sealed record KycFileListPage(
 }
 
 /// <param name="CustomerId">
-/// Opaque. The customer's NAME is deliberately not here: names live in clear in M01 so its search
-/// stays an indexable prefix scan, and M01 exposes no batch lookup — resolving twenty names through
-/// this module would be twenty cross-module calls per page, plus a copy of someone else's data to
-/// keep in step. The screen resolves them from the clients API it already calls.
+/// Opaque — an id into M01, never a foreign key.
+/// </param>
+/// <param name="CustomerName">
+/// M01's <c>DisplayName</c>, resolved for the page's rows through one batch call
+/// (<c>ICustomersModule.GetClientSummariesAsync</c>) and NOT stored here: a name copied into the
+/// kyc schema is a second source of truth that drifts on the next rename or merge.
+///
+/// <para>
+/// <c>null</c> when M01 does not know the id — a dangling reference left by a purge, or a tenant
+/// mismatch. A compliance worklist must still render the row and its required action; the screen
+/// shows a placeholder. That is also why resolution is read-only and never fails the page.
+/// </para>
+///
+/// <para>
+/// Safe to return in clear: M01 keeps names unencrypted precisely so its own search stays an
+/// indexable prefix scan, so this leaks nothing the clients API would not already answer to the
+/// same caller — unlike a phone or document number, which only the audited reveal endpoint hands
+/// out.
+/// </para>
 /// </param>
 /// <param name="RequiredActionCode">
 /// A stable code, not a sentence. Phrasing belongs to the screen, which already holds the module's
@@ -61,6 +76,7 @@ public sealed record KycFileListPage(
 public sealed record KycFileListItem(
     Guid KycFileId,
     Guid CustomerId,
+    string? CustomerName,
     Guid? AgencyId,
     string Status,
     string Tier,

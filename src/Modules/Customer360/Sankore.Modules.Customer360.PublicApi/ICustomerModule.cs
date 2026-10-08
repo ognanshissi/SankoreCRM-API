@@ -6,16 +6,7 @@ namespace Sankore.Modules.Customer360.PublicApi;
 /// </summary>
 public interface ICustomerModule
 {
-    /// <summary>
-    /// Checks whether a customer with the given ID exists for the tenant.
-    /// Used by Leads module for convert-to-existing-customer validation (US-M13-171).
-    /// </summary>
-    Task<bool> ExistsAsync(Guid tenantId, Guid customerId, CancellationToken ct);
 
-    /// <summary>
-    /// Returns a lightweight summary of a customer, or null if not found.
-    /// </summary>
-    Task<CustomerSummary?> GetCustomerAsync(Guid tenantId, Guid customerId, CancellationToken ct);
 }
 
 public sealed record CustomerSummary(

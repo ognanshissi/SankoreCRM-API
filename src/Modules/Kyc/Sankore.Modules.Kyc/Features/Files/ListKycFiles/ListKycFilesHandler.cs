@@ -2,6 +2,7 @@ namespace Sankore.Modules.Kyc.Features.Files.ListKycFiles;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
@@ -11,7 +12,8 @@ using Sankore.Shared.Kernel.Authorization;
 internal sealed class ListKycFilesHandler(
     KycDbContext db,
     ICurrentUser currentUser,
-    IAgencyScopeProvider agencyScope)
+    IAgencyScopeProvider agencyScope,
+    ICustomersModule customers)
     : IRequestHandler<ListKycFilesQuery, Result<KycFileListPage>>
 {
     private const int MaxPageSize = 100;
@@ -86,10 +88,20 @@ internal sealed class ListKycFilesHandler(
             })
             .ToListAsync(ct);
 
+        // Names come from M01, in ONE call for the rows we are about to return — never inside the
+        // Select above, which runs in SQL against the kyc schema and cannot reach another module's
+        // tables anyway. Bounded by pageSize, so the IN list is at most MaxPageSize wide.
+        var names = await customers.GetClientSummariesAsync(
+            currentUser.TenantId, [.. rows.Select(r => r.CustomerId)], ct);
+
         return Result.Ok(new KycFileListPage(
             Rows: [.. rows.Select(r => new KycFileListItem(
                 KycFileId: r.Id,
                 CustomerId: r.CustomerId,
+                // Absent from the dictionary means M01 does not know this id. The row still renders
+                // with its status and required action: a worklist that hid files whose customer
+                // record vanished would hide exactly the ones somebody has to look at.
+                CustomerName: names.TryGetValue(r.CustomerId, out var client) ? client.DisplayName : null,
                 AgencyId: r.AgencyId,
                 Status: r.Status.ToString(),
                 Tier: r.Tier.ToString(),

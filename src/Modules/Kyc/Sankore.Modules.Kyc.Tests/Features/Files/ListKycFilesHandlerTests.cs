@@ -2,6 +2,7 @@ namespace Sankore.Modules.Kyc.Tests.Features.Files;
 
 using FluentAssertions;
 using NSubstitute;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Files.ListKycFiles;
 using Sankore.Modules.Kyc.Infrastructure;
@@ -27,6 +28,12 @@ public sealed class ListKycFilesHandlerTests : IDisposable
     private readonly KycDbContext _db;
     private readonly MovingClock _clock = new();
 
+    /// <summary>
+    /// What the stubbed M01 knows. A file seeded WITHOUT an entry here stands for a customer that
+    /// module can no longer resolve, which is the case the null name exists for.
+    /// </summary>
+    private readonly Dictionary<Guid, string> _knownCustomers = [];
+
     public ListKycFilesHandlerTests()
     {
         _factory = new TestKycDbContextFactory(_tenantId);
@@ -47,17 +54,54 @@ public sealed class ListKycFilesHandlerTests : IDisposable
     /// </param>
     private ListKycFilesHandler Handler(
         IReadOnlySet<Guid>? perimeter = null, bool unrestricted = false, params string[] roles)
+        => new(_db, CurrentUser(roles), Scope(perimeter, unrestricted), Customers());
+
+    private ICurrentUser CurrentUser(params string[] roles)
     {
         var currentUser = Substitute.For<ICurrentUser>();
         currentUser.Id.Returns(_userId);
         currentUser.TenantId.Returns(_tenantId);
         currentUser.Roles.Returns(roles);
+        return currentUser;
+    }
 
+    private IAgencyScopeProvider Scope(
+        IReadOnlySet<Guid>? perimeter = null, bool unrestricted = false)
+    {
         var scope = Substitute.For<IAgencyScopeProvider>();
         scope.GetAccessibleAgencyIdsAsync(_tenantId, _userId, Arg.Any<CancellationToken>())
             .Returns(unrestricted ? null : perimeter ?? new HashSet<Guid> { MyAgency });
+        return scope;
+    }
 
-        return new ListKycFilesHandler(_db, currentUser, scope);
+    /// <summary>
+    /// M01, stubbed to answer only about the ids it was ASKED for — the batch contract. Returning
+    /// the whole registry regardless of the argument would hide the bug this shape catches: a
+    /// handler keying the dictionary by anything but the requested id.
+    /// </summary>
+    private ICustomersModule Customers()
+    {
+        var customers = Substitute.For<ICustomersModule>();
+
+        customers
+            .GetClientSummariesAsync(
+                _tenantId, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult<IReadOnlyDictionary<Guid, ClientSummary>>(
+                ((IReadOnlyCollection<Guid>)call[1])
+                    .Where(_knownCustomers.ContainsKey)
+                    .ToDictionary(id => id, id => new ClientSummary(
+                        Id: id,
+                        ClientNumber: "CLI-0001",
+                        ClientType: "Individual",
+                        DisplayName: _knownCustomers[id],
+                        Status: "Active",
+                        AgencyId: MyAgency,
+                        AdvisorUserId: null,
+                        KycStatus: "Pending",
+                        RiskLevel: "Standard",
+                        MergedIntoId: null))));
+
+        return customers;
     }
 
     private static ListKycFilesQuery Query(
@@ -71,16 +115,24 @@ public sealed class ListKycFilesHandlerTests : IDisposable
     /// none", and it silently filed the orphan under MyAgency — making the two perimeter tests pass
     /// for the wrong reason.
     /// </param>
+    /// <param name="customerName">
+    /// The name M01 will answer for this file's customer. Left null, M01 knows nothing about the
+    /// id and the row must still come back.
+    /// </param>
     private KycFile Seed(
         Guid? agency = null,
         bool withoutAgency = false,
         KycFileStatus status = KycFileStatus.Collecting,
         KycVigilanceLevel vigilance = KycVigilanceLevel.Standard,
         KycApprovalLevel? pendingAt = null,
-        KycApprovalLevel? alreadySigned = null)
+        KycApprovalLevel? alreadySigned = null,
+        string? customerName = null)
     {
+        var customerId = Guid.NewGuid();
+        if (customerName is not null) _knownCustomers[customerId] = customerName;
+
         var file = KycFile.Open(
-            _tenantId, Guid.NewGuid(), KycChannel.Agency, Guid.NewGuid(), _clock,
+            _tenantId, customerId, KycChannel.Agency, Guid.NewGuid(), _clock,
             vigilanceLevel: vigilance, agencyId: withoutAgency ? null : agency ?? MyAgency);
 
         // The status is set through reflection-free means only as far as the domain allows; this
@@ -318,15 +370,81 @@ public sealed class ListKycFilesHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task No_row_carries_a_customer_name_or_anything_sensitive()
+    public async Task No_row_carries_anything_sensitive()
     {
-        Seed();
+        Seed(customerName: "KOUASSI Adjoua");
 
         var json = System.Text.Json.JsonSerializer.Serialize(await ReadAsync(Handler()));
 
-        // The list is exported, logged and pasted into tickets. Names are resolved by the screen
-        // from M01; a document number or an OCR value has no business here at all.
-        json.Should().NotContain("customerName").And.NotContain("documentNumber");
+        // The list is exported, logged and pasted into tickets. A name is fine — M01 keeps those in
+        // clear so its own search stays indexable. A document number or an OCR value is not, and
+        // neither reaches this projection.
+        json.Should().NotContain("documentNumber").And.NotContain("ocr");
+    }
+
+    // ------------------------------------------------------------------ customer name
+
+    [Fact]
+    public async Task Each_row_carries_the_name_M01_answers_for_its_own_customer()
+    {
+        // Two files, so a handler zipping the two lists positionally instead of keying by id would
+        // hand each row the other's name.
+        Seed(customerName: "KOUASSI Adjoua");
+        Seed(customerName: "DIALLO Mamadou");
+
+        var rows = (await ReadAsync(Handler())).Rows;
+
+        rows.Should().OnlyContain(r => r.CustomerName == _knownCustomers[r.CustomerId]);
+    }
+
+    [Fact]
+    public async Task A_customer_M01_cannot_resolve_leaves_the_name_null_and_keeps_the_row()
+    {
+        Seed(status: KycFileStatus.Validating);
+
+        var row = (await ReadAsync(Handler())).Rows.Should().ContainSingle().Subject;
+
+        row.CustomerName.Should().BeNull();
+        row.RequiredActionCode.Should().Be("AWAIT_APPROVAL",
+            "a worklist that dropped files whose customer record vanished would hide exactly the "
+            + "ones somebody has to look at");
+    }
+
+    [Fact]
+    public async Task Names_cost_one_call_for_the_whole_page_not_one_per_row()
+    {
+        for (var i = 0; i < 5; i++) Seed(customerName: $"CLIENT {i}");
+
+        var customers = Customers();
+        var handler = new ListKycFilesHandler(_db, CurrentUser(), Scope(), customers);
+        await _db.SaveChangesAsync();
+
+        var page = (await handler.Handle(Query(pageSize: 3), default)).Value!;
+
+        page.Rows.Should().HaveCount(3).And.OnlyContain(r => r.CustomerName != null);
+        await customers.Received(1).GetClientSummariesAsync(
+            _tenantId,
+            // Only the page's ids: the batch is what keeps the IN list bounded by pageSize, and a
+            // call carrying all five would mean the resolution is following TotalCount instead.
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 3),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_page_with_no_rows_still_asks_M01_nothing_it_cannot_answer()
+    {
+        var customers = Customers();
+        var handler = new ListKycFilesHandler(_db, CurrentUser(), Scope(), customers);
+        await _db.SaveChangesAsync();
+
+        var page = (await handler.Handle(Query(), default)).Value!;
+
+        page.Rows.Should().BeEmpty();
+        await customers.Received(1).GetClientSummariesAsync(
+            _tenantId,
+            // An empty batch, which the facade short-circuits rather than turning into `IN ()`.
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 0),
+            Arg.Any<CancellationToken>());
     }
 
     private sealed class MovingClock : TimeProvider

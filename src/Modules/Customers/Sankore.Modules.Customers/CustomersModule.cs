@@ -74,9 +74,6 @@ public static class CustomersModule
 
         // ── Cross-module surface ────────────────────────────────────────────
         services.AddScoped<ICustomersModule, CustomersModuleFacade>();
-        // Serves the older Customer360 contract from real data, replacing
-        // Sankore.Api.Stubs.StubCustomerModule for callers already written against it.
-        services.AddScoped<Sankore.Modules.Customer360.PublicApi.ICustomerModule, LegacyCustomerModuleAdapter>();
 
         // ── Per-area registrations (one call per vertical-slice folder) ──────
         services.AddClientsServices();

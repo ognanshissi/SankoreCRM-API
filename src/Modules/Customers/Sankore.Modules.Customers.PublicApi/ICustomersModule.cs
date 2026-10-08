@@ -25,6 +25,28 @@ public interface ICustomersModule
     Task<ClientSummary?> GetClientSummaryAsync(Guid tenantId, Guid clientId, CancellationToken ct);
 
     /// <summary>
+    /// The same projection as <see cref="GetClientSummaryAsync"/> for a batch of ids, keyed by the
+    /// id that was ASKED for — so a caller holding a page of opaque references can line the answers
+    /// up positionally without a second lookup.
+    ///
+    /// <para>
+    /// Ids that do not exist in that tenant are simply absent from the dictionary: a list screen
+    /// resolving names must degrade to "unknown" on a dangling reference, not fail the page.
+    /// Merge chains are NOT followed, exactly as in the single read — the answer describes the
+    /// record pointed at, and a caller that wants the survivor resolves through
+    /// <see cref="ResolveClientIdAsync"/> first.
+    /// </para>
+    ///
+    /// <para>
+    /// It exists so a cross-module list costs ONE query per page instead of one per row. Callers
+    /// must therefore keep the batch bounded to a page's worth of ids: the implementation turns
+    /// them into a single SQL <c>IN</c>, which stops being a favour somewhere in the thousands.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, ClientSummary>> GetClientSummariesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> clientIds, CancellationToken ct);
+
+    /// <summary>
     /// Follows the merge chain and returns the id of the surviving client record
     /// (the same id when the client was never merged), or <c>null</c> when the
     /// client does not exist. Callers holding a possibly stale client id should
@@ -44,6 +66,17 @@ public interface ICustomersModule
     /// the same lead returns the same client with <c>AlreadyExisted = true</c>.
     /// </summary>
     Task<Result<CreateFromLeadResult>> CreateFromLeadAsync(CreateFromLeadRequest request, CancellationToken ct);
+    
+    /// <summary>
+    /// Checks whether a customer with the given ID exists for the tenant.
+    /// Used by Leads module for convert-to-existing-customer validation (US-M13-171).
+    /// </summary>
+    Task<bool> ExistsAsync(Guid tenantId, Guid customerId, CancellationToken ct);
+
+    /// <summary>
+    /// Returns a lightweight summary of a customer, or null if not found.
+    /// </summary>
+    Task<CustomerSummary?> GetCustomerAsync(Guid tenantId, Guid customerId, CancellationToken ct);
 }
 
 /// <summary>
@@ -101,3 +134,11 @@ public sealed record CreateFromLeadResult(
     string ClientNumber,
     bool AlreadyExisted,
     string? BlockingCode = null);
+
+
+public sealed record CustomerSummary(
+    Guid Id,
+    string DisplayName,
+    string? Email,
+    string? PhoneNumber,
+    Guid? AgencyId);

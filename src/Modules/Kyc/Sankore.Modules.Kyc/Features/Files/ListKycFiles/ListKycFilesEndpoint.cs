@@ -21,7 +21,8 @@ internal static class ListKycFilesEndpoint
                 + "agency could not be resolved are visible only to an unrestricted caller. Rows "
                 + "whose next approval rung the caller's roles can sign come first, and "
                 + "awaitingMeCount counts those across the whole perimeter rather than the page. "
-                + "Carries no customer name: resolve it from the clients API. Requires kyc:read.")
+                + "customerName is resolved from the clients module for the returned rows and is "
+                + "null when that module no longer knows the id. Requires kyc:read.")
             .RequireAuthorization(Permissions.CanReadKycFile.Code)
             .Produces<KycFileListPage>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
