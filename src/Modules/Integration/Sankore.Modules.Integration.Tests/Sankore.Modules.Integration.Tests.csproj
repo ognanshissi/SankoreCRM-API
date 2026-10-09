@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Sankore.Modules.Integration.Tests</RootNamespace>
+    <NoWarn>$(NoWarn);CA1707;CA1859</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sankore.Modules.Integration\Sankore.Modules.Integration.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Fake\Sankore.Modules.Integration.Adapters.Fake.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Temenos\Sankore.Modules.Integration.Adapters.Temenos.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.PerfectVision\Sankore.Modules.Integration.Adapters.PerfectVision.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Sab\Sankore.Modules.Integration.Adapters.Sab.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Amplitude\Sankore.Modules.Integration.Adapters.Amplitude.csproj" />
+  </ItemGroup>
+
+</Project>

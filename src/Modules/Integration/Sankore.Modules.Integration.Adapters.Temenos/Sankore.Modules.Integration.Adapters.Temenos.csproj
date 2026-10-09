@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Modules.Integration.Adapters.Temenos</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Hand-written wire records rather than an OpenApiReference, unlike M02's biometry client.
+         The reason is not preference: Temenos Transact's OpenAPI document is not in this
+         repository and is not publicly redistributable, so there is nothing to generate from.
+         When an installation's document is obtained, TemenosWire is the one file to replace. -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sankore.Modules.Integration\Sankore.Modules.Integration.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

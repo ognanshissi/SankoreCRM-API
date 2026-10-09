@@ -59,6 +59,27 @@
     <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.17" />
     <PackageVersion Include="Hangfire.PostgreSql" Version="1.20.10" />
   </ItemGroup>
+  <ItemGroup Label="RelayAgent">
+    <!-- The on-premise relay agent (INT-26) is a worker shipped as a Docker image and as a
+         Windows service. These are referenced ONLY by that project. -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Sftp">
+    <!-- The batch socle of INT-24/INT-25 deposits and polls files over SFTP, and nothing in this
+         repository spoke SFTP before. SSH.NET is the de-facto .NET client; it is referenced ONLY
+         by the Integration module and the relay agent, so no other host ships an SSH stack.
+
+         2026.0.0 and not 2024.2.0: that release carries two HIGH severity advisories
+         (GHSA-mggc-4xg6-vcxf, GHSA-q939-rpr3-3284). This library opens SSH sessions into an
+         IMF's own network from a process that also holds its customer data — the one place in
+         this solution where a known-vulnerable transport would be least acceptable. Keep this
+         pinned forward; `dotnet restore` reports NU1903 if it ever slips back. -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
+  </ItemGroup>
+
   <ItemGroup Label="CsvHelper">
     <PackageVersion Include="CsvHelper" Version="33.0.1" />
     <PackageVersion Include="QuestPDF" Version="2024.12.2" />

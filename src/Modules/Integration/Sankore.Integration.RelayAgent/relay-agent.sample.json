@@ -1,0 +1,102 @@
+{
+  "//": [
+    "Modèle de fichier de configuration de l'agent relais SANKORE (INT-26).",
+    "Copier vers /etc/sankore/relay-agent.json (Linux, Docker) ou",
+    "C:\\ProgramData\\Sankore\\RelayAgent\\relay-agent.json (service Windows),",
+    "puis adapter. Chaque champ est expliqué dans docs/relay-agent-installation.md.",
+    "",
+    "Toute adresse que l'agent peut atteindre est déclarée ICI et nulle part ailleurs :",
+    "SANKORE n'envoie jamais une URL, un hôte, un répertoire ni une requête SQL — il",
+    "nomme une cible déclarée ci-dessous. Ce fichier est donc la limite exacte de ce que",
+    "l'agent peut faire dans votre réseau."
+  ],
+
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information"
+    }
+  },
+
+  "Relay": {
+    "Sankore": {
+      "ChannelUri": "wss://api.sankore.example.com/relay/v1/channel",
+      "ServerCertificateThumbprint": null,
+      "HandshakeTimeoutSeconds": 20,
+      "MaxFrameBytes": 8388608,
+      "MaxConcurrentOrders": 4
+    },
+
+    "Certificate": {
+      "Pkcs12Path": "/etc/sankore/relay-agent.pfx",
+      "PasswordFile": "/run/secrets/relay_cert_password",
+      "StoreThumbprint": null,
+      "StoreName": "My",
+      "StoreLocation": "LocalMachine"
+    },
+
+    "Reconnect": {
+      "InitialDelaySeconds": 1,
+      "MaxDelaySeconds": 60,
+      "JitterRatio": 0.25
+    },
+
+    "Heartbeat": {
+      "IntervalSeconds": 30,
+      "ProbeTimeoutSeconds": 5
+    },
+
+    "HttpTargets": [
+      {
+        "Name": "cbs-api",
+        "BaseUrl": "https://cbs.interne.example.lan:8443/api/v2/",
+        "AllowedMethods": ["GET", "POST"],
+        "Headers": {
+          "X-Api-Key": "la-clef-du-systeme-local"
+        },
+        "TimeoutSeconds": 30,
+        "MaxResponseBytes": 4194304
+      }
+    ],
+
+    "SftpTargets": [
+      {
+        "Name": "cbs-depot",
+        "Host": "sftp.interne.example.lan",
+        "Port": 22,
+        "Username": "sankore",
+        "PrivateKeyPath": "/etc/sankore/sftp_id_ed25519",
+        "HostKeyFingerprintSha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU",
+        "RemotePath": "/echange/sankore/entrant",
+        "AllowPut": true,
+        "AllowRead": false,
+        "TimeoutSeconds": 60,
+        "MaxFileBytes": 16777216
+      },
+      {
+        "Name": "cbs-retour",
+        "Host": "sftp.interne.example.lan",
+        "Port": 22,
+        "Username": "sankore",
+        "PrivateKeyPath": "/etc/sankore/sftp_id_ed25519",
+        "HostKeyFingerprintSha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU",
+        "RemotePath": "/echange/sankore/sortant",
+        "AllowPut": false,
+        "AllowRead": true,
+        "TimeoutSeconds": 60,
+        "MaxFileBytes": 16777216
+      }
+    ],
+
+    "SqlViewTargets": [
+      {
+        "Name": "soldes",
+        "ConnectionString": "Host=reporting.interne.example.lan;Port=5432;Database=cbs_reporting;Username=sankore_ro;Password=...",
+        "Schema": "reporting",
+        "View": "v_soldes_clients",
+        "Parameters": ["reference_compte"],
+        "MaxRows": 200,
+        "TimeoutSeconds": 15
+      }
+    ]
+  }
+}
