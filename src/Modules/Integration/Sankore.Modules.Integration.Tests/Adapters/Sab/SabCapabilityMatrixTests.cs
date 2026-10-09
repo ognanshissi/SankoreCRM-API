@@ -2,6 +2,7 @@ namespace Sankore.Modules.Integration.Tests.Adapters.Sab;
 
 using FluentAssertions;
 using Sankore.Modules.Integration.Adapters.Sab;
+using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Ports;
 using Sankore.Modules.Integration.PublicApi;
 using Xunit;
@@ -146,15 +147,21 @@ public sealed class SabCapabilityMatrixTests
     }
 
     [Fact]
-    public void The_matrix_is_read_from_the_tenants_own_connection()
+    public void The_matrix_is_read_from_the_connection_it_is_handed()
     {
-        using var scoped = SabHarness.With(SabHarness.ScopedSettings());
-        using var unscoped = SabHarness.With(SabHarness.UnscopedSettings());
+        // Was two harnesses compared through a parameterless Capabilities property, which could
+        // only ever express "this KIND's matrix". Same purpose — the entity scope of criterion 2
+        // decides the matrix — asserted the way the contract now states it: ONE adapter, two rows,
+        // two answers.
+        using var harness = SabHarness.With(SabHarness.ScopedSettings());
 
-        scoped.Adapter.Capabilities.Supports(IntegrationCapability.CreateCustomer)
+        var scoped = SabHarness.ConnectionCarrying(SabHarness.ScopedSettings());
+        var unscoped = SabHarness.ConnectionCarrying(SabHarness.UnscopedSettings());
+
+        harness.Adapter.CapabilitiesFor(scoped).Supports(IntegrationCapability.CreateCustomer)
             .Should().BeTrue("this installation names the institution a call is about");
 
-        unscoped.Adapter.Capabilities.Modes
+        harness.Adapter.CapabilitiesFor(unscoped).Modes
             .Should().BeEmpty("this one does not, and the matrix must say so");
     }
 
@@ -162,14 +169,19 @@ public sealed class SabCapabilityMatrixTests
     public void A_connection_that_is_not_active_still_yields_a_matrix()
     {
         // Deliberate, and the opposite of TemenosAdapter's binding. A SAB connection can never be
-        // activated — its health check cannot pass until the catalogue arrives — so filtering on
-        // IsActive would make the matrix permanently empty and the deliverable half of this
-        // chantier unobservable. Reading an inactive row grants nothing: every port refuses
-        // regardless, and the facade's own GetCapabilities resolves an ACTIVE connection, so no
-        // screen is offered these buttons today.
+        // activated — its health check cannot pass until the catalogue arrives — so refusing an
+        // inactive row would make the matrix permanently empty and the deliverable half of this
+        // chantier unobservable. Answering for one grants nothing: every port refuses regardless,
+        // and the facade's own GetCapabilities resolves an ACTIVE connection, so no screen is
+        // offered these buttons today.
         using var harness = SabHarness.With(SabHarness.ScopedSettings());
 
-        harness.Adapter.Capabilities.Modes.Should().NotBeEmpty();
+        // ConnectionCarrying never activates the row it builds, which is the state under test.
+        var inactive = SabHarness.ConnectionCarrying(SabHarness.ScopedSettings());
+
+        inactive.IsActive.Should().BeFalse("otherwise this test is about an active connection");
+
+        harness.Adapter.CapabilitiesFor(inactive).Modes.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -178,18 +190,29 @@ public sealed class SabCapabilityMatrixTests
         // The same installation reached through the on-premise agent (INT-26) is the same
         // installation. If the carrier changed the matrix, a tenant that moved behind a relay
         // would lose buttons for a reason that has nothing to do with what its CBS can do.
-        using var direct = SabHarness.With(SabHarness.ScopedSettings());
-        using var relayed = SabHarness.With(SabHarness.ScopedSettings(), mode: IntegrationMode.Relay);
+        using var harness = SabHarness.With(SabHarness.ScopedSettings());
 
-        relayed.Adapter.Capabilities.ToDictionary()
-            .Should().BeEquivalentTo(direct.Adapter.Capabilities.ToDictionary());
+        var direct = SabHarness.ConnectionCarrying(SabHarness.ScopedSettings());
+
+        var relayed = SabHarness.ConnectionCarrying(
+            SabHarness.ScopedSettings(), IntegrationMode.Relay);
+
+        harness.Adapter.CapabilitiesFor(relayed).ToDictionary()
+            .Should().BeEquivalentTo(harness.Adapter.CapabilitiesFor(direct).ToDictionary());
     }
 
     [Fact]
-    public void A_tenant_with_no_connection_gets_an_empty_matrix_rather_than_an_exception()
+    public void A_row_carrying_another_kinds_settings_gets_an_empty_matrix_rather_than_an_exception()
     {
-        using var harness = SabHarness.WithNoConnection();
+        // Was "a tenant with no connection": the matrix used to be looked up by the adapter, so
+        // "no row" was the narrowest input it could be given. CapabilitiesFor takes a row, so the
+        // narrowest input is now a row whose settings it cannot read — the `as` in CapabilitiesFor,
+        // and the one that reaches a screen only asking what is available.
+        using var harness = SabHarness.With(SabHarness.ScopedSettings());
 
-        harness.Adapter.Capabilities.Modes.Should().BeEmpty();
+        var foreign = SabHarness.ConnectionCarrying(
+            new TemenosSettings { BaseUrl = "https://example.invalid" });
+
+        harness.Adapter.CapabilitiesFor(foreign).Modes.Should().BeEmpty();
     }
 }

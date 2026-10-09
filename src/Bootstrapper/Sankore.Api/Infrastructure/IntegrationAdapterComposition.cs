@@ -2,6 +2,7 @@ namespace Sankore.Api.Infrastructure;
 
 using Sankore.Modules.Integration.Adapters.Amplitude;
 using Sankore.Modules.Integration.Adapters.Fake;
+using Sankore.Modules.Integration.Adapters.Orass;
 using Sankore.Modules.Integration.Adapters.PerfectVision;
 using Sankore.Modules.Integration.Adapters.Sab;
 using Sankore.Modules.Integration.Adapters.Temenos;
@@ -72,6 +73,15 @@ internal static class IntegrationAdapterComposition
         // Needs AddSecretsVault to have run — it probes the vault for the key and registers none
         // of it itself.
         services.AddSabAdapter(config);
+
+        // ORASS®Suite (ASS-06), the insurance family's first adapter, blocked on the ORASS
+        // interface specification AND the insurer's agreement — two counterparties, where the three
+        // core-banking adapters each wait on one. Its refusals separate five owners: settings of
+        // the wrong shape, a missing apporteur code, a mode that contradicts the insurer's
+        // coordinates and a missing credential are the tenant administrator's own; only the
+        // specification is a procurement conversation. Needs AddSecretsVault to have run — it
+        // probes the vault for whichever credential its carrier needs and registers none itself.
+        services.AddOrassAdapter(config);
 
         // The in-memory double (INT-10), Development only. Guarded HERE as well as inside
         // AddFakeAdapter, which throws outside Development: the host decides whether to offer the

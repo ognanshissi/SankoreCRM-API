@@ -154,35 +154,50 @@ public sealed class AmplitudeAdapterTests
     // ── The matrix, read from the tenant's own row (criterion 3) ─────────────────────────────
 
     [Fact]
-    public void The_matrix_is_read_from_the_tenants_own_connection()
+    public void The_matrix_is_read_from_the_connection_it_is_handed()
     {
-        using var up = AmplitudeHarness.With(AmplitudeVersion.Up, IntegrationMode.Api);
-        using var legacy = AmplitudeHarness.With(AmplitudeVersion.Legacy);
+        // Was two harnesses compared through a parameterless Capabilities property, which could
+        // only ever express "this KIND's matrix". Same purpose — INT-31's criterion 3, the matrix
+        // follows the release installed at the IMF — asserted the way the contract now states it:
+        // ONE adapter, two rows, two answers.
+        using var harness = AmplitudeHarness.With();
 
-        up.Adapter.Capabilities.IsRealTime(IntegrationCapability.CreateCustomer)
+        var up = AmplitudeHarness.ConnectionCarrying(
+            AmplitudeHarness.Settings(AmplitudeVersion.Up), IntegrationMode.Api);
+
+        var legacy = AmplitudeHarness.ConnectionCarrying(
+            AmplitudeHarness.Settings(AmplitudeVersion.Legacy));
+
+        harness.Adapter.CapabilitiesFor(up).IsRealTime(IntegrationCapability.CreateCustomer)
             .Should().BeTrue("this installation runs Up and is reached by API");
 
-        legacy.Adapter.Capabilities.IsRealTime(IntegrationCapability.CreateCustomer)
+        harness.Adapter.CapabilitiesFor(legacy).IsRealTime(IntegrationCapability.CreateCustomer)
             .Should().BeFalse("this one exchanges files, and the matrix must say so");
     }
 
     [Fact]
     public void The_matrix_reads_the_connections_mode_as_well_as_its_release()
     {
-        using var api = AmplitudeHarness.With(AmplitudeVersion.Up, IntegrationMode.Api);
-        using var batch = AmplitudeHarness.With(AmplitudeVersion.Up, IntegrationMode.Batch);
+        using var harness = AmplitudeHarness.With();
+
+        var api = AmplitudeHarness.ConnectionCarrying(
+            AmplitudeHarness.Settings(AmplitudeVersion.Up), IntegrationMode.Api);
+
+        var batch = AmplitudeHarness.ConnectionCarrying(
+            AmplitudeHarness.Settings(AmplitudeVersion.Up), IntegrationMode.Batch);
 
         // Both rows say Up; only the mode differs. If this test fails, the adapter has stopped
         // reading the mode column — and the symptom in production would be a screen offering live
         // writes on a connection whose commands are deposited in a file.
-        api.Adapter.Capabilities.ModeOf(IntegrationCapability.CreateCustomer)
+        harness.Adapter.CapabilitiesFor(api).ModeOf(IntegrationCapability.CreateCustomer)
             .Should().Be(CapabilityMode.RealTime);
 
-        batch.Adapter.Capabilities.ModeOf(IntegrationCapability.CreateCustomer)
+        harness.Adapter.CapabilitiesFor(batch).ModeOf(IntegrationCapability.CreateCustomer)
             .Should().Be(CapabilityMode.Batch);
 
         // And the reads are unaffected by the mode, which is the asymmetry the facade relies on.
-        batch.Adapter.Capabilities.IsRealTime(IntegrationCapability.ReadBalance).Should().BeTrue();
+        harness.Adapter.CapabilitiesFor(batch).IsRealTime(IntegrationCapability.ReadBalance)
+            .Should().BeTrue();
     }
 
     [Fact]
@@ -190,23 +205,37 @@ public sealed class AmplitudeAdapterTests
     {
         // Deliberate, and the opposite of every other adapter's binding. An Amplitude connection
         // can never be activated — its health check cannot pass until the contract arrives — so
-        // filtering on IsActive would make the matrix permanently empty and criterion 3
-        // undeliverable. Reading an inactive row grants nothing: every port refuses regardless.
-        using var harness = AmplitudeHarness.With(AmplitudeVersion.Up, IntegrationMode.Api);
+        // refusing an inactive row would make the matrix permanently empty and criterion 3
+        // undeliverable. Answering for one grants nothing: every port refuses regardless.
+        using var harness = AmplitudeHarness.With();
 
-        harness.Adapter.Capabilities.Modes.Should().NotBeEmpty();
+        // ConnectionCarrying never activates the row it builds, which is the state under test.
+        var inactive = AmplitudeHarness.ConnectionCarrying(
+            AmplitudeHarness.Settings(AmplitudeVersion.Up), IntegrationMode.Api);
+
+        inactive.IsActive.Should().BeFalse("otherwise this test is about an active connection");
+
+        harness.Adapter.CapabilitiesFor(inactive).Modes.Should().NotBeEmpty();
     }
 
     [Fact]
-    public void A_tenant_with_no_connection_gets_the_narrow_matrix_rather_than_an_exception()
+    public void A_row_carrying_another_kinds_settings_gets_the_narrow_matrix_rather_than_an_exception()
     {
-        using var harness = AmplitudeHarness.WithNoConnection();
+        // Was "a tenant with no connection": the matrix used to be looked up by the adapter, so
+        // "no row" was the narrowest input it could be given. CapabilitiesFor takes a row, so the
+        // narrowest input is now a row whose settings it cannot read as Amplitude's — the `as` in
+        // CapabilitiesFor, reached by a screen only asking what is available.
+        using var harness = AmplitudeHarness.With();
 
-        var matrix = harness.Adapter.Capabilities;
+        var foreign = AmplitudeHarness.ConnectionCarrying(
+            new TemenosSettings { BaseUrl = "https://example.invalid" }, IntegrationMode.Api);
 
-        // No connection means no release and no mode, and the matrix narrows on both: the writes
-        // stay, because they are a property of the product a screen may legitimately ask about,
-        // and nothing is declared live.
+        var matrix = harness.Adapter.CapabilitiesFor(foreign);
+
+        // Unreadable settings mean no release, and the matrix narrows on that alone — the MODE is
+        // still read, from a column a settings mismatch cannot corrupt: the writes stay, because
+        // they are a property of the product a screen may legitimately ask about, and nothing is
+        // declared live.
         matrix.Supports(IntegrationCapability.CreateCustomer).Should().BeTrue();
         matrix.ModeOf(IntegrationCapability.CreateCustomer).Should().Be(CapabilityMode.Batch);
         matrix.Supports(IntegrationCapability.ReadBalance).Should().BeFalse();
@@ -293,10 +322,15 @@ public sealed class AmplitudeAdapterTests
 
     [Theory]
     [InlineData(IntegrationMode.Api)]
-    [InlineData(IntegrationMode.Relay)]
     public async Task A_release_that_contradicts_the_mode_is_its_own_distinct_fault(
         IntegrationMode mode)
     {
+        // Api only. Relay was the second incoherent mode until L8, when the dispatcher and the
+        // scheduled batch generation were made to read one definition of "leaves in a file"
+        // (OutboundBatchCarrier): a pre-Up installation behind a relay agent now produces and
+        // deposits its files, so it is a legitimate configuration and reporting it as a fault
+        // would send an administrator to change something that works. The coherent-Relay case is
+        // asserted by the test below.
         using var harness = AmplitudeHarness.With();
 
         var connection = AmplitudeHarness.ConnectionCarrying(
@@ -316,6 +350,27 @@ public sealed class AmplitudeAdapterTests
         // And it names what to change, in both directions.
         health.Detail.Should().Contain(nameof(IntegrationMode.Batch));
         health.Detail.Should().Contain(nameof(AmplitudeVersion.Up));
+    }
+
+    [Fact]
+    public async Task A_pre_up_release_behind_a_relay_agent_is_not_reported_as_a_fault()
+    {
+        // The other half of the restriction above, and the reason it is a restriction rather than
+        // a deletion: narrowing the theory alone would have left nothing asserting that Relay is
+        // now accepted, so a later change could silently make it a fault again.
+        using var harness = AmplitudeHarness.With();
+
+        var connection = AmplitudeHarness.ConnectionCarrying(
+            AmplitudeHarness.Settings(AmplitudeVersion.Legacy), IntegrationMode.Relay);
+
+        var health = await harness.Adapter.CheckHealthAsync(connection, default);
+
+        // Still Unhealthy — the ORASS-shaped structural lock: no Amplitude connection can be
+        // activated until SBS delivers. But the reason must be the missing contract, NOT a
+        // configuration fault, because there is nothing here for an administrator to correct.
+        health.IsHealthy.Should().BeFalse();
+        health.Detail.Should().Contain(IntegrationErrors.AdapterSpecificationPending);
+        health.Detail.Should().NotContain(IntegrationErrors.SettingsInvalid);
     }
 
     [Fact]

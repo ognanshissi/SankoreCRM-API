@@ -17,11 +17,42 @@ public interface ICbsAdapter
     IntegrationKind Kind { get; }
 
     /// <summary>
-    /// What this adapter can do, and in which mode. Read from the adapter and not from a central
-    /// table because the answer depends on the installation: INT-31 computes it from the
-    /// Amplitude version configured on the connection.
+    /// What this adapter can do <b>for one connection</b>, and in which mode. Read from the
+    /// adapter and not from a central table because the answer depends on the installation:
+    /// INT-31 computes it from the Amplitude version configured on the connection, and ORASS from
+    /// the carrier its settings and mode resolve to.
+    ///
+    /// <para>
+    /// <b>It takes its subject, and that is the whole point.</b> This was a parameterless property
+    /// until L8, and the omission was not cosmetic. An adapter is resolved by the connection's
+    /// KIND, so a parameterless property forced any adapter whose matrix depends on the row to
+    /// re-discover "the tenant's connection" by kind and answer for whichever row it happened to
+    /// pick — in practice the oldest active one. For core banking that is invisible: a tenant has
+    /// at most one active core-banking connection, enforced by
+    /// <c>ux_integration_connection_active_core_banking</c>. For INSURANCE it is not, and
+    /// deliberately so: ASS-01 places no such limit on the insurance family because an IMF
+    /// distributing ORASS IARD and ORASS Vie legitimately holds two ACTIVE connections of the same
+    /// kind whose matrices can differ. <c>IInsuranceGateway.GetCapabilities(connectionId)</c> —
+    /// which exists per connection precisely because « each insurer has its own adapter and its own
+    /// supported operations » — then returned the same matrix for both, and a product of the other
+    /// connection was offered a live button that failed at the counter.
+    /// </para>
+    ///
+    /// <para>
+    /// Same subject and same type as <see cref="CheckHealthAsync"/>, so the two members of this
+    /// contract that depend on a row ask for it the same way. The connection carries its own
+    /// <c>Settings</c> and <c>Mode</c>, so an implementation needs no database read to answer:
+    /// the matrix is a pure function of the row, which is what every <c>…CapabilityMatrix.For</c>
+    /// in the adapter assemblies already was.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Inside this module there is exactly one caller</b> — <c>ResolvedAdapter.Capabilities</c>,
+    /// which is the type that pairs a connection with the adapter serving it. Everything else
+    /// reads that. One pairing site is what stops the connection being dropped on the floor again.
+    /// </para>
     /// </summary>
-    IntegrationCapabilities Capabilities { get; }
+    IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection);
 
     /// <summary>
     /// Reaches the external system and says whether it answered. Called by the health-check

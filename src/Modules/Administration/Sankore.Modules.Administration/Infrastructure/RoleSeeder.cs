@@ -109,6 +109,14 @@ internal static class RoleSeeder
 
         // Internal control reads the reconciliation; resolving a gap stays with the administrator.
         (Roles.RegulationManager.Code, "Integration.Reconciliation.View"),
+
+        // ASS-03/ASS-11 — reading the insurance catalogue is part of distributing, so it travels
+        // with the roles that sell. Managing the catalogue does NOT: deciding which products the
+        // institution distributes is an administrator's act, and it stays ungranted here.
+        (Roles.Agent.Code, "Ins.Product.View"),
+        (Roles.CommercialAgent.Code, "Ins.Product.View"),
+        (Roles.SalesManager.Code, "Ins.Product.View"),
+        (Roles.BranchManager.Code, "Ins.Product.View"),
     ];
 
     private static async Task SeedDefaultGrantsAsync(AdministrationDbContext db, ILogger logger)

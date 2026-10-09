@@ -138,4 +138,37 @@ public static class IntegrationErrors
     public const string BatchFileNotFound = "INTEGRATION_BATCH_FILE_NOT_FOUND";
     public const string SettingsInvalid = "INTEGRATION_SETTINGS_INVALID";
     public const string FakeAdapterNotAllowed = "INTEGRATION_FAKE_ADAPTER_NOT_ALLOWED";
+
+    // ── Insurance family (ASS-03 → ASS-12) ──────────────────────────────────
+
+    /// <summary>
+    /// The product does not exist, or belongs to another tenant. <b>404, never 403</b> — the same
+    /// rule as <see cref="ConnectionNotFound"/>: a 403 would confirm the id names a real product
+    /// on the platform, and a catalogue entry names an insurer and a tenant.
+    /// </summary>
+    public const string InsuranceProductNotFound = "INSURANCE_PRODUCT_NOT_FOUND";
+
+    /// <summary>
+    /// This insurer already has a catalogue entry for that product code
+    /// (<c>ux_ins_product_insurer_code</c>).
+    /// </summary>
+    public const string InsuranceProductAlreadyExists = "INSURANCE_PRODUCT_ALREADY_EXISTS";
+
+    /// <summary>
+    /// The product cannot be offered right now — ASS-03's fourth criterion. The detail names
+    /// every reason, because the agent has to know whether to wait or to call the administrator.
+    /// </summary>
+    public const string InsuranceProductNotOfferable = "INSURANCE_PRODUCT_NOT_OFFERABLE";
+
+    /// <summary>
+    /// The connection named is not an insurance connection. A catalogue entry on a core-banking
+    /// connection would resolve a CBS adapter for a policy subscription.
+    /// </summary>
+    public const string InsuranceConnectionWrongFamily = "INSURANCE_CONNECTION_WRONG_FAMILY";
+
+    /// <summary>
+    /// The linked credit product (ASS-03, criterion 3) does not exist in M12's catalogue, or is
+    /// not a loan. Checked at write time; readers afterwards degrade to "unlinked".
+    /// </summary>
+    public const string InsuranceLinkedCreditProductInvalid = "INSURANCE_LINKED_CREDIT_PRODUCT_INVALID";
 }

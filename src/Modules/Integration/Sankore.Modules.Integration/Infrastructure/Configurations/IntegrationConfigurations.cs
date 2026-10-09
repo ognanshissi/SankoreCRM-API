@@ -189,6 +189,11 @@ internal sealed class IntegrationReconciliationRunConfiguration
 
         b.Property(r => r.FailureDetail).HasMaxLength(1000);
 
+        // A comma-separated list of GapType NAMES, so the longest possible value is every name
+        // of the enum joined — well under 120 even if the enum doubles. Deliberately not a
+        // jsonb array: nothing queries inside it, and a report prints it as it stands.
+        b.Property(r => r.UndetectableGapTypes).HasMaxLength(120);
+
         b.HasIndex(r => new { r.TenantId, r.StartedAt })
             .HasDatabaseName("ix_integration_reconciliation_run_tenant_started");
 
@@ -216,8 +221,18 @@ internal sealed class IntegrationReconciliationGapConfiguration
 
         // What makes a still-true gap not become a second row tomorrow (INT-34). Filtered on the
         // open ones: the same gap may legitimately reappear after being resolved months later.
+        //
+        // NULLS NOT DISTINCT is load-bearing, not a refinement. Two of the four gap types leave one
+        // of these columns null by contract — MissingInExternal has no external id, MissingInCrm no
+        // CRM id — and PostgreSQL's default treats NULLs as DISTINCT, so for exactly those two the
+        // index constrained nothing: two identical open rows were accepted. Verified on PostgreSQL
+        // 18 before changing it, and the control case (both columns set) was correctly refused,
+        // which is what made the hole invisible. The reconciliation's own dedup reads the open set
+        // first and does not depend on this, but two overlapping runs for one connection — Hangfire
+        // retries at least once — would both insert, and then criterion 3 is enforced by nothing.
         b.HasIndex(g => new { g.TenantId, g.ConnectionId, g.GapType, g.CrmId, g.ExternalId })
             .IsUnique()
+            .AreNullsDistinct(false)
             .HasFilter("resolution = 'Open'")
             .HasDatabaseName("ux_integration_reconciliation_gap_open");
 

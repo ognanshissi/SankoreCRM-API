@@ -243,6 +243,15 @@ internal sealed class FlowFailingAdapter(FakeAdapter inner)
 
     public IntegrationCapabilities Capabilities => inner.Capabilities;
 
+    /// <summary>
+    /// Forwarded with its argument, not answered from a snapshot. A decorator that collapsed the
+    /// connection would make the wrapped fake look like an adapter that cannot tell two
+    /// connections apart — which is the defect <c>CapabilitiesFor</c> was introduced to end, and a
+    /// test double is the last place to reintroduce it.
+    /// </summary>
+    public IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection)
+        => inner.CapabilitiesFor(connection);
+
     public Task<IntegrationHealth> CheckHealthAsync(IntegrationConnection connection, CancellationToken ct)
         => inner.CheckHealthAsync(connection, ct);
 

@@ -624,6 +624,16 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(),
             Sankore.Modules.Integration.Features.KycLimits.KycLimitWatchOrchestratorJob.CronExpression);
 
+        // 06:00, after every other nightly sweep including the ceiling watch at 05:00, which reads
+        // the same two sides. A comparison run against state another sweep is still changing
+        // reports divergences that were never real; run during opening hours it reports ones a
+        // counter closes a minute later, which is how a compliance ledger stops being believed
+        // (INT-34).
+        AddOrUpdate<Sankore.Modules.Integration.Features.Reconciliation.ReconciliationOrchestratorJob>(
+            Sankore.Modules.Integration.Features.Reconciliation.ReconciliationOrchestratorJob.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Reconciliation.ReconciliationOrchestratorJob.CronExpression);
+
         AddOrUpdate<Sankore.Modules.Customers.Features.Compliance.Retention.IdentifyRetentionCandidatesOrchestratorJob>(
             "customers-retention-candidates-orchestrator",
             job => job.ExecuteAsync(),

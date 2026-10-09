@@ -16,8 +16,10 @@ using Sankore.Modules.Integration.Features.CallLog;
 using Sankore.Modules.Integration.Features.Commands;
 using Sankore.Modules.Integration.Features.Connections;
 using Sankore.Modules.Integration.Features.Dispatch;
+using Sankore.Modules.Integration.Features.Insurance;
 using Sankore.Modules.Integration.Features.Mappings;
 using Sankore.Modules.Integration.Features.Onboarding;
+using Sankore.Modules.Integration.Features.Reconciliation;
 using Sankore.Modules.Integration.Features.RelayAgents;
 using Sankore.Modules.Integration.Features.KycLimits;
 using Sankore.Modules.Integration.Features.Snapshot;
@@ -90,8 +92,13 @@ public static class IntegrationModule
         services.AddSnapshotServices();
         services.AddSyncServices();
         services.AddKycLimitsServices();
+        services.AddReconciliationServices();
         services.AddInboundBatchServices();
         services.AddRelayAgentsServices();
+
+        // The insurance family (ASS-03 →). On the SAME socle: no second DbContext, no second
+        // outbox, no second dispatcher — which is the whole claim of ASS-01.
+        services.AddInsuranceServices();
 
         return services;
     }
@@ -125,6 +132,8 @@ public static class IntegrationModule
         app.MapCallLogEndpoints();
         app.MapBalanceEndpoints();
         app.MapRelayAgentsEndpoints();
+        app.MapReconciliationEndpoints();
+        app.MapInsuranceEndpoints();
 
         return app;
     }

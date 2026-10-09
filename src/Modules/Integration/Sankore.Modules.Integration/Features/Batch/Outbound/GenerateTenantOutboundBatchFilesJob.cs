@@ -97,13 +97,19 @@ public sealed class GenerateTenantOutboundBatchFilesJob(IServiceScopeFactory sco
         // job, where the ambient tenant is not necessarily the one being swept. Inactive
         // connections are excluded: a deactivated connection owes no deposit, and generating for
         // one would write a file nobody will fetch.
-        var connections = await db.Connections
+        // The mode filter is OutboundBatchCarrier's SQL-translatable SUPERSET; the real question
+        // type-tests the settings, which are jsonb behind a value converter, so it is asked of the
+        // loaded rows. One definition, two halves — see OutboundBatchCarrier for what the drift
+        // between them cost.
+        var candidates = await db.Connections
             .IgnoreQueryFilters()
             .Where(c => c.TenantId == tenantId
                      && c.IsActive
-                     && c.Mode == IntegrationMode.Batch)
+                     && (c.Mode == IntegrationMode.Batch || c.Mode == IntegrationMode.Relay))
             .OrderBy(c => c.Id)
             .ToListAsync(ct);
+
+        var connections = candidates.Where(OutboundBatchCarrier.LeavesInAFile).ToList();
 
         report.Connections = connections.Count;
 

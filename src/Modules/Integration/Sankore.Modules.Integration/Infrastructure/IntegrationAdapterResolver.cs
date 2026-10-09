@@ -78,6 +78,27 @@ internal sealed class IntegrationAdapterResolver(
     }
 
     /// <summary>
+    /// The adapter for ONE connection, paired with it.
+    ///
+    /// <para>
+    /// The shape every caller actually wants: an adapter is useless without the row it is being
+    /// asked about — the settings, the mode, and now the capability matrix all come from it. A
+    /// caller that holds a connection should never end up holding a bare
+    /// <see cref="ICbsAdapter"/>, because that is the state in which the connection can be dropped.
+    /// </para>
+    /// </summary>
+    public IntegrationResult<ResolvedAdapter> ResolveFor(IntegrationConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var adapter = ResolveAdapter(connection);
+
+        return adapter.IsFailure
+            ? IntegrationResult.Technical<ResolvedAdapter>(adapter.Code!, adapter.Detail)
+            : IntegrationResult.Ok(new ResolvedAdapter(connection, adapter.Value));
+    }
+
+    /// <summary>
     /// Both steps at once, for the common case. Returns the connection alongside the adapter
     /// because every adapter method needs the settings that connection carries.
     /// </summary>
@@ -88,31 +109,52 @@ internal sealed class IntegrationAdapterResolver(
         if (connection.IsFailure)
             return IntegrationResult.Technical<ResolvedAdapter>(connection.Code!, connection.Detail);
 
-        var adapter = ResolveAdapter(connection.Value);
-        if (adapter.IsFailure)
-            return IntegrationResult.Technical<ResolvedAdapter>(adapter.Code!, adapter.Detail);
-
-        return IntegrationResult.Ok(new ResolvedAdapter(connection.Value, adapter.Value));
+        return ResolveFor(connection.Value);
     }
 
-    /// <summary>A port of the resolved adapter, or a clear statement that it cannot do this.</summary>
+    /// <summary>
+    /// A port of the resolved adapter, or a clear statement that it cannot do this.
+    ///
+    /// <para>
+    /// Takes the <see cref="ResolvedAdapter"/> and not a bare adapter: the capability check below
+    /// is about a CONNECTION's installation, not about an adapter type. Before L8 this took an
+    /// <see cref="ICbsAdapter"/> and read a parameterless <c>Capabilities</c> property, so every
+    /// port resolution in the module silently asked "what can this KIND do" — see
+    /// <see cref="ICbsAdapter.CapabilitiesFor"/> for what that cost the insurance family.
+    /// </para>
+    /// </summary>
     public IntegrationResult<TPort> ResolvePort<TPort>(
-        ICbsAdapter adapter, IntegrationCapability capability) where TPort : class
+        ResolvedAdapter resolved, IntegrationCapability capability) where TPort : class
     {
-        ArgumentNullException.ThrowIfNull(adapter);
+        ArgumentNullException.ThrowIfNull(resolved);
 
-        if (!adapter.Capabilities.Supports(capability))
+        if (!resolved.Capabilities.Supports(capability))
             return IntegrationResult.Technical<TPort>(
                 IntegrationErrors.CapabilityNotSupported,
-                $"{adapter.Kind} does not support {capability}.");
+                $"{resolved.Adapter.Kind} does not support {capability}.");
 
-        return adapter is TPort port
+        return resolved.Adapter is TPort port
             ? IntegrationResult.Ok(port)
             : IntegrationResult.Technical<TPort>(
                 IntegrationErrors.CapabilityNotSupported,
-                $"{adapter.Kind} declares {capability} but does not implement {typeof(TPort).Name}.");
+                $"{resolved.Adapter.Kind} declares {capability} but does not implement "
+                + $"{typeof(TPort).Name}.");
     }
 }
 
-/// <summary>A connection and the adapter that serves it.</summary>
-internal sealed record ResolvedAdapter(IntegrationConnection Connection, ICbsAdapter Adapter);
+/// <summary>
+/// A connection and the adapter that serves it.
+///
+/// <para>
+/// <b>The module's single pairing site.</b> <see cref="Capabilities"/> is the only place
+/// <see cref="ICbsAdapter.CapabilitiesFor"/> is called inside this module — the resolver, the
+/// dispatcher, the snapshot projector, the facade and the insurance catalogue all read it through
+/// here. That is deliberate and it is the structural half of the L8 fix: a parameter can be
+/// honoured at one call site or forgotten at fifteen, and this is the one.
+/// </para>
+/// </summary>
+internal sealed record ResolvedAdapter(IntegrationConnection Connection, ICbsAdapter Adapter)
+{
+    /// <summary>What this adapter can do FOR THIS CONNECTION.</summary>
+    public IntegrationCapabilities Capabilities => Adapter.CapabilitiesFor(Connection);
+}

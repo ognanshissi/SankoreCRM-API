@@ -117,17 +117,23 @@ public sealed class PerfectVisionAdapterTests
     }
 
     [Fact]
-    public void The_matrix_is_read_from_the_tenants_own_connection()
+    public void The_matrix_is_read_from_the_connection_it_is_handed()
     {
-        using var withView = PerfectVisionHarness.With(
+        // Was two harnesses compared through a parameterless Capabilities property, which could
+        // only ever express "this KIND's matrix". Same purpose — criterion 3's « la matrice dépend
+        // de l'installation » — asserted the way the contract now states it: ONE adapter, two rows,
+        // two answers.
+        using var harness = PerfectVisionHarness.With(new PerfectVisionSettings());
+
+        var withView = PerfectVisionHarness.ConnectionCarrying(
             new PerfectVisionSettings { BalanceViewName = "PLACEHOLDER_VIEW" });
 
-        using var withoutView = PerfectVisionHarness.With(new PerfectVisionSettings());
+        var withoutView = PerfectVisionHarness.ConnectionCarrying(new PerfectVisionSettings());
 
-        withView.Adapter.Capabilities.Supports(IntegrationCapability.ReadBalance)
+        harness.Adapter.CapabilitiesFor(withView).Supports(IntegrationCapability.ReadBalance)
             .Should().BeTrue("this installation exposes a read-only view");
 
-        withoutView.Adapter.Capabilities.Supports(IntegrationCapability.ReadBalance)
+        harness.Adapter.CapabilitiesFor(withoutView).Supports(IntegrationCapability.ReadBalance)
             .Should().BeFalse("this one does not, and the matrix must say so");
     }
 
@@ -136,21 +142,33 @@ public sealed class PerfectVisionAdapterTests
     {
         // Deliberate, and the opposite of every other adapter's binding. A Perfect Vision
         // connection can never be activated — its health check cannot pass until the specification
-        // arrives — so filtering on IsActive would make the matrix permanently empty and
-        // criterion 3 undeliverable. Reading an inactive row grants nothing: every port refuses
+        // arrives — so refusing an inactive row would make the matrix permanently empty and
+        // criterion 3 undeliverable. Answering for one grants nothing: every port refuses
         // regardless.
-        using var harness = PerfectVisionHarness.With(
+        using var harness = PerfectVisionHarness.With(new PerfectVisionSettings());
+
+        // ConnectionCarrying never activates the row it builds, which is the state under test.
+        var inactive = PerfectVisionHarness.ConnectionCarrying(
             new PerfectVisionSettings { BalanceViewName = "PLACEHOLDER_VIEW" });
 
-        harness.Adapter.Capabilities.Modes.Should().NotBeEmpty();
+        inactive.IsActive.Should().BeFalse("otherwise this test is about an active connection");
+
+        harness.Adapter.CapabilitiesFor(inactive).Modes.Should().NotBeEmpty();
     }
 
     [Fact]
-    public void A_tenant_with_no_connection_gets_the_narrow_matrix_rather_than_an_exception()
+    public void A_row_carrying_another_kinds_settings_narrows_the_matrix_rather_than_throwing()
     {
-        using var harness = PerfectVisionHarness.WithNoConnection();
+        // Was "a tenant with no connection": the matrix used to be looked up by the adapter, so
+        // "no row" was the narrowest input it could be given. CapabilitiesFor takes a row, so the
+        // narrowest input is now a row whose settings it cannot read — the `as` in CapabilitiesFor,
+        // and the one that reaches a screen only asking what is available.
+        using var harness = PerfectVisionHarness.With(new PerfectVisionSettings());
 
-        var matrix = harness.Adapter.Capabilities;
+        var foreign = PerfectVisionHarness.ConnectionCarrying(
+            new TemenosSettings { BaseUrl = "https://example.invalid" });
+
+        var matrix = harness.Adapter.CapabilitiesFor(foreign);
 
         matrix.Supports(IntegrationCapability.ReadBalance).Should().BeFalse();
         matrix.Supports(IntegrationCapability.CreateCustomer).Should().BeTrue();
@@ -162,15 +180,17 @@ public sealed class PerfectVisionAdapterTests
         // The same installation reached through the on-premise agent (INT-26) is the same
         // installation. If the carrier changed the matrix, a tenant that moved behind a relay
         // would lose buttons for a reason that has nothing to do with what its CBS can do.
-        using var direct = PerfectVisionHarness.With(
+        using var harness = PerfectVisionHarness.With(new PerfectVisionSettings());
+
+        var direct = PerfectVisionHarness.ConnectionCarrying(
             new PerfectVisionSettings { BalanceViewName = "PLACEHOLDER_VIEW" });
 
-        using var relayed = PerfectVisionHarness.With(
+        var relayed = PerfectVisionHarness.ConnectionCarrying(
             new PerfectVisionSettings { BalanceViewName = "PLACEHOLDER_VIEW" },
             IntegrationMode.Relay);
 
-        relayed.Adapter.Capabilities.ToDictionary()
-            .Should().BeEquivalentTo(direct.Adapter.Capabilities.ToDictionary());
+        harness.Adapter.CapabilitiesFor(relayed).ToDictionary()
+            .Should().BeEquivalentTo(harness.Adapter.CapabilitiesFor(direct).ToDictionary());
     }
 
     // ── Health (INT-03) ─────────────────────────────────────────────────────────────────────

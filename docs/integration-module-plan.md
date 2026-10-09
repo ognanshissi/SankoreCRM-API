@@ -254,8 +254,22 @@ au moment où il l'associe. Deux obligations en découlent, à tenir au moment d
 | INT-28 | Perfect Vision | L4 | **bloquée** — spécification d'interface absente ; le refus est livré et vérifié, voir §11 |
 | INT-31 | Amplitude | L5 | **livré dans la limite de SBS** — CA 2 et 3 tenues, CA 1 et 4 bloquées, voir §12 |
 | INT-32 | SAB AT | L5 | **livré dans la limite de SBS** — CA 2 tenue, CA 1 partielle, CA 3 bloquée, voir §12 |
-| INT-34 | Réconciliation quotidienne | L7 | — |
-| ASS-01…12 | Famille assurance | L8 | ASS-06 **bloquée** — spécification ORASS absente |
+| — | *(aucune US)* | **L6** | **lot vide** — voir la note sous le tableau |
+| INT-34 | Réconciliation quotidienne | L7 | **livré** — 4 CA sur 5 tenues, `MissingInCrm` non détectable et déclaré tel, voir §13 |
+| ASS-01 | Branchement sur le socle | L8 | **livré** — vérifié, socle non modifié, voir §14 |
+| ASS-02 | Contrat public et ports assurance | L8 | **livré** — un défaut de contrat corrigé, voir §14 |
+| ASS-03 | Catalogue des produits | L8 | **livré** — 4 CA sur 4 |
+| ASS-06 | Adaptateur ORASS | L8 | **bloquée** — spécification ORASS et accord assureur absents ; refus livré et vérifié |
+| ASS-04/05, 07…12 | Souscription, primes, sinistres, bordereaux, conformité | L8 | vagues 2 et 3 |
+
+**Le lot L6 ne contient aucune US, et ce n'est pas un oubli de lecture.** Dans le tableau
+d'ensemble qui fait autorité, `L6` n'apparaît pas une seule fois : INT-31 et INT-32 y sont tous
+deux assignés à L5, INT-34 à L7, ASS-01…12 à L8, et la numérotation ne saute rien d'autre (les 26
+INT sont 01→15, 20, 21, 22, 24→28, 31, 32, 34 — il n'y a pas d'INT-33). La seule occurrence de
+« L6 » dans tout le document est le titre de section « L5 et L6 — Amplitude, SAB AT », qui
+regroupe les deux adaptateurs sur les deux lots — vraisemblablement un par lot dans l'intention
+initiale. Les deux ont été livrés dans la passe L5 : L6 est donc déjà fait, et la question « que
+reste-t-il en L6 » n'a pas de réponse autre que « rien ». Noté ici pour que personne ne la repose.
 
 ## 9. L2 — ce que l'absence de sandbox Temenos empêche
 
@@ -408,10 +422,11 @@ Hors périmètre, confirmé par la spécification : l'import initial d'un portef
 | Le routage de partition | `INSERT` puis `tableoid::regclass` | la ligne atterrit dans `integration_call_log_y2026m10` |
 | La partition manquante **échoue** | `INSERT` à +10 mois | `ERROR: no partition of relation "integration_call_log" found for row` — ce qui établit que `EnsureCallLogPartitionsJob` fait partie de la fonctionnalité, pas de l'entretien |
 | L'asymétrie ASS-01 | deux connexions CoreBanking actives, puis deux Insurance actives | la 2ᵉ CoreBanking est refusée par `ux_integration_connection_active_core_banking` ; les deux Insurance passent |
-| La suite du module | `dotnet test` | **1 156 tests, 0 échec, 0 avertissement** (414 au L1, 686 au L3, 975 au L4) ; + 48 pour `Sankore.Integration.RelayAgent` |
+| La suite du module | `dotnet test` | **1 406 tests, 0 échec, 0 avertissement** (414 au L1, 686 au L3, 975 au L4, 1 156 au L5, 1 217 au L7) ; + 48 pour `Sankore.Integration.RelayAgent` |
 | La solution entière | `dotnet build SankoreCRM.sln` | 0 erreur |
 | Les autres modules | les 9 autres suites | tout passe, sauf 2 échecs **préexistants** confirmés dans un worktree sur HEAD (`ActivateTemplateHandlerTests` — EF InMemory ne gère pas `ExecuteDelete` ; `CustomersModuleCompositionTests` — `ICustomerModule` non résolu) |
-| Le câblage de l'hôte | `--emit-openapi` (démarre réellement l'hôte) | 323 routes dont **26 pour Integration** (23 sous `api/v1`, 3 publiques : enrôlement, heartbeat, webhook) ; aucune erreur de DI au démarrage |
+| Le câblage de l'hôte | `--emit-openapi` (démarre réellement l'hôte) | 330 routes dont **33 pour Integration** (25 sous `api/v1`, 3 publiques : enrôlement, heartbeat, webhook) ; aucune erreur de DI au démarrage |
+| L'index de déduplication des écarts contraint vraiment | migrations appliquées sur une base jetable PostgreSQL 18, puis insertions comportementales | `NULLS NOT DISTINCT` présent avec son filtre partiel ; deux lignes ouvertes identiques refusées pour les deux types qui laissent une colonne nulle, et un écart résolu peut toujours réapparaître |
 | Les adaptateurs embarqués sont joignables | `IntegrationAdapterCompositionTests` (`Sankore.Api.Tests`) | les 5 enregistrements attendus présents, une seule fois chacun, en `Scoped` ; le double en Development seulement, dans les deux sens. Vérifié en retirant un appel : le test tombe |
 | Les trois commutateurs `$kind` couvrent l'enum | `ConnectionSettingsJsonConverterTests` + `ConnectionSettingsConverterTests` | les 6 `IntegrationKind` ont un enregistrement de réglages, font l'aller-retour HTTP **et** jsonb, et portent le bon discriminant |
 | Aucun endpoint orphelin | chaque `*Endpoint.cs` du module confronté aux agrégateurs appelés par `IntegrationModule` | les 38 fichiers appartiennent tous à un agrégateur mappé ; `Batch`, `KycLimits`, `Onboarding`, `Snapshot`, `Dispatch` n'exposent volontairement aucune route (jobs et consommateurs) |
@@ -672,9 +687,39 @@ coordonnées batch suit exactement le chemin d'une `Batch`, et toute autre est r
 deux moitiés sont épinglées : n'épingler que le refus aurait validé une version cassant le
 batch-par-relais, qui est une fonctionnalité livrée.
 
-Imprécision connue et écrite : Amplitude Up par relais (coordonnées batch, porteur API) serait
-routé vers un fichier. Inatteignable aujourd'hui — cet adaptateur refuse tout — et c'est la matrice
-qui en sera l'autorité le jour où le canal existera.
+Imprécision connue et écrite : Amplitude Up par relais (coordonnées batch, porteur API) est routé
+vers un fichier. Inatteignable aujourd'hui — cet adaptateur refuse tout — et c'est la matrice qui en
+sera l'autorité le jour où le canal d'ordres existera.
+
+> **Correction apportée en L8.** Ce correctif était **à moitié fait**, et la moitié manquante était
+> la plus dommageable. J'ai changé la définition de « cette écriture part en fichier » côté dispatch
+> sans toucher le côté **planifié**, qui continuait de filtrer `Mode == Batch`. Une connexion
+> `Relay` portant des coordonnées batch était donc enlistée dans un fichier et passée en `Batched`
+> par le dispatcher, pendant que la passe qui aurait **déposé** ce fichier ne la regardait jamais —
+> le dépôt et la purge appartiennent au job batch, pas au dispatcher. Le fichier restait dans le
+> magasin, le système distant ne recevait rien, et la commande brûlait tout son `AckTimeoutHours`
+> avant que quoi que ce soit le signale. Pire que l'une ou l'autre moitié fausse seule : avant mon
+> correctif, ces commandes étaient *rejetées* avec un motif clair.
+>
+> Trouvé par le chantier ASS-06, confirmé, et corrigé à la racine : la dérive était le bug, donc le
+> remède est l'unification et non un troisième prédicat. `OutboundBatchCarrier` est désormais la
+> définition unique, lue par le dispatcher, par `GenerateTenantOutboundBatchFilesJob` et par la
+> porte de fan-out `HasBatchConnectionAsync`. Elle expose deux moitiés : le prédicat réel, qui
+> teste le type des réglages, et le **surensemble traduisible en SQL**, parce que les réglages sont
+> du jsonb derrière un convertisseur de valeur et ne peuvent pas être testés par type en SQL — un
+> balayage filtre sur le mode dans la base, puis pose la vraie question aux lignes chargées.
+> `OutboundBatchCarrierTests` épingle l'accord entre les deux, dont deux cas comportementaux qui
+> prouvent qu'une connexion relais est bien générée **et déposée** par la passe planifiée ; ils
+> tombent sur l'ancien prédicat.
+>
+> Conséquence en cascade, également traitée : le correctif a invalidé le raisonnement documenté de
+> deux adaptateurs. `AmplitudeCarrierRouting` déclarait `Up + Relay ⇒ porteur API` et
+> `Legacy + Relay` incohérent ; `OrassCarrierRouting` déclarait `Relay` incohérent dans tous les
+> cas. Les deux décrivaient l'état d'avant. Une matrice qui annonce du temps réel pour une écriture
+> partant en fichier met un bouton « live » sur un écran pour une opération qui part à l'heure de
+> coupure — exactement ce que la matrice existe pour empêcher. Les deux sont réalignés, et dans les
+> deux cas la restriction de l'incohérence est accompagnée d'un **cas positif** : sans lui, un
+> changement ultérieur pourrait refaire de `Relay` une faute en silence.
 
 **2. `UpdateSettings` conservait le verdict de santé et `IsActive`.** Les colonnes de santé
 décrivent la réponse du système distant **à la configuration qui a été testée**. Les traîner à
@@ -738,3 +783,351 @@ donc l'orthographe évidente comparait cinq `null` et passait quoi qu'on enregis
   projets Integration, oui (les 3 avertissements d'analyseur de son projet de tests sont corrigés —
   CA5351 supprimé localement avec sa justification, CA1825 et CA1826 réparés), mais M13 en porte
   110, `Notifications.Tests` 78 et M12 28, tous préexistants et hors périmètre.
+
+---
+
+## 13. L7 — décisions prises à la réconciliation
+
+L7 ne contient qu'une US, INT-34, et sa dépendance (INT-21) était livrée. La table, les deux
+agrégats, les quatre types d'écart, les deux codes d'erreur et les deux permissions existaient
+depuis L1 — ce qui manquait était la tranche : l'orchestrateur, la comparaison, la déduplication,
+le résumé M08 et les deux endpoints.
+
+Quatre CA sur cinq sont tenues. La cinquième ne l'est qu'aux trois quarts, et c'est la décision
+centrale du lot.
+
+### `MissingInCrm` n'est pas détectable, et c'est déclaré plutôt que tu
+
+Le critère nomme quatre types d'écart. Trois ont une source dans ce déploiement ; le quatrième n'en
+a aucune, et ce n'est pas un oubli d'implémentation :
+
+- `cbs_customer_snapshot` (INT-21) est **clé par `crm_customer_id`** et n'est écrit que pour les
+  clients dont nous détenons déjà une référence — `CbsSnapshotProjector` sort sans écrire quand la
+  recherche de référence revient vide. Il est structurellement incapable de nommer un client que le
+  CRM ignore.
+- L'extraction entrante (INT-25) ne voit que les lignes qu'un fichier porte, et `ExtractionApplier`
+  signale un identifiant externe inconnu puis **ne persiste rien** — délibérément : un identifiant
+  inconnu « n'est pas une erreur, c'est un client avec qui cette connexion n'a jamais échangé ».
+
+**L'option écartée était d'élargir l'applicateur d'INT-25** pour enregistrer ces identifiants
+inconnus. Écartée sur la correction, pas sur le coût : ce qu'elle détecterait est le sous-ensemble
+des enregistrements externes qui se sont trouvés dans un fichier pendant la fenêtre — un chiffre
+dont la taille est décidée par le périmètre d'extraction du partenaire, pas par la divergence. Un
+responsable du contrôle interne lit « `MissingInCrm` : 3 » comme « trois clients existent au CBS et
+pas au CRM » ; sur une IMF qui n'a pas migré son portefeuille, le vrai chiffre est tous ses clients.
+**Un sous-ensemble biaisé présenté comme un décompte est une pire réponse qu'un refus explicite de
+compter**, et c'est le genre de nombre que personne ne revérifie.
+
+Et le lot exclut déjà la vraie question : à l'échelle, `MissingInCrm` **est** le portefeuille CBS
+non importé, que la ligne « hors périmètre » d'INT-34 met hors de ce lot. Le jour où cet import
+arrivera, il lui faudra un port d'énumération exhaustive du côté externe — et `ReconciliationScope`
+est le seul endroit à modifier pour faire basculer le type.
+
+Rendu **visible** par une colonne, `integration_reconciliation_run.undetectable_gap_types`, posée
+dès `Start` pour qu'un run qui plante annonce quand même sa portée, et renvoyée par l'endpoint de
+lecture. Délibérément **pas** semée comme un zéro dans les décomptes par type : sur un rapport de
+conformité un zéro est une mesure, et une mesure absente imprimée en zéro est pire que pas de
+rapport. La portée est aussi **le filtre de fermeture automatique** — un run ne ferme que ce qu'il a
+pu chercher, sans quoi la première nuit après déploiement fermerait en silence tout `MissingInCrm`
+ouvert au motif de n'en avoir trouvé aucun. Un test épingle que les deux ensembles couvrent l'enum :
+un cinquième type ajouté sans décision échoue.
+
+Décidé explicitement aussi : une **référence pendante** (M01 ne connaît pas le client) est comptée
+et journalisée, jamais transformée en `MissingInCrm`. M01 ne supprime aucun client — l'archivage est
+un statut, l'anonymisation blanchit des champs — donc le brancher là donnerait à ce type un
+détecteur qui en pratique ne se déclenche jamais : le même mensonge sous une autre forme.
+
+### INT-21 notifie, INT-34 tient le registre
+
+INT-21 publie déjà `CbsKycMismatchDetectedEvent` au moment du snapshot. L'écart est **dérivé de
+l'état, jamais de l'événement**, et c'est portant : rien ne publie jamais « ça a cessé de diverger »,
+donc un registre alimenté par événements ouvrirait des écarts sans jamais en fermer un — la CA 3
+n'existe que parce que la comparaison repart de zéro chaque nuit. Pas de double rapport : ce job ne
+publie aucun `CbsKycMismatchDetectedEvent` (épinglé par un test) et le projecteur n'écrit aucun
+écart ; le résumé d'INT-34 est un décompte par connexion et par jour, donc l'histoire par client
+reste celle d'INT-21. Les deux passent par `SnapshotKycLevels.Diverge`, donc ils ne peuvent pas
+diverger sur la définition d'une divergence.
+
+### Trois autres décisions
+
+**Une seule définition d'« actif au CRM »** : `ClientSummary.Status == "Active"`, en ordinal,
+reproduisant la règle documentée d'`ExistsAndActiveAsync` mais lue depuis la projection par lot —
+une requête par page au lieu d'un aller-retour par client. Un client **fusionné** tombe dans
+`StatusMismatch` délibérément, avec `"merged":true` dans les détails, pour que le remède se lise
+« re-pointer la référence » et non « réactiver ». `StatusMismatch` a priorité sur `KycMismatch` :
+un client, au plus un écart.
+
+**Pagination par keyset sur `external_id`, 200 par page**, servie par
+`ux_integration_reference_external`. Elle porte une suppression `CA1309` assumée : l'analyseur
+demande `StringComparison.Ordinal`, ce qui serait **faux** ici — l'expression est traduite en SQL et
+évaluée sous la collation de la colonne, celle-là même sous laquelle l'`OrderBy` trie ; un curseur
+keyset n'est sain que tant que son prédicat et son tri s'accordent, et forcer la sémantique ordinale
+de .NET les ferait divorcer sur toute collation non-C — les pages sauteraient des références en
+silence. Examiné à la revue : passer la clé sur `CrmId` (un `uuid`, sans collation) supprimerait
+l'avertissement, mais `Guid` ne définit pas `operator >`, il faudrait `CompareTo`, et sa traduction
+Npgsql n'est **pas vérifiable par la suite de tests** (EF InMemory traduit tout en LINQ-to-objects).
+Échanger un risque raisonné et documenté contre un risque non vérifié n'est pas un gain : laissé tel
+quel.
+
+**Les snapshots sont lus par `(tenant, crm_customer_id)` sans restreindre sur la connexion.** Ce
+n'est pas seulement défendable, c'est obligatoire : la clé primaire de `cbs_customer_snapshot` est
+`(TenantId, CrmCustomerId)` et **n'inclut pas la connexion**, donc restreindre filtrerait sur une
+colonne hors clé et écarterait des lignes arbitrairement. Le bénéfice annexe est celui que le
+chantier avait énoncé : le matin où un administrateur re-pointe ou remplace une connexion CBS, une
+lecture restreinte ferait ressembler un portefeuille entier à une disparition — des dizaines de
+milliers de faux `MissingInExternal`.
+
+**Cron `0 6 * * *`**, après toutes les autres balayages de nuit, y compris la veille des plafonds
+d'INT-22 à 05:00 qui lit les deux mêmes côtés. Lire pendant qu'un autre balayage modifie encore
+l'état compare contre des données en mouvement ; lancer pendant les heures d'ouverture rapporte des
+divergences qu'un guichet referme une minute plus tard, ce qui est la façon dont un registre de
+conformité cesse d'être cru. File `integration-sync`, comme la veille des plafonds : la liste
+`opts.Queues` de l'hôte **remplace** le jeu par défaut, donc un nom de file absent de cette liste
+donne un job mis en file et jamais traité, sans erreur ni log — la même forme de défaut que
+l'adaptateur non enregistré du L4.
+
+### Un défaut trouvé à la revue, corrigé et prouvé
+
+**`ux_integration_reconciliation_gap_open` ne contraignait pas ce qu'il prétendait contraindre.**
+L'index couvre `(tenant_id, connection_id, gap_type, crm_id, external_id)` et PostgreSQL traite les
+NULL comme **distincts** par défaut — donc pour exactement les deux types qui laissent une de ces
+colonnes nulle par contrat (`MissingInExternal` n'a pas d'identifiant externe, `MissingInCrm` pas
+d'identifiant CRM), deux lignes ouvertes identiques étaient acceptées. Ce qui rendait le trou
+invisible est que le cas de contrôle — les deux colonnes renseignées — était, lui, correctement
+refusé.
+
+Vérifié par le comportement avant et après, sur une base jetable PostgreSQL 18 : deux insertions
+identiques acceptées pour chacun des deux types nuls, refusées pour le cas de contrôle ; puis, index
+reconstruit en `NULLS NOT DISTINCT`, les deux refusées — et un écart résolu peut toujours
+réapparaître, donc le filtre partiel tient. Migration `GapOpenIndexNullsNotDistinct`, appliquée sur
+base jetable, et l'index relu depuis `pg_indexes` pour confirmer que l'annotation EF produit bien la
+clause.
+
+La déduplication du job ne reposait pas sur l'index (elle lit l'ensemble ouvert d'abord), ce qui est
+pourquoi elle **répare** une paire pré-existante au lieu de la conserver : une seule ligne de la
+paire est touchée, l'autre tombe dans la fermeture automatique. Mais deux runs concurrents sur une
+même connexion — Hangfire garantit au moins une exécution, donc un retry peut chevaucher —
+inséraient tous deux, et la CA 3 n'était alors garantie par rien.
+
+### Constats signalés, non corrigés
+
+- **`IKycModule` n'a pas de lecture de plafonds par lot**, donc le palier KYC coûte un appel par
+  client actif et présent au snapshot — le même coût que la veille d'INT-22 paie déjà sur la même
+  population. Une surcharge `GetLimitsAsync` par lot diviserait par deux le trafic M02 de la nuit si
+  les deux jobs l'utilisaient.
+- Les constats du L5 restent ouverts : `AesSecretsModule.GetValueAsync` ignore `ExpiresAt`, la
+  fenêtre de double acceptation d'`RotateHmacSecret` est morte, et `IntegrationMode` n'est pas
+  contraint par `IntegrationKind`.
+
+---
+
+## 14. L8 — la famille assurance (vague 1 et ASS-06)
+
+Le lot L8 est d'un autre ordre que les précédents : douze US. Il a donc été découpé en vagues, et la
+contrainte qui dicte le découpage n'est pas la taille mais les **migrations** — deux chantiers qui en
+ajoutent simultanément régénèrent tous deux `IntegrationDbContextModelSnapshot` et entrent en
+conflit. D'où une vague 1 qui conçoit **tout** le modèle de données assurance en une seule migration,
+pour que les vagues suivantes n'en ajoutent aucune.
+
+### Ce que L1 avait déjà livré, et qu'il ne fallait pas refaire
+
+Mesuré avant de découper, et plus large que le tableau d'état ne le laissait croire :
+
+- **ASS-01 est satisfaite par le socle lui-même.** `Family` sur la connexion, l'asymétrie « au plus
+  une CoreBanking active, plusieurs Insurance » garantie par `ux_integration_connection_active_core_banking`
+  (vérifiée comportementalement dès L1), et outbox / dispatcher / files Hangfire / journal d'appels /
+  réconciliation déjà agnostiques de la famille.
+- **ASS-02 était essentiellement complète** : `IIntegrationModule.Insurance` renvoie un
+  `InsuranceGateway` implémenté exposant exactement les cinq membres du critère, les trois ports
+  internes ont leurs signatures complètes, et `CommandType` portait déjà `SubscribePolicy`,
+  `CancelPolicy`, `DeclareClaim`, `DebitAccount`, `ReverseDebit`.
+- **Les sept permissions d'ASS-11** étaient déclarées, nommées verbatim.
+
+Il ne restait donc **aucun travail de contrat** : des tables et des tranches.
+
+### Le schéma : préfixe `ins_`, onze tables, une migration
+
+ASS-01 réserve `cbs_` au core banking et ne dit pas qu'une seconde famille reste sans préfixe ;
+laisser ces tables nues les aurait confondues avec les tables du socle qui servent réellement les
+deux. `ins_` est l'abréviation de la spécification elle-même (`Ins.Product.Manage`), donc
+`\dt integration.*` se lit en trois groupes : `integration_` partagé, `cbs_` core banking, `ins_`
+assurance.
+
+| Table | Rôle | US |
+|-------|------|----|
+| `ins_product` | catalogue du tenant : code assureur, garanties, périodicité, mode de tarification, règles d'éligibilité, produit de crédit lié, taux de commission, politique de relance | ASS-03, ASS-08, ASS-10 |
+| `ins_subscription` | **la saga ASS-05** : statut, prime, références de compte et de débit CBS, référence et tentatives de contre-passation, les trois identifiants de commande, référence du contrat | ASS-04, ASS-05 |
+| `ins_consent_proof` | preuve de consentement et de signature (CIMA 2024) : canal, version des mentions, empreinte, `retain_until` | ASS-04, ASS-12 |
+| `ins_medical_questionnaire` | la seule colonne médicale du schéma | ASS-04, ASS-12 |
+| `ins_policy` | read model d'ASS-07 : statut et date de changement, dates, prime, prochaine échéance | ASS-07 → 10 |
+| `ins_policy_certificate` | attestation **comme référence de stockage, sans octets** ; plusieurs par contrat | ASS-07 |
+| `ins_premium_instalment` | échéancier matérialisé, une ligne par échéance | ASS-08, ASS-10 |
+| `ins_claim` | dossier sinistre : nature, statut, pièces manquantes, indemnité et référence de crédit CBS | ASS-09 |
+| `ins_claim_document` | pièces : référence de stockage, empreinte, **verrou antivirus** | ASS-09, ASS-12 |
+| `ins_statement` | bordereau mensuel par assureur | ASS-10 |
+| `ins_statement_line` | un mouvement comptabilisé, **figé par recopie** (numéro de contrat, taux, référence CBS) | ASS-10 |
+
+Vérifié par moi sur une base jetable PostgreSQL 18, migrations appliquées puis schéma interrogé :
+
+| Quoi | Résultat |
+|------|----------|
+| Les trois groupes de tables | 11 `ins_`, 1 `cbs_`, 18 partagées — la règle de préfixe d'ASS-01 tient |
+| Clés étrangères sortant du schéma `integration` | **0** |
+| Idempotence d'ASS-04 | `ux_ins_subscription_idempotency (tenant_id, crm_customer_id, product_id, effective_date)` — mot pour mot le critère |
+| Idempotence d'ASS-08 | `ux_ins_premium_instalment_due (tenant_id, policy_id, due_date)` |
+| Index de la passe quotidienne | `(status, due_date, next_attempt_at)`, **sans préfixe tenant** — comme celui du dispatcher : l'orchestrateur demande « quels tenants doivent du travail » avant de connaître le tenant |
+| Colonnes chiffrées | les quatre en `text` sans plafond, par la variante **keyed** `IntegrationFieldProtection.Key` |
+| `NULLS NOT DISTINCT` | appliqué d'office sur `ux_ins_statement_line` — la leçon du L7 reprise sans qu'on la demande |
+
+Trois décisions de modélisation méritent d'être retenues.
+
+**L'offrabilité est dérivée, jamais une colonne.** Un drapeau « proposable » serait périmé de trois
+façons indépendantes, et chacune dans le sens qui *propose un produit invendable* : la connexion est
+une autre ligne, la fenêtre de validité se périme par le seul passage du temps, et la capacité de
+tarification est lue sur l'adaptateur. Le filtre `offerableOnly` de la liste ne pousse en SQL que la
+moitié décidable en base — pour que la pagination s'accorde avec le filtre — et le `isOfferable` du
+DTO porte le verdict complet ; l'asymétrie est écrite aux deux bouts. Un produit est **retiré, jamais
+supprimé** : pas d'endpoint DELETE.
+
+**La saga est sa propre table, pas le contrat.** ASS-07 synchronise des contrats que SANKORE n'a
+jamais vendus — la plupart des lignes de `ins_policy` n'auraient donc pas de saga — et une saga qui
+échoue au débit ne produit aucun contrat. Deux cycles de vie, deux identités. Et `PremiumRefundDue`
+est un **état terminal nommé** : « la dernière commande est `Rejected` » est vrai aussi bien d'un
+refus proprement remboursé que d'argent que l'institution doit encore au client, donc un unique
+prédicat sur le statut est ce qui rend cette dette listable. Relancer un remboursement est un acte
+humain — la contre-passation a déjà dépensé son budget de tentatives.
+
+**Le questionnaire médical est une table séparée à cause de la permission.** Une colonne sur
+`ins_subscription` serait lue par toutes les projections d'une souscription, et « personne n'a
+sélectionné cette colonne » n'est pas une restriction que quiconque peut auditer. Une table, c'est
+exactement un chemin de requête sur lequel la permission dédiée et la trace d'ASS-12 pourront
+s'asseoir.
+
+### Une huitième permission assurance, assumée
+
+Les sept endpoints d'ASS-03 étaient tous derrière `Ins.Product.Manage` : un agent n'ayant que
+`Ins.Policy.Subscribe` pouvait souscrire un contrat sans voir quels produits existent ni ce qu'ils
+coûtent. Ce n'est pas une séparation des pouvoirs, c'est un écran qu'on ne peut pas dessiner — et le
+but déclaré d'ASS-11 est de séparer **distribution**, gestion et administration, ce qui met la
+lecture du catalogue du côté du distributeur.
+
+**Retenu : `Ins.Product.View`**, déclarée avec sa justification dans `Permissions.cs` et dans le test
+de catalogue, pour qu'une comparaison avec la table d'ASS-11 soulève une question et non un défaut.
+Les trois routes de lecture (liste, détail, devis) l'exigent ; les quatre routes de gestion gardent
+`Ins.Product.Manage`. Octroyée par défaut aux quatre rôles qui vendent ; **gérer** le catalogue ne
+l'est pas, parce que décider quels produits l'institution distribue est un acte d'administrateur.
+
+L'alternative — des routes acceptant l'un ou l'autre code — a été écartée : `AddSankoreAuthorization`
+génère une politique par permission et les `RequireAuthorization` successifs se combinent en ET, donc
+un OU demandait d'inventer un mécanisme de politique composite pour un seul écran.
+
+### ASS-06 — ORASS, quatrième adaptateur bloqué
+
+CA 2 et 3 tenues, CA 1 et 4 bloquées sur **deux** contreparties — la spécification d'ORSYS et
+l'accord de l'assureur — là où les trois adaptateurs core banking n'en attendaient qu'une. Rien
+d'inventé : aucun chemin, verbe, en-tête, champ, type d'enregistrement ni format de bordereau.
+
+Deux raisonnements valent d'être conservés.
+
+**Le code apporteur n'est pas le même problème que l'`Entity` de SAB**, même si la réponse est la
+même (échec fermé). L'`Entity` est une frontière de **confidentialité** : mauvaise valeur, on lit les
+clients d'une autre institution. Le code apporteur est une frontière d'**attribution et de
+prouvabilité** : il ne choisit pas quels clients on voit, il décide dans quel portefeuille le contrat
+atterrit et si quelqu'un pourra plus tard le rattacher à cette IMF. Le mode de défaillance n'est donc
+pas une fuite mais « la couverture existe quelque part que personne ne peut nous attribuer » — avec
+un client à qui le guichet a dit qu'il était assuré. Deux aiguisages propres à ORASS : le porteur
+bordereau **n'a aucune réponse** où lire un refus, donc le garde sur le chemin d'appel est le seul
+endroit où arrêter cela ; et contrairement à SAB, le validateur n'exige pas ce champ, donc ce garde
+n'est pas le second de deux mais le seul.
+
+**La branche IARD/Vie fait partie de l'identité d'une connexion**, pas de sa configuration : ce sont
+des entreprises légalement distinctes en zone CIMA, donc une IMF qui distribue les deux a deux
+connexions ORASS actives — ce que la famille assurance autorise et que le core banking interdit. Un
+code apporteur est **porté par une branche**, donc `(branche, code)` identifie l'IMF. Et la branche ne
+doit **pas** restreindre la matrice : toutes les opérations existent sur les deux branches, ce qui
+diffère est quels produits répondent et comment un sinistre est instruit — deux préoccupations de
+mapping définies par la spécification manquante. Restreindre encoderait une connaissance produit que
+personne ici ne détient. Une connexion mal branchée est indiscernable d'une bonne vue d'ici : le pire
+cas est une assurance emprunteur enregistrée chez l'entreprise non-vie, l'emprunteur décède, et le
+sinistre est déclaré contre un contrat que la compagnie vie n'a jamais connu. L'obligation de
+*vérifier* la paire est consignée sur `CheckHealthAsync`.
+
+### Le défaut de contrat d'ASS-02, corrigé
+
+`IInsuranceGateway.GetCapabilities(Guid connectionId)` **ne pouvait pas honorer son propre
+paramètre**. L'identifiant servait à retrouver la connexion et à résoudre l'adaptateur, puis la
+réponse venait de `ICbsAdapter.Capabilities`, une propriété **sans paramètre**. Pire : un adaptateur
+qui dérivait sa matrice de la ligne redécouvrait « la connexion du tenant » par **type** —
+`AmplitudeAdapter.Bind` faisait `Where(Kind == Amplitude).OrderByDescending(IsActive).ThenBy(CreatedAt).FirstOrDefault()`
+— donc avec deux connexions ORASS actives il répondait la matrice de **la plus ancienne ligne active
+pour les deux**. Et le défaut se propageait dans `GetPoliciesAsync`, `GetClaimsAsync` et la sonde de
+tarification d'ASS-03.
+
+Invisible en core banking, où l'index n'autorise qu'une connexion active ; réellement ambigu en
+assurance, la seule famille où un tenant détient légitimement plusieurs connexions actives **du même
+type**.
+
+**Retenu : la vraie forme**, `IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection)`
+sur `ICbsAdapter`, avec `ResolvedAdapter.Capabilities => Adapter.CapabilitiesFor(Connection)` qui la
+porte jusqu'à `ResolvePort`. Le raccourci — un membre d'interface par défaut
+`CapabilitiesFor(c) => Capabilities` — a été écarté pour la raison qui a fait naître `LanguageCode` :
+il laisse deux façons de poser une question, et la sans-paramètre est celle qu'un nouvel adaptateur
+implémente par habitude. Le coût réel est négatif : quatre adaptateurs ont une matrice statique et
+gagnent une méthode d'une ligne, Amplitude **perd** `Bind`, ses champs de cache, son logger et la
+justification d'une lecture synchrone qui cesse d'être nécessaire, et ORASS perd l'intersection qu'il
+avait construite pour absorber l'ambiguïté.
+
+Un demi-argument a été écarté explicitement : l'enregistrement **scoped** d'un adaptateur donne bien
+un endroit sûr pour mettre en cache, mais un cache n'est correct que s'il y a **un sujet par portée**
+— et `GetPoliciesAsync` itère sur les connexions actives *dans une seule portée*. Le cycle de vie
+scoped est donc ce qui rend le paramètre **nécessaire**, pas ce qui le rend optionnel.
+
+**Résultat, et la partie qui compte.** Le refactor ne valait que s'il rendait écrivable le test que
+personne ne pouvait écrire. Il existe, et il mord :
+
+- `InsurerPricingProbeTests.Two_connections_of_the_same_kind_each_get_their_own_answer` — deux
+  connexions assurance actives du même type, un produit sur chacune, un adaptateur dont la matrice
+  par défaut tarifie et dont la surcharge par connexion retire cette capacité à l'IARD seulement.
+  Au retour en arrière : « Expected `probe.CanPrice(pair.Iard)` to be False … but found True » — le
+  produit IARD s'annonçait offrable.
+- `…The_catalogue_verdict_and_the_counter_agree_per_connection` — au retour en arrière, le guichet
+  **cotait une prime** depuis une installation qui ne tarifie pas. C'était la défaillance concrète
+  d'origine, et elle est maintenant épinglée.
+- `InsuranceGatewayPerConnectionTests` — les deux boucles `GetPoliciesAsync` / `GetClaimsAsync`. Au
+  retour en arrière : « the collection is empty » — un client détenant un contrat n'en recevait
+  aucun, parce que la boucle lisait les capacités de la première ligne à chaque itération.
+
+Le sens du réglage est volontaire : la capacité est retirée **par connexion** et la matrice par
+défaut la conserve, parce que le défaut est ce qu'un adaptateur mono-connexion sert à tout le monde.
+
+**ASS-02 critère 1 : tenu.** L'identifiant résout la ligne, `ResolvedAdapter.Capabilities` applique
+`CapabilitiesFor` à **cette** ligne, et plus aucun adaptateur ne redécouvre une connexion par type.
+
+Une réserve honnête, hors critère 1 : **un appel de port ne porte pas de connexion.** Les méthodes
+des ports assurance n'en reçoivent aucune, donc les refus d'ORASS restent fermés sur l'ensemble des
+lignes d'un tenant — une ligne mal configurée refuse pour tout le tenant, ce qu'un test épingle.
+La question *capacité* est par connexion ; la question *appel* ne l'est pas, et la refermer
+demanderait de changer la signature des ports.
+
+### Constats signalés, non corrigés
+
+- **`FlowFailingAdapter.Capabilities`** n'est plus membre d'aucune interface : il ne compile que
+  parce que `FakeAdapter` garde la propriété, et rien ne le lit à travers le décorateur. Poids mort
+  le jour où cette propriété disparaîtra.
+- Trois commentaires de production décrivaient encore `Capabilities` comme une propriété sans
+  paramètre ; un seul était activement trompeur (`OrassAdapter`, le paragraphe justifiant la lecture
+  synchrone par une contrainte de contrat qui n'existe plus) et il est corrigé — la lecture survit,
+  mais pour `RefusalAsync`, qui n'a pas de connexion, et le commentaire le dit maintenant.
+- **ASS-10 aura besoin de deux valeurs `GapType`** (`PremiumWithoutPolicy`, `PolicyWithoutPremium`)
+  pour réutiliser le registre d'INT-34. Aucune migration — la colonne est textuelle — mais le test
+  de §13 épingle que les deux ensembles de `ReconciliationScope` couvrent l'enum, donc quiconque les
+  ajoute devra l'étendre.
+- Préexistant, trouvé en chemin : **des constructeurs `internal` sur un validateur FluentValidation
+  ne sont pas activables par le conteneur**, qui valide au démarrage — l'API aurait refusé de
+  démarrer. Le balayage d'assemblage avec `includeInternalTypes: true` fait donc de l'accessibilité
+  d'un constructeur une préoccupation de démarrage, ce que les validateurs existants ne révélaient
+  pas puisqu'ils sont tous `public`.
+- Les constats des lots précédents restent ouverts : `AesSecretsModule.GetValueAsync` ignore
+  `ExpiresAt`, la fenêtre de double acceptation d'`RotateHmacSecret` est morte, `IntegrationMode`
+  n'est pas contraint par `IntegrationKind`, et `CredentialVaultRef` / `SftpCredentialVaultRef` sont
+  des champs morts sur un contrat de réglages publié.

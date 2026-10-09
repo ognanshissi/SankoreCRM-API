@@ -27,10 +27,36 @@ public sealed class IntegrationReconciliationRun : AggregateRoot
 
     public string? FailureDetail { get; private set; }
 
+    /// <summary>
+    /// The <see cref="GapType"/> values this run could <b>not look for at all</b>, as a
+    /// comma-separated list of their names. Null means it looked for every type.
+    ///
+    /// <para>
+    /// It exists so that a gap type which can never fire does not read like a gap type that fired
+    /// and found nothing. "Zero <c>MissingInCrm</c>" is reassuring and, on a deployment whose only
+    /// external side is the INT-21 read model, meaningless: that read model is keyed by
+    /// <c>crm_customer_id</c> and therefore structurally cannot name a record the CRM has no
+    /// reference for. An inspection reads a zero as a measurement, so the absence of the
+    /// measurement has to be written down next to it — <c>ReconciliationScope</c> holds the list
+    /// and the argument.
+    /// </para>
+    ///
+    /// <para>
+    /// Set at <see cref="Start"/> and not at <see cref="Finish"/>, deliberately: the scope is a
+    /// property of the deployment's sources, known before a single customer is compared, so a run
+    /// that crashes still says what it was going to look for.
+    /// </para>
+    /// </summary>
+    public string? UndetectableGapTypes { get; private set; }
+
     private IntegrationReconciliationRun() { }
 
     public static IntegrationReconciliationRun Start(
-        Guid tenantId, Guid connectionId, TimeProvider clock, Guid? id = null)
+        Guid tenantId,
+        Guid connectionId,
+        TimeProvider clock,
+        IReadOnlyCollection<GapType>? undetectableGapTypes = null,
+        Guid? id = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
         if (connectionId == Guid.Empty) throw new DomainException("ConnectionId is required.");
@@ -41,9 +67,22 @@ public sealed class IntegrationReconciliationRun : AggregateRoot
             TenantId = tenantId,
             ConnectionId = connectionId,
             StartedAt = clock.GetUtcNow(),
+            // Null rather than an empty string when nothing is undetectable: "" and "no value"
+            // would be two spellings of the same fact in a column a report reads.
+            UndetectableGapTypes = undetectableGapTypes is null || undetectableGapTypes.Count == 0
+                ? null
+                : string.Join(',', undetectableGapTypes.Select(t => t.ToString())),
         };
     }
 
+    /// <param name="gapCount">
+    /// Divergences this run OBSERVED — the open rows it created plus the ones it touched. Not the
+    /// new ones alone: a run that finds forty still-true divergences and opens none would
+    /// otherwise record a zero, and "the comparison ran and found nothing" is the one sentence
+    /// this table must never say falsely. The new ones are carried separately by
+    /// <c>ReconciliationCompletedEvent.NewGapCount</c>, because that is what decides whether
+    /// anybody is told.
+    /// </param>
     public void Finish(int checkedCount, int gapCount, int closedCount, TimeProvider clock)
     {
         CheckedCount = checkedCount;

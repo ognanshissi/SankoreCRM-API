@@ -125,11 +125,20 @@ public sealed class OutboundBatchOrchestratorJob(
     /// on exactly the connections that are idle.
     /// </para>
     /// </summary>
-    internal static Task<bool> HasBatchConnectionAsync(
+    internal static async Task<bool> HasBatchConnectionAsync(
         IntegrationDbContext db, Guid tenantId, CancellationToken ct)
-        => db.Connections
+    {
+        // Loads the candidates instead of asking AnyAsync, because the real predicate type-tests
+        // the settings and cannot be translated — see OutboundBatchCarrier. The table is per
+        // tenant and holds a handful of rows, so this is a cheaper mistake than letting the mode
+        // test drift from the dispatcher's again.
+        var candidates = await db.Connections
             .IgnoreQueryFilters()
-            .AnyAsync(
-                c => c.TenantId == tenantId && c.IsActive && c.Mode == IntegrationMode.Batch,
-                ct);
+            .Where(c => c.TenantId == tenantId
+                     && c.IsActive
+                     && (c.Mode == IntegrationMode.Batch || c.Mode == IntegrationMode.Relay))
+            .ToListAsync(ct);
+
+        return candidates.Any(OutboundBatchCarrier.LeavesInAFile);
+    }
 }

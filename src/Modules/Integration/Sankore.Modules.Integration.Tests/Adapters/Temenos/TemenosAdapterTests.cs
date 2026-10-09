@@ -35,7 +35,10 @@ public sealed class TemenosAdapterTests
     {
         using var harness = TemenosTestHarness.Create();
 
-        var modes = harness.Adapter.Capabilities.Modes;
+        // The connection the harness seeded: CapabilitiesFor is asked about a row, and this
+        // adapter's matrix is the same for every one of them — a tenant has at most one active
+        // core-banking connection (ux_integration_connection_active_core_banking).
+        var modes = harness.Adapter.CapabilitiesFor(harness.Connection).Modes;
 
         modes.Keys.Should().BeEquivalentTo(new[]
         {
@@ -59,11 +62,13 @@ public sealed class TemenosAdapterTests
     {
         using var harness = TemenosTestHarness.Create();
 
+        var matrix = harness.Adapter.CapabilitiesFor(harness.Connection);
+
         // ASS-05 is not part of INT-13. A capability that is absent from the map is not
         // supported, which is what IntegrationAdapterResolver.ResolvePort reads before calling.
-        harness.Adapter.Capabilities.Supports(IntegrationCapability.DebitAccount).Should().BeFalse();
-        harness.Adapter.Capabilities.Supports(IntegrationCapability.ReverseDebit).Should().BeFalse();
-        harness.Adapter.Capabilities.ModeOf(IntegrationCapability.DebitAccount).Should().BeNull();
+        matrix.Supports(IntegrationCapability.DebitAccount).Should().BeFalse();
+        matrix.Supports(IntegrationCapability.ReverseDebit).Should().BeFalse();
+        matrix.ModeOf(IntegrationCapability.DebitAccount).Should().BeNull();
     }
 
     [Fact]

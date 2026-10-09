@@ -35,6 +35,15 @@ public sealed class IntegrationPermissionsTests
     private static readonly string[] InsuranceCodes =
     [
         "Ins.Product.Manage",
+
+        // The eighth, where ASS-11's table names seven. Listed with its reason so that comparing
+        // this file to the specification raises a question and not a defect: ASS-03's endpoints all
+        // sat behind Ins.Product.Manage, so an agent holding only Ins.Policy.Subscribe could
+        // subscribe a policy without being able to see which products exist or what one costs —
+        // and ASS-11's own purpose is to separate DISTRIBUTION from management, which puts reading
+        // the catalogue on the distributor's side. See Permissions.CanViewInsuranceProduct.
+        "Ins.Product.View",
+
         "Ins.Policy.Subscribe",
         "Ins.Policy.View",
         "Ins.Claim.Declare",
@@ -53,7 +62,7 @@ public sealed class IntegrationPermissionsTests
     }
 
     [Fact]
-    public void The_seven_insurance_permissions_are_registered_in_Permissions_All()
+    public void The_eight_insurance_permissions_are_registered_in_Permissions_All()
     {
         var registered = Permissions.All.Select(p => p.Code).ToList();
 

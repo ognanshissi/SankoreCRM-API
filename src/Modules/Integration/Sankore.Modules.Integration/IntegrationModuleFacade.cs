@@ -371,8 +371,11 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             if (resolved.IsFailure)
                 return await facade.StaleBalanceAsync(tenantId, crmCustomerId, accountRef, ct);
 
-            var adapter = resolved.Value.Adapter;
-            var connectionId = resolved.Value.Connection.Id;
+            // The PAIR, not the bare adapter: the capability read below and the port resolution
+            // are both questions about this connection's installation, and unwrapping here is
+            // exactly how the connection used to get dropped.
+            var adapter = resolved.Value;
+            var connectionId = adapter.Connection.Id;
 
             // THE ACCOUNT MUST BELONG TO THE CUSTOMER, and that is checked before anything is
             // asked of the CBS. INT-15 restricts this read to the clients of the agent's own
@@ -473,7 +476,7 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
 
             if (connection is null) return IntegrationCapabilities.None;
 
-            var adapter = facade._resolver.ResolveAdapter(connection);
+            var adapter = facade._resolver.ResolveFor(connection);
 
             return adapter.IsSuccess ? adapter.Value.Capabilities : IntegrationCapabilities.None;
         }
@@ -655,6 +658,16 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         /// Per connection, unlike the core-banking one: each insurer has its own adapter and its
         /// own supported operations, and a screen showing two insurers must be able to offer
         /// "declare a claim" for one and not for the other.
+        ///
+        /// <para>
+        /// <b>And it now honours its own parameter.</b> Until L8 the id selected the connection and
+        /// the connection selected an adapter BY KIND, after which a parameterless
+        /// <c>Capabilities</c> property answered for whichever row the adapter had bound itself to
+        /// — so two active ORASS connections, the normal shape for an IMF selling IARD and Vie,
+        /// got the same matrix. <see cref="ResolvedAdapter.Capabilities"/> applies the connection
+        /// that was asked about, which is the only reason this method differs from
+        /// <see cref="CoreBankingGateway.GetCapabilities"/> at all.
+        /// </para>
         /// </summary>
         public IntegrationCapabilities GetCapabilities(Guid connectionId)
         {
@@ -664,7 +677,7 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
 
             if (connection is null) return IntegrationCapabilities.None;
 
-            var adapter = facade._resolver.ResolveAdapter(connection);
+            var adapter = facade._resolver.ResolveFor(connection);
 
             return adapter.IsSuccess ? adapter.Value.Capabilities : IntegrationCapabilities.None;
         }
@@ -873,11 +886,21 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     /// A port of the adapter serving one insurance connection, or <c>null</c> when the connection
     /// has no adapter or the adapter does not declare the capability. Null rather than a result
     /// because both callers do the same thing with it: skip that insurer and carry on.
+    ///
+    /// <para>
+    /// <b>Called in a LOOP over the tenant's active insurance connections</b>, by
+    /// <c>GetPoliciesAsync</c> and <c>GetClaimsAsync</c>, inside ONE DI scope. That is why the
+    /// capability question had to carry its connection rather than be cached on the scoped
+    /// adapter: the same adapter instance is asked about several rows one after another, so an
+    /// answer cached per scope is an answer for whichever row came first. The adapters stay scoped
+    /// — the lifetime was never the problem — and <see cref="ResolvedAdapter"/> re-pairs on every
+    /// iteration.
+    /// </para>
     /// </summary>
     private TPort? ResolveInsurancePort<TPort>(
         IntegrationConnection connection, IntegrationCapability capability) where TPort : class
     {
-        var adapter = _resolver.ResolveAdapter(connection);
+        var adapter = _resolver.ResolveFor(connection);
         if (adapter.IsFailure)
         {
             _logger.LogWarning(

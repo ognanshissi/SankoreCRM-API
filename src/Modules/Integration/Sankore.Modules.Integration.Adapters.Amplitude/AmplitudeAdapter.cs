@@ -89,16 +89,33 @@ internal sealed class AmplitudeAdapter(
 {
     private bool _bindingResolved;
     private AmplitudeSettings? _settings;
-    private IntegrationMode? _mode;
 
     public IntegrationKind Kind => IntegrationKind.Amplitude;
 
     /// <summary>
-    /// The matrix of <see cref="AmplitudeCapabilityMatrix"/>, applied to this tenant's own
-    /// Amplitude connection — the five writes always, in the mode the release and the connection's
-    /// carrier resolve to, plus the three live reads on an Up installation.
+    /// The matrix of <see cref="AmplitudeCapabilityMatrix"/>, applied to <b>the connection asked
+    /// about</b> — the five writes always, in the mode that row's release and carrier resolve to,
+    /// plus the three live reads on an Up installation (INT-31, criterion 3).
+    ///
+    /// <para>
+    /// Both inputs come straight off <paramref name="connection"/> and nothing is queried.
+    /// <c>AmplitudeCapabilityMatrix.For</c> was always the pure function of a row; until L8 it was
+    /// missing its argument, so this adapter re-discovered "the tenant's Amplitude connection" by
+    /// kind and answered for whichever row it picked. That read is gone from this path, and with
+    /// it the mode field it existed to fill.
+    /// </para>
     /// </summary>
-    public IntegrationCapabilities Capabilities => AmplitudeCapabilityMatrix.For(Settings, Mode);
+    public IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // `as`, not a cast: an Amplitude row carrying another kind's settings is a corrupted
+        // configuration, and the matrix narrows for it rather than throwing out of a screen that
+        // is only asking what is available. The MODE is still passed, because it is read from a
+        // column a settings mismatch cannot corrupt and the matrix narrows correctly from it alone.
+        return AmplitudeCapabilityMatrix.For(
+            connection.Settings as AmplitudeSettings, connection.Mode);
+    }
 
     // ── The installation ────────────────────────────────────────────────────────────────────
 
@@ -106,24 +123,37 @@ internal sealed class AmplitudeAdapter(
     /// The tenant's Amplitude settings, read once per scope.
     ///
     /// <para>
-    /// <b>Read synchronously, and that is the lesser evil.</b> <c>ICbsAdapter.Capabilities</c> is a
-    /// synchronous property on a contract this adapter may not change, and INT-31's criterion 3
-    /// requires the matrix to depend on the row — this is the very case
-    /// <c>PerfectVisionAdapter.Settings</c> predicted would come back for the Amplitude version.
-    /// The alternatives are worse: blocking on an async query with <c>GetAwaiter().GetResult()</c>
-    /// is the deadlock-prone form of exactly this, and reading in the constructor would query for
-    /// every resolution of the adapter including the ones that never look at the matrix. So: one
-    /// bounded single-row read, taken lazily, cached for the lifetime of the scope.
+    /// <b>No longer read for the capability matrix</b>, which was its original and only reason:
+    /// <c>ICbsAdapter.Capabilities</c> was a parameterless property, INT-31's criterion 3 requires
+    /// the matrix to depend on the row, and this was the lazy read that squared the two.
+    /// <see cref="CapabilitiesFor"/> now takes its connection, so the matrix reads nothing — and
+    /// the companion <c>Mode</c> property, which served the matrix alone, is gone with it.
     /// </para>
     ///
     /// <para>
-    /// <b>Activation is NOT part of the predicate</b>, unlike every other adapter's binding. An
-    /// Amplitude connection can never be activated — its health check cannot pass until the
-    /// contract arrives — so filtering on <c>IsActive</c> would make the matrix permanently empty
-    /// and criterion 3 undeliverable. The matrix describes a configured installation; it is not a
-    /// licence to send anything, and every port method refuses regardless. An active row still wins
+    /// What keeps it alive is the REFUSAL DETAIL. <c>ReadRefusal</c> and <c>Pending</c> name the
+    /// configured release so an administrator is told which Amplitude artefact this installation is
+    /// waiting on, and both are reached from port methods — <c>ICbsCustomerPort.CreateCustomerAsync</c>
+    /// and its siblings take a payload and an idempotency key, never a connection. So the row still
+    /// has to be found there. Read synchronously and lazily, cached for the scope: blocking on an
+    /// async query with <c>GetAwaiter().GetResult()</c> is the deadlock-prone form of the same
+    /// thing, and reading in the constructor would query for every resolution of the adapter
+    /// including the ones that never refuse anything.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Activation is NOT part of the predicate.</b> An Amplitude connection can never be
+    /// activated — its health check cannot pass until the contract arrives — so filtering on
+    /// <c>IsActive</c> would leave every refusal unable to name a release. An active row still wins
     /// where a tenant has several, so the day activation becomes possible this reads the connection
     /// commands actually flow through.
+    /// </para>
+    ///
+    /// <para>
+    /// This picks the tenant's first active Amplitude row, while <see cref="CapabilitiesFor"/>
+    /// speaks for whichever row it was handed. The two cannot disagree for a core-banking kind:
+    /// <c>ux_integration_connection_active_core_banking</c> permits one active row per tenant, and
+    /// that index is exactly why this shape is safe here and was not safe for the insurance family.
     /// </para>
     ///
     /// <para>
@@ -139,27 +169,6 @@ internal sealed class AmplitudeAdapter(
         {
             Bind();
             return _settings;
-        }
-    }
-
-    /// <summary>
-    /// The connection's mode — the second input of the matrix, read from the same row and in the
-    /// same read as the settings.
-    ///
-    /// <para>
-    /// <c>null</c> when this tenant has no Amplitude connection at all, which is NOT the same as
-    /// <see cref="IntegrationMode.Batch"/>: "nothing is configured" and "files were chosen" are
-    /// different states, and the matrix narrows on the first without claiming the second. A screen
-    /// asks what Amplitude supports before anything exists, and it must get an answer rather than
-    /// a fault.
-    /// </para>
-    /// </summary>
-    private IntegrationMode? Mode
-    {
-        get
-        {
-            Bind();
-            return _mode;
         }
     }
 
@@ -181,21 +190,19 @@ internal sealed class AmplitudeAdapter(
 
         if (connection is null) return;
 
-        // The mode is kept even when the settings turn out to be of the wrong shape: it is read
-        // from a column the mismatch cannot corrupt, and the matrix still narrows correctly from
-        // it alone.
-        _mode = connection.Mode;
         _settings = connection.Settings as AmplitudeSettings;
 
         if (_settings is null)
         {
             // An Amplitude row carrying another kind's settings is a corrupted configuration, not
             // a missing contract: the two send an administrator to different screens, so they are
-            // told apart even though both end in a narrowed matrix.
+            // told apart. The consequence named here is the REFUSAL DETAIL, not the matrix — the
+            // matrix is computed from the connection it is asked about and reports its own
+            // narrowing.
             logger.LogError(
                 "Connection {ConnectionId} is an Amplitude row whose settings are not "
-                + "AmplitudeSettings; its capability matrix will omit the live reads and declare "
-                + "the writes as batch.",
+                + "AmplitudeSettings; refusals from this adapter cannot name the configured "
+                + "release.",
                 connection.Id);
         }
     }

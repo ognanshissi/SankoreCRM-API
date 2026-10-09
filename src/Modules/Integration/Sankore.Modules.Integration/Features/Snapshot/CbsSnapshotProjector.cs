@@ -75,7 +75,7 @@ internal sealed class CbsSnapshotProjector(
             return;
         }
 
-        var adapter = resolver.ResolveAdapter(connection.Value);
+        var adapter = resolver.ResolveFor(connection.Value);
         if (adapter.IsFailure)
         {
             logger.LogWarning(
@@ -216,11 +216,11 @@ internal sealed class CbsSnapshotProjector(
         Guid tenantId,
         Guid connectionId,
         Guid crmCustomerId,
-        ICbsAdapter adapter,
+        ResolvedAdapter adapter,
         ExternalId customer,
         CancellationToken ct)
     {
-        if (adapter is ICbsKycLevelPort port
+        if (adapter.Adapter is ICbsKycLevelPort port
             && adapter.Capabilities.Supports(IntegrationCapability.ReadKycLevel))
         {
             var read = await journal.RecordAsync(
@@ -243,13 +243,13 @@ internal sealed class CbsSnapshotProjector(
     }
 
     private async Task<IReadOnlyList<CbsAccount>?> ReadAccountsAsync(
-        Guid tenantId, Guid connectionId, ICbsAdapter adapter, ExternalId customer, CancellationToken ct)
+        Guid tenantId, Guid connectionId, ResolvedAdapter adapter, ExternalId customer, CancellationToken ct)
     {
         var port = resolver.ResolvePort<ICbsAccountPort>(adapter, IntegrationCapability.ReadAccounts);
         if (port.IsFailure)
         {
             logger.LogWarning(
-                "Snapshot skipped: {Kind} cannot read accounts — {Code}", adapter.Kind, port.Code);
+                "Snapshot skipped: {Kind} cannot read accounts — {Code}", adapter.Adapter.Kind, port.Code);
             return null;
         }
 
@@ -282,7 +282,7 @@ internal sealed class CbsSnapshotProjector(
     /// </para>
     /// </summary>
     private async Task<IReadOnlyList<CbsLoan>?> ReadLoansAsync(
-        Guid tenantId, Guid connectionId, ICbsAdapter adapter, ExternalId customer, CancellationToken ct)
+        Guid tenantId, Guid connectionId, ResolvedAdapter adapter, ExternalId customer, CancellationToken ct)
     {
         var port = resolver.ResolvePort<ICbsLoanPort>(adapter, IntegrationCapability.ReadLoans);
         if (port.IsFailure) return [];
@@ -309,7 +309,7 @@ internal sealed class CbsSnapshotProjector(
     private async Task<decimal?> ReadMonthlyFlowAsync(
         Guid tenantId,
         Guid connectionId,
-        ICbsAdapter adapter,
+        ResolvedAdapter adapter,
         ExternalId customer,
         int? windowDays,
         CancellationToken ct)

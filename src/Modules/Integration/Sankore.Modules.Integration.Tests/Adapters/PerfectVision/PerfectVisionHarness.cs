@@ -55,11 +55,10 @@ internal sealed class PerfectVisionHarness : IDisposable
         PerfectVisionSettings settings, IntegrationMode mode = IntegrationMode.Batch)
         => Build(settings, mode);
 
-    /// <summary>
-    /// A tenant with no Perfect Vision connection at all — the case the matrix must answer
-    /// narrowly instead of throwing, since a screen asks for it before anything is configured.
-    /// </summary>
-    public static PerfectVisionHarness WithNoConnection() => Build(null, IntegrationMode.Batch);
+    // No WithNoConnection fixture: it existed for the matrix's "no row at all" case, and
+    // CapabilitiesFor takes a row, so the narrowest input a test can give is a row whose settings
+    // the adapter cannot read. Build still accepts a null — the seeding branch is what a
+    // no-connection fixture would need — so bringing one back is one method, not a rewrite.
 
     private static PerfectVisionHarness Build(PerfectVisionSettings? settings, IntegrationMode mode)
     {

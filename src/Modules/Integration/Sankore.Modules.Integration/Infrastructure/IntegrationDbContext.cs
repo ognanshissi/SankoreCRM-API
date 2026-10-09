@@ -31,6 +31,24 @@ public sealed class IntegrationDbContext(
     public DbSet<KycLimitAlert> KycLimitAlerts => Set<KycLimitAlert>();
     public DbSet<IntegrationRelayAgent> RelayAgents => Set<IntegrationRelayAgent>();
 
+    // ── Insurance family (ASS-03 → ASS-12) ──────────────────────────────────
+    // In THIS context and not a second one: that is the point of ASS-01. The outbox, the
+    // dispatcher, the batch socle, the call log and the reconciliation are written once and the
+    // second family plugs into them without a second schema or a second unit of work — which is
+    // also what lets a premium debit (a CoreBanking command) and a policy subscription (an
+    // Insurance one) commit in a single transaction.
+    public DbSet<InsuranceProduct> InsuranceProducts => Set<InsuranceProduct>();
+    public DbSet<InsuranceSubscription> InsuranceSubscriptions => Set<InsuranceSubscription>();
+    public DbSet<ConsentProof> ConsentProofs => Set<ConsentProof>();
+    public DbSet<MedicalQuestionnaire> MedicalQuestionnaires => Set<MedicalQuestionnaire>();
+    public DbSet<PolicyRecord> Policies => Set<PolicyRecord>();
+    public DbSet<PolicyCertificate> PolicyCertificates => Set<PolicyCertificate>();
+    public DbSet<PremiumInstalment> PremiumInstalments => Set<PremiumInstalment>();
+    public DbSet<ClaimRecord> Claims => Set<ClaimRecord>();
+    public DbSet<ClaimDocument> ClaimDocuments => Set<ClaimDocument>();
+    public DbSet<InsurerStatement> InsurerStatements => Set<InsurerStatement>();
+    public DbSet<InsurerStatementLine> InsurerStatementLines => Set<InsurerStatementLine>();
+
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<IntegrationInboxMessage> InboxMessages => Set<IntegrationInboxMessage>();
 
@@ -88,6 +106,22 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<CbsSnapshot>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycLimitAlert>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<IntegrationRelayAgent>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+
+        // The insurance family. Every one of these is tenant-scoped, and the list is pinned by
+        // InsuranceOnTheSocleTests: a new entity added without a line here fails that test rather
+        // than leaking one institution's portfolio, premiums, claims and medical questionnaires to
+        // another.
+        modelBuilder.Entity<InsuranceProduct>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<InsuranceSubscription>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ConsentProof>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<MedicalQuestionnaire>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<PolicyRecord>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<PolicyCertificate>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<PremiumInstalment>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ClaimRecord>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ClaimDocument>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<InsurerStatement>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<InsurerStatementLine>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
     }
 }
 

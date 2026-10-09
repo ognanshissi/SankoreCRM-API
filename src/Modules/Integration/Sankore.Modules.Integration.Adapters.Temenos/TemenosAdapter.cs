@@ -14,7 +14,7 @@ using Sankore.Shared.Kernel;
 /// Temenos Transact, over the Party and Holdings APIs (INT-12, INT-13).
 ///
 /// <para>
-/// <b>What it declares is what it does.</b> <see cref="Capabilities"/> lists the eight operations
+/// <b>What it declares is what it does.</b> <see cref="CapabilitiesFor"/> lists the eight operations
 /// implemented below and nothing else. <c>DebitAccount</c> and <c>ReverseDebit</c> are absent from
 /// it on purpose: they belong to ASS-05 and are not in this chantier's criteria, so the two
 /// methods exist (the port demands them) and answer
@@ -56,7 +56,7 @@ internal sealed partial class TemenosAdapter(
     /// <summary>
     /// Resolved once per scope. Null until the first call: the constructor cannot query, and a
     /// connection read at construction would be read for every resolution of the adapter,
-    /// including the ones that only look at <see cref="Capabilities"/>.
+    /// including the ones that only look at <see cref="CapabilitiesFor"/>.
     /// </summary>
     private TemenosBinding? _binding;
 
@@ -70,8 +70,13 @@ internal sealed partial class TemenosAdapter(
     /// over HTTP: there is no file cycle in this adapter, and declaring batch would make the
     /// platform wait for an acknowledgement that nothing will ever produce.
     /// </para>
+    ///
+    /// <para>
+    /// <c>static readonly</c>: the matrix is the same for every connection and every scope, so
+    /// there is nothing per-instance about it.
+    /// </para>
     /// </summary>
-    public IntegrationCapabilities Capabilities { get; } = new(
+    private static readonly IntegrationCapabilities Matrix = new(
         new Dictionary<IntegrationCapability, CapabilityMode>
         {
             // INT-12 — Party API.
@@ -86,6 +91,20 @@ internal sealed partial class TemenosAdapter(
             [IntegrationCapability.ReadTransactions] = CapabilityMode.RealTime,
             [IntegrationCapability.ReadMonthlyFlow] = CapabilityMode.RealTime,
         });
+
+    /// <summary>
+    /// The same eight operations whatever the connection — and saying so with the connection in
+    /// hand is the point.
+    ///
+    /// <para>
+    /// Transact's API surface is fixed by the product, not by the row: this adapter reads nothing
+    /// from <paramref name="connection"/> and that is a real statement about Temenos, not a
+    /// shortcut. The parameterless property this replaces could not express it — it looked
+    /// identical to an adapter whose matrix DID depend on the row and had quietly picked one, which
+    /// is exactly what Amplitude and ORASS were doing.
+    /// </para>
+    /// </summary>
+    public IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection) => Matrix;
 
     // ── Health (INT-03) ─────────────────────────────────────────────────────────────────────
 
@@ -314,7 +333,7 @@ internal sealed partial class TemenosAdapter(
     /// The method exists because <c>ICbsAccountPort</c> demands it — the port carries the premium
     /// debit of ASS-05 — and this chantier's criteria (INT-13) do not include it. Answering
     /// <see cref="IntegrationErrors.CapabilityNotSupported"/> is the honest shape: the capability
-    /// is absent from <see cref="Capabilities"/>, so the dispatcher refuses the command before
+    /// is absent from <see cref="CapabilitiesFor"/>, so the dispatcher refuses the command before
     /// reaching here and this body is the belt to that braces. A plausible implementation written
     /// without the criteria that govern it would be a method that moves money.
     /// </para>

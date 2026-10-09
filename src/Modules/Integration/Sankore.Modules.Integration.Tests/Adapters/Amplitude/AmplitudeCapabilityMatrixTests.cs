@@ -152,13 +152,37 @@ public sealed class AmplitudeCapabilityMatrixTests
     }
 
     [Fact]
-    public void The_relay_mode_changes_nothing_about_an_up_matrix()
+    public void Relay_keeps_an_up_installations_reads_live_and_moves_its_writes_to_the_file()
     {
-        // The same installation reached through the on-premise agent (INT-26) is the same
-        // installation. If the transport changed the matrix, a tenant that moved behind a relay
-        // would lose buttons for a reason that has nothing to do with what its CBS can do.
-        Matrix(AmplitudeVersion.Up, IntegrationMode.Relay).ToDictionary()
-            .Should().BeEquivalentTo(Matrix(AmplitudeVersion.Up, IntegrationMode.Api).ToDictionary());
+        // This test asserted that Relay changed NOTHING, on the reasoning that the same
+        // installation reached through the on-premise agent is the same installation. The
+        // reasoning is right about reads and was wrong about writes: the relay agent's file
+        // carrier is delivered and its ORDER channel is not, so the dispatcher sends every relay
+        // write with batch coordinates to the outbound socle — and AmplitudeSettings, being
+        // BatchCapableSettings, always has them. Declaring those writes RealTime offered a live
+        // button for a write that leaves at a cut-off.
+        //
+        // So the buttons are not lost, which was the original concern: the operations are all
+        // still declared. What changes is the PROMISE attached to the writes.
+        var relay = Matrix(AmplitudeVersion.Up, IntegrationMode.Relay);
+        var api = Matrix(AmplitudeVersion.Up, IntegrationMode.Api);
+
+        relay.Modes.Keys.Should().BeEquivalentTo(
+            api.Modes.Keys, "a tenant behind a relay must not lose operations");
+
+        foreach (var read in AmplitudeCapabilityMatrix.ApiReads)
+        {
+            relay.ModeOf(read).Should().Be(
+                CapabilityMode.RealTime, "the read path never consults the mode");
+        }
+
+        foreach (var write in AmplitudeCapabilityMatrix.Writes)
+        {
+            relay.ModeOf(write).Should().Be(
+                CapabilityMode.Batch, "a relay write leaves in a file until INT-26's order channel exists");
+
+            api.ModeOf(write).Should().Be(CapabilityMode.RealTime);
+        }
     }
 
     [Fact]
@@ -226,9 +250,12 @@ public sealed class AmplitudeCapabilityMatrixTests
     [Fact]
     public void Every_declared_capability_is_backed_by_a_port_the_adapter_implements()
     {
-        using var harness = AmplitudeHarness.With(AmplitudeVersion.Up, IntegrationMode.Api);
+        using var harness = AmplitudeHarness.With();
 
-        var matrix = harness.Adapter.Capabilities;
+        // The Up/Api row: the widest of the two releases, and the one the adapter is asked about
+        // rather than the one it used to go looking for.
+        var matrix = harness.Adapter.CapabilitiesFor(AmplitudeHarness.ConnectionCarrying(
+            AmplitudeHarness.Settings(AmplitudeVersion.Up), IntegrationMode.Api));
 
         // A capability declared without the interface behind it is refused by
         // IntegrationAdapterResolver.ResolvePort with CapabilityNotSupported — the same code as

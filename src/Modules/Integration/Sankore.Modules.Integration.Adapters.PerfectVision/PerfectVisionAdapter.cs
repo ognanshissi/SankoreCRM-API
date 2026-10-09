@@ -82,11 +82,28 @@ internal sealed class PerfectVisionAdapter(
     public IntegrationKind Kind => IntegrationKind.PerfectVision;
 
     /// <summary>
-    /// The matrix of <see cref="PerfectVisionCapabilityMatrix"/>, applied to this tenant's own
-    /// Perfect Vision connection — the batch writes always, a live balance read only where the
+    /// The matrix of <see cref="PerfectVisionCapabilityMatrix"/>, applied to <b>the connection
+    /// asked about</b> — the batch writes always, a live balance read only where that
     /// installation exposes a view.
+    ///
+    /// <para>
+    /// Reads its settings straight off <paramref name="connection"/> and queries nothing. Before
+    /// L8 this was a parameterless property backed by <see cref="Settings"/>, a lazy single-row
+    /// read that re-discovered "the tenant's Perfect Vision connection" by kind; the matrix is a
+    /// pure function of the row, so handed the row it needs no read at all. The lazy read survives
+    /// for the balance-routing path below, which has no connection to hand — see
+    /// <see cref="Settings"/>.
+    /// </para>
     /// </summary>
-    public IntegrationCapabilities Capabilities => PerfectVisionCapabilityMatrix.For(Settings);
+    public IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // `as`, not a cast: a Perfect Vision row carrying another kind's settings is a corrupted
+        // configuration, and the matrix narrows to nothing for it rather than throwing out of a
+        // screen that is only asking what is available.
+        return PerfectVisionCapabilityMatrix.For(connection.Settings as PerfectVisionSettings);
+    }
 
     // ── Settings ────────────────────────────────────────────────────────────────────────────
 
@@ -94,14 +111,28 @@ internal sealed class PerfectVisionAdapter(
     /// The tenant's Perfect Vision settings, read once per scope.
     ///
     /// <para>
-    /// <b>Read synchronously, and that is the lesser evil.</b> <c>ICbsAdapter.Capabilities</c> is
-    /// a synchronous property on a contract this adapter may not change, and INT-28's criterion 3
-    /// requires the matrix to depend on the row. The alternatives are worse: blocking on an async
-    /// query with <c>GetAwaiter().GetResult()</c> is the deadlock-prone form of exactly this, and
-    /// reading in the constructor would query for every resolution of the adapter including the
-    /// ones that never look at the matrix. So: one bounded single-row read, taken lazily, cached
-    /// for the lifetime of the scope. Temenos keeps a fixed matrix and needs none of this; INT-31
-    /// will face the same question for the Amplitude version.
+    /// <b>No longer read for the capability matrix.</b> This used to exist because
+    /// <c>ICbsAdapter.Capabilities</c> was a parameterless property and INT-28's criterion 3
+    /// requires the matrix to depend on the row; <c>CapabilitiesFor</c> now takes its connection
+    /// and reads the settings off it, so that reason is gone.
+    /// </para>
+    ///
+    /// <para>
+    /// It survives for <c>PerfectVisionBalanceRouting.ChooseFor</c>, which is reached from a PORT
+    /// method — <c>ICbsAccountPort.GetBalanceAsync</c> takes an account reference and no
+    /// connection — so there the row still has to be found. Read synchronously and lazily, cached
+    /// for the scope: blocking on an async query with <c>GetAwaiter().GetResult()</c> is the
+    /// deadlock-prone form of the same thing, and reading in the constructor would query for every
+    /// resolution of the adapter including the ones that never route a balance.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>It can disagree with <c>CapabilitiesFor</c>'s answer</b>, in principle: this picks the
+    /// tenant's first active Perfect Vision row while the matrix speaks for whichever row it was
+    /// handed. For core banking the two cannot differ —
+    /// <c>ux_integration_connection_active_core_banking</c> allows one active row per tenant — and
+    /// that index is the whole reason this shape is safe here and was not safe for the insurance
+    /// family.
     /// </para>
     ///
     /// <para>

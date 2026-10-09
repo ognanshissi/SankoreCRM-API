@@ -81,6 +81,891 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("cbs_customer_snapshot", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ClaimDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClaimId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("claim_id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("DocumentKind")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("document_kind");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("file_name");
+
+                    b.Property<bool>("RequestedByInsurer")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requested_by_insurer");
+
+                    b.Property<string>("ScanDetail")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("scan_detail");
+
+                    b.Property<string>("ScanStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("scan_status");
+
+                    b.Property<DateTimeOffset?>("ScannedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scanned_at");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("StorageRef")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("storage_ref");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("TransmitCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transmit_command_id");
+
+                    b.Property<DateTimeOffset?>("TransmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("transmitted_at");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_claim_document");
+
+                    b.HasIndex("ClaimId")
+                        .HasDatabaseName("ix_ins_claim_document_claim_id");
+
+                    b.HasIndex("TenantId", "ScanStatus")
+                        .HasDatabaseName("ix_ins_claim_document_scan_status");
+
+                    b.HasIndex("TenantId", "ClaimId", "Sha256")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_claim_document_digest");
+
+                    b.ToTable("ins_claim_document", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ClaimRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ClaimNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("claim_number");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<Guid?>("DeclareCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("declare_command_id");
+
+                    b.Property<DateTimeOffset>("DeclaredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("declared_at");
+
+                    b.Property<Guid>("DeclaredBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("declared_by");
+
+                    b.Property<string>("DescriptionEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("description_encrypted");
+
+                    b.Property<string>("ExternalClaimId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("external_claim_id");
+
+                    b.Property<decimal?>("IndemnityAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("indemnity_amount");
+
+                    b.Property<string>("IndemnityCbsReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("indemnity_cbs_reference");
+
+                    b.Property<string>("IndemnityCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("indemnity_currency");
+
+                    b.Property<DateTimeOffset?>("IndemnityPaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("indemnity_paid_at");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_synced_at");
+
+                    b.Property<string>("MissingDocuments")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("missing_documents");
+
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("nature");
+
+                    b.Property<DateOnly>("OccurredOn")
+                        .HasColumnType("date")
+                        .HasColumnName("occurred_on");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("StatusChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("status_changed_at");
+
+                    b.Property<string>("StatusDetail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("status_detail");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_claim");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_ins_claim_connection_id");
+
+                    b.HasIndex("DeclareCommandId")
+                        .HasDatabaseName("ix_ins_claim_declare_command")
+                        .HasFilter("declare_command_id IS NOT NULL");
+
+                    b.HasIndex("PolicyId")
+                        .HasDatabaseName("ix_ins_claim_policy_id");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_ins_claim_tenant_status");
+
+                    b.HasIndex("TenantId", "ConnectionId", "ExternalClaimId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_claim_external")
+                        .HasFilter("external_claim_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "CrmCustomerId", "DeclaredAt")
+                        .HasDatabaseName("ix_ins_claim_customer_declared");
+
+                    b.HasIndex("TenantId", "PolicyId", "OccurredOn", "Nature")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_claim_declaration");
+
+                    b.ToTable("ins_claim", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConsentProof", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CapturedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("captured_at");
+
+                    b.Property<Guid>("CapturedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("captured_by");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid?>("CommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("command_id");
+
+                    b.Property<string>("ConsentTextSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("consent_text_sha256");
+
+                    b.Property<string>("ConsentTextVersion")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("consent_text_version");
+
+                    b.Property<DateTimeOffset>("ConsentedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consented_at");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<string>("EvidenceEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("evidence_encrypted");
+
+                    b.Property<string>("EvidenceSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("evidence_sha256");
+
+                    b.Property<string>("EvidenceStorageRef")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("evidence_storage_ref");
+
+                    b.Property<DateTimeOffset?>("RetainUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retain_until");
+
+                    b.Property<Guid>("SubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subscription_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_consent_proof");
+
+                    b.HasIndex("CommandId")
+                        .HasDatabaseName("ix_ins_consent_proof_command")
+                        .HasFilter("command_id IS NOT NULL");
+
+                    b.HasIndex("SubscriptionId")
+                        .HasDatabaseName("ix_ins_consent_proof_subscription_id");
+
+                    b.HasIndex("TenantId", "SubscriptionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_consent_proof_subscription");
+
+                    b.HasIndex("TenantId", "CrmCustomerId", "ConsentedAt")
+                        .HasDatabaseName("ix_ins_consent_proof_customer");
+
+                    b.ToTable("ins_consent_proof", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceProduct", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("CommissionRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("commission_rate");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_from");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_to");
+
+                    b.Property<decimal?>("FixedPremiumAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("fixed_premium_amount");
+
+                    b.Property<string>("GuaranteesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("guarantees");
+
+                    b.Property<decimal?>("InsuredAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("insured_amount");
+
+                    b.Property<string>("InsurerProductCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("insurer_product_code");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("LinkedCreditProductCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("linked_credit_product_code");
+
+                    b.Property<int?>("MaxAge")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_age");
+
+                    b.Property<int?>("MinAge")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_age");
+
+                    b.Property<string>("MinKycLevel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("min_kyc_level");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Periodicity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("periodicity");
+
+                    b.Property<int>("PremiumRetryIntervalDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("premium_retry_interval_days");
+
+                    b.Property<int>("PremiumRetryLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("premium_retry_limit");
+
+                    b.Property<string>("PricingMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("pricing_mode");
+
+                    b.Property<bool>("RequiresActiveLoan")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_active_loan");
+
+                    b.Property<bool>("RequiresCbsAccount")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_cbs_account");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_product");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_ins_product_connection_id");
+
+                    b.HasIndex("TenantId", "LinkedCreditProductCode")
+                        .HasDatabaseName("ix_ins_product_linked_credit")
+                        .HasFilter("linked_credit_product_code IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ConnectionId", "InsurerProductCode")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_product_insurer_code");
+
+                    b.HasIndex("TenantId", "ConnectionId", "IsActive")
+                        .HasDatabaseName("ix_ins_product_tenant_connection_active");
+
+                    b.ToTable("ins_product", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceSubscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BeneficiariesEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("beneficiaries_encrypted");
+
+                    b.Property<string>("CbsAccountRef")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cbs_account_ref");
+
+                    b.Property<string>("CbsDebitReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cbs_debit_reference");
+
+                    b.Property<string>("CbsReversalReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cbs_reversal_reference");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<Guid?>("DebitCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("debit_command_id");
+
+                    b.Property<DateTimeOffset?>("DebitedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("debited_at");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_date");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("failure_code");
+
+                    b.Property<string>("FailureDetail")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("failure_detail");
+
+                    b.Property<string>("InsurerPolicyReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("insurer_policy_reference");
+
+                    b.Property<Guid?>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<decimal>("PremiumAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("premium_amount");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<int>("ReversalAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("reversal_attempts");
+
+                    b.Property<Guid?>("ReversalCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reversal_command_id");
+
+                    b.Property<DateTimeOffset?>("ReversedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reversed_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("SubscribeCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subscribe_command_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_subscription");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_ins_subscription_connection_id");
+
+                    b.HasIndex("DebitCommandId")
+                        .HasDatabaseName("ix_ins_subscription_debit_command")
+                        .HasFilter("debit_command_id IS NOT NULL");
+
+                    b.HasIndex("PolicyId")
+                        .HasDatabaseName("ix_ins_subscription_policy_id");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_ins_subscription_product_id");
+
+                    b.HasIndex("ReversalCommandId")
+                        .HasDatabaseName("ix_ins_subscription_reversal_command")
+                        .HasFilter("reversal_command_id IS NOT NULL");
+
+                    b.HasIndex("SubscribeCommandId")
+                        .HasDatabaseName("ix_ins_subscription_subscribe_command")
+                        .HasFilter("subscribe_command_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_ins_subscription_tenant_status");
+
+                    b.HasIndex("TenantId", "ConnectionId", "CreatedAt")
+                        .HasDatabaseName("ix_ins_subscription_tenant_connection_created");
+
+                    b.HasIndex("TenantId", "CrmCustomerId", "ProductId", "EffectiveDate")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_subscription_idempotency");
+
+                    b.ToTable("ins_subscription", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsurerStatement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("CancellationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("cancellation_count");
+
+                    b.Property<decimal>("CommissionAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("commission_amount");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("CsvStorageRef")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("csv_storage_ref");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTimeOffset?>("FinalisedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finalised_at");
+
+                    b.Property<Guid?>("FinalisedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("finalised_by");
+
+                    b.Property<DateTimeOffset>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("generated_at");
+
+                    b.Property<string>("PdfStorageRef")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("pdf_storage_ref");
+
+                    b.Property<string>("Period")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("period");
+
+                    b.Property<decimal>("PremiumCollected")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("premium_collected");
+
+                    b.Property<decimal>("PremiumReversed")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("premium_reversed");
+
+                    b.Property<int>("ReversalCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("reversal_count");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("SubscriptionCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("subscription_count");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("TransmitBatchFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transmit_batch_file_id");
+
+                    b.Property<string>("TransmitFailureDetail")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("transmit_failure_detail");
+
+                    b.Property<DateTimeOffset?>("TransmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("transmitted_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_statement");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_ins_statement_connection_id");
+
+                    b.HasIndex("TenantId", "Period")
+                        .HasDatabaseName("ix_ins_statement_tenant_period");
+
+                    b.HasIndex("TenantId", "ConnectionId", "Period")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_statement_period");
+
+                    b.ToTable("ins_statement", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsurerStatementLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("CbsReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cbs_reference");
+
+                    b.Property<decimal>("CommissionAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("commission_amount");
+
+                    b.Property<decimal>("CommissionRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("commission_rate");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<Guid?>("InstalmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instalment_id");
+
+                    b.Property<string>("InsurerProductCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("insurer_product_code");
+
+                    b.Property<string>("LineType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("line_type");
+
+                    b.Property<DateOnly>("OccurredOn")
+                        .HasColumnType("date")
+                        .HasColumnName("occurred_on");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<string>("PolicyNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("policy_number");
+
+                    b.Property<Guid>("StatementId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("statement_id");
+
+                    b.Property<Guid?>("SubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subscription_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_statement_line");
+
+                    b.HasIndex("PolicyId")
+                        .HasDatabaseName("ix_ins_statement_line_policy_id");
+
+                    b.HasIndex("StatementId")
+                        .HasDatabaseName("ix_ins_statement_line_statement_id");
+
+                    b.HasIndex("TenantId", "StatementId", "OccurredOn")
+                        .HasDatabaseName("ix_ins_statement_line_statement_occurred");
+
+                    b.HasIndex("TenantId", "StatementId", "LineType", "PolicyId", "InstalmentId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_statement_line");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("TenantId", "StatementId", "LineType", "PolicyId", "InstalmentId"), false);
+
+                    b.ToTable("ins_statement_line", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.IntegrationBatchFile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -601,6 +1486,8 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasDatabaseName("ux_integration_reconciliation_gap_open")
                         .HasFilter("resolution = 'Open'");
 
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("TenantId", "ConnectionId", "GapType", "CrmId", "ExternalId"), false);
+
                     b.ToTable("integration_reconciliation_gap", "integration");
                 });
 
@@ -642,6 +1529,11 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
+
+                    b.Property<string>("UndetectableGapTypes")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("undetectable_gap_types");
 
                     b.HasKey("Id")
                         .HasName("pk_integration_reconciliation_run");
@@ -921,6 +1813,399 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("integration_kyc_limit_alert", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.MedicalQuestionnaire", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AnswersEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("answers_encrypted");
+
+                    b.Property<Guid>("CapturedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("captured_by");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<string>("QuestionnaireCode")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("questionnaire_code");
+
+                    b.Property<bool>("RequiresMedicalUnderwriting")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_medical_underwriting");
+
+                    b.Property<DateTimeOffset?>("RetainUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retain_until");
+
+                    b.Property<Guid>("SubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subscription_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_medical_questionnaire");
+
+                    b.HasIndex("SubscriptionId")
+                        .HasDatabaseName("ix_ins_medical_questionnaire_subscription_id");
+
+                    b.HasIndex("TenantId", "SubscriptionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_medical_questionnaire_subscription");
+
+                    b.ToTable("ins_medical_questionnaire", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyCertificate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fetched_at");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("InsurerCertificateRef")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("insurer_certificate_ref");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("StorageRef")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("storage_ref");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateOnly?>("ValidFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateOnly?>("ValidTo")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_to");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_policy_certificate");
+
+                    b.HasIndex("PolicyId")
+                        .HasDatabaseName("ix_ins_policy_certificate_policy_id");
+
+                    b.HasIndex("TenantId", "PolicyId", "FetchedAt")
+                        .HasDatabaseName("ix_ins_policy_certificate_policy_fetched");
+
+                    b.HasIndex("TenantId", "PolicyId", "Sha256")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_policy_certificate_digest");
+
+                    b.ToTable("ins_policy_certificate", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_date");
+
+                    b.Property<DateOnly?>("ExpiryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("expiry_date");
+
+                    b.Property<string>("ExternalPolicyId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("external_policy_id");
+
+                    b.Property<decimal?>("InsuredAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("insured_amount");
+
+                    b.Property<string>("InsurerProductCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("insurer_product_code");
+
+                    b.Property<DateTimeOffset>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_synced_at");
+
+                    b.Property<DateOnly?>("NextDueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("next_due_date");
+
+                    b.Property<string>("Periodicity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("periodicity");
+
+                    b.Property<string>("PolicyNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("policy_number");
+
+                    b.Property<decimal>("PremiumAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("premium_amount");
+
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("StatusChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("status_changed_at");
+
+                    b.Property<string>("StatusDetail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("status_detail");
+
+                    b.Property<Guid?>("SubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subscription_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_policy");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_ins_policy_connection_id");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_ins_policy_product_id");
+
+                    b.HasIndex("SubscriptionId")
+                        .HasDatabaseName("ix_ins_policy_subscription")
+                        .HasFilter("subscription_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "NextDueDate")
+                        .HasDatabaseName("ix_ins_policy_next_due")
+                        .HasFilter("next_due_date IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ConnectionId", "ExternalPolicyId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_policy_external");
+
+                    b.HasIndex("TenantId", "ConnectionId", "StatusChangedAt")
+                        .HasDatabaseName("ix_ins_policy_connection_status_changed");
+
+                    b.HasIndex("TenantId", "CrmCustomerId", "Status")
+                        .HasDatabaseName("ix_ins_policy_customer_status");
+
+                    b.ToTable("ins_policy", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PremiumInstalment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("CbsDebitReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cbs_debit_reference");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<Guid?>("DebitCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("debit_command_id");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("last_error_code");
+
+                    b.Property<string>("LastErrorDetail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error_detail");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<DateTimeOffset?>("PaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paid_at");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<int>("SequenceNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence_no");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("UnpaidCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("unpaid_command_id");
+
+                    b.Property<DateTimeOffset?>("UnpaidDeclaredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("unpaid_declared_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_premium_instalment");
+
+                    b.HasIndex("DebitCommandId")
+                        .HasDatabaseName("ix_ins_premium_instalment_debit_command")
+                        .HasFilter("debit_command_id IS NOT NULL");
+
+                    b.HasIndex("PolicyId")
+                        .HasDatabaseName("ix_ins_premium_instalment_policy_id");
+
+                    b.HasIndex("Status", "DueDate", "NextAttemptAt")
+                        .HasDatabaseName("ix_ins_premium_instalment_due_attempt");
+
+                    b.HasIndex("TenantId", "PolicyId", "DueDate")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_premium_instalment_due");
+
+                    b.HasIndex("TenantId", "Status", "DueDate")
+                        .HasDatabaseName("ix_ins_premium_instalment_tenant_status");
+
+                    b.ToTable("ins_premium_instalment", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Infrastructure.IntegrationInboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -989,6 +2274,149 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasDatabaseName("ix_outbox_messages_processed_at_occurred_at");
 
                     b.ToTable("outbox_messages", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ClaimDocument", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.ClaimRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ClaimId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_claim_document_claims_claim_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ClaimRecord", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.IntegrationConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_claim_connections_connection_id");
+
+                    b.HasOne("Sankore.Modules.Integration.Domain.PolicyRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_claim_policies_policy_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConsentProof", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.InsuranceSubscription", null)
+                        .WithMany()
+                        .HasForeignKey("SubscriptionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_consent_proof_insurance_subscriptions_subscription_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceProduct", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.IntegrationConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_product_connections_connection_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceSubscription", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.IntegrationConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_subscription_connections_connection_id");
+
+                    b.HasOne("Sankore.Modules.Integration.Domain.PolicyRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_ins_subscription_policies_policy_id");
+
+                    b.HasOne("Sankore.Modules.Integration.Domain.InsuranceProduct", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_subscription_ins_product_product_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsurerStatement", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.IntegrationConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_statement_connections_connection_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsurerStatementLine", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.PolicyRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_statement_line_policies_policy_id");
+
+                    b.HasOne("Sankore.Modules.Integration.Domain.InsurerStatement", null)
+                        .WithMany()
+                        .HasForeignKey("StatementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_statement_line_ins_statement_statement_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.MedicalQuestionnaire", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.InsuranceSubscription", null)
+                        .WithMany()
+                        .HasForeignKey("SubscriptionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_medical_questionnaire_ins_subscription_subscription_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyCertificate", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.PolicyRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_policy_certificate_policies_policy_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyRecord", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.IntegrationConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_policy_integration_connection_connection_id");
+
+                    b.HasOne("Sankore.Modules.Integration.Domain.InsuranceProduct", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_ins_policy_ins_product_product_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PremiumInstalment", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.PolicyRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_premium_instalment_ins_policy_policy_id");
                 });
 #pragma warning restore 612, 618
         }

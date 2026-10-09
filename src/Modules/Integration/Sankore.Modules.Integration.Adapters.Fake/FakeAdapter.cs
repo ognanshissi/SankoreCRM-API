@@ -161,13 +161,47 @@ public sealed class FakeAdapter :
     public IntegrationKind Kind => IntegrationKind.Fake;
 
     /// <summary>
-    /// Every capability, in real time. Settable so a test can build a batch-only or a crippled
-    /// fake: the matrix is read from the adapter precisely because the answer depends on the
-    /// installation, and a double that could only ever say "everything, live" would never
+    /// Every capability, in real time — the answer for any connection that is not named in
+    /// <see cref="CapabilitiesByConnection"/>. Settable so a test can build a batch-only or a
+    /// crippled fake: the matrix is read from the adapter precisely because the answer depends on
+    /// the installation, and a double that could only ever say "everything, live" would never
     /// exercise the screens that hide a button.
     /// </summary>
     public IntegrationCapabilities Capabilities { get; set; } = IntegrationCapabilities.All(
         CapabilityMode.RealTime, Enum.GetValues<IntegrationCapability>());
+
+    /// <summary>
+    /// Per-connection overrides, for the one situation <see cref="Capabilities"/> alone cannot
+    /// express: <b>two connections of the same kind whose matrices differ</b>.
+    ///
+    /// <para>
+    /// That shape is not exotic, it is the insurance family's normal one. A tenant has at most one
+    /// active core-banking connection, but ASS-01 deliberately permits several active insurance
+    /// ones, and an IMF distributing IARD and Vie holds two rows of the same kind that resolve to
+    /// the same adapter instance. Until <c>ICbsAdapter.CapabilitiesFor</c> took its connection
+    /// there was no way for a double to answer differently for the two, which is precisely why the
+    /// defect it fixes could not be caught by a test.
+    /// </para>
+    ///
+    /// <para>
+    /// Empty by default, so every existing test keeps the single-matrix behaviour.
+    /// </para>
+    /// </summary>
+    public Dictionary<Guid, IntegrationCapabilities> CapabilitiesByConnection { get; } = [];
+
+    /// <summary>
+    /// The override for this connection, or <see cref="Capabilities"/>.
+    ///
+    /// <para>
+    /// A null connection answers the default rather than throwing: this is a test double, and a
+    /// harness that has no row to hand should still be able to ask what the fake can do.
+    /// </para>
+    /// </summary>
+    public IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection)
+        => connection is not null
+           && CapabilitiesByConnection.TryGetValue(connection.Id, out var specific)
+            ? specific
+            : Capabilities;
 
     /// <summary>
     /// The single instant every answer is stamped with. A constant and not

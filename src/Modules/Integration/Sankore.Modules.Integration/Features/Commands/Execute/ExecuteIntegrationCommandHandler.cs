@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Integration.Domain;
+using Sankore.Modules.Integration.Features.Batch.Outbound;
 using Sankore.Modules.Integration.Features.References.GetReference;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.Ports;
@@ -110,24 +111,17 @@ internal sealed class ExecuteIntegrationCommandHandler(
         if (connection.IsFailure)
             return await ApplyFailureAsync(command, connection, ct);
 
-        // Does this write leave in a file? For Batch the answer is the mode's definition. For
-        // Relay it is a statement about what has been BUILT: the agent's file carrier exists
-        // (RelayFileTransport, and IntegrationFileTransportRouter already sends a Relay
-        // connection's deposits to the agent), while its order channel does not — INT-26's
-        // platform side is undelivered. So a Relay connection carrying file coordinates takes the
-        // same path as a Batch one, and any other Relay connection is refused below.
+        // Does this write leave in a file? OutboundBatchCarrier is the single definition, shared
+        // with the scheduled generation — the two used to answer differently, and a command
+        // enlisted by one and ignored by the other is a file nobody deposits.
         //
-        // Reading the settings rather than the adapter's capability matrix keeps this decision
-        // where it has always been: before an adapter is resolved, because a connection whose
-        // writes leave in a file needs no adapter at all. The known imprecision is Amplitude Up
-        // over relay — batch-capable settings, API carrier — which this would route to a file; it
-        // is unreachable today because that adapter refuses every call, and the matrix is the
+        // Deciding it from the settings rather than from the adapter's capability matrix keeps the
+        // branch where it has always been: before an adapter is resolved, because a connection
+        // whose writes leave in a file needs no adapter at all. The known imprecision is
+        // Amplitude Up over relay — batch-capable settings, API carrier — which this routes to a
+        // file; unreachable today because that adapter refuses every call, and the matrix is the
         // right authority for it once the order channel exists.
-        var leavesInAFile = connection.Value.Mode == IntegrationMode.Batch
-            || (connection.Value.Mode == IntegrationMode.Relay
-                && connection.Value.Settings is BatchCapableSettings);
-
-        if (leavesInAFile)
+        if (OutboundBatchCarrier.LeavesInAFile(connection.Value))
             return await EnlistInBatchAsync(command, connection.Value, ct);
 
         if (connection.Value.Mode == IntegrationMode.Relay)
@@ -150,7 +144,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
                 ct);
         }
 
-        var adapter = resolver.ResolveAdapter(connection.Value);
+        var adapter = resolver.ResolveFor(connection.Value);
         if (adapter.IsFailure)
             return await ApplyFailureAsync(command, adapter, ct);
 
@@ -169,7 +163,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     /// compile-time hole a reviewer sees, not a command that sits Pending for ever.
     /// </summary>
     private async Task<CallOutcome> CallAsync(
-        IntegrationCommand command, ICbsAdapter adapter, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, CancellationToken ct)
     {
         var key = new IdempotencyKey(command.IdempotencyKey);
 
@@ -193,7 +187,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> CreateCustomerAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = await CustomerPayloadAsync(command, ct);
         if (payload is null) return MissingPayload(command);
@@ -213,7 +207,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> UpdateCustomerAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = await CustomerPayloadAsync(command, ct);
         if (payload is null) return MissingPayload(command);
@@ -230,7 +224,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> SetKycLevelAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = protector.Unprotect<SetKycLevelPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);
@@ -247,7 +241,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> OpenAccountAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = protector.Unprotect<OpenAccountPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);
@@ -272,7 +266,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> SubmitLoanAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = protector.Unprotect<SubmitLoanApplicationPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);
@@ -305,7 +299,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> DebitAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = protector.Unprotect<DebitAccountPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);
@@ -323,7 +317,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> ReverseDebitAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = protector.Unprotect<ReverseDebitPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);
@@ -338,7 +332,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> SubscribePolicyAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = protector.Unprotect<InsurancePolicyPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);
@@ -359,7 +353,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> CancelPolicyAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = protector.Unprotect<CancelPolicyPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);
@@ -374,7 +368,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
     }
 
     private async Task<CallOutcome> DeclareClaimAsync(
-        IntegrationCommand command, ICbsAdapter adapter, IdempotencyKey key, CancellationToken ct)
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
     {
         var payload = protector.Unprotect<InsuranceClaimPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);

@@ -140,6 +140,10 @@ internal sealed class StubCbsAdapter(
 
     public IntegrationCapabilities Capabilities { get; } = IntegrationCapabilities.None;
 
+    /// <summary>Nothing supported, whichever connection is asked about.</summary>
+    public IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection)
+        => Capabilities;
+
     public int Calls { get; private set; }
 
     public Task<IntegrationHealth> CheckHealthAsync(

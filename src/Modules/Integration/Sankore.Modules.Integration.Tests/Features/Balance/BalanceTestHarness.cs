@@ -214,6 +214,14 @@ internal static class BalanceTestHarness
 
         public IntegrationCapabilities Capabilities { get; }
 
+        /// <summary>
+        /// The same answer whatever the connection: this double serves one. The parameter exists
+        /// because a real insurance adapter serves several active connections of one kind and must
+        /// answer per connection — see <c>ICbsAdapter.CapabilitiesFor</c>.
+        /// </summary>
+        public IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection)
+            => Capabilities;
+
         /// <summary>Every account id the port was asked about, in order.</summary>
         public List<string> BalanceCalls { get; } = [];
 

@@ -101,12 +101,25 @@ internal sealed class SabAdapter(
     public IntegrationKind Kind => IntegrationKind.Sab;
 
     /// <summary>
-    /// The matrix of <see cref="SabCapabilityMatrix"/>, applied to this tenant's own SAB
-    /// connection — the ten live operations when the installation names an entity, nothing at all
+    /// The matrix of <see cref="SabCapabilityMatrix"/>, applied to <b>the connection asked
+    /// about</b> — the ten live operations when that installation names an entity, nothing at all
     /// when it does not.
+    ///
+    /// <para>
+    /// Reads its settings straight off <paramref name="connection"/> and queries nothing, where
+    /// before L8 it went through <see cref="Bind"/> — a lazy read that re-discovered "the tenant's
+    /// SAB connection" by kind because the contract's property carried no connection. The binding
+    /// survives for the port methods and the vault key, which have no row to hand.
+    /// </para>
     /// </summary>
-    public IntegrationCapabilities Capabilities
-        => SabCapabilityMatrix.For(Bind() is { IsSuccess: true } bound ? bound.Value.Settings : null);
+    public IntegrationCapabilities CapabilitiesFor(IntegrationConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // `as`, not a cast: a SAB row carrying another kind's settings narrows to no matrix rather
+        // than throwing out of a screen that is only asking what is available.
+        return SabCapabilityMatrix.For(connection.Settings as SabSettings);
+    }
 
     // ── Binding ─────────────────────────────────────────────────────────────────────────────
 
@@ -114,14 +127,24 @@ internal sealed class SabAdapter(
     /// The tenant's SAB connection, its id and its settings — resolved once per scope.
     ///
     /// <para>
-    /// <b>Read synchronously, and that is the lesser evil.</b> <c>ICbsAdapter.Capabilities</c> is a
-    /// synchronous property on a contract this adapter may not change, and the matrix depends on
-    /// the row. The alternatives are worse: blocking on an async query with
-    /// <c>GetAwaiter().GetResult()</c> is the deadlock-prone form of exactly this, and reading in
-    /// the constructor would query for every resolution of the adapter including the ones that
-    /// never look at the matrix. So: one bounded single-row read, taken lazily, cached for the
-    /// lifetime of the scope — and the SAME read serves the async port methods, so the tenant
-    /// predicate below appears once instead of in two code paths that can drift.
+    /// <b>No longer read for the capability matrix.</b> That was its original reason —
+    /// <c>ICbsAdapter.Capabilities</c> was a parameterless property and the matrix depends on the
+    /// row — and <c>CapabilitiesFor</c> now takes its connection and reads the settings off it.
+    /// </para>
+    ///
+    /// <para>
+    /// It survives for the PORT methods and for the vault key below, neither of which is handed a
+    /// connection. Read synchronously and lazily, cached for the scope: blocking on an async query
+    /// with <c>GetAwaiter().GetResult()</c> is the deadlock-prone form of the same thing, and
+    /// reading in the constructor would query for every resolution of the adapter including the
+    /// ones that never make a call.
+    /// </para>
+    ///
+    /// <para>
+    /// This picks the tenant's first active SAB row while the matrix now speaks for whichever row
+    /// it was handed. The two cannot differ for a core-banking kind:
+    /// <c>ux_integration_connection_active_core_banking</c> allows one active row per tenant, and
+    /// that index is precisely why this shape is safe here and was not safe for insurance.
     /// </para>
     ///
     /// <para>

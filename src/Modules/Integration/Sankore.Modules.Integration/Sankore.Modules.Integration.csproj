@@ -49,6 +49,11 @@
          vault under the same per-connection name Temenos uses. It journals nothing and
          translates nothing, because it makes no call. -->
     <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Sab" />
+    <!-- ORASS (ASS-06) reaches IntegrationSecrets only, and reaches THREE of its keys: the API
+         credential on the call carrier, and the SFTP credential plus the host-key fingerprint on
+         the bordereau carrier, because criterion 2 gives it two carriers that authenticate against
+         different things. It journals nothing and translates nothing, because it makes no call. -->
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Orass" />
     <!-- NSubstitute proxies internal interfaces. -->
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>

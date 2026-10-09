@@ -74,11 +74,16 @@ public enum AmplitudeCarrier
 /// <list type="table">
 /// <item><term>Up + Api</term><description>The intended Up shape. Writes on the API services,
 ///   reads live.</description></item>
-/// <item><term>Up + Relay</term><description>Legitimate and unchanged: the same services reached
-///   through the on-premise agent, because SANKORE opens no port into the institution's network
-///   (INT-26). The carrier of the TRANSPORT differs, not whether an answer comes back, so the
-///   matrix is identical to Up + Api — a tenant that moved behind a relay must not lose buttons
-///   for a reason that has nothing to do with what its CBS can do.</description></item>
+/// <item><term>Up + Relay</term><description>Legitimate, and <b>its writes go in a file</b> —
+///   which is not what one would wish and is what the platform does. The relay agent's FILE
+///   carrier is delivered; its ORDER channel is not (INT-26's platform side), so
+///   <c>ExecuteIntegrationCommandHandler</c> sends every relay write with batch coordinates to the
+///   outbound socle, and <c>AmplitudeSettings</c> derives from <c>BatchCapableSettings</c>, so it
+///   always has them. Declaring these writes real-time would have a screen offer a live button for
+///   a write that leaves at a cut-off. The LIVE READS stay: the read path never consults the mode,
+///   and an Up installation answers a query whoever carries it. Revisit on the day the order
+///   channel exists — see <c>OutboundBatchCarrier</c>, which is the single definition both halves
+///   of the platform now read.</description></item>
 /// <item><term>Up + Batch</term><description>Legitimate, and a choice rather than a mistake: an
 ///   institution can run Up and still exchange files — the API module may not be licensed or
 ///   enabled, or its security policy may forbid inbound calls. The version says the services
@@ -90,13 +95,14 @@ public enum AmplitudeCarrier
 ///   to call, and the dispatcher would hand every command to an adapter instead of enlisting it in
 ///   a file. An administrator fixes it by setting the mode to Batch — or by correcting the version
 ///   if the installation really is Up.</description></item>
-/// <item><term>Legacy + Relay</term><description><b>Incoherent, for the same reason and one more.</b>
-///   Relay routes commands to an adapter too, and a relay-mode connection is invisible to the
-///   outbound batch job, which scans <c>Mode == Batch</c> only — so such a connection would
-///   generate no file at all. A pre-Up installation whose SFTP server sits inside the
-///   institution's network is expressed as mode Batch with a relay agent linked, which is what
-///   <c>IntegrationFileTransportRouter</c> keys on: <c>RelayAgentId</c>, not the
-///   mode.</description></item>
+/// <item><term>Legacy + Relay</term><description><b>Coherent, and this entry used to say the
+///   opposite.</b> It was written when the dispatcher batched on <c>Mode == Batch</c> alone, so a
+///   relay connection reached an adapter that had no API to call AND was invisible to the outbound
+///   batch job — no file at all. Both halves were corrected in L8: the dispatcher routes a relay
+///   write with batch coordinates to the socle, and the scheduled generation and deposit now scan
+///   the same superset (<c>OutboundBatchCarrier</c>). So a pre-Up installation whose SFTP server
+///   sits inside the institution's network may be expressed EITHER as mode Relay or as mode Batch
+///   with a relay agent linked — <c>IntegrationFileTransportRouter</c> keys on both.</description></item>
 /// </list>
 ///
 /// <para>
@@ -153,7 +159,13 @@ public static class AmplitudeCarrierRouting
         // is not cosmetic: `mode is not IntegrationMode.Batch` is TRUE for null, so the negative
         // form hands an unknown mode the widest answer — exactly the direction the remarks above
         // forbid. A test pins it, because the mistake compiles and reads correctly.
-        var callsAreMade = mode is IntegrationMode.Api or IntegrationMode.Relay;
+        // Api ONLY, not `or Relay`. A relay write with batch coordinates is sent to the outbound
+        // socle by the dispatcher, and AmplitudeSettings is BatchCapableSettings, so it always has
+        // them: there is no reachable path by which a relay-mode Amplitude write becomes a call.
+        // OutboundBatchCarrier is the platform's single definition of that, and this line must
+        // agree with it — when it did not, the matrix declared real-time writes for commands that
+        // left in a file.
+        var callsAreMade = mode is IntegrationMode.Api;
 
         return settings?.AmplitudeVersion == AmplitudeVersion.Up && callsAreMade
             ? AmplitudeCarrier.ApiServices
@@ -179,10 +191,19 @@ public static class AmplitudeCarrierRouting
     /// Whether the configured release and the connection's mode can both be true at once.
     ///
     /// <para>
-    /// False for exactly one pair of cases: a pre-Up release on an <see cref="IntegrationMode.Api"/>
-    /// or <see cref="IntegrationMode.Relay"/> connection. Both route commands to an adapter that
-    /// has no API to call, and the relay one additionally generates no file, so neither can ever
-    /// move a write.
+    /// False for exactly ONE case: a pre-Up release on an <see cref="IntegrationMode.Api"/>
+    /// connection. There is no API on that release to call, so the dispatcher would hand every
+    /// command to an adapter instead of enlisting it in a file, and the write would never move.
+    /// </para>
+    ///
+    /// <para>
+    /// <b><see cref="IntegrationMode.Relay"/> used to be the second case, and no longer is.</b> It
+    /// was incoherent while the dispatcher batched on <c>Mode == Batch</c> alone — a relay
+    /// connection reached an adapter with nothing to call and was invisible to the outbound batch
+    /// job, so it produced no file either. Both halves were corrected in L8 and now read one
+    /// definition (<c>OutboundBatchCarrier</c>): a relay write with batch coordinates goes to the
+    /// socle, and the scheduled generation and deposit see it. A pre-Up installation behind an
+    /// agent is therefore a legitimate configuration, not a mistake to report.
     /// </para>
     ///
     /// <para>
@@ -196,7 +217,8 @@ public static class AmplitudeCarrierRouting
     {
         if (settings is null || mode is null) return true;
 
-        return settings.AmplitudeVersion != AmplitudeVersion.Legacy || mode == IntegrationMode.Batch;
+        return settings.AmplitudeVersion != AmplitudeVersion.Legacy
+            || mode is IntegrationMode.Batch or IntegrationMode.Relay;
     }
 
     /// <summary>
@@ -216,9 +238,9 @@ public static class AmplitudeCarrierRouting
         return $"this Amplitude connection is configured as release {AmplitudeVersion.Legacy} in "
                + $"mode {mode}, and the two cannot both hold: a pre-Up release exposes no API "
                + "service, so its commands must travel in files. Set the mode to "
-               + $"{IntegrationMode.Batch} — and link a relay agent through enrolment if the SFTP "
-               + "server sits inside the institution's network, which is how a file deposit is "
-               + $"routed through the agent — or set the release to {AmplitudeVersion.Up} if this "
-               + "installation has been upgraded.";
+               + $"{IntegrationMode.Batch} — or to {IntegrationMode.Relay} if the SFTP server sits "
+               + "inside the institution's network, which deposits the file through the on-premise "
+               + $"agent — or set the release to {AmplitudeVersion.Up} if this installation has "
+               + "been upgraded.";
     }
 }

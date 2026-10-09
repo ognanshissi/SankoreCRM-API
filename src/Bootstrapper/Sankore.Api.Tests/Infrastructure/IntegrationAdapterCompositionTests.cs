@@ -63,11 +63,9 @@ public sealed class IntegrationAdapterCompositionTests
         // that motivated this suite.
         [IntegrationKind.PerfectVision] = true,
 
-        // The insurance family's adapter (ASS-06) has no project at all yet — blocked on the ORASS
-        // specification, lot L8. An Orass connection is configurable and answers
-        // AdapterNotRegistered, which is here the honest answer rather than a wiring mistake: no
-        // assembly exists to register. Flip this to true the day one does.
-        [IntegrationKind.Orass] = false,
+        // The insurance family's adapter (ASS-06), blocked on the ORASS interface specification
+        // and on the insurer's agreement; registered to refuse by name, like the other three.
+        [IntegrationKind.Orass] = true,
 
         // The in-memory double (INT-10). Development only — asserted separately, in both
         // directions, because this entry describes a NON-Development host.

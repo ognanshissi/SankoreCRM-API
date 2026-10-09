@@ -94,8 +94,9 @@ internal sealed class SabHarness : IDisposable
         => Build(settings, credentialStored, mode);
 
     /// <summary>
-    /// A tenant with no SAB connection at all — the case the matrix must answer narrowly instead
-    /// of throwing, since a screen asks for it before anything is configured.
+    /// A tenant with no SAB connection at all — the case a PORT call must answer by name instead
+    /// of throwing, since a port method carries no connection and has to find the row itself. Not
+    /// the capability matrix's case any more: <c>CapabilitiesFor</c> is handed its row.
     /// </summary>
     public static SabHarness WithNoConnection()
         => Build(null, credentialStored: true, IntegrationMode.Api);

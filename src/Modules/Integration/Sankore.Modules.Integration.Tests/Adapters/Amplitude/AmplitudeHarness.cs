@@ -61,11 +61,9 @@ internal sealed class AmplitudeHarness : IDisposable
         IntegrationMode mode = IntegrationMode.Batch)
         => Build(Settings(version), mode);
 
-    /// <summary>
-    /// A tenant with no Amplitude connection at all — the case the matrix must answer narrowly
-    /// instead of throwing, since a screen asks for it before anything is configured.
-    /// </summary>
-    public static AmplitudeHarness WithNoConnection() => Build(null, IntegrationMode.Batch);
+    // No WithNoConnection fixture: it existed for the matrix's "no row at all" case, and
+    // CapabilitiesFor takes a row, so the narrowest input a test can give is a row whose settings
+    // the adapter cannot read as Amplitude's.
 
     /// <summary>
     /// Settings for one release. Carries the SFTP coordinates and a base URL that are required of

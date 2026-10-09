@@ -27,6 +27,7 @@
     <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.PerfectVision\Sankore.Modules.Integration.Adapters.PerfectVision.csproj" />
     <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Sab\Sankore.Modules.Integration.Adapters.Sab.csproj" />
     <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Amplitude\Sankore.Modules.Integration.Adapters.Amplitude.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Orass\Sankore.Modules.Integration.Adapters.Orass.csproj" />
   </ItemGroup>
 
 </Project>

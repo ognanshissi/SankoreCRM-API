@@ -463,6 +463,31 @@ public static class Permissions
         new("Ins.Product.Manage", "Manage the tenant's insurance product catalogue",
             ApplicationModules.Integration, "Product.Manage");
 
+    /// <summary>
+    /// Read the catalogue and ask for a quote. <b>An eighth insurance permission, where ASS-11's
+    /// table names seven</b> — a deliberate departure, recorded here rather than left to be
+    /// discovered by whoever compares this file to the specification.
+    ///
+    /// <para>
+    /// ASS-03's endpoints all sat behind <see cref="CanManageInsuranceProduct"/>, which means an
+    /// agent holding only <c>Ins.Policy.Subscribe</c> could subscribe a policy and could not see
+    /// which products exist or what one costs. That is not a separation of duties, it is a screen
+    /// that cannot be drawn: ASS-11's own stated purpose is to « séparer distribution, gestion et
+    /// administration », and reading the catalogue is part of DISTRIBUTING, not of managing.
+    /// </para>
+    ///
+    /// <para>
+    /// The alternative was to have the three read routes accept either code. Rejected: policies in
+    /// this platform are generated one-per-permission by <c>AddSankoreAuthorization</c> and
+    /// multiple <c>RequireAuthorization</c> calls are ANDed, so an OR would mean inventing a
+    /// composite-policy mechanism for one screen — more machinery, and a second way to express an
+    /// authorisation rule, which is how a catalogue stops being readable at a glance.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanViewInsuranceProduct =
+        new("Ins.Product.View", "Read the insurance product catalogue and request a quote",
+            ApplicationModules.Integration, "Product.View");
+
     public static readonly PermissionItem CanSubscribeInsurancePolicy =
         new("Ins.Policy.Subscribe", "Subscribe an insurance policy for a customer",
             ApplicationModules.Integration, "Policy.Subscribe");
@@ -617,8 +642,10 @@ public static class Permissions
         CanResolveIntegrationReconciliation,
         CanViewLiveBalance,
 
-        // Insurance family (ASS-11)
+        // Insurance family (ASS-11), plus Ins.Product.View — see its own remarks for why the
+        // specification's table of seven became eight.
         CanManageInsuranceProduct,
+        CanViewInsuranceProduct,
         CanSubscribeInsurancePolicy,
         CanViewInsurancePolicy,
         CanDeclareInsuranceClaim,

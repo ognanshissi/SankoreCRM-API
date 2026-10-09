@@ -2,6 +2,9 @@ namespace Sankore.Modules.Integration.Tests.Conventions;
 
 using System.Xml.Linq;
 using FluentAssertions;
+using Sankore.Modules.Integration;
+using Sankore.Modules.Integration.Ports;
+using Sankore.Modules.Integration.PublicApi;
 using Xunit;
 
 /// <summary>
@@ -104,6 +107,131 @@ public sealed class AdapterIsolationTests
         crossModule.Should().OnlyContain(
             name => name!.EndsWith(".PublicApi", StringComparison.Ordinal),
             "cross-module dependencies are PublicApi contracts only, never a main assembly");
+    }
+
+    // ── ASS-02, last criterion ──────────────────────────────────────────────
+    //
+    // « Un test d'architecture interdit toute référence directe à un adaptateur assurance. »
+    // Extended here rather than given a second mechanism: the project-reference rule above is
+    // already family-agnostic, so what the insurance criterion actually needs is proof that an
+    // insurance adapter FALLS UNDER it — plus the two leaks the reference rule cannot see.
+
+    /// <summary>
+    /// Every insurance adapter is named so the rule above catches it.
+    ///
+    /// <para>
+    /// This looks tautological and is not: the rule is a string match on
+    /// <c>Sankore.Modules.Integration.Adapters.</c>, so an ORASS adapter shipped as
+    /// <c>Sankore.Integration.Orass</c> — the naming the relay agent project already uses in this
+    /// repo, which makes the mistake plausible rather than theoretical — would be referenced by
+    /// any module with the architecture test still green. What is pinned is the premise the rule
+    /// depends on, for every kind that can be an insurer.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Every_insurance_adapter_project_is_named_so_the_reference_rule_covers_it()
+    {
+        // Orass today; a second insurer added to the enum lands here with no edit.
+        var insuranceKinds = new[] { IntegrationKind.Orass };
+
+        var adapterProjects = EnumerateProjects()
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(name => name is not null)
+            .Select(name => name!)
+            .ToList();
+
+        foreach (var kind in insuranceKinds)
+        {
+            // An adapter for this kind may not be shipped yet (ASS-06 depends on the ORSYS
+            // specification). When it is, it must sit under the marker.
+            var projects = adapterProjects
+                .Where(p => p.EndsWith($".{kind}", StringComparison.Ordinal))
+                .ToList();
+
+            projects.Should().OnlyContain(
+                p => p.StartsWith(AdaptersMarker, StringComparison.Ordinal),
+                $"an adapter for {kind} named outside {AdaptersMarker}* escapes the project-"
+                + "reference rule entirely, and a consumer could reference it with every "
+                + "architecture test still passing");
+        }
+    }
+
+    /// <summary>
+    /// The MODULE is not its own insurance adapter.
+    ///
+    /// <para>
+    /// The reference rule reads <c>.csproj</c> files, so it is blind to the one way an adapter can
+    /// reach a consumer without any reference at all: the module implementing the ports itself.
+    /// That would make <c>Sankore.Modules.Integration</c> — which every consumer's PublicApi
+    /// dependency transitively sits next to, and which the bootstrapper references directly —
+    /// carry insurer-specific wire code, and the gateway contract would no longer be the only way
+    /// in. Reflection and not project files, because this leak has no project file.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_module_assembly_implements_no_insurance_port()
+    {
+        var ports = new[]
+        {
+            typeof(IInsuranceProductPort),
+            typeof(IInsurancePolicyPort),
+            typeof(IInsuranceClaimPort),
+        };
+
+        var offenders = typeof(IntegrationModule).Assembly
+            .GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false })
+            .Where(t => ports.Any(p => p.IsAssignableFrom(t)))
+            .Select(t => t.FullName)
+            .ToList();
+
+        offenders.Should().BeEmpty(
+            "the insurance ports are implemented by adapter assemblies the host chooses to ship; "
+            + "an implementation inside the module would put one insurer's wire format in the "
+            + "assembly every deployment loads");
+    }
+
+    /// <summary>
+    /// The contract assembly pulls in nothing but the zero-dependency kernel.
+    ///
+    /// <para>
+    /// This is the teeth of "a consumer never depends on an adapter". A consumer module references
+    /// <c>Sankore.Modules.Integration.PublicApi</c> and inherits whatever THAT project references,
+    /// so a reference added here would be acquired transitively by every consumer and the
+    /// direct-reference rule above would become decorative.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>Sankore.Shared.Kernel</c> is the one permitted dependency — it is the repo's
+    /// zero-dependency project, and the contract needs it for <c>Result</c> and the shared value
+    /// objects. Allowing exactly it, by name, rather than asserting an empty list: the point is
+    /// that nothing MODULE-shaped or ADAPTER-shaped can get in, and an empty-list assertion would
+    /// fail on a legitimate kernel reference while still passing if the kernel itself grew a
+    /// dependency.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_insurance_contract_assembly_reaches_no_module_and_no_adapter()
+    {
+        var publicApi = EnumerateProjects().Single(p =>
+            Path.GetFileNameWithoutExtension(p) == "Sankore.Modules.Integration.PublicApi");
+
+        ProjectReferencesOf(publicApi)
+            .Select(Path.GetFileNameWithoutExtension)
+            .Should().OnlyContain(
+                name => name == "Sankore.Shared.Kernel",
+                "the gateway contract is what every consumer module depends on, so anything it "
+                + "references is inherited by all of them; only the zero-dependency kernel may "
+                + "travel that way");
+
+        // And the kernel it leans on must itself stay dependency-free, or the guarantee above is
+        // one hop deep.
+        var kernel = EnumerateProjects().Single(p =>
+            Path.GetFileNameWithoutExtension(p) == "Sankore.Shared.Kernel");
+
+        ProjectReferencesOf(kernel).Should().BeEmpty(
+            "Sankore.Shared.Kernel is declared to have zero dependencies, and the contract's "
+            + "isolation rests on that");
     }
 
     /// <summary>

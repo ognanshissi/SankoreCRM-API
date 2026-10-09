@@ -38,10 +38,16 @@ public sealed class AmplitudeCarrierRoutingTests
     public static TheoryData<AmplitudeVersion, IntegrationMode, AmplitudeCarrier, bool> Combinations()
         => new()
         {
-            // Up: the services exist. Api and Relay both use them — Relay changes who holds the
-            // outbound connection (INT-26), not whether an answer comes back.
+            // Up on Api: the services exist and we call them.
             { AmplitudeVersion.Up, IntegrationMode.Api, AmplitudeCarrier.ApiServices, true },
-            { AmplitudeVersion.Up, IntegrationMode.Relay, AmplitudeCarrier.ApiServices, true },
+
+            // Up on Relay: legitimate, and its WRITES still leave in a file. This row asserted
+            // ApiServices until L8 and was wrong — the relay agent's file carrier is delivered and
+            // its order channel is not, so the dispatcher sends every relay write with batch
+            // coordinates to the socle, and AmplitudeSettings always has them. A matrix declaring
+            // these writes real-time put a live button on a screen for a write that leaves at a
+            // cut-off. The live READS are unaffected, which the read test below pins separately.
+            { AmplitudeVersion.Up, IntegrationMode.Relay, AmplitudeCarrier.BatchSocle, true },
 
             // Up on a file-exchanging connection: legitimate, and a choice rather than a mistake —
             // the API module may not be licensed, or the institution's policy may forbid inbound
@@ -52,11 +58,16 @@ public sealed class AmplitudeCarrierRoutingTests
             // Pre-Up: the only shape it has.
             { AmplitudeVersion.Legacy, IntegrationMode.Batch, AmplitudeCarrier.BatchSocle, true },
 
-            // Pre-Up on Api or Relay: incoherent. Both would hand every command to an adapter that
-            // has no API to call, and the relay one is additionally invisible to the outbound batch
-            // job, which scans Mode == Batch only — so it would generate no file either.
+            // Pre-Up on Api: incoherent, and the only incoherent pair left. It would hand every
+            // command to an adapter with no API to call, so the write would never move.
             { AmplitudeVersion.Legacy, IntegrationMode.Api, AmplitudeCarrier.BatchSocle, false },
-            { AmplitudeVersion.Legacy, IntegrationMode.Relay, AmplitudeCarrier.BatchSocle, false },
+
+            // Pre-Up on Relay: COHERENT since L8, and this row asserted the opposite. It was
+            // incoherent only because the outbound batch job scanned Mode == Batch alone, so a
+            // relay connection produced no file; the dispatcher and the scheduled generation now
+            // read one definition (OutboundBatchCarrier) and both see it. A pre-Up installation
+            // whose SFTP server sits inside the institution's network is exactly this shape.
+            { AmplitudeVersion.Legacy, IntegrationMode.Relay, AmplitudeCarrier.BatchSocle, true },
         };
 
     [Theory]
@@ -109,9 +120,12 @@ public sealed class AmplitudeCarrierRoutingTests
         // too.
         var up = new AmplitudeSettings { AmplitudeVersion = AmplitudeVersion.Up };
 
-        AmplitudeCarrierRouting.ServesApiReads(up).Should().BeTrue();
-        AmplitudeCarrierRouting.ChooseFor(up, mode).Should().Be(
-            mode == IntegrationMode.Batch ? AmplitudeCarrier.BatchSocle : AmplitudeCarrier.ApiServices);
+        // The claim, stated on the read question alone: whatever the mode, an Up installation
+        // answers a query. The write carrier is a different question and is asserted by the theory
+        // above — conflating the two is what made this test fail when the write carrier changed,
+        // for a reason that had nothing to do with reads.
+        AmplitudeCarrierRouting.ServesApiReads(up).Should().BeTrue(
+            $"the read path never consults the mode, and this connection is in {mode}");
     }
 
     [Fact]
