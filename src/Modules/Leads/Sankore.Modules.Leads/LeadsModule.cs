@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Builder;
 
 namespace Sankore.Modules.Leads;
 
+using Sankore.Modules.Leads.Features.Ingestion;
+
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Routing;
@@ -334,12 +336,22 @@ public static class LeadsModule
     /// </summary>
     public static IEndpointRouteBuilder MapPublicIngestEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapWebIngestEndpoint();
-        app.MapWebIngestCorsEndpoint();
-        app.MapWebPingEndpoint();
-        app.MapWebFormEndpoint();
-        app.MapWebhookIngestEndpoint();
+        // An empty-prefix group: every path below stays exactly as written, and the tenant
+        // filter is declared ONCE for all of them. These routes are exempt from
+        // TenantResolutionMiddleware, so without it the pipeline reaches AuditBehavior with no
+        // tenant and throws after the lead has already been ingested.
+        var ingest = app.MapGroup(string.Empty).ResolveIngestTenantFromPublicKey();
+
+        ingest.MapWebIngestEndpoint();
+        ingest.MapWebIngestCorsEndpoint();
+        ingest.MapWebPingEndpoint();
+        ingest.MapWebFormEndpoint();
+        ingest.MapWebhookIngestEndpoint();
+
+        // Outside the group on purpose: an SDK file is the same bytes for every tenant, the route
+        // carries no public key, and SdkVersion is platform-level with no tenant column.
         app.MapSdkServeEndpoints();
+
         return app;
     }
 }

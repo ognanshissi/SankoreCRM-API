@@ -674,7 +674,17 @@ app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
-app.UseTenantResolution();   // extract + verify tenant against external store
+// Extract + verify tenant against the external store. The prefixes are the public surfaces
+// mapped at the bottom of this file: their tenant comes from the URL — a lead-source public key,
+// a connection id, a relay agent's client certificate — so there is no JWT and no recognised
+// domain to resolve, and without them every one of those routes answers
+// 400 "Cannot determine tenant" instead of reaching its endpoint. Keep this list and the
+// app.Map*PublicEndpoints() calls below in step.
+app.UseTenantResolution(
+    "/api/ingest",                  // M13 web form + webhook ingest (public key in the path)
+    "/sdk",                         // the forms.js builds those pages load
+    "/integration/webhooks",        // M14 inbound sync hooks (connection id + HMAC)
+    "/integration/relay-agents");   // M14 relay agent enrolment + heartbeat (client certificate)
 app.UseRequestLocalization(opts =>
 {
     opts.SupportedCultures = [new("fr"), new("en")];

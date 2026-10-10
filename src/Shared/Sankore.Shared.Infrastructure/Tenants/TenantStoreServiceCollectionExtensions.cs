@@ -44,6 +44,15 @@ public static class TenantStoreServiceCollectionExtensions
     /// Adds <see cref="TenantResolutionMiddleware"/> to the pipeline.
     /// Must be called AFTER app.UseAuthentication().
     /// </summary>
-    public static IApplicationBuilder UseTenantResolution(this IApplicationBuilder app)
-        => app.UseMiddleware<TenantResolutionMiddleware>();
+    /// <param name="exemptPathPrefixes">
+    /// Public surfaces this host serves without a caller identity, whose tenant is resolved by
+    /// the endpoint itself from something in the URL. Declare them next to where they are mapped:
+    /// the middleware runs before routing and otherwise refuses them with
+    /// 400 "Cannot determine tenant", which makes the endpoint behind the prefix unreachable.
+    /// </param>
+    public static IApplicationBuilder UseTenantResolution(
+        this IApplicationBuilder app,
+        params string[] exemptPathPrefixes)
+        => app.UseMiddleware<TenantResolutionMiddleware>(
+            new TenantExemptPaths(exemptPathPrefixes));
 }
