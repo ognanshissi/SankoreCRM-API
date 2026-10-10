@@ -115,17 +115,17 @@ public sealed class WebhookIngestEndpointTests : IDisposable
     }
 
     [Fact]
-    public void ServerWebhookSettings_has_AllowedIpAddresses_and_ExternalIdPath()
+    public void ServerWebhookSettings_has_AllowedIps_and_ExternalIdPath()
     {
         var settings = new ServerWebhookSettings
         {
-            AllowedIpAddresses = ["192.168.1.1", "10.0.0.1"],
+            AllowedIps = ["192.168.1.1", "10.0.0.1"],
             ExternalIdPath = "$.externalId",
             SignatureAlgorithm = "sha256",
             SignatureHeaderName = "X-Sankore-Signature"
         };
 
-        settings.AllowedIpAddresses.Should().HaveCount(2);
+        settings.AllowedIps.Should().HaveCount(2);
         settings.ExternalIdPath.Should().Be("$.externalId");
     }
 }

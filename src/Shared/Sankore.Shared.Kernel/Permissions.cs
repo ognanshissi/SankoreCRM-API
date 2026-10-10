@@ -412,6 +412,106 @@ public static class Permissions
     public static readonly PermissionItem CanManageKycSettings =
         new("kyc:settings:manage", "Change the tenant KYC parameters", ApplicationModules.Kyc, "settings:manage");
 
+    // ── Integration module (INT-11, ASS-11) ───────────────────────────────
+    //
+    // These codes are PascalCase-dotted, which is the one place in this file that departs from
+    // the `resource:action` convention of every other module. It is deliberate: the
+    // specification tabulates them in this form together with their default roles, and the
+    // front-end is generated against them. Nothing in AddSankoreAuthorization cares — a policy
+    // name is an opaque string — and keeping them centralised here means a later alignment with
+    // the repo convention is a single edit.
+
+    public static readonly PermissionItem CanViewIntegrationConnection =
+        new("Integration.Connection.View", "View an integration connection and its health",
+            ApplicationModules.Integration, "Connection.View");
+
+    public static readonly PermissionItem CanManageIntegrationConnection =
+        new("Integration.Connection.Manage", "Create and update connections, secrets and relay agents",
+            ApplicationModules.Integration, "Connection.Manage");
+
+    public static readonly PermissionItem CanManageIntegrationMapping =
+        new("Integration.Mapping.Manage", "Manage the code mapping tables",
+            ApplicationModules.Integration, "Mapping.Manage");
+
+    public static readonly PermissionItem CanViewIntegrationCommand =
+        new("Integration.Command.View", "Read integration commands and the rejection queue",
+            ApplicationModules.Integration, "Command.View");
+
+    public static readonly PermissionItem CanReplayIntegrationCommand =
+        new("Integration.Command.Replay", "Replay or cancel a rejected integration command",
+            ApplicationModules.Integration, "Command.Replay");
+
+    public static readonly PermissionItem CanViewIntegrationReconciliation =
+        new("Integration.Reconciliation.View", "Read the reconciliation reports",
+            ApplicationModules.Integration, "Reconciliation.View");
+
+    public static readonly PermissionItem CanResolveIntegrationReconciliation =
+        new("Integration.Reconciliation.Resolve", "Mark a reconciliation gap as resolved",
+            ApplicationModules.Integration, "Reconciliation.Resolve");
+
+    /// <summary>
+    /// Triggers a DIRECT call to the core banking system. Separate from the read permissions
+    /// because it is the one operation an agent can perform that puts load on the IMF's CBS.
+    /// </summary>
+    public static readonly PermissionItem CanViewLiveBalance =
+        new("CoreBanking.Balance.ViewLive", "Trigger a direct balance call on the core banking system",
+            ApplicationModules.Integration, "Balance.ViewLive");
+
+    // ── Insurance family (ASS-11) ─────────────────────────────────────────
+
+    public static readonly PermissionItem CanManageInsuranceProduct =
+        new("Ins.Product.Manage", "Manage the tenant's insurance product catalogue",
+            ApplicationModules.Integration, "Product.Manage");
+
+    /// <summary>
+    /// Read the catalogue and ask for a quote. <b>An eighth insurance permission, where ASS-11's
+    /// table names seven</b> — a deliberate departure, recorded here rather than left to be
+    /// discovered by whoever compares this file to the specification.
+    ///
+    /// <para>
+    /// ASS-03's endpoints all sat behind <see cref="CanManageInsuranceProduct"/>, which means an
+    /// agent holding only <c>Ins.Policy.Subscribe</c> could subscribe a policy and could not see
+    /// which products exist or what one costs. That is not a separation of duties, it is a screen
+    /// that cannot be drawn: ASS-11's own stated purpose is to « séparer distribution, gestion et
+    /// administration », and reading the catalogue is part of DISTRIBUTING, not of managing.
+    /// </para>
+    ///
+    /// <para>
+    /// The alternative was to have the three read routes accept either code. Rejected: policies in
+    /// this platform are generated one-per-permission by <c>AddSankoreAuthorization</c> and
+    /// multiple <c>RequireAuthorization</c> calls are ANDed, so an OR would mean inventing a
+    /// composite-policy mechanism for one screen — more machinery, and a second way to express an
+    /// authorisation rule, which is how a catalogue stops being readable at a glance.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanViewInsuranceProduct =
+        new("Ins.Product.View", "Read the insurance product catalogue and request a quote",
+            ApplicationModules.Integration, "Product.View");
+
+    public static readonly PermissionItem CanSubscribeInsurancePolicy =
+        new("Ins.Policy.Subscribe", "Subscribe an insurance policy for a customer",
+            ApplicationModules.Integration, "Policy.Subscribe");
+
+    public static readonly PermissionItem CanViewInsurancePolicy =
+        new("Ins.Policy.View", "Read a customer's insurance policies",
+            ApplicationModules.Integration, "Policy.View");
+
+    public static readonly PermissionItem CanDeclareInsuranceClaim =
+        new("Ins.Claim.Declare", "Declare an insurance claim",
+            ApplicationModules.Integration, "Claim.Declare");
+
+    public static readonly PermissionItem CanViewInsuranceClaim =
+        new("Ins.Claim.View", "Read insurance claims",
+            ApplicationModules.Integration, "Claim.View");
+
+    public static readonly PermissionItem CanViewInsuranceStatement =
+        new("Ins.Statement.View", "Read the monthly insurer statements and commissions",
+            ApplicationModules.Integration, "Statement.View");
+
+    public static readonly PermissionItem CanResolveInsuranceReconciliation =
+        new("Ins.Reconciliation.Resolve", "Mark an insurance reconciliation gap as resolved",
+            ApplicationModules.Integration, "Reconciliation.Resolve");
+
     public static readonly PermissionItem[] All =
     [
         CanReadKycFile,
@@ -531,5 +631,26 @@ public static class Permissions
         CanMergeCustomers,
         CanManageCustomerGroups,
         CanExportCustomers,
+
+        // Integration module (INT-11)
+        CanViewIntegrationConnection,
+        CanManageIntegrationConnection,
+        CanManageIntegrationMapping,
+        CanViewIntegrationCommand,
+        CanReplayIntegrationCommand,
+        CanViewIntegrationReconciliation,
+        CanResolveIntegrationReconciliation,
+        CanViewLiveBalance,
+
+        // Insurance family (ASS-11), plus Ins.Product.View — see its own remarks for why the
+        // specification's table of seven became eight.
+        CanManageInsuranceProduct,
+        CanViewInsuranceProduct,
+        CanSubscribeInsurancePolicy,
+        CanViewInsurancePolicy,
+        CanDeclareInsuranceClaim,
+        CanViewInsuranceClaim,
+        CanViewInsuranceStatement,
+        CanResolveInsuranceReconciliation,
     ];
 }

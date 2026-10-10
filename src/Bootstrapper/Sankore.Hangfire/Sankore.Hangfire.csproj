@@ -25,6 +25,7 @@
          cannot be deserialized on resume. -->
     <ProjectReference Include="..\..\Modules\Leads\Sankore.Modules.Leads\Sankore.Modules.Leads.csproj" />
     <ProjectReference Include="..\..\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj" />
+    <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration\Sankore.Modules.Integration.csproj" />
   </ItemGroup>
 
   <ItemGroup>

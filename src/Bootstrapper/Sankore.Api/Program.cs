@@ -20,6 +20,7 @@ using Sankore.Modules.Workflow;
 using Sankore.Modules.Notifications;
 using Sankore.Modules.Customers;
 using Sankore.Modules.Kyc;
+using Sankore.Modules.Integration;
 using Sankore.Shared.ObjectStorage;
 using Sankore.Api.Features.ObjectStorage;
 using Sankore.Api.Features.ObjectStorage.MigrateObjects;
@@ -76,6 +77,8 @@ builder.Services.ConfigureHttpJsonOptions(opts =>
         new Sankore.Api.Infrastructure.NullableDateOnlyConverter());
     opts.SerializerOptions.Converters.Add(
         new Sankore.Api.Infrastructure.SourceSettingsJsonConverter());
+    opts.SerializerOptions.Converters.Add(
+        new Sankore.Api.Infrastructure.ConnectionSettingsJsonConverter());
 });
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
@@ -169,6 +172,31 @@ builder.Services.AddRateLimiter(options =>
         });
     });
 
+    // Integration webhooks: per IP AND per connection (INT-20).
+    //
+    // It cannot reuse "ingest-key": that policy partitions on the route value `publicKey`, which
+    // this route does not have, so every integration webhook reaching one instance would share a
+    // single 10/min window — a back office emitting one notification per customer event would be
+    // throttled almost immediately, and the throttling would look like the CBS being quiet.
+    //
+    // 60/min because the work a verified webhook triggers is one idempotent re-projection of a
+    // customer we already know; the signature check is what keeps an unauthenticated caller from
+    // spending it, and the limit is there to bound a misbehaving partner rather than to authorise.
+    options.AddPolicy("integration-webhook", ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var connection = ctx.Request.RouteValues["connectionId"]?.ToString() ?? "none";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"integration-webhook:{ip}:{connection}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 60,
+                QueueLimit = 0,
+            });
+    });
+
     // Web ingest: 10 req/min per IP+key (US-F13.37-BE-12)
     options.AddPolicy("ingest-key", ctx =>
     {
@@ -248,6 +276,12 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<ChildWorkflowCompletedConsumer>();
 
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycValidatedConsumer>();
+
+    // Integration module — the onboarding chain (INT-14). KycValidatedEvent is consumed here AND
+    // by M01 above; each module has its own inbox table, and this module's guard additionally
+    // derives a per-consumer id so its two consumers can share one event.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Onboarding.KycValidatedOnboardingConsumer>();
+    x.AddConsumer<Sankore.Modules.Integration.Features.Onboarding.CbsCustomerCreatedOnboardingConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRiskLevelChangedConsumer>();
     // Development-only auto-validation stub; inert outside Development (US-M01-BE-13).
@@ -317,7 +351,31 @@ builder.Services.AddHangfire(cfg =>
            opts.UseNpgsqlConnection(connectionString)));
 // Not in emit mode: the document describes routes, and the one thing that would still reach for
 // PostgreSQL while writing it is this worker starting up.
-if (emitOpenApiTo is null) builder.Services.AddHangfireServer();
+if (emitOpenApiTo is null)
+{
+    // Named queues for the Integration module (INT-06, INT-09). Until this module existed every
+    // job in the solution ran on "default" with the stock worker count, and that is exactly why
+    // "default" has to stay first in this list: passing Queues REPLACES the default set, so
+    // omitting it would silently stop every lead, KYC and customer job from being processed.
+    //
+    // The split matters because the three integration queues have different failure modes. A
+    // batch job holds a whole file in memory and runs for minutes; a write job is a short
+    // outbound call that must not queue behind it; a sync job is long but interruptible. One
+    // shared pool lets a nightly batch starve the writes an agent is waiting on.
+    builder.Services.AddHangfireServer(opts =>
+    {
+        opts.Queues =
+        [
+            "default",
+            "integration-write",
+            "integration-sync",
+            "integration-batch",
+        ];
+
+        // Left at the framework default (ProcessorCount * 5) rather than pinned: the figure is
+        // per host and this process also serves HTTP. Raise it deliberately, with a measurement.
+    });
+}
 
 // Platform job: the one-shot copy of stored objects to the bucket. Transient like every module's
 // job type — Hangfire activates it from the container.
@@ -354,6 +412,13 @@ builder.Services.AddSwaggerGen(options =>
     // Render every enum as a string schema with all valid member names listed.
     // Ensures Swagger UI shows "New | Open | Qualifying | ..." instead of "0 | 1 | 2 | ...".
     options.SchemaFilter<EnumSchemaFilter>();
+
+    // Describe the two polymorphic settings hierarchies as oneOf + their discriminator.
+    // Reflection alone documents the abstract base, which omits the discriminator the HTTP
+    // converters resolve through — see PolymorphicSettingsSchemaFilter.
+    options.SchemaFilter<ConnectionSettingsSchemaFilter>();
+    options.SchemaFilter<SourceSettingsSchemaFilter>();
+
     options.UseInlineDefinitionsForEnums();
 });
 #endregion
@@ -373,6 +438,12 @@ builder.Services.AddNotificationsModule(builder.Configuration);
 builder.Services.AddCustomersModule(builder.Configuration);      // M01
 
 builder.Services.AddKycModule(builder.Configuration);            // M02
+
+builder.Services.AddIntegrationModule(builder.Configuration);    // Integration (CBS + assurance)
+
+// Every core-banking adapter, in one method so that a shipped-but-unregistered adapter is a
+// failing test rather than a support ticket — see IntegrationAdapterComposition.
+builder.Services.AddIntegrationAdapters(builder.Configuration, builder.Environment);
 
 if (emitOpenApiTo is not null)
 {
@@ -408,6 +479,7 @@ if (emitOpenApiTo is null)
     await NotificationsModule.InitializeAsync(scope.ServiceProvider);
     await CustomersModule.InitializeAsync(scope.ServiceProvider);
     await KycModule.InitializeAsync(scope.ServiceProvider);
+    await IntegrationModule.InitializeAsync(scope.ServiceProvider);
 }
 
 // ---------------------------------------------------------------------
@@ -503,6 +575,72 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(),
             "0 1 * * *");                                    // daily (KYC-B-07)
 
+        // ── Integration module ────────────────────────────────────────────────────
+        // Both GLOBAL orchestrators: they walk the active tenants themselves and enqueue opaque
+        // per-tenant work, so adding a tenant needs no new recurring registration.
+        //
+        // Every minute, like the lead-source puller. The sweep is cheap when there is nothing to
+        // do — one indexed count per tenant on (status, next_attempt_at) — and the cost of being
+        // slower is a customer waiting at a counter for a CBS write that is already queued.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Dispatch.IntegrationDispatchOrchestratorJob>(
+            "integration-dispatch-orchestrator",
+            job => job.ExecuteAsync(),
+            "* * * * *");
+
+        // 02:00 daily, and daily rather than monthly on purpose: the four statements are
+        // CREATE TABLE IF NOT EXISTS ... PARTITION OF, so re-running is a no-op, while a monthly
+        // schedule that misses its single slot loses the month — and an INSERT past the last
+        // partition FAILS rather than landing somewhere. 02:00 is already the duplicate-detection
+        // slot below; the two touch different schemas and neither holds a long lock.
+        AddOrUpdate<Sankore.Modules.Integration.Infrastructure.CallLog.EnsureCallLogPartitionsJob>(
+            "integration-call-log-partitions",
+            job => job.ExecuteAsync(CancellationToken.None),
+            "0 2 * * *");
+
+        // Every minute is the RESOLUTION of the schedule, not the sweep period: each (connection,
+        // stream) pair carries its own interval in the connection's settings, and a slower cron
+        // would silently round every configured interval up to itself.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Sync.IntegrationSyncOrchestrator>(
+            Sankore.Modules.Integration.Features.Sync.IntegrationSyncOrchestrator.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Sync.IntegrationSyncOrchestrator.CronExpression);
+
+        // 05:00, after the night's other sweeps rather than alongside them: M02's periodic review
+        // at 01:00 can move a tier and therefore whether a customer is capped at all, and the
+        // integration sync is what puts the night's figures into the snapshot this watch reads.
+        // Every five minutes (INT-24). A cut-off is a time of day PER CONNECTION, so a single
+        // daily schedule is wrong twice: there is no one hour to schedule it at, and a failed
+        // deposit or a due purge has to be retried through the day rather than waiting until
+        // tomorrow. Five minutes is the worst-case lag between a cut-off and its file.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Batch.Outbound.OutboundBatchOrchestratorJob>(
+            "integration-outbound-batch",
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Batch.Outbound.OutboundBatchOrchestratorJob.CronExpression);
+
+        // Every quarter hour (INT-25). A batch rhythm is daily, but the partner deposits at an
+        // hour neither side controls: polling four times an hour bounds how late an acknowledgement
+        // is noticed to fifteen minutes, at four SFTP sessions per hour rather than sixty, and the
+        // overdue delay of criterion 3 is measured in hours anyway.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Batch.Inbound.InboundBatchPollOrchestratorJob>(
+            "integration-inbound-batch-poll",
+            job => job.ExecuteAsync(),
+            "*/15 * * * *");
+
+        AddOrUpdate<Sankore.Modules.Integration.Features.KycLimits.KycLimitWatchOrchestratorJob>(
+            Sankore.Modules.Integration.Features.KycLimits.KycLimitWatchOrchestratorJob.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.KycLimits.KycLimitWatchOrchestratorJob.CronExpression);
+
+        // 06:00, after every other nightly sweep including the ceiling watch at 05:00, which reads
+        // the same two sides. A comparison run against state another sweep is still changing
+        // reports divergences that were never real; run during opening hours it reports ones a
+        // counter closes a minute later, which is how a compliance ledger stops being believed
+        // (INT-34).
+        AddOrUpdate<Sankore.Modules.Integration.Features.Reconciliation.ReconciliationOrchestratorJob>(
+            Sankore.Modules.Integration.Features.Reconciliation.ReconciliationOrchestratorJob.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Reconciliation.ReconciliationOrchestratorJob.CronExpression);
+
         AddOrUpdate<Sankore.Modules.Customers.Features.Compliance.Retention.IdentifyRetentionCandidatesOrchestratorJob>(
             "customers-retention-candidates-orchestrator",
             job => job.ExecuteAsync(),
@@ -536,7 +674,17 @@ app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
-app.UseTenantResolution();   // extract + verify tenant against external store
+// Extract + verify tenant against the external store. The prefixes are the public surfaces
+// mapped at the bottom of this file: their tenant comes from the URL — a lead-source public key,
+// a connection id, a relay agent's client certificate — so there is no JWT and no recognised
+// domain to resolve, and without them every one of those routes answers
+// 400 "Cannot determine tenant" instead of reaching its endpoint. Keep this list and the
+// app.Map*PublicEndpoints() calls below in step.
+app.UseTenantResolution(
+    "/api/ingest",                  // M13 web form + webhook ingest (public key in the path)
+    "/sdk",                         // the forms.js builds those pages load
+    "/integration/webhooks",        // M14 inbound sync hooks (connection id + HMAC)
+    "/integration/relay-agents");   // M14 relay agent enrolment + heartbeat (client certificate)
 app.UseRequestLocalization(opts =>
 {
     opts.SupportedCultures = [new("fr"), new("en")];
@@ -562,6 +710,7 @@ appVersion1.MapWorkflowModuleEndpoints();
 appVersion1.MapNotificationsModuleEndpoints();
 appVersion1.MapCustomersModuleEndpoints();
 appVersion1.MapKycModuleEndpoints();
+appVersion1.MapIntegrationModuleEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 appVersion1.MapGroup("object-storage").MapMigrateObjects();
@@ -570,6 +719,12 @@ app.MapBootstrapEndpoints();
 
 // Public (unauthenticated) ingest endpoints — outside api/v1, own rate limiting
 app.MapPublicIngestEndpoints();
+
+// Integration webhooks (INT-20). Outside api/v1 and before authentication, like M13's ingest: the
+// caller is an external back office with no JWT, and the HMAC signature over the body IS the
+// authentication. An unknown or deactivated connection answers 401 exactly as a bad signature
+// does — a 404 would turn the route into a connection-enumeration oracle.
+app.MapIntegrationPublicEndpoints();
 
 // app.MapKycEndpoints();
 // app.MapLoansEndpoints();

@@ -140,13 +140,13 @@ public static class WebIngestEndpoint
             return Results.UnprocessableEntity(new { error = "ConsentRequired" });
 
         // ── 9. Captcha check ────────────────────────────────────────────
-        if (settings?.CaptchaProvider is not null)
+        if (settings?.CaptchaProviderName is not null)
         {
             if (string.IsNullOrEmpty(request.CaptchaToken))
                 return Results.UnprocessableEntity(new { error = "CaptchaFailed" });
 
             var captchaValid = await captchaValidator.ValidateAsync(
-                settings.CaptchaProvider, request.CaptchaToken, GetIp(httpContext), ct);
+                settings.CaptchaProviderName, request.CaptchaToken, GetIp(httpContext), ct);
 
             if (!captchaValid)
                 return Results.UnprocessableEntity(new { error = "CaptchaFailed" });

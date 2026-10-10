@@ -28,19 +28,14 @@ internal sealed class SendSnippetHandler(
         if (string.IsNullOrEmpty(source.PublicKey))
             return Result.Fail("PUBLIC_KEY_NOT_GENERATED");
 
-        var settings = source.Settings as EmbeddedScriptSettings;
-        var containerId = settings?.FormContainerId ?? "sankore-form";
-
-        var html = $"""
-            <!-- Sankore CRM Lead Capture — {source.Label} -->
-            <div id="{containerId}"></div>
-            <script src="{options.Value.SdkUrl}"
-                    integrity="{options.Value.SriHash}"
-                    crossorigin="anonymous"
-                    data-key="{source.PublicKey}"
-                    data-container="#{containerId}"
-                    defer></script>
-            """;
+        // Resolved from the registered SDK version, like the screen's snippet. This handler used
+        // to build the mail from SnippetOptions alone, whose default hash is the literal
+        // "sha384-placeholder": the snippet we mailed to integrators was refused by every
+        // browser it was pasted into.
+        var (sdkUrl, sriHash) = await SnippetBuilder.ResolveSdkAsync(db, options.Value, ct);
+        var snippet = SnippetBuilder.Build(source, sdkUrl, sriHash);
+        var html = snippet.Html;
+        var containerId = snippet.ContainerId;
 
         await notifications.QueueEmailAsync(new QueueEmailRequest(
             TemplateKey:    "lead-source.snippet",
@@ -52,8 +47,8 @@ internal sealed class SendSnippetHandler(
             {
                 ["sourceLabel"] = source.Label,
                 ["snippet"]     = html,
-                ["sdkUrl"]      = options.Value.SdkUrl,
-                ["sriHash"]     = options.Value.SriHash,
+                ["sdkUrl"]      = sdkUrl,
+                ["sriHash"]     = sriHash,
                 ["publicKey"]   = source.PublicKey,
                 ["containerId"] = containerId
             },

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Integration.RelayAgent</RootNamespace>
+    <UserSecretsId>sankore-relay-agent</UserSecretsId>
+    <!-- Shipped as a Docker image AND as a Windows service (INT-26). -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <!-- SFTP deposit and read, executed INSIDE the IMF's network. -->
+    <PackageReference Include="SSH.NET" />
+    <!-- Read-only SQL against a declared view. -->
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The option validator, the file-name whitelist and the URI resolver are internal: they are
+         this agent's own guarantees, not an API. The tests that pin them — which is how criterion
+         4 and the SQL allow-list are checkable rather than promised — need to see them. -->
+    <InternalsVisibleTo Include="Sankore.Integration.RelayAgent.Tests" />
+  </ItemGroup>
+
+  <!-- NO reference to the Integration module, and that is deliberate: this process runs on the
+       IMF's own hardware, outside our deployment. It speaks one wire protocol to SANKORE and
+       knows nothing of our domain, our schema or our other modules. Anything it must share with
+       the platform is a contract defined in its own Protocol/ folder. -->
+
+</Project>

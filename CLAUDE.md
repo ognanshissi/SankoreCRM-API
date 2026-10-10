@@ -315,6 +315,11 @@ not an inbox table. It establishes `BackgroundJobContext.SetScope` **before** cr
 scope, because `ITenantContext` and `ICurrentUser` are built from it and a consumer has no HTTP
 context.
 
+The capture → scoring → qualification → dispatch → conversion walkthrough, with the measured
+score of each dimension and the cases a change here must not break, is in
+`docs/plan-test-qualification-lead.md`; `docs/workflow-complet-leads.md` lists every endpoint of
+the module.
+
 ### Language codes
 
 **Every write of a language code goes through `LanguageCode` (`Sankore.Shared.Kernel`)**:
@@ -538,6 +543,10 @@ gets `ScoreUnavailableCode`, rather than a score computed from a reconstruction.
 told us nothing — leave the file in `Verifying` and let Hangfire replay). Recording an outage as a
 rejection would reject an honest client over our own downtime. `FakeBiometryClient` is the double
 for every test; the Flask service is not in this repository.
+
+How to take a file from creation to validated — the two accounts the four-eyes rule requires, the
+circuit per vigilance level, the degraded manual path and the cases pinning each of them — is in
+`docs/plan-test-validation-kyc.md`.
 
 ### Adding a new module
 

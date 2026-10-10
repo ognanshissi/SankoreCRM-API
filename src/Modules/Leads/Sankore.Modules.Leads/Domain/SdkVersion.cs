@@ -49,4 +49,17 @@ public sealed class SdkVersion
     }
 
     public void Revoke() => IsCurrent = false;
+
+    /// <summary>
+    /// Makes this the build new snippets pin.
+    ///
+    /// <para>
+    /// Safe to call on an existing deployment only because a snippet pins the EXACT version:
+    /// while the snippet pointed at <c>/sdk/v{major}/</c> and carried an SRI hash, promoting a
+    /// build changed the bytes behind a URL whose hash was already pasted into customers' pages
+    /// and every one of those forms stopped loading. Promotion now changes what the NEXT copied
+    /// snippet uses, and nothing that is already live.
+    /// </para>
+    /// </summary>
+    public void MakeCurrent() => IsCurrent = true;
 }

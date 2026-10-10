@@ -38,8 +38,8 @@ internal sealed class IngestWebhookHandler(
         var settings = source.Settings as ServerWebhookSettings;
 
         // ── 2. IP allowlist ─────────────────────────────────────────────
-        if (settings?.AllowedIpAddresses.Count > 0
-            && !settings.AllowedIpAddresses.Contains(cmd.RemoteIp))
+        if (settings?.AllowedIps.Count > 0
+            && !settings.AllowedIps.Contains(cmd.RemoteIp))
         {
             logger.LogWarning("Webhook IP rejected: {Ip} for source {SourceId}", cmd.RemoteIp, source.Id);
             return Result.Ok(new IngestWebhookResult(403, []));

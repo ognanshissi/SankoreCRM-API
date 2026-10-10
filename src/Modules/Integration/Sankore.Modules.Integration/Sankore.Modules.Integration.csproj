@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Modules.Integration</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Hangfire.Core" />
+    <!-- Hangfire.Core pulls Newtonsoft.Json 11.0.1 transitively (known advisory). -->
+    <PackageReference Include="Newtonsoft.Json" />
+    <!-- Per-connection Polly pipelines with an observable circuit breaker (INT-09). -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <!-- Mapping tables import/export (INT-04). Same reader stack as the three importers. -->
+    <PackageReference Include="CsvHelper" />
+    <!-- SFTP deposit of the batch files (INT-24). Version pinned centrally. -->
+    <PackageReference Include="SSH.NET" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Integration.PublicApi\Sankore.Modules.Integration.PublicApi.csproj" />
+    <!-- Cross-module dependencies: PublicApi contracts ONLY, never a main assembly -->
+    <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Customers\Sankore.Modules.Customers.PublicApi\Sankore.Modules.Customers.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Kyc\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Notifications\Sankore.Modules.Notifications.PublicApi\Sankore.Modules.Notifications.PublicApi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Tests" />
+    <!-- The adapters live in their own assemblies and implement this module's ports. They reach
+         the module's internals on purpose — ICallJournal, MappingResolver and IntegrationSecrets
+         are how an adapter journals its calls, translates a code and reads its credentials, and
+         making those public would offer them to every other module as well. One line per adapter
+         assembly, so adding one is a deliberate act and not a wildcard nobody reviews. -->
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Fake" />
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Temenos" />
+    <!-- SAB AT (INT-32) reaches IntegrationSecrets only: its Open SAB API key is held in the
+         vault under the same per-connection name Temenos uses. It journals nothing and
+         translates nothing, because it makes no call. -->
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Sab" />
+    <!-- ORASS (ASS-06) reaches IntegrationSecrets only, and reaches THREE of its keys: the API
+         credential on the call carrier, and the SFTP credential plus the host-key fingerprint on
+         the bordereau carrier, because criterion 2 gives it two carriers that authenticate against
+         different things. It journals nothing and translates nothing, because it makes no call. -->
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Orass" />
+    <!-- NSubstitute proxies internal interfaces. -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>
