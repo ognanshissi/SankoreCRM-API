@@ -28,11 +28,42 @@ using Sankore.Modules.Integration.PublicApi;
 /// </summary>
 public sealed class ConnectionSettingsJsonConverter : JsonConverter<ConnectionSettings>
 {
+    // CamelCase, matching what the OpenAPI document publishes and what the EF-side
+    // ConnectionSettingsConverter stores. Without the policy the WRITE side emitted the record's
+    // own PascalCase — "BaseUrl" — against a contract promising "baseUrl", so every per-kind
+    // field of a GET read back undefined in the generated client while reads kept working (the
+    // case-insensitive flag below covers the inbound direction either way).
     private static readonly JsonSerializerOptions InnerOpts = new()
     {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() },
     };
+
+    /// <summary>
+    /// Discriminator value to concrete record. The single host-side source of that mapping: both
+    /// <see cref="ResolveType"/> and <c>ConnectionSettingsSchemaFilter</c> read it, so the kind a
+    /// client may SEND and the kind the OpenAPI document ADVERTISES cannot drift apart — which is
+    /// how the discriminator came to be required on the wire and absent from the contract.
+    ///
+    /// <para>
+    /// Compared case-INSENSITIVELY. The switch this replaced was an ordinal string switch, so
+    /// <c>"$kind": "temenos"</c> resolved to nothing and surfaced as "settings is required" on a
+    /// correctly filled object — while <c>"kind": "temenos"</c> on the sibling field bound fine
+    /// through <see cref="JsonStringEnumConverter"/>. One enum, two casing rules, no way to tell
+    /// from the error message.
+    /// </para>
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, Type> SettingsTypesByKind =
+        new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+        {
+            [nameof(IntegrationKind.Temenos)] = typeof(TemenosSettings),
+            [nameof(IntegrationKind.Amplitude)] = typeof(AmplitudeSettings),
+            [nameof(IntegrationKind.Sab)] = typeof(SabSettings),
+            [nameof(IntegrationKind.PerfectVision)] = typeof(PerfectVisionSettings),
+            [nameof(IntegrationKind.Orass)] = typeof(OrassSettings),
+            [nameof(IntegrationKind.Fake)] = typeof(FakeSettings),
+        };
 
     public override ConnectionSettings? Read(
         ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -72,18 +103,12 @@ public sealed class ConnectionSettingsJsonConverter : JsonConverter<ConnectionSe
     }
 
     /// <summary>
-    /// One switch, mirroring the module-side <c>ConnectionSettingsConverter.ResolveType</c>. The
-    /// duplication is the known wart of this pattern in the repo; keeping the two literal and
-    /// adjacent is better than a reflection scan that fails at run time on a renamed record.
+    /// One table, mirroring the module-side <c>ConnectionSettingsConverter.ResolveType</c>. That
+    /// duplication is the known wart of this pattern in the repo, and deliberate: the module may
+    /// not reference a host, and two literal switches beat a reflection scan that fails at run
+    /// time on a renamed record. What is NOT duplicated any more is the host's own copy — the
+    /// schema filter reads <see cref="SettingsTypesByKind"/> rather than restating it.
     /// </summary>
-    private static Type? ResolveType(string kind) => kind switch
-    {
-        nameof(IntegrationKind.Temenos) => typeof(TemenosSettings),
-        nameof(IntegrationKind.Amplitude) => typeof(AmplitudeSettings),
-        nameof(IntegrationKind.Sab) => typeof(SabSettings),
-        nameof(IntegrationKind.PerfectVision) => typeof(PerfectVisionSettings),
-        nameof(IntegrationKind.Orass) => typeof(OrassSettings),
-        nameof(IntegrationKind.Fake) => typeof(FakeSettings),
-        _ => null,
-    };
+    private static Type? ResolveType(string kind)
+        => SettingsTypesByKind.TryGetValue(kind, out var type) ? type : null;
 }

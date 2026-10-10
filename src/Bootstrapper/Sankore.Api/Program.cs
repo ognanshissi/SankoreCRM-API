@@ -412,6 +412,13 @@ builder.Services.AddSwaggerGen(options =>
     // Render every enum as a string schema with all valid member names listed.
     // Ensures Swagger UI shows "New | Open | Qualifying | ..." instead of "0 | 1 | 2 | ...".
     options.SchemaFilter<EnumSchemaFilter>();
+
+    // Describe the two polymorphic settings hierarchies as oneOf + their discriminator.
+    // Reflection alone documents the abstract base, which omits the discriminator the HTTP
+    // converters resolve through — see PolymorphicSettingsSchemaFilter.
+    options.SchemaFilter<ConnectionSettingsSchemaFilter>();
+    options.SchemaFilter<SourceSettingsSchemaFilter>();
+
     options.UseInlineDefinitionsForEnums();
 });
 #endregion

@@ -4,6 +4,7 @@ namespace Sankore.Modules.Leads.Features.Ingestion.Web;
 
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -80,10 +81,11 @@ public static class WebFormEndpoint
             ConsentVersion: settings.ConsentVersion,
             Theme:          settings.Theme,
             SubmitLabel:    settings.SubmitButtonLabel ?? "Submit",
-            CaptchaProvider: settings.CaptchaProvider);
+            CaptchaProvider: settings.CaptchaProviderName,
+            AccentColor:    settings.AccentColor,
+            FontFamily:     settings.FontFamily);
 
-        // ETag based on settings content hash
-        var etag = ComputeETag(source.Code, settings.SchemaVersion, settings.FormFields?.Count ?? 0);
+        var etag = ComputeETag(source.Code, response);
 
         if (http.Request.Headers.IfNoneMatch == etag)
             return Results.StatusCode(StatusCodes.Status304NotModified);
@@ -94,12 +96,29 @@ public static class WebFormEndpoint
         return Results.Ok(response);
     }
 
-    private static string ComputeETag(string code, int schemaVersion, int fieldCount)
+    /// <summary>
+    /// Hashes the RESPONSE, not a summary of it.
+    ///
+    /// <para>
+    /// It used to hash the source code, the schema version and the FIELD COUNT, which meant
+    /// every change that kept the number of fields the same was invisible to a client holding
+    /// the old ETag: a relabelled field, a reworded consent notice, a new submit label — and now
+    /// an accent colour — all answered 304 and the form never changed. Hashing the serialised
+    /// response makes the tag change exactly when the form does.
+    /// </para>
+    /// </summary>
+    private static string ComputeETag(string code, WebFormResponse response)
     {
-        var input = $"{code}:{schemaVersion}:{fieldCount}";
+        var input = $"{code}:{JsonSerializer.Serialize(response, EtagJsonOptions)}";
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return $"\"{Convert.ToHexString(hash[..8])}\"";
     }
+
+    /// <summary>
+    /// Fixed options, so the tag depends on the response and not on how the host happens to be
+    /// configured to serialise it.
+    /// </summary>
+    private static readonly JsonSerializerOptions EtagJsonOptions = new();
 }
 
 public sealed record WebFormResponse(
@@ -108,7 +127,15 @@ public sealed record WebFormResponse(
     string? ConsentVersion,
     string? Theme,
     string SubmitLabel,
-    string? CaptchaProvider);
+    string? CaptchaProvider,
+    /// <summary>
+    /// Accent colour the SDK uses as the FALLBACK of <c>--sankore-primary</c>, so the tenant's
+    /// choice applies and a host site can still override it with that CSS variable. Null leaves
+    /// the SDK's own default.
+    /// </summary>
+    string? AccentColor = null,
+    /// <summary>Font stack, fallback of <c>--sankore-font</c>. Same contract as the colour.</summary>
+    string? FontFamily = null);
 
 public sealed record WebFormFieldDto(
     string Name,

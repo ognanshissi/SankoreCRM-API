@@ -26,39 +26,22 @@ internal sealed class GetSnippetHandler(
         if (string.IsNullOrEmpty(source.PublicKey))
             return Result.Fail<SnippetResult>("PUBLIC_KEY_NOT_GENERATED");
 
-        var settings = source.Settings as EmbeddedScriptSettings;
-        var containerId = settings?.FormContainerId ?? "sankore-form";
+        var (sdkUrl, sriHash) = await SnippetBuilder.ResolveSdkAsync(db, options.Value, ct);
+        var snippet = SnippetBuilder.Build(source, sdkUrl, sriHash);
 
-        // Resolve SDK URL and SRI from published version (DB), fall back to config
-        var currentSdk = await db.SdkVersions
-            .IgnoreQueryFilters()
-            .Where(v => v.IsCurrent)
-            .OrderByDescending(v => v.Major)
-            .FirstOrDefaultAsync(ct);
-
-        var sdkUrl = currentSdk is not null
-            ? $"/sdk/v{currentSdk.Major}/forms.min.js"
-            : options.Value.SdkUrl;
-        var sriHash = currentSdk?.SriHash ?? options.Value.SriHash;
-
-        var html = $"""
-            <!-- Sankore CRM Lead Capture — {source.Label} -->
-            <div id="{containerId}"></div>
-            <script src="{sdkUrl}"
-                    integrity="{sriHash}"
-                    crossorigin="anonymous"
-                    data-key="{source.PublicKey}"
-                    data-container="#{containerId}"
-                    defer></script>
-            """;
-
-        return Result.Ok(new SnippetResult(html, sdkUrl, sriHash, source.PublicKey, containerId));
+        return Result.Ok(new SnippetResult(
+            snippet.Html, snippet.SdkUrl, snippet.SriHash, source.PublicKey, snippet.ContainerId));
     }
 }
 
 public sealed class SnippetOptions
 {
-    /// <summary>Fallback CDN URL when no SDK version is published.</summary>
+    /// <summary>
+    /// Fallback URL when no SDK version is registered — a first-boot case, since the shipped
+    /// builds are seeded at start-up. The major alias, not a pinned version, because there is no
+    /// version to pin; it is paired with the placeholder hash below and both must be configured
+    /// together to be usable.
+    /// </summary>
     public string SdkUrl { get; set; } = "/sdk/v1/forms.min.js";
 
     /// <summary>Fallback SRI hash when no SDK version is published.</summary>

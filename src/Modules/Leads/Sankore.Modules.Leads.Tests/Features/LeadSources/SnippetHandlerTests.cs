@@ -37,8 +37,11 @@ public sealed class SnippetHandlerTests : IDisposable
             IntegrationMode.EmbeddedScript,
             settings: new EmbeddedScriptSettings
             {
-                AllowedOrigins = ["https://example.com"],
-                FormContainerId = "my-form"
+                Script = new ScriptConfig
+                {
+                    AllowedOrigins = ["https://example.com"],
+                    FormSelector = "my-form",
+                },
             });
         db.LeadSourceConfigs.Add(source);
         await db.SaveChangesAsync();

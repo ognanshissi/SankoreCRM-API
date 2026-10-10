@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.LeadSources.CreateLeadSource;
 
 using FluentValidation;
+using NCrontab;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.LeadSources.Mapping;
 
@@ -24,12 +25,29 @@ internal sealed class CreateLeadSourceValidator
         // ── Polymorphic SourceSettings validation ─────────────────────────
         When(x => x.Settings is EmbeddedScriptSettings, () =>
         {
+            // The two values that leave this system and land in a <style> element on somebody
+            // else's page. Refused here so the tenant is told, rather than silently dropped by
+            // the projection and the form quietly reverting to the SDK's default colour.
+            RuleFor(x => ((EmbeddedScriptSettings)x.Settings!).HostedForm!.AccentColor)
+                .Must(CssColor.IsValidColor)
+                .When(x => !string.IsNullOrWhiteSpace(
+                    ((EmbeddedScriptSettings)x.Settings!).HostedForm?.AccentColor))
+                .WithName("settings.hostedForm.accentColor")
+                .WithMessage("settings.hostedForm.accentColor must be a hex colour (#2563eb) or a CSS colour keyword.");
+
+            RuleFor(x => ((EmbeddedScriptSettings)x.Settings!).HostedForm!.FontFamily)
+                .Must(CssColor.IsValidFontFamily)
+                .When(x => !string.IsNullOrWhiteSpace(
+                    ((EmbeddedScriptSettings)x.Settings!).HostedForm?.FontFamily))
+                .WithName("settings.hostedForm.fontFamily")
+                .WithMessage("settings.hostedForm.fontFamily must be a plain font stack, e.g. \"Inter, system-ui, sans-serif\".");
+
             RuleForEach(x => ((EmbeddedScriptSettings)x.Settings!).AllowedOrigins)
                 .Must(BeAValidUrl)
-                .WithMessage("settings.allowedOrigins[{CollectionIndex}] must be a valid http/https URL.");
+                .WithMessage("settings.script.allowedOrigins[{CollectionIndex}] must be a valid http/https URL.");
             RuleFor(x => ((EmbeddedScriptSettings)x.Settings!).FormContainerId)
                 .MaximumLength(100)
-                .WithName("settings.formContainerId");
+                .WithName("settings.script.formSelector");
         });
 
         When(x => x.Settings is ServerWebhookSettings, () =>
@@ -44,17 +62,27 @@ internal sealed class CreateLeadSourceValidator
 
         When(x => x.Settings is ScheduledPullSettings, () =>
         {
+            // Validated on the COMPOSED url, named after the field the editor owns: the three
+            // parts are only ever wrong together, and "settings.endpointUrl" named nothing the
+            // caller could go and correct.
             RuleFor(x => ((ScheduledPullSettings)x.Settings!).EndpointUrl)
                 .NotEmpty()
                 .Must(BeAValidUrl)
-                .WithName("settings.endpointUrl");
-            RuleFor(x => ((ScheduledPullSettings)x.Settings!).HttpMethod)
-                .Must(m => m is "GET" or "POST")
-                .WithName("settings.httpMethod")
-                .WithMessage("settings.httpMethod must be 'GET' or 'POST'.");
-            RuleFor(x => ((ScheduledPullSettings)x.Settings!).CronSchedule)
-                .NotEmpty()
-                .WithName("settings.cronSchedule");
+                .WithName("settings.pull.baseUrl")
+                .WithMessage("settings.pull.baseUrl and requestPath must compose a valid http/https URL.");
+
+            // No rule on the verb: it is an enum now, so an unknown value is refused when the
+            // body is deserialized rather than here.
+
+            // A blank cron is legal — the orchestrator falls back to the record's default — but
+            // an UNPARSEABLE one is not, and it fails invisibly: IsCronDue catches the parse
+            // error and answers "not due", so the source simply never pulls again.
+            RuleFor(x => ((ScheduledPullSettings)x.Settings!).Pull!.CronExpression)
+                .Must(BeAParseableCron)
+                .When(x => !string.IsNullOrWhiteSpace(
+                    ((ScheduledPullSettings)x.Settings!).Pull?.CronExpression))
+                .WithName("settings.pull.cronExpression")
+                .WithMessage("settings.pull.cronExpression is not a valid cron expression.");
         });
 
         When(x => x.Settings is PlatformSettings, () =>
@@ -84,6 +112,14 @@ internal sealed class CreateLeadSourceValidator
                     ctx.AddFailure("settings.fieldMappings", $"{error.Path}: {error.Message}");
             });
     }
+
+
+    /// <summary>
+    /// Five-field cron, as <c>LeadSourcePullOrchestratorJob</c> parses it. Parsed rather than
+    /// pattern-matched so this agrees with the scheduler by construction.
+    /// </summary>
+    private static bool BeAParseableCron(string? expression)
+        => CrontabSchedule.TryParse(expression) is not null;
 
     private static bool BeAValidUrl(string url)
         => Uri.TryCreate(url, UriKind.Absolute, out var uri)

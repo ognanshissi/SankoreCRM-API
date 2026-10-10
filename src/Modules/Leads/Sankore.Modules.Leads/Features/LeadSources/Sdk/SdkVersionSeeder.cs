@@ -10,8 +10,15 @@ using Sankore.Modules.Leads.Infrastructure;
 /// Registers the SDK builds that ship with the host (wwwroot/sdk/&lt;version&gt;/forms.min.js)
 /// so the <c>/sdk/v{major}/forms.min.js</c> alias resolves without an admin upload.
 /// Runs at startup inside <see cref="LeadsModule.InitializeAsync"/>.
-/// Idempotent — a version already in the table is left untouched, and an existing
-/// current version for a major is never demoted (an uploaded build stays current).
+/// Idempotent — a version already in the table is left untouched.
+///
+/// <para>
+/// Within a major, the HIGHEST registered version is the current one, whether it was shipped
+/// here or uploaded by an admin. It used to be "first one wins, never demote", which meant a
+/// newer shipped build was registered and then ignored: the alias and every new snippet kept
+/// pointing at the older build, so shipping an SDK fix reached nobody. Promotion is only safe
+/// because a snippet pins the exact version — see <see cref="SdkVersion.MakeCurrent"/>.
+/// </para>
 /// </summary>
 internal static class SdkVersionSeeder
 {
@@ -27,16 +34,13 @@ internal static class SdkVersionSeeder
 
         if (onDisk.Count == 0) return;
 
-        var known = await db.SdkVersions
+        // AsTracking: the context defaults to NoTracking, and PromoteHighestPerMajor MUTATES
+        // these rows. Untracked, the promotion computed correctly, logged, and saved nothing.
+        var registered = await db.SdkVersions
             .IgnoreQueryFilters()
-            .Select(v => v.Version)
+            .AsTracking()
             .ToListAsync(ct);
-
-        var majorsWithCurrent = await db.SdkVersions
-            .IgnoreQueryFilters()
-            .Where(v => v.IsCurrent)
-            .Select(v => v.Major)
-            .ToListAsync(ct);
+        var known = registered.Select(v => v.Version).ToHashSet(StringComparer.Ordinal);
 
         foreach (var (version, parsed) in onDisk)
         {
@@ -48,17 +52,12 @@ internal static class SdkVersionSeeder
             var sriHash = $"sha384-{Convert.ToBase64String(SHA384.HashData(content))}";
             var seeded = SdkVersion.Publish(version, parsed!.Major, sriHash);
 
-            // Publish() marks the new row current; only keep that when the major has none yet.
-            if (majorsWithCurrent.Contains(parsed.Major))
-                seeded.Revoke();
-            else
-                majorsWithCurrent.Add(parsed.Major);
-
             db.SdkVersions.Add(seeded);
-            logger.LogInformation(
-                "Seeded shipped SDK version {Version} (current: {IsCurrent}).",
-                version, seeded.IsCurrent);
+            registered.Add(seeded);
+            logger.LogInformation("Seeded shipped SDK version {Version}.", version);
         }
+
+        PromoteHighestPerMajor(registered, logger);
 
         try
         {
@@ -68,6 +67,36 @@ internal static class SdkVersionSeeder
         {
             // ux_sdk_version — another instance seeded the same build concurrently.
             logger.LogWarning(ex, "SDK version seeding skipped — versions already registered.");
+        }
+    }
+
+    /// <summary>
+    /// Exactly one current build per major: the highest version, by semver and not by the order
+    /// rows were inserted.
+    ///
+    /// <para>
+    /// Applied to every major on every start-up, not only to rows just seeded, because that is
+    /// what repairs a deployment already carrying the old "first one wins" state — otherwise the
+    /// newly shipped build would sit in the table, registered and unreachable.
+    /// </para>
+    /// </summary>
+    private static void PromoteHighestPerMajor(List<SdkVersion> registered, ILogger logger)
+    {
+        foreach (var major in registered.GroupBy(v => v.Major))
+        {
+            var highest = major
+                .OrderByDescending(v => System.Version.TryParse(v.Version, out var p) ? p : new Version(0, 0))
+                .First();
+
+            foreach (var version in major.Where(v => v.IsCurrent && v != highest))
+                version.Revoke();
+
+            if (highest.IsCurrent) continue;
+
+            highest.MakeCurrent();
+            logger.LogInformation(
+                "SDK {Version} is now the current build for major {Major}; new snippets pin it.",
+                highest.Version, major.Key);
         }
     }
 }
