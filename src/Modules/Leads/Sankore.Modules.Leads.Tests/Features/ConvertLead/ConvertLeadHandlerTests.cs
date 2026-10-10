@@ -2,7 +2,6 @@ namespace Sankore.Modules.Leads.Tests.Features.ConvertLead;
 
 using FluentAssertions;
 using NSubstitute;
-using Sankore.Modules.Customer360.PublicApi;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.ConvertLead;
@@ -25,7 +24,6 @@ public sealed class ConvertLeadHandlerTests : IDisposable
     private readonly TestDbContextFactory _factory;
 
     private readonly ICustomersModule _customers = Substitute.For<ICustomersModule>();
-    private readonly ICustomerModule _legacyCustomers = Substitute.For<ICustomerModule>();
     private readonly IEventPublisher _publisher = Substitute.For<IEventPublisher>();
 
     public ConvertLeadHandlerTests() => _factory = new TestDbContextFactory(_tenantId);

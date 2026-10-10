@@ -37,8 +37,6 @@
     <!-- Cross-module dependency: Customers PublicApi — ICustomersModule.CreateFromLeadAsync is
          what actually creates the client record when a lead is converted (US-M01-BE-06). -->
     <ProjectReference Include="..\..\Customers\Sankore.Modules.Customers.PublicApi\Sankore.Modules.Customers.PublicApi.csproj" />
-    <!-- Cross-module dependency: Customer360 PublicApi for convert-to-existing validation (US-M13-171) -->
-    <ProjectReference Include="..\..\Customer360\Sankore.Modules.Customer360.PublicApi\Sankore.Modules.Customer360.PublicApi.csproj" />
     <!-- Cross-module dependency: KYC PublicApi for KycRequested event (US-M13-172) -->
     <ProjectReference Include="..\..\Kyc\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />

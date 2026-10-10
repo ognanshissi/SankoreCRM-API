@@ -4,7 +4,6 @@ using System.Transactions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Sankore.Modules.Customer360.PublicApi;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Leads.Domain;

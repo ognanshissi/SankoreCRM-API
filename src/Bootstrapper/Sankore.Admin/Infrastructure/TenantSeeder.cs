@@ -26,7 +26,7 @@ internal static class TenantSeeder
 
         devTenant.ApplicationModulesList.AddRange([
             ApplicationModules.Lead,
-            ApplicationModules.Customer360,
+            ApplicationModules.Customer,
             ApplicationModules.Loan
         ]);
 

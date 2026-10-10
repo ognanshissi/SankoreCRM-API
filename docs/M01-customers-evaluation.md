@@ -154,9 +154,9 @@ connexion.
 C'est le filet qui manquait : les 730 autres tests construisent les handlers avec `new` et
 prouvent leur logique, mais ne disent rien de la capacité du conteneur à les produire. Avec 10
 dossiers de tranches verticales enregistrant chacun ses services, un `AddScoped` oublié ne se
-verrait qu'au premier appel en production. Les tests vérifient aussi que le contrat historique
-`Customer360.ICustomerModule` est bien servi par `LegacyCustomerModuleAdapter` et non plus par le
-stub, et `ValidateScopes` est activé pour attraper un singleton capturant un service scoped —
+verrait qu'au premier appel en production. Les tests vérifient aussi que `ICustomersModule` —
+désormais le seul contrat client, le module historique `Customer360` ayant été supprimé — est
+servi par ce module, et `ValidateScopes` est activé pour attraper un singleton capturant un service scoped —
 la façon classique dont un `DbContext` survit à sa requête et se met à renvoyer des données
 d'un autre tenant.
 

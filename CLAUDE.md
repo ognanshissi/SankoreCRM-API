@@ -201,9 +201,9 @@ Its extra **Job control** page adds pause/resume, which Hangfire OSS has no equi
 
 `CustomersDbContext` — schema `customers`, migrations history in `customers`. Central
 `HasQueryFilter` per tenant-scoped entity, `OutboxMessage` excluded. Contract:
-`Sankore.Modules.Customers.PublicApi.ICustomersModule`. The legacy
-`Customer360.PublicApi.ICustomerModule` consumed by Leads is served by
-`LegacyCustomerModuleAdapter` — it exposes no sensitive field.
+`Sankore.Modules.Customers.PublicApi.ICustomersModule` — the single customer contract, and it
+exposes no sensitive field. The legacy `Customer360` module it superseded is gone; nothing
+outside this module may reach a client record by any other route.
 
 **Field-level encryption (F12.14)** lives in `Sankore.Shared.Infrastructure/Crypto/`, not in
 the module, so M02 can reuse it: `IFieldEncryptor` (AES-256-GCM, payload

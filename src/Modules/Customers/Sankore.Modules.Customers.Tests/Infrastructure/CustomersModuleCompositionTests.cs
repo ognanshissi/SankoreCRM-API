@@ -180,11 +180,5 @@ public sealed class CustomersModuleCompositionTests
         using var scope = provider.CreateScope();
 
         scope.ServiceProvider.GetService<ICustomersModule>().Should().NotBeNull();
-
-        // The legacy Customer360 contract Leads already calls must now be served from real
-        // client records, not from Sankore.Api.Stubs.StubCustomerModule.
-        var legacy = scope.ServiceProvider.GetService<Modules.Customer360.PublicApi.ICustomerModule>();
-        legacy.Should().NotBeNull();
-        legacy!.GetType().Name.Should().Be("LegacyCustomerModuleAdapter");
     }
 }
