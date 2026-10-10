@@ -121,8 +121,8 @@ internal static class WorkflowTemplateSeeder
         foreach (var (order, name, description, roleCode) in KycSteps)
             template.AddStep(order, name, description, roleCode, ApprovalStepTimeoutHours);
 
-        // AFTER the steps: Activate refuses an empty template, and it clears and rebuilds the
-        // transition table from the steps it finds — so activating first would leave a template with
+        // AFTER the steps: Activate refuses an empty template, and it rebuilds the auto-generated
+        // transitions from the steps it finds — so activating first would leave a template with
         // no APPROVE path and an instance that could never advance.
         template.Activate();
 

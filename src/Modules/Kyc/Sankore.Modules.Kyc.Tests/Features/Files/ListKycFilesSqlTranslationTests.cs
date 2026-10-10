@@ -14,9 +14,9 @@ using Xunit;
 /// Every other test in this module runs on the EF InMemory provider, and that provider evaluates
 /// almost any LINQ shape in memory. A query it accepts can still be untranslatable by Npgsql, and
 /// then it fails for the first time in production. This module has already paid for that twice:
-/// <c>ExecuteDeleteAsync</c> is unsupported InMemory (M12's test fails on it to this day), and on
-/// .NET 10 an array's <c>Contains</c> binds to the <c>ReadOnlySpan&lt;T&gt;</c> extension and stops
-/// translating at all.
+/// <c>ExecuteDeleteAsync</c> is unsupported InMemory (it silently cost M12 its whole template
+/// activation path until the handler was rewritten to load-and-remove), and on .NET 10 an array's
+/// <c>Contains</c> binds to the <c>ReadOnlySpan&lt;T&gt;</c> extension and stops translating at all.
 /// </para>
 ///
 /// <para>
