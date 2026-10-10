@@ -7,6 +7,7 @@ using Sankore.Modules.Leads.Infrastructure.Crypto;
 using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Persistence;
 
 /// <param name="encryptor">
 /// M13's OWN encryptor, resolved by DI key. It is a constructor dependency because
@@ -55,6 +56,16 @@ public sealed class LeadsDbContext(
     public DbSet<FatcaDeclaration> FatcaDeclarations => Set<FatcaDeclaration>();
     public DbSet<LeadSetting> LeadSettings => Set<LeadSetting>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
+    /// <summary>
+    /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+    /// See <see cref="UtcTimestamps"/>.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+        builder.UseUtcDateTimeOffsets();
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

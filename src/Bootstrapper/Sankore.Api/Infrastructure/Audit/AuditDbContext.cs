@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Sankore.Shared.Infrastructure.Persistence;
 
 namespace Sankore.Api.Infrastructure.Audit;
 
@@ -13,6 +14,16 @@ public sealed class AuditDbContext(DbContextOptions<AuditDbContext> options)
     : DbContext(options)
 {
     public DbSet<AuditLogEntry> Entries => Set<AuditLogEntry>();
+
+    /// <summary>
+    /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+    /// See <see cref="UtcTimestamps"/>.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+        builder.UseUtcDateTimeOffsets();
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

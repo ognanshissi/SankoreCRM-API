@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Persistence;
 
 /// <summary>
 /// Persistence root of module M02. Lives in its own PostgreSQL schema (<c>kyc</c>) so the module
@@ -45,6 +46,16 @@ public sealed class KycDbContext(DbContextOptions<KycDbContext> options, ITenant
 
         // Reads dominate; handlers opt back in with .AsTracking() when they mean to mutate.
         optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+    }
+
+    /// <summary>
+    /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+    /// See <see cref="UtcTimestamps"/>.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+        builder.UseUtcDateTimeOffsets();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

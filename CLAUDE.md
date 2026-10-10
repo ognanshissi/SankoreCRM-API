@@ -360,6 +360,35 @@ case-INsensitively. Those clients were mailed the message's own JSON payload as 
 The renderer still normalises on read, so existing rows are safe without a migration; the write
 side is normalised so the column holds one value per language.
 
+### Timestamps are UTC, enforced at the DbContext
+
+Npgsql maps `DateTimeOffset` to `timestamp with time zone` and **refuses any offset but zero**:
+`Cannot write DateTimeOffset with Offset=02:00:00 to PostgreSQL type 'timestamp with time zone',
+only offset 0 (UTC) is supported.` It is an `ArgumentException` from inside `SaveChanges`, so it
+reaches the client as a 500 on an ordinary write and the message names neither the property nor the
+request.
+
+`UtcTimestamps.UseUtcDateTimeOffsets()` (`Shared.Infrastructure/Persistence/`) converts on the way
+to the column, and **every DbContext that owns a timestamp calls it from `ConfigureConventions`** —
+the six module contexts plus `SecretsDbContext`, `AuditDbContext` and `AdminDbContext`. A new
+timestamp column is covered without anybody remembering. `DataProtectionKeysDbContext` is the one
+left out: its single framework-owned entity is `(Id, FriendlyName, Xml)`, with no timestamp at all.
+
+Why a convention and not a fix per call site: nothing in this solution produces a local timestamp —
+there is no `DateTimeOffset.Now` anywhere, only `UtcNow` and `TimeProvider.GetUtcNow()`. The offset
+arrives from OUTSIDE, in a request body carrying `2026-10-10T14:00:00+02:00`, bound onto a command
+and written straight to a column. Every endpoint taking a client-supplied instant is such a path —
+`LogActivity`'s `ScheduledAt`, `RecordFirstContact`'s `ContactedAt`, `SetConnectionSecret`'s
+`ExpiresAt`, `RecordRelayHeartbeat`'s `CheckedAt`, a workflow task's `DueAt` — and so is the next
+one added. The conversion is lossless for ordering and comparison (`ToUniversalTime` keeps the
+instant); what it drops is the originating offset, which no column here stores anyway.
+
+It changes no migration — the store type is unchanged, and
+`dotnet ef migrations has-pending-model-changes` reports nothing for any context. **The test suite
+cannot catch a regression through an insert**: EF InMemory accepts any offset happily. The guard is
+`UtcTimestampConventionTests`, which asserts on the converted value and walks `db.Model` for a
+`DateTimeOffset` property without a converter.
+
 ### Reading spreadsheets
 
 All three importers (users M12, clients M01, leads M13) accept CSV and .xlsx. **Read every

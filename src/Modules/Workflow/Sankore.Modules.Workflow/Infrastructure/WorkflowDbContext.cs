@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Workflow.Domain;
 using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Persistence;
 
 namespace Sankore.Modules.Workflow.Infrastructure;
 
@@ -25,6 +26,16 @@ public sealed class WorkflowDbContext(
     {
         base.OnConfiguring(optionsBuilder);
         optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+    }
+
+    /// <summary>
+    /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+    /// See <see cref="UtcTimestamps"/>.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+        builder.UseUtcDateTimeOffsets();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

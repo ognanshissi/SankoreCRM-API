@@ -3,6 +3,7 @@ namespace Sankore.Modules.Notifications.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Notifications.Domain;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Persistence;
 
 public sealed class NotificationsDbContext(
     DbContextOptions<NotificationsDbContext> options,
@@ -12,6 +13,16 @@ public sealed class NotificationsDbContext(
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
     public DbSet<EmailDeliveryLog> EmailDeliveryLogs => Set<EmailDeliveryLog>();
+
+    /// <summary>
+    /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+    /// See <see cref="UtcTimestamps"/>.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+        builder.UseUtcDateTimeOffsets();
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

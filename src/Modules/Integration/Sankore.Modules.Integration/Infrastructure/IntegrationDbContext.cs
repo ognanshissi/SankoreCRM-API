@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Persistence;
 
 /// <summary>
 /// The module's store: schema <c>integration</c>, migrations history in the same schema.
@@ -58,6 +59,16 @@ public sealed class IntegrationDbContext(
 
         // Reads dominate; handlers opt back in with .AsTracking() when they mean to mutate.
         optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+    }
+
+    /// <summary>
+    /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+    /// See <see cref="UtcTimestamps"/>.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+        builder.UseUtcDateTimeOffsets();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

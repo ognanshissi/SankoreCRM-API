@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Domain;
 using Sankore.Shared.Infrastructure.Outbox;
 using Shared.Kernel;
+using Sankore.Shared.Infrastructure.Persistence;
 
 public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbContext> options, ITenantContext tenant)
     : IdentityDbContext<AppUser, AppRole, Guid>(options)
@@ -43,6 +44,16 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
         optionsBuilder.ConfigureWarnings(w =>
             w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning));
     }
+
+/// <summary>
+/// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+/// See <see cref="UtcTimestamps"/>.
+/// </summary>
+protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+{
+    base.ConfigureConventions(builder);
+    builder.UseUtcDateTimeOffsets();
+}
 
 protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

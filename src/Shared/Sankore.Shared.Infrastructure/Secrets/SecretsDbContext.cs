@@ -1,11 +1,22 @@
 namespace Sankore.Shared.Infrastructure.Secrets;
 
 using Microsoft.EntityFrameworkCore;
+using Sankore.Shared.Infrastructure.Persistence;
 
 public sealed class SecretsDbContext(DbContextOptions<SecretsDbContext> options)
     : DbContext(options)
 {
     public DbSet<SecretEntry> Entries => Set<SecretEntry>();
+
+    /// <summary>
+    /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+    /// See <see cref="UtcTimestamps"/>.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+        builder.UseUtcDateTimeOffsets();
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

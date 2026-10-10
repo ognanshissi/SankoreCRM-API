@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Persistence;
 
 /// <summary>
 /// Persistence root of module M01. Lives in its own PostgreSQL schema
@@ -63,6 +64,16 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
         optionsBuilder.EnableSensitiveDataLogging();
         optionsBuilder.ConfigureWarnings(w =>
             w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning));
+    }
+
+    /// <summary>
+    /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
+    /// See <see cref="UtcTimestamps"/>.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+        builder.UseUtcDateTimeOffsets();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
