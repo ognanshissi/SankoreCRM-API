@@ -61,7 +61,7 @@ public sealed class InsuranceTenantIsolationTests : IDisposable
 
         await using var db = _factory.CreateContext();
         var result = await new GetInsuranceProductHandler(
-                db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.Clock())
+                db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.CrmCatalogue(), InsuranceTestHarness.Clock())
             .Handle(new GetInsuranceProductQuery(foreign.Id), CancellationToken.None);
 
         result.Error.Should().Be(IntegrationErrors.InsuranceProductNotFound);
@@ -74,7 +74,7 @@ public sealed class InsuranceTenantIsolationTests : IDisposable
 
         await using var db = _factory.CreateContext();
         var result = await new ListInsuranceProductsHandler(
-                db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.Clock())
+                db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.CrmCatalogue(), InsuranceTestHarness.Clock())
             .Handle(new ListInsuranceProductsQuery(), CancellationToken.None);
 
         result.Value!.TotalCount.Should().Be(0);
@@ -90,6 +90,7 @@ public sealed class InsuranceTenantIsolationTests : IDisposable
         var result = await new UpdateInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.CreditCheck(TenantA),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Pricing(db),
                 InsuranceTestHarness.User(TenantA),
                 InsuranceTestHarness.Clock())
@@ -112,6 +113,7 @@ public sealed class InsuranceTenantIsolationTests : IDisposable
         await using var on = _factory.CreateContext();
         (await new ActivateInsuranceProductHandler(
                     on, InsuranceTestHarness.Pricing(on),
+                    InsuranceTestHarness.CrmCatalogue(),
                     InsuranceTestHarness.User(TenantA), InsuranceTestHarness.Clock())
                 .Handle(new ActivateInsuranceProductCommand(foreign.Id), CancellationToken.None))
             .Error.Should().Be(IntegrationErrors.InsuranceProductNotFound);
@@ -119,6 +121,7 @@ public sealed class InsuranceTenantIsolationTests : IDisposable
         await using var off = _factory.CreateContext();
         (await new DeactivateInsuranceProductHandler(
                     off, InsuranceTestHarness.Pricing(off),
+                    InsuranceTestHarness.CrmCatalogue(),
                     InsuranceTestHarness.User(TenantA), InsuranceTestHarness.Clock())
                 .Handle(new DeactivateInsuranceProductCommand(foreign.Id), CancellationToken.None))
             .Error.Should().Be(IntegrationErrors.InsuranceProductNotFound);

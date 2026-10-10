@@ -281,22 +281,58 @@ public sealed class ContractCrmCodeCatalogTests
         list.Codes.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task The_product_domain_enumerates_the_tenants_catalogue()
+    {
+        var administration = Substitute.For<IAdministrationModule>();
+        administration.ListProductsAsync(TenantId, null, Arg.Any<CancellationToken>())
+            .Returns([
+                new ProductSummary("EPG-001", "Épargne libre", "Savings", true),
+                new ProductSummary("CRED-001", "Crédit court terme", "Loan", true),
+            ]);
+
+        var list = await new ContractCrmCodeCatalog(administration)
+            .GetAsync(TenantId, MappingDomain.Product, default);
+
+        // COMPLETE, not Partial: the contract now has a real enumeration, so an empty answer
+        // genuinely means "nothing unmapped" for this domain. That is the whole point of the
+        // availability flag, and it is what INT-04's last criterion could not say before.
+        list.Availability.Should().Be(CrmCodeListAvailability.Complete);
+        list.Codes.Select(c => c.Code).Should().Equal("CRED-001", "EPG-001");
+    }
+
+    [Fact]
+    public async Task A_retired_product_still_appears_in_the_product_domain()
+    {
+        var administration = Substitute.For<IAdministrationModule>();
+        administration.ListProductsAsync(TenantId, null, Arg.Any<CancellationToken>())
+            .Returns([new ProductSummary("CRED-OLD", "Ancien crédit", "Loan", false)]);
+
+        var list = await new ContractCrmCodeCatalog(administration)
+            .GetAsync(TenantId, MappingDomain.Product, default);
+
+        // A mapping to the CBS outlives the day the institution stops selling the product, so a
+        // retired code is still a code that must be mapped. Dropping it would make this screen
+        // report it as mapped — the one answer the availability flag exists to prevent.
+        list.Codes.Should().ContainSingle(c => c.Code == "CRED-OLD");
+    }
+
     [Theory]
-    [InlineData(MappingDomain.Product)]
     [InlineData(MappingDomain.IdDocType)]
     [InlineData(MappingDomain.Country)]
     [InlineData(MappingDomain.Gender)]
     [InlineData(MappingDomain.MaritalStatus)]
     [InlineData(MappingDomain.Profession)]
     [InlineData(MappingDomain.Sector)]
-    public async Task Every_other_domain_is_explicitly_unavailable_and_says_why(MappingDomain domain)
+    public async Task Every_unreachable_domain_is_explicitly_unavailable_and_says_why(MappingDomain domain)
     {
         var list = await new ContractCrmCodeCatalog(Substitute.For<IAdministrationModule>())
             .GetAsync(TenantId, domain, default);
 
         // Explicitly unavailable rather than silently empty, and with a sentence: no module
-        // contract projects these lists today, and inventing one from ProductCategory or from
-        // M01's internal enums would produce a plausible-looking wrong answer.
+        // contract projects these lists today, and inventing one from M01's internal enums would
+        // produce a plausible-looking wrong answer. Product has LEFT this list —
+        // IAdministrationModule.ListProductsAsync enumerates it — and the two facts above pin that.
         list.Availability.Should().Be(CrmCodeListAvailability.Unavailable);
         list.Codes.Should().BeEmpty();
         list.Source.Should().Contain("Not available through a module contract");

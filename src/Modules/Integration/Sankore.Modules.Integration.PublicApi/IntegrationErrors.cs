@@ -171,4 +171,11 @@ public static class IntegrationErrors
     /// not a loan. Checked at write time; readers afterwards degrade to "unlinked".
     /// </summary>
     public const string InsuranceLinkedCreditProductInvalid = "INSURANCE_LINKED_CREDIT_PRODUCT_INVALID";
+
+    /// <summary>
+    /// The CRM catalogue entry the product claims to realise does not exist in M12's catalogue, or
+    /// is not an insurance product. Checked at write time; readers afterwards degrade to
+    /// "unlinked", except for offerability, which reports the mismatch rather than hiding it.
+    /// </summary>
+    public const string InsuranceCrmProductInvalid = "INSURANCE_CRM_PRODUCT_INVALID";
 }

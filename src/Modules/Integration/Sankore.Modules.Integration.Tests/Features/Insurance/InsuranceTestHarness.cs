@@ -35,18 +35,41 @@ internal static class InsuranceTestHarness
 
     internal static NullLogger<T> Log<T>() => NullLogger<T>.Instance;
 
+    /// <summary>The CRM catalogue code the insurance doubles resolve by default.</summary>
+    internal const string CrmCode = "ASS-VIE";
+
     /// <summary>
     /// An <see cref="IAdministrationModule"/> that resolves one credit product code to one
-    /// category. The default — "CRED-001" is a Loan — is what a borrower's-insurance product
-    /// needs; pass a different category to exercise the refusal.
+    /// category and one CRM catalogue code to one product.
+    ///
+    /// <para>
+    /// The defaults are what each check wants to pass: "CRED-001" is a Loan, which is what a
+    /// borrower's-insurance product needs, and <see cref="CrmCode"/> is an active Insurance entry,
+    /// which is what a linked distribution agreement needs. Pass a different category — or
+    /// <c>crmActive: false</c> — to exercise the refusals.
+    /// </para>
+    ///
+    /// <para>
+    /// Any OTHER code answers null, which is the substitute's own default and the honest one: a
+    /// code the tenant's catalogue does not contain. That is what keeps the products seeded with no
+    /// CRM code at all unaffected — they never reach a lookup.
+    /// </para>
     /// </summary>
     internal static IAdministrationModule Administration(
-        string code = "CRED-001", string? category = "Loan")
+        string code = "CRED-001",
+        string? category = "Loan",
+        string crmCode = CrmCode,
+        string? crmCategory = "Insurance",
+        bool crmActive = true)
     {
         var module = Substitute.For<IAdministrationModule>();
 
         module.GetProductCategoryAsync(Arg.Any<Guid>(), code, Arg.Any<CancellationToken>())
             .Returns(category);
+
+        if (crmCategory is not null)
+            module.GetProductAsync(Arg.Any<Guid>(), crmCode, Arg.Any<CancellationToken>())
+                .Returns(new ProductSummary(crmCode, "Assurance vie", crmCategory, crmActive));
 
         return module;
     }
@@ -57,6 +80,18 @@ internal static class InsuranceTestHarness
             administration ?? Administration(),
             new FixedTenantContext(tenantId),
             Log<LinkedCreditProductCheck>());
+
+    /// <summary>
+    /// A <see cref="CrmProductCatalogue"/> over the <see cref="Administration"/> double. The tenant
+    /// id is immaterial to the double — it matches <c>Arg.Any&lt;Guid&gt;()</c> — so the parameter
+    /// exists for the tests that read better naming their tenant.
+    /// </summary>
+    internal static CrmProductCatalogue CrmCatalogue(
+        Guid tenantId = default, IAdministrationModule? administration = null)
+        => new(
+            administration ?? Administration(),
+            new FixedTenantContext(tenantId),
+            Log<CrmProductCatalogue>());
 
     /// <summary>
     /// An <see cref="InsurerPricingProbe"/> over a resolver that knows the adapters given. With
@@ -146,6 +181,7 @@ internal static class InsuranceTestHarness
         bool requiresCbsAccount = false,
         bool requiresActiveLoan = false,
         string? linkedCreditProductCode = null,
+        string? crmProductCode = null,
         decimal commissionRate = 0.15m)
     {
         var clock = Clock();
@@ -169,6 +205,7 @@ internal static class InsuranceTestHarness
             requiresCbsAccount: requiresCbsAccount,
             requiresActiveLoan: requiresActiveLoan,
             linkedCreditProductCode: linkedCreditProductCode,
+            crmProductCode: crmProductCode,
             commissionRate: commissionRate,
             effectiveTo: effectiveTo);
 
@@ -192,6 +229,7 @@ internal static class InsuranceTestHarness
         bool requiresCbsAccount = false,
         bool requiresActiveLoan = false,
         string? linkedCreditProductCode = null,
+        string? crmProductCode = null,
         decimal commissionRate = 0.15m,
         int premiumRetryLimit = 3,
         int premiumRetryIntervalDays = 3,
@@ -214,6 +252,7 @@ internal static class InsuranceTestHarness
             RequiresCbsAccount: requiresCbsAccount,
             RequiresActiveLoan: requiresActiveLoan,
             LinkedCreditProductCode: linkedCreditProductCode,
+            CrmProductCode: crmProductCode,
             CommissionRate: commissionRate,
             PremiumRetryLimit: premiumRetryLimit,
             PremiumRetryIntervalDays: premiumRetryIntervalDays,

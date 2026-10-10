@@ -11,6 +11,7 @@ using Sankore.Shared.Kernel;
 internal sealed class QuoteInsuranceProductHandler(
     IntegrationDbContext db,
     IntegrationAdapterResolver resolver,
+    CrmProductCatalogue crmProducts,
     TimeProvider clock,
     ILogger<QuoteInsuranceProductHandler> logger)
     : IRequestHandler<QuoteInsuranceProductQuery, Result<InsuranceQuoteDto>>
@@ -41,6 +42,9 @@ internal sealed class QuoteInsuranceProductHandler(
             effectiveTo: product.EffectiveTo,
             pricingMode: product.PricingMode,
             insurerPricingAvailable: true,
+            // A product whose CRM catalogue entry has been retired is NOT quotable: the price an
+            // agent would read out belongs to something the institution has stopped selling.
+            crmCatalogue: await crmProducts.StatusAsync(product.CrmProductCode, ct),
             today: DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime));
 
         if (blockers.Count > 0)

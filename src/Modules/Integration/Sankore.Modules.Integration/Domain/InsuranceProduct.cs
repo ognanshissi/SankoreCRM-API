@@ -78,6 +78,43 @@ public sealed class InsuranceProduct : AggregateRoot
     /// <summary>The capital insured, when the product has a single standard one. Informational.</summary>
     public decimal? InsuredAmount { get; private set; }
 
+    /// <summary>
+    /// The entry in M12's own product catalogue (<c>ProductSpeciality.Code</c>) that this
+    /// distribution agreement realises — the CRM's name for what the institution sells, as
+    /// opposed to <see cref="InsurerProductCode"/>, which is the insurer's.
+    ///
+    /// <para>
+    /// <b>Why both exist.</b> M12's catalogue is the identity every other module already keys on:
+    /// lead qualification templates resolve a template from a product code, opportunities and
+    /// product-mix reporting name products by code, and the CBS mapping domain
+    /// <c>MappingDomain.Product</c> translates that same code per connection. This row is the
+    /// insurance counterpart of that mapping plus the commercial terms insurance needs — a price,
+    /// guarantees, eligibility, a commission rate — which is why it is per connection and the
+    /// catalogue entry is not. One catalogue entry distributed at two insurers is two rows here,
+    /// legitimately carrying two codes, two prices and two commission rates, and that is exactly
+    /// the shape that forbids merging the two tables.
+    /// </para>
+    ///
+    /// <para>
+    /// A <b>string code and no foreign key</b>, upper-cased the way M12 stores it, for the reason
+    /// <see cref="LinkedCreditProductCode"/> gives: M12's products live in the
+    /// <c>administration</c> schema and this module never puts a physical key across a schema
+    /// boundary. It is checked at write time through <c>IAdministrationModule.GetProductAsync</c>
+    /// — it must resolve, and resolve to an insurance category — and every reader afterwards
+    /// degrades to "unlinked" rather than assuming it still resolves.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Nullable, and not because the link is optional.</b> Products configured before this
+    /// column existed have none, and a non-null column would have made them unreadable. An
+    /// unlinked product stays fully usable — it simply does not appear in the CRM's
+    /// product-by-code reporting, and its offerability is not gated on a catalogue entry it does
+    /// not name. Making it required is a decision for after the backfill, not a side effect of
+    /// adding it.
+    /// </para>
+    /// </summary>
+    public string? CrmProductCode { get; private set; }
+
     // ── Eligibility (ASS-03, criterion 1) ───────────────────────────────────
 
     /// <summary>Minimum age at the effective date, in whole years. Null means no floor.</summary>
@@ -178,6 +215,7 @@ public sealed class InsuranceProduct : AggregateRoot
         bool requiresCbsAccount = false,
         bool requiresActiveLoan = false,
         string? linkedCreditProductCode = null,
+        string? crmProductCode = null,
         decimal commissionRate = 0m,
         int premiumRetryLimit = 3,
         int premiumRetryIntervalDays = 3,
@@ -216,8 +254,8 @@ public sealed class InsuranceProduct : AggregateRoot
         product.ApplyTerms(
             pricingMode, fixedPremiumAmount, currency, insuredAmount,
             minAge, maxAge, minKycLevel, requiresCbsAccount, requiresActiveLoan,
-            linkedCreditProductCode, commissionRate, premiumRetryLimit, premiumRetryIntervalDays,
-            effectiveTo);
+            linkedCreditProductCode, crmProductCode, commissionRate, premiumRetryLimit,
+            premiumRetryIntervalDays, effectiveTo);
 
         return product;
     }
@@ -243,6 +281,7 @@ public sealed class InsuranceProduct : AggregateRoot
         bool requiresCbsAccount,
         bool requiresActiveLoan,
         string? linkedCreditProductCode,
+        string? crmProductCode,
         decimal commissionRate,
         int premiumRetryLimit,
         int premiumRetryIntervalDays,
@@ -263,8 +302,8 @@ public sealed class InsuranceProduct : AggregateRoot
         ApplyTerms(
             pricingMode, fixedPremiumAmount, currency, insuredAmount,
             minAge, maxAge, minKycLevel, requiresCbsAccount, requiresActiveLoan,
-            linkedCreditProductCode, commissionRate, premiumRetryLimit, premiumRetryIntervalDays,
-            effectiveTo);
+            linkedCreditProductCode, crmProductCode, commissionRate, premiumRetryLimit,
+            premiumRetryIntervalDays, effectiveTo);
 
         UpdatedBy = updatedBy;
         UpdatedAt = clock.GetUtcNow();
@@ -315,6 +354,7 @@ public sealed class InsuranceProduct : AggregateRoot
         bool requiresCbsAccount,
         bool requiresActiveLoan,
         string? linkedCreditProductCode,
+        string? crmProductCode,
         decimal commissionRate,
         int premiumRetryLimit,
         int premiumRetryIntervalDays,
@@ -367,6 +407,12 @@ public sealed class InsuranceProduct : AggregateRoot
         LinkedCreditProductCode = string.IsNullOrWhiteSpace(linkedCreditProductCode)
             ? null
             : linkedCreditProductCode.Trim();
+        // Upper-cased, unlike the insurer's code: M12 stores its codes upper-cased and matches
+        // them that way, so a lower-case value here would be a link that resolves on the write
+        // path and dangles on every read.
+        CrmProductCode = string.IsNullOrWhiteSpace(crmProductCode)
+            ? null
+            : crmProductCode.Trim().ToUpperInvariant();
         CommissionRate = commissionRate;
         PremiumRetryLimit = premiumRetryLimit;
         PremiumRetryIntervalDays = premiumRetryIntervalDays;

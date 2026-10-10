@@ -39,6 +39,7 @@ public sealed class QuoteInsuranceProductHandlerTests : IDisposable
         var result = await new QuoteInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.Resolver(db, adapter),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Clock(),
                 InsuranceTestHarness.Log<QuoteInsuranceProductHandler>())
             .Handle(
@@ -77,6 +78,7 @@ public sealed class QuoteInsuranceProductHandlerTests : IDisposable
         var result = await new QuoteInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.Resolver(db, adapter),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Clock(),
                 InsuranceTestHarness.Log<QuoteInsuranceProductHandler>())
             .Handle(
@@ -114,6 +116,7 @@ public sealed class QuoteInsuranceProductHandlerTests : IDisposable
         var result = await new QuoteInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.Resolver(db, adapter),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Clock(),
                 InsuranceTestHarness.Log<QuoteInsuranceProductHandler>())
             .Handle(
@@ -143,6 +146,7 @@ public sealed class QuoteInsuranceProductHandlerTests : IDisposable
         var result = await new QuoteInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.Resolver(db, new FakeAdapter()),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Clock(),
                 InsuranceTestHarness.Log<QuoteInsuranceProductHandler>())
             .Handle(
@@ -172,6 +176,7 @@ public sealed class QuoteInsuranceProductHandlerTests : IDisposable
         var result = await new QuoteInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.Resolver(db, adapter),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Clock(),
                 InsuranceTestHarness.Log<QuoteInsuranceProductHandler>())
             .Handle(
@@ -200,6 +205,7 @@ public sealed class QuoteInsuranceProductHandlerTests : IDisposable
         var result = await new QuoteInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.Resolver(db, new FakeAdapter()),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Clock(),
                 InsuranceTestHarness.Log<QuoteInsuranceProductHandler>())
             .Handle(
@@ -218,6 +224,7 @@ public sealed class QuoteInsuranceProductHandlerTests : IDisposable
         var result = await new QuoteInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.Resolver(db),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Clock(),
                 InsuranceTestHarness.Log<QuoteInsuranceProductHandler>())
             .Handle(

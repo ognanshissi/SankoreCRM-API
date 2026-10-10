@@ -184,6 +184,50 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db) : I
         return product?.Category.ToString();
     }
 
+    /// <summary>
+    /// <c>IgnoreQueryFilters</c> plus an explicit tenant predicate, like every other method here:
+    /// the caller may be a Hangfire job or a MassTransit consumer, where the ambient tenant is not
+    /// the tenant being asked about.
+    /// </summary>
+    public async Task<ProductSummary?> GetProductAsync(
+        Guid tenantId, string productCode, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(productCode)) return null;
+
+        var code = productCode.Trim().ToUpperInvariant();
+
+        return await db.ProductSpecialities
+            .IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId && p.Code == code)
+            .Select(p => new ProductSummary(
+                p.Code, p.Name, p.Category.ToString(), p.IsActive))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ProductSummary>> ListProductsAsync(
+        Guid tenantId, string? category, CancellationToken ct)
+    {
+        var query = db.ProductSpecialities
+            .IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId);
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            // An unparseable category answers an empty list and never the whole catalogue: a
+            // filter quietly dropped is how a caller asking for insurance products gets loans.
+            if (!Enum.TryParse<ProductCategory>(category, ignoreCase: true, out var parsed))
+                return [];
+
+            query = query.Where(p => p.Category == parsed);
+        }
+
+        return await query
+            .OrderBy(p => p.Code)
+            .Select(p => new ProductSummary(
+                p.Code, p.Name, p.Category.ToString(), p.IsActive))
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Guid>> GetTeamAgentIdsAsync(
         Guid tenantId, Guid supervisorId, CancellationToken ct)
     {

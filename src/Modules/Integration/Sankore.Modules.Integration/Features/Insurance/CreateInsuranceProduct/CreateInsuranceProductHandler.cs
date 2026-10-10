@@ -11,6 +11,7 @@ using Sankore.Shared.Kernel;
 internal sealed class CreateInsuranceProductHandler(
     IntegrationDbContext db,
     LinkedCreditProductCheck creditProducts,
+    CrmProductCatalogue crmProducts,
     InsurerPricingProbe pricing,
     ITenantContext tenant,
     ICurrentUser currentUser,
@@ -39,6 +40,12 @@ internal sealed class CreateInsuranceProductHandler(
 
         var linked = await creditProducts.VerifyAsync(cmd.Body.LinkedCreditProductCode, ct);
         if (linked.IsFailure) return Result.Fail<InsuranceProductDto>(linked.Error!);
+
+        // The CRM catalogue entry this agreement realises. Checked here and not only rendered,
+        // because an unverified code is a link that dangles from the moment it is written — and
+        // the field it would silently break is the one every product-by-code report keys on.
+        var catalogued = await crmProducts.VerifyAsync(cmd.Body.CrmProductCode, ct);
+        if (catalogued.IsFailure) return Result.Fail<InsuranceProductDto>(catalogued.Error!);
 
         var code = cmd.InsurerProductCode.Trim();
 
@@ -79,8 +86,11 @@ internal sealed class CreateInsuranceProductHandler(
 
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
+        // Already resolved and cached by the VerifyAsync above: no second call to M12.
+        var crmCatalogue = await crmProducts.StatusAsync(product.CrmProductCode, ct);
+
         return Result.Ok(InsuranceProductDto.From(
-            product, connection, pricing.CanPrice(connection), today));
+            product, connection, pricing.CanPrice(connection), crmCatalogue, today));
     }
 
     private static InsuranceProduct Build(
@@ -109,6 +119,7 @@ internal sealed class CreateInsuranceProductHandler(
             requiresCbsAccount: body.RequiresCbsAccount,
             requiresActiveLoan: body.RequiresActiveLoan,
             linkedCreditProductCode: body.LinkedCreditProductCode,
+            crmProductCode: body.CrmProductCode,
             commissionRate: body.CommissionRate,
             premiumRetryLimit: body.PremiumRetryLimit,
             premiumRetryIntervalDays: body.PremiumRetryIntervalDays,

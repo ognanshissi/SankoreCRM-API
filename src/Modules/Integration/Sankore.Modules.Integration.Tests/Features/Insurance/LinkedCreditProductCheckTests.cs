@@ -100,6 +100,7 @@ public sealed class LinkedCreditProductCheckTests : IDisposable
                 db,
                 InsuranceTestHarness.CreditCheck(
                     Tenant, InsuranceTestHarness.Administration("EPG-001", "Savings")),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Pricing(db),
                 new FixedTenantContext(Tenant),
                 InsuranceTestHarness.User(Tenant),
@@ -129,6 +130,7 @@ public sealed class LinkedCreditProductCheckTests : IDisposable
         var result = await new CreateInsuranceProductHandler(
                 db,
                 InsuranceTestHarness.CreditCheck(Tenant),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.Pricing(db),
                 new FixedTenantContext(Tenant),
                 InsuranceTestHarness.User(Tenant),

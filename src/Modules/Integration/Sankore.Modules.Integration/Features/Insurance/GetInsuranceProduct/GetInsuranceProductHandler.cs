@@ -8,6 +8,7 @@ using Sankore.Shared.Kernel;
 internal sealed class GetInsuranceProductHandler(
     IntegrationDbContext db,
     InsurerPricingProbe pricing,
+    CrmProductCatalogue crmProducts,
     TimeProvider clock)
     : IRequestHandler<GetInsuranceProductQuery, Result<InsuranceProductDto>>
 {
@@ -27,7 +28,9 @@ internal sealed class GetInsuranceProductHandler(
         var (product, connection) = found.Value;
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
+        var crmCatalogue = await crmProducts.StatusAsync(product.CrmProductCode, ct);
+
         return Result.Ok(InsuranceProductDto.From(
-            product, connection, pricing.CanPrice(connection), today));
+            product, connection, pricing.CanPrice(connection), crmCatalogue, today));
     }
 }

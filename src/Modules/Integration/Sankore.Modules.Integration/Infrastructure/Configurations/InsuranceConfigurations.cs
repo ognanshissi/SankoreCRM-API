@@ -61,6 +61,7 @@ internal sealed class InsuranceProductConfiguration : IEntityTypeConfiguration<I
         b.Property(p => p.MinKycLevel).HasConversion<string>().HasMaxLength(20).IsRequired();
         b.Property(p => p.Currency).HasMaxLength(3);
         b.Property(p => p.LinkedCreditProductCode).HasMaxLength(100);
+        b.Property(p => p.CrmProductCode).HasMaxLength(50);
 
         b.Property(p => p.FixedPremiumAmount).HasPrecision(18, 2);
         b.Property(p => p.InsuredAmount).HasPrecision(18, 2);
@@ -103,6 +104,18 @@ internal sealed class InsuranceProductConfiguration : IEntityTypeConfiguration<I
         b.HasIndex(p => new { p.TenantId, p.LinkedCreditProductCode })
             .HasFilter("linked_credit_product_code IS NOT NULL")
             .HasDatabaseName("ix_ins_product_linked_credit");
+
+        // "What does this catalogue entry cost at each of my insurers" — the read that makes one
+        // M12 product show its N distribution agreements. Filtered for the same reason as the one
+        // above: a product configured before the column existed carries no link, and indexing
+        // those nulls buys nothing.
+        //
+        // NOT unique. Two rows may legitimately name the same catalogue entry — that IS the
+        // multi-insurer case — and uniqueness is already where it belongs, on
+        // ux_ins_product_insurer_code.
+        b.HasIndex(p => new { p.TenantId, p.CrmProductCode })
+            .HasFilter("crm_product_code IS NOT NULL")
+            .HasDatabaseName("ix_ins_product_crm_product");
 
         b.Ignore(p => p.DomainEvents);
     }

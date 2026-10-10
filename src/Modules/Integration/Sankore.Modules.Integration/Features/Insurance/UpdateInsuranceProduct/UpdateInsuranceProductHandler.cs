@@ -10,6 +10,7 @@ using Sankore.Shared.Kernel;
 internal sealed class UpdateInsuranceProductHandler(
     IntegrationDbContext db,
     LinkedCreditProductCheck creditProducts,
+    CrmProductCatalogue crmProducts,
     InsurerPricingProbe pricing,
     ICurrentUser currentUser,
     TimeProvider clock)
@@ -32,6 +33,9 @@ internal sealed class UpdateInsuranceProductHandler(
         var linked = await creditProducts.VerifyAsync(cmd.Body.LinkedCreditProductCode, ct);
         if (linked.IsFailure) return Result.Fail<InsuranceProductDto>(linked.Error!);
 
+        var catalogued = await crmProducts.VerifyAsync(cmd.Body.CrmProductCode, ct);
+        if (catalogued.IsFailure) return Result.Fail<InsuranceProductDto>(catalogued.Error!);
+
         var body = cmd.Body;
 
         try
@@ -51,6 +55,7 @@ internal sealed class UpdateInsuranceProductHandler(
                 requiresCbsAccount: body.RequiresCbsAccount,
                 requiresActiveLoan: body.RequiresActiveLoan,
                 linkedCreditProductCode: body.LinkedCreditProductCode,
+                crmProductCode: body.CrmProductCode,
                 commissionRate: body.CommissionRate,
                 premiumRetryLimit: body.PremiumRetryLimit,
                 premiumRetryIntervalDays: body.PremiumRetryIntervalDays,
@@ -76,8 +81,9 @@ internal sealed class UpdateInsuranceProductHandler(
         }
 
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var crmCatalogue = await crmProducts.StatusAsync(product.CrmProductCode, ct);
 
         return Result.Ok(InsuranceProductDto.From(
-            product, connection, pricing.CanPrice(connection), today));
+            product, connection, pricing.CanPrice(connection), crmCatalogue, today));
     }
 }

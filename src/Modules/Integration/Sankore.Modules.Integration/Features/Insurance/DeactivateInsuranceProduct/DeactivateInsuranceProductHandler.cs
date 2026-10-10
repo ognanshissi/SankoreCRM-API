@@ -10,6 +10,7 @@ using Sankore.Shared.Kernel;
 internal sealed class DeactivateInsuranceProductHandler(
     IntegrationDbContext db,
     InsurerPricingProbe pricing,
+    CrmProductCatalogue crmProducts,
     ICurrentUser currentUser,
     TimeProvider clock)
     : IRequestHandler<DeactivateInsuranceProductCommand, Result<InsuranceProductDto>>
@@ -42,7 +43,9 @@ internal sealed class DeactivateInsuranceProductHandler(
 
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
+        var crmCatalogue = await crmProducts.StatusAsync(product.CrmProductCode, ct);
+
         return Result.Ok(InsuranceProductDto.From(
-            product, connection, pricing.CanPrice(connection), today));
+            product, connection, pricing.CanPrice(connection), crmCatalogue, today));
     }
 }

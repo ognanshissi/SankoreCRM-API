@@ -54,6 +54,44 @@ public interface IAdministrationModule
     Task<string?> GetProductCategoryAsync(Guid tenantId, string productCode, CancellationToken ct);
 
     /// <summary>
+    /// One catalogue entry by its code, or <c>null</c> when this tenant has no such product.
+    ///
+    /// <para>
+    /// The second, product-shaped projection next to <see cref="GetProductCategoryAsync"/>, for
+    /// the reason <see cref="GetAgencyAsync"/> exists next to <see cref="GetAgentAsync"/>: a
+    /// consumer that has to decide whether a product may still be SOLD needs its activity flag,
+    /// and a category string cannot carry one. M-Integration's insurance catalogue is the first
+    /// caller — a withdrawn catalogue entry must stop new subscriptions at the counter — and
+    /// reading the flag through a second call to the category lookup is not possible.
+    /// </para>
+    ///
+    /// <para>
+    /// The code is matched the way M12 stores it: upper-cased. A caller passes whatever it holds.
+    /// </para>
+    /// </summary>
+    Task<ProductSummary?> GetProductAsync(Guid tenantId, string productCode, CancellationToken ct);
+
+    /// <summary>
+    /// Every product of the tenant, newest-sorted by code, optionally narrowed to one category.
+    ///
+    /// <para>
+    /// The ENUMERATION the contract was missing. Two callers need it and neither can be served by
+    /// a lookup that takes the code it would have to return: M-Integration's "which CRM codes are
+    /// still unmapped" screen (INT-04), which until now reported the <c>Product</c> domain as
+    /// unavailable, and any screen offering an administrator the catalogue entries an insurance
+    /// product may be attached to.
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="category"/> is a <see cref="ProductCategory"/> name, compared
+    /// case-insensitively; an unrecognised value returns an EMPTY list rather than every product,
+    /// because a filter silently ignored is how a caller asking for insurance products gets loans.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<ProductSummary>> ListProductsAsync(
+        Guid tenantId, string? category, CancellationToken ct);
+
+    /// <summary>
     /// Returns the email provider configuration for a tenant so that the
     /// Notifications module can resolve the correct provider at send time.
     /// Returns null when no custom config exists (use platform default).
@@ -128,3 +166,27 @@ public sealed record AgentSummary(
 
 /// <param name="Limit">Null when the tenant has no monthly limit.</param>
 public sealed record EmailQuotaDecision(bool Granted, int? Limit, int UsedThisMonth);
+
+/// <summary>
+/// Read-only projection of one product of the tenant's catalogue, safe to hand to other modules.
+///
+/// <para>
+/// Four fields and deliberately not the whole entity: <c>ParametersJson</c> is a category-dependent
+/// free-form payload whose schema the owning module validates, and the CBS link
+/// (<c>BusinessProductId</c>) belongs to M12's own integration screen. A consumer needs the
+/// identity (<paramref name="Code"/>), something to show (<paramref name="Name"/>), the axis it
+/// reasons on (<paramref name="Category"/>) and whether the institution still sells it
+/// (<paramref name="IsActive"/>).
+/// </para>
+/// </summary>
+/// <param name="Code">Upper-cased, unique per tenant. The value other modules store.</param>
+/// <param name="Category">A <see cref="ProductCategory"/> name.</param>
+/// <param name="IsActive">
+/// <c>false</c> once the product has been retired from the catalogue. A retirement never deletes
+/// the row, so a code other modules hold keeps resolving — it resolves to an inactive product.
+/// </param>
+public sealed record ProductSummary(
+    string Code,
+    string Name,
+    string Category,
+    bool IsActive);

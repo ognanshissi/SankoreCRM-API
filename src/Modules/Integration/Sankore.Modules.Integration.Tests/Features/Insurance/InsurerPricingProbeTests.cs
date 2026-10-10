@@ -73,7 +73,7 @@ public sealed class InsurerPricingProbeTests : IDisposable
         // And the verdict a screen reads, through the real catalogue path: isOfferable is the FULL
         // verdict, so it is where a per-connection capability either arrives or is lost.
         var listed = await new ListInsuranceProductsHandler(
-                db, probe, InsuranceTestHarness.Clock())
+                db, probe, InsuranceTestHarness.CrmCatalogue(), InsuranceTestHarness.Clock())
             .Handle(new ListInsuranceProductsQuery(), CancellationToken.None);
 
         listed.IsSuccess.Should().BeTrue();
@@ -108,6 +108,7 @@ public sealed class InsurerPricingProbeTests : IDisposable
         var handler = new QuoteInsuranceProductHandler(
             db,
             InsuranceTestHarness.Resolver(db, adapter),
+            InsuranceTestHarness.CrmCatalogue(),
             InsuranceTestHarness.Clock(),
             InsuranceTestHarness.Log<QuoteInsuranceProductHandler>());
 

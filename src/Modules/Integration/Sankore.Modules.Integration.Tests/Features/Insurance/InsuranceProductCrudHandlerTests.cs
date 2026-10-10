@@ -31,6 +31,7 @@ public sealed class InsuranceProductCrudHandlerTests : IDisposable
         => new(
             db,
             InsuranceTestHarness.CreditCheck(Tenant),
+            InsuranceTestHarness.CrmCatalogue(),
             InsuranceTestHarness.Pricing(db),
             new FixedTenantContext(Tenant),
             InsuranceTestHarness.User(Tenant),
@@ -40,6 +41,7 @@ public sealed class InsuranceProductCrudHandlerTests : IDisposable
         => new(
             db,
             InsuranceTestHarness.CreditCheck(Tenant),
+            InsuranceTestHarness.CrmCatalogue(),
             InsuranceTestHarness.Pricing(db),
             InsuranceTestHarness.User(Tenant),
             InsuranceTestHarness.Clock());
@@ -200,6 +202,7 @@ public sealed class InsuranceProductCrudHandlerTests : IDisposable
 
         var first = await new ActivateInsuranceProductHandler(
                 db, InsuranceTestHarness.Pricing(db),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.User(Tenant), InsuranceTestHarness.Clock())
             .Handle(new ActivateInsuranceProductCommand(product.Id), CancellationToken.None);
 
@@ -209,6 +212,7 @@ public sealed class InsuranceProductCrudHandlerTests : IDisposable
         await using var again = _factory.CreateContext();
         var second = await new ActivateInsuranceProductHandler(
                 again, InsuranceTestHarness.Pricing(again),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.User(Tenant), InsuranceTestHarness.Clock())
             .Handle(new ActivateInsuranceProductCommand(product.Id), CancellationToken.None);
 
@@ -219,6 +223,7 @@ public sealed class InsuranceProductCrudHandlerTests : IDisposable
         await using var off = _factory.CreateContext();
         var third = await new DeactivateInsuranceProductHandler(
                 off, InsuranceTestHarness.Pricing(off),
+                InsuranceTestHarness.CrmCatalogue(),
                 InsuranceTestHarness.User(Tenant), InsuranceTestHarness.Clock())
             .Handle(new DeactivateInsuranceProductCommand(product.Id), CancellationToken.None);
 
@@ -245,7 +250,7 @@ public sealed class InsuranceProductCrudHandlerTests : IDisposable
 
         await using var db = _factory.CreateContext();
         var handler = new ListInsuranceProductsHandler(
-            db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.Clock());
+            db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.CrmCatalogue(), InsuranceTestHarness.Clock());
 
         var all = await handler.Handle(new ListInsuranceProductsQuery(), CancellationToken.None);
         all.Value!.TotalCount.Should().Be(3);
@@ -273,7 +278,7 @@ public sealed class InsuranceProductCrudHandlerTests : IDisposable
 
         await using var db = _factory.CreateContext();
         var handler = new ListInsuranceProductsHandler(
-            db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.Clock());
+            db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.CrmCatalogue(), InsuranceTestHarness.Clock());
 
         var offerable = await handler.Handle(
             new ListInsuranceProductsQuery(OfferableOnly: true), CancellationToken.None);
@@ -308,7 +313,7 @@ public sealed class InsuranceProductCrudHandlerTests : IDisposable
 
         await using var db = _factory.CreateContext();
         var result = await new GetInsuranceProductHandler(
-                db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.Clock())
+                db, InsuranceTestHarness.Pricing(db), InsuranceTestHarness.CrmCatalogue(), InsuranceTestHarness.Clock())
             .Handle(new GetInsuranceProductQuery(product.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

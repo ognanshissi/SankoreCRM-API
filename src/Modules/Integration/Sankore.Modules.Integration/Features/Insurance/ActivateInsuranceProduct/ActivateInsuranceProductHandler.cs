@@ -10,6 +10,7 @@ using Sankore.Shared.Kernel;
 internal sealed class ActivateInsuranceProductHandler(
     IntegrationDbContext db,
     InsurerPricingProbe pricing,
+    CrmProductCatalogue crmProducts,
     ICurrentUser currentUser,
     TimeProvider clock)
     : IRequestHandler<ActivateInsuranceProductCommand, Result<InsuranceProductDto>>
@@ -47,7 +48,9 @@ internal sealed class ActivateInsuranceProductHandler(
 
         // The verdict comes back with the row, so a screen that activated a product whose
         // connection is down is told immediately instead of discovering it at the counter.
+        var crmCatalogue = await crmProducts.StatusAsync(product.CrmProductCode, ct);
+
         return Result.Ok(InsuranceProductDto.From(
-            product, connection, pricing.CanPrice(connection), today));
+            product, connection, pricing.CanPrice(connection), crmCatalogue, today));
     }
 }

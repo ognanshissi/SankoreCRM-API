@@ -98,6 +98,13 @@ internal sealed class InsuranceProductBodyValidator : AbstractValidator<Insuranc
             .MaximumLength(100)
             .OverridePropertyName("linkedCreditProductCode");
 
+        // 50, matching ProductSpeciality.Code in M12 — not 100 like the insurer's code. A longer
+        // value could never resolve to a catalogue entry, so refusing it here names the field
+        // instead of letting the write-time lookup report it as "no such product".
+        RuleFor(b => b.CrmProductCode)
+            .MaximumLength(50)
+            .OverridePropertyName("crmProductCode");
+
         RuleForEach(b => b.Guarantees)
             .ChildRules(g =>
             {

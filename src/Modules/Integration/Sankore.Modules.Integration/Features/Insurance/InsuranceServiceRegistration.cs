@@ -21,6 +21,11 @@ internal static class InsuranceServiceRegistration
         // Reaches M12 through IAdministrationModule — a PublicApi contract, never its assembly.
         services.AddScoped<LinkedCreditProductCheck>();
 
+        // Scoped for the same reason as the pricing probe, one level up: it caches one catalogue
+        // lookup per product code for the lifetime of a request, and a singleton would carry a
+        // verdict across requests while an administrator retires the entry behind it.
+        services.AddScoped<CrmProductCatalogue>();
+
         return services;
     }
 }

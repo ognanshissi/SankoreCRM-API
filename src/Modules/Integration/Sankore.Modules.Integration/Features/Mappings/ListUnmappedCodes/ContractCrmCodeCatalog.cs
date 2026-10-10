@@ -7,8 +7,8 @@ using Sankore.Modules.Integration.Domain;
 /// What the CRM's own code lists are REACHABLE as, through module contracts only.
 ///
 /// <para>
-/// This module may reference a <c>*.PublicApi</c> assembly and nothing else, and today exactly
-/// one of the eight domains has any path to an enumeration:
+/// This module may reference a <c>*.PublicApi</c> assembly and nothing else, and today two of the
+/// eight domains have a path to an enumeration:
 /// </para>
 ///
 /// <list type="bullet">
@@ -19,11 +19,16 @@ using Sankore.Modules.Integration.Domain;
 /// available commercial agent is invisible here. Reported as
 /// <see cref="CrmCodeListAvailability.Partial"/> for that reason, never as a complete list.</item>
 ///
-/// <item><b>Product</b> — none. <c>GetProductCategoryAsync(tenantId, productCode)</c> is a lookup
-/// that takes the code it would have to return. <c>ProductCategory</c> (Kernel) is a closed list,
-/// but of CATEGORIES: feeding it here would answer "Loan, Savings, Tontine…" where the mapping
-/// domain wants the product codes an administrator maintains in M12, and a plausible-looking
-/// wrong list is worse than an empty one.</item>
+/// <item><b>Product</b> — complete. <c>IAdministrationModule.ListProductsAsync</c> enumerates the
+/// tenant's catalogue, which is what this domain wants: the product codes an administrator
+/// maintains in M12. It was reported <see cref="CrmCodeListAvailability.Unavailable"/> for as long
+/// as the contract offered only <c>GetProductCategoryAsync(tenantId, productCode)</c> — a lookup
+/// that takes the code it would have to return — and the tempting substitute, the
+/// <c>ProductCategory</c> enum, is a closed list of CATEGORIES: it would have answered "Loan,
+/// Savings, Tontine…" where the codes were wanted, and a plausible-looking wrong list is worse
+/// than an empty one. Retired products are INCLUDED: a mapping to the CBS outlives the day the
+/// institution stops selling the product, and a code vanishing from this list would read as
+/// "mapped" rather than as "no longer offered".</item>
 ///
 /// <item><b>IdDocType, Gender, MaritalStatus, Country, Profession, Sector</b> — none. These are
 /// M01's enums and M01's per-tenant reference data, living in its MAIN assembly; no contract
@@ -43,10 +48,7 @@ internal sealed class ContractCrmCodeCatalog(IAdministrationModule administratio
         {
             MappingDomain.Agency => await AgenciesAsync(tenantId, ct),
 
-            MappingDomain.Product => CrmCodeList.Unavailable(
-                "Not available through a module contract: IAdministrationModule exposes "
-                + "GetProductCategoryAsync(productCode), a lookup, and no product enumeration. "
-                + "The product codes live in the Administration module's own schema."),
+            MappingDomain.Product => await ProductsAsync(tenantId, ct),
 
             MappingDomain.IdDocType or MappingDomain.Gender or MappingDomain.MaritalStatus
                 or MappingDomain.Country or MappingDomain.Profession or MappingDomain.Sector =>
@@ -58,6 +60,26 @@ internal sealed class ContractCrmCodeCatalog(IAdministrationModule administratio
 
             _ => CrmCodeList.Unavailable($"Unknown mapping domain '{domain}'.")
         };
+
+    private async Task<CrmCodeList> ProductsAsync(Guid tenantId, CancellationToken ct)
+    {
+        const string source =
+            "COMPLETE — IAdministrationModule.ListProductsAsync. Every product of the tenant's "
+            + "catalogue, retired ones included: a code mapped to the CBS stays meaningful after "
+            + "the institution stops selling the product.";
+
+        // category null: the whole catalogue. A mapping domain is not category-specific — a CBS
+        // translates loans, savings and insurance codes through the same table.
+        var products = await administration.ListProductsAsync(tenantId, null, ct);
+
+        return new CrmCodeList(
+            CrmCodeListAvailability.Complete,
+            source,
+            products
+                .Select(p => new CrmCode(p.Code, p.Name))
+                .OrderBy(c => c.Code, StringComparer.Ordinal)
+                .ToList());
+    }
 
     private async Task<CrmCodeList> AgenciesAsync(Guid tenantId, CancellationToken ct)
     {

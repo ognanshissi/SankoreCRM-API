@@ -37,6 +37,8 @@ les **points laissés ouverts** par la spécification.
 | Rôles par défaut (INT-11) | « superviseur » et « contrôle interne » ne sont pas des rôles de cette plateforme. Lus comme `SalesManager` + `BranchManager` et `RegulationManager`. Table déclarative `RoleSeeder.DefaultGrants`, additive et idempotente : elle ne révoque jamais, donc un tenant qui a resserré un rôle à la main garde sa décision. | INT-11 |
 | `RelayAgentId` est **server-set only** | Absent des contrats de requête de création et de mise à jour d'une connexion, et posé uniquement par le flux d'enrôlement d'INT-27. Même remède que `Lead.LeadSourceConfigId` dans ce dépôt, pour une raison plus grave : l'agent relais exécute des ordres *dans* le réseau de l'IMF (HTTP local, SFTP, SQL en lecture), donc un id librement choisi par le client ferait exécuter les payloads d'un tenant dans le réseau d'un autre, et lui donnerait accès à ses répertoires et ses vues. Fuite croisée dans les deux sens. Un test de non-régression interdit la réapparition du champ. | INT-03, INT-26, INT-27 |
 | Chevauchement M12 | `POST products/{id}/link-cbs` (`BusinessProductId`, `BusinessPlatformName`) existe déjà en Administration. Le domaine `Product` d'`integration_mapping` le **remplace** fonctionnellement ; l'ancien endpoint reste, aucune migration de données n'est faite sans décision. | INT-04 |
+| Produits d'assurance ⇄ catalogue M12 | **Deux tables, un code.** `ProductSpeciality` (M12, schéma `administration`) est l'**identité commerciale** sur laquelle tout le CRM s'indexe — templates de qualification, opportunités, reporting par produit, domaine `Product` d'`integration_mapping`. `ins_product` est l'**accord de distribution chez un assureur** : code assureur, garanties, tarification, éligibilité, taux de commission, politique de relance. Les fusionner est impossible : un même produit du catalogue distribué chez deux assureurs fait **deux** lignes `ins_product`, avec deux codes, deux primes et deux commissions. Les laisser déliés rendait un produit d'assurance invisible au reporting par code. D'où `ins_product.crm_product_code` : chaîne **majuscule** comme M12 les stocke, **sans clé étrangère** (idiome `LinkedCreditProductCode` / `LeadAssignment.RuleId`), vérifiée à l'écriture via `IAdministrationModule.GetProductAsync` — doit résoudre ET résoudre vers `Insurance`, `HealthInsurance` ou `ForecastInsurance`. **Nullable** : les produits configurés avant la colonne n'en ont pas, et une colonne obligatoire les aurait rendus illisibles. La rendre obligatoire est une décision d'après-reprise, pas un effet de bord de son ajout. | ASS-03 |
+| Retrait catalogue ⇒ non proposable | `CRM_PRODUCT_WITHDRAWN` rejoint `ProductOfferability.Reasons`, **dérivé et jamais stocké**, exactement pour l'argument de `CONNECTION_INACTIVE` : c'est un fait sur une AUTRE ligne, qui change sans que celle-ci soit touchée. Un administrateur qui retire un produit du catalogue attend qu'il cesse d'être vendu chez **tous** ses assureurs dans l'instant. Seul le drapeau d'activité de M12 est lu, **pas** sa fenêtre de validité : deux fenêtres sur un même produit est un paramétrage que personne ne réussit deux fois, et ASS-03 place la fenêtre sur le produit d'assurance. `CRM_PRODUCT_UNKNOWN` l'accompagne, en ceinture et bretelles comme `CONNECTION_WRONG_FAMILY` — M12 retire au lieu de supprimer, donc un code qui ne résout plus signifie une ligne écrite avant le contrôle, ou à la main. Ni l'un ni l'autre ne peut entrer dans le prédicat SQL d'`offerableOnly` : le catalogue est dans le schéma d'un autre module. | ASS-03 |
 
 ---
 
@@ -439,12 +441,18 @@ Hors périmètre, confirmé par la spécification : l'import initial d'un portef
 Rien de ce qui suit n'est un critère d'acceptation non tenu par négligence ; chacun est une limite
 de l'environnement ou une dépendance manquante, et chacun est visible dans le code.
 
-**INT-04, dernier critère partiel.** « Un endpoint liste les codes CRM sans correspondance, par
-domaine » suppose une énumération des codes du CRM. `IAdministrationModule` n'expose pas de
-catalogue : il donne les agents disponibles, une agence par id, une catégorie de produit par code.
-Le résultat porte donc un indicateur `Partial` / `Complete` : un domaine non énumérable renvoie
-explicitement une liste incomplète plutôt qu'une liste vide qui se lirait « tout est mappé ».
-Lever la réserve demande une méthode d'énumération sur le contrat M12 — une US à part.
+**INT-04, dernier critère partiel — levé pour le domaine `Product`.** « Un endpoint liste les codes
+CRM sans correspondance, par domaine » suppose une énumération des codes du CRM. `IAdministrationModule`
+n'en exposait aucune : des agents disponibles, une agence par id, une **catégorie** de produit par
+code — un lookup qui prend le code qu'il devrait rendre. Le contrat porte désormais
+`ListProductsAsync(tenantId, category?)`, ajoutée avec `GetProductAsync` pour le lien ASS-03
+ci-dessus, et le domaine `Product` répond `Complete` : une liste vide y signifie enfin « rien
+d'autre à mapper ». Les produits **retirés** y figurent — un mapping vers le CBS survit au jour où
+l'institution cesse de vendre le produit, et un code disparu se lirait « mappé ».
+
+`Agency` reste `Partial` (pas d'énumération d'agences) et les six domaines de M01 restent
+`Unavailable` : chacun demande une projection sur le contrat du module propriétaire, une US par
+module.
 
 **INT-09, dernier critère partiel.** L'état du disjoncteur est exposé par un `IHealthCheck` nommé
 `integration`, le premier qu'un module de ce dépôt contribue. Mais `/health` détaillé n'est mappé
@@ -955,7 +963,7 @@ assurance.
 
 | Table | Rôle | US |
 |-------|------|----|
-| `ins_product` | catalogue du tenant : code assureur, garanties, périodicité, mode de tarification, règles d'éligibilité, produit de crédit lié, taux de commission, politique de relance | ASS-03, ASS-08, ASS-10 |
+| `ins_product` | catalogue du tenant : code assureur, garanties, périodicité, mode de tarification, règles d'éligibilité, produit de crédit lié, **entrée du catalogue M12 réalisée (`crm_product_code`)**, taux de commission, politique de relance | ASS-03, ASS-08, ASS-10 |
 | `ins_subscription` | **la saga ASS-05** : statut, prime, références de compte et de débit CBS, référence et tentatives de contre-passation, les trois identifiants de commande, référence du contrat | ASS-04, ASS-05 |
 | `ins_consent_proof` | preuve de consentement et de signature (CIMA 2024) : canal, version des mentions, empreinte, `retain_until` | ASS-04, ASS-12 |
 | `ins_medical_questionnaire` | la seule colonne médicale du schéma | ASS-04, ASS-12 |

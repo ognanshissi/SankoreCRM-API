@@ -53,6 +53,37 @@ internal static class ProductOfferability
     internal const string InsurerPricingUnavailable = "INSURER_PRICING_UNAVAILABLE";
 
     /// <summary>
+    /// The CRM catalogue entry this product realises has been retired in M12 — the institution
+    /// stopped selling the product.
+    ///
+    /// <para>
+    /// The same kind of fact as <see cref="ConnectionInactive"/>, and here for the same reason: it
+    /// is a statement about ANOTHER row, which changes without this one being touched. An
+    /// administrator retiring a product in the catalogue expects it to stop being sold at every
+    /// insurer that distributes it, in that instant; a column here would be correct until then and
+    /// wrong afterwards. Existing policies keep running — a withdrawal stops new subscriptions, it
+    /// does not cancel contracts.
+    /// </para>
+    ///
+    /// <para>
+    /// Only M12's activity flag is read, deliberately NOT its validity window: two date windows on
+    /// one product is a configuration nobody gets right twice, and ASS-03 puts the window on the
+    /// insurance product, which is where it stays.
+    /// </para>
+    /// </summary>
+    internal const string CrmProductWithdrawn = "CRM_PRODUCT_WITHDRAWN";
+
+    /// <summary>
+    /// The product names a catalogue entry that resolves to nothing. Belt and braces, like
+    /// <see cref="ConnectionWrongFamily"/>: the create and update handlers refuse an unresolvable
+    /// code, and M12 retires products rather than deleting them, so reaching this means a row
+    /// written before the check existed or by hand. Reported rather than ignored — an insurance
+    /// product whose CRM identity is gone is invisible to every product-by-code report, and
+    /// selling it would compound that silently.
+    /// </summary>
+    internal const string CrmProductUnknown = "CRM_PRODUCT_UNKNOWN";
+
+    /// <summary>
     /// Every reason this product cannot be offered, or an empty list. All of them, not the first:
     /// an administrator fixing one and finding the next is how a configuration screen wastes an
     /// afternoon.
@@ -65,6 +96,7 @@ internal static class ProductOfferability
         DateOnly? effectiveTo,
         ProductPricingMode pricingMode,
         bool insurerPricingAvailable,
+        CrmCatalogueStatus crmCatalogue,
         DateOnly today)
     {
         var reasons = new List<string>(3);
@@ -78,6 +110,11 @@ internal static class ProductOfferability
         if (pricingMode == ProductPricingMode.InsurerComputed && !insurerPricingAvailable)
             reasons.Add(InsurerPricingUnavailable);
 
+        // NotLinked adds nothing: a product that names no catalogue entry is not thereby
+        // unsellable, and every product configured before the column existed is in that state.
+        if (crmCatalogue == CrmCatalogueStatus.Withdrawn) reasons.Add(CrmProductWithdrawn);
+        if (crmCatalogue == CrmCatalogueStatus.Unknown) reasons.Add(CrmProductUnknown);
+
         return reasons;
     }
 
@@ -87,10 +124,14 @@ internal static class ProductOfferability
     ///
     /// <para>
     /// The insurer-pricing reason is deliberately absent: deciding it needs an adapter per row,
-    /// which cannot happen inside a query. A product excluded from this predicate is never
-    /// offerable; one that passes it may still carry <see cref="InsurerPricingUnavailable"/>, and
-    /// the DTO's own <c>isOfferable</c> — computed from <see cref="Reasons"/> — is the full
-    /// verdict. Callers branch on that, never on having asked for the filter.
+    /// which cannot happen inside a query. The two CRM-catalogue reasons are absent for the
+    /// stronger version of the same objection — the catalogue lives in another module's schema,
+    /// reachable only through <c>IAdministrationModule</c>, so no SQL predicate of THIS context
+    /// can join to it. A product excluded from this predicate is never offerable; one that passes
+    /// it may still carry <see cref="InsurerPricingUnavailable"/>,
+    /// <see cref="CrmProductWithdrawn"/> or <see cref="CrmProductUnknown"/>, and the DTO's own
+    /// <c>isOfferable</c> — computed from <see cref="Reasons"/> — is the full verdict. Callers
+    /// branch on that, never on having asked for the filter.
     /// </para>
     /// </summary>
     internal static bool IsOfferableInDatabase(

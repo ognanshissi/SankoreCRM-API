@@ -77,6 +77,7 @@ public sealed record InsuranceProductDto(
     bool RequiresCbsAccount,
     bool RequiresActiveLoan,
     string? LinkedCreditProductCode,
+    string? CrmProductCode,
     decimal CommissionRate,
     int PremiumRetryLimit,
     int PremiumRetryIntervalDays,
@@ -88,10 +89,18 @@ public sealed record InsuranceProductDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt)
 {
+    /// <param name="crmCatalogue">
+    /// Where the product's <c>CrmProductCode</c> stands in M12's catalogue. A parameter and not a
+    /// lookup inside this method: resolving it crosses a module boundary and is therefore async,
+    /// while a DTO projection is not — callers resolve it first (one call, or
+    /// <c>CrmProductCatalogue.PrefetchAsync</c> for a page) exactly as they already do for
+    /// <paramref name="insurerPricingAvailable"/>.
+    /// </param>
     internal static InsuranceProductDto From(
         InsuranceProduct product,
         IntegrationConnection connection,
         bool insurerPricingAvailable,
+        CrmCatalogueStatus crmCatalogue,
         DateOnly today)
     {
         var reasons = ProductOfferability.Reasons(
@@ -102,6 +111,7 @@ public sealed record InsuranceProductDto(
             effectiveTo: product.EffectiveTo,
             pricingMode: product.PricingMode,
             insurerPricingAvailable: insurerPricingAvailable,
+            crmCatalogue: crmCatalogue,
             today: today);
 
         return new InsuranceProductDto(
@@ -124,6 +134,7 @@ public sealed record InsuranceProductDto(
             RequiresCbsAccount: product.RequiresCbsAccount,
             RequiresActiveLoan: product.RequiresActiveLoan,
             LinkedCreditProductCode: product.LinkedCreditProductCode,
+            CrmProductCode: product.CrmProductCode,
             CommissionRate: product.CommissionRate,
             PremiumRetryLimit: product.PremiumRetryLimit,
             PremiumRetryIntervalDays: product.PremiumRetryIntervalDays,
@@ -157,6 +168,7 @@ public sealed record InsuranceProductWriteRequest(
     bool RequiresCbsAccount = false,
     bool RequiresActiveLoan = false,
     string? LinkedCreditProductCode = null,
+    string? CrmProductCode = null,
     decimal CommissionRate = 0m,
     int PremiumRetryLimit = 3,
     int PremiumRetryIntervalDays = 3,
