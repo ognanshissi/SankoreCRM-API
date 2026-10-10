@@ -5,7 +5,8 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Products.LinkProductToCbs;
 
-internal sealed class LinkProductToCbsHandler(AdministrationDbContext db)
+internal sealed class LinkProductToCbsHandler(
+    AdministrationDbContext db, ProductCatalogCache catalogCache)
     : IRequestHandler<LinkProductToCbsCommand, Result>
 {
     public async Task<Result> Handle(LinkProductToCbsCommand cmd, CancellationToken ct)
@@ -24,6 +25,13 @@ internal sealed class LinkProductToCbsHandler(AdministrationDbContext db)
 
         db.ProductSpecialities.Update(product);
         await db.SaveChangesAsync(ct);
+
+        // Drops this tenant's cached policy and catalogue (BNF-B-06). AFTER SaveChanges on
+        // purpose: invalidating first opens a window in which a concurrent read repopulates the
+        // cache from the pre-write row, which is the one ordering that makes a cache permanently
+        // wrong instead of briefly stale.
+        await catalogCache.InvalidateAsync(product.TenantId, product.Id, ct);
+
         return Result.Ok();
     }
 }

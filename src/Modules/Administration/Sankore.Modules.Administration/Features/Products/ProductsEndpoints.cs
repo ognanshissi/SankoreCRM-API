@@ -6,6 +6,7 @@ using Sankore.Modules.Administration.Features.Products.DeleteProduct;
 using Sankore.Modules.Administration.Features.Products.GetProduct;
 using Sankore.Modules.Administration.Features.Products.LinkProductToCbs;
 using Sankore.Modules.Administration.Features.Products.ListProducts;
+using Sankore.Modules.Administration.Features.Products.SetBeneficiaryPolicy;
 using Sankore.Modules.Administration.Features.Products.UpdateProduct;
 
 namespace Sankore.Modules.Administration.Features.Products;
@@ -21,6 +22,9 @@ internal static class ProductsEndpoints
         group.MapUpdateProduct();
         group.MapDeleteProduct();
         group.MapLinkProductToCbs();
+
+        // Beneficiary policy of the product line (BNF-B-06)
+        group.MapSetBeneficiaryPolicy();
         return app;
     }
 }

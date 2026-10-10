@@ -42,7 +42,7 @@ public sealed class KycRequestedConsumerTests : IDisposable
     }
 
     private KycRequestedIntegrationEvent Event(
-        Guid customerId, Guid requestedBy, Guid? tenantId = null)
+        Guid customerId, Guid requestedBy, Guid? tenantId = null, bool hasPepExposure = false)
         => new(
             TenantId: tenantId ?? _tenantId,
             CustomerEntityId: customerId,
@@ -52,7 +52,8 @@ public sealed class KycRequestedConsumerTests : IDisposable
             Email: null,
             NationalId: null,
             DateOfBirth: null,
-            RequestedBy: requestedBy);
+            RequestedBy: requestedBy,
+            HasPepExposure: hasPepExposure);
 
     private Task<List<KycFile>> AllFiles()
         => _db.KycFiles.IgnoreQueryFilters().ToListAsync();
@@ -172,5 +173,70 @@ public sealed class KycRequestedConsumerTests : IDisposable
 
         await act.Should().NotThrowAsync();
         (await AllFiles()).Should().BeEmpty();
+    }
+
+    // ── PEP exposure raises the vigilance level (BNF-B-24) ──────────────────
+
+    [Fact]
+    public async Task A_politically_exposed_household_opens_the_file_at_High()
+    {
+        // High is what adds the compliance officer to the approval ladder (KycApprovalCircuit).
+        var customerId = Guid.NewGuid();
+
+        await _consumer.Consume(Delivered.Of(Event(customerId, Guid.NewGuid(), hasPepExposure: true)));
+
+        var file = (await AllFiles()).Should().ContainSingle().Subject;
+        file.VigilanceLevel.Should().Be(KycVigilanceLevel.High);
+    }
+
+    [Fact]
+    public async Task An_unexposed_one_opens_at_Standard()
+    {
+        var customerId = Guid.NewGuid();
+
+        await _consumer.Consume(Delivered.Of(Event(customerId, Guid.NewGuid())));
+
+        (await AllFiles()).Should().ContainSingle()
+            .Which.VigilanceLevel.Should().Be(KycVigilanceLevel.Standard);
+    }
+
+    [Fact]
+    public async Task It_RAISES_a_file_M01s_event_already_opened()
+    {
+        // The case that matters: ClientCreatedKycConsumer usually wins the race, so applying the
+        // level only on creation would mean the PEP flag had no effect in the common case.
+        var customerId = Guid.NewGuid();
+
+        _db.KycFiles.Add(KycFile.Open(
+            tenantId: _tenantId, customerId: customerId, channel: KycChannel.Agency,
+            createdBy: Guid.NewGuid(), clock: TimeProvider.System,
+            vigilanceLevel: KycVigilanceLevel.Standard, agencyId: null));
+        await _db.SaveChangesAsync();
+
+        await _consumer.Consume(Delivered.Of(Event(customerId, Guid.NewGuid(), hasPepExposure: true)));
+
+        var files = await AllFiles();
+        files.Should().ContainSingle("the file was already there — nothing new is opened");
+        files[0].VigilanceLevel.Should().Be(KycVigilanceLevel.High);
+    }
+
+    [Fact]
+    public async Task And_never_LOWERS_one()
+    {
+        // A file marked High by a duplicate suspicion or a compliance decision must not be relaxed
+        // because a second, ordinary trigger arrived for the same customer: the level selects the
+        // approval ladder, and lowering it removes a signature somebody decided was required.
+        var customerId = Guid.NewGuid();
+
+        _db.KycFiles.Add(KycFile.Open(
+            tenantId: _tenantId, customerId: customerId, channel: KycChannel.Agency,
+            createdBy: Guid.NewGuid(), clock: TimeProvider.System,
+            vigilanceLevel: KycVigilanceLevel.High, agencyId: null));
+        await _db.SaveChangesAsync();
+
+        await _consumer.Consume(Delivered.Of(Event(customerId, Guid.NewGuid(), hasPepExposure: false)));
+
+        (await AllFiles()).Should().ContainSingle()
+            .Which.VigilanceLevel.Should().Be(KycVigilanceLevel.High);
     }
 }

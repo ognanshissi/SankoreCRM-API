@@ -59,7 +59,8 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
 
         public LeadsDbContext Create() => new(
             new DbContextOptionsBuilder<LeadsDbContext>().UseInMemoryDatabase(_name).Options,
-            new FixedTenantContext(tenantId));
+            new FixedTenantContext(tenantId),
+            TestSupport.LeadsTestEncryptor.Instance);
 
         public void Dispose() { }
     }

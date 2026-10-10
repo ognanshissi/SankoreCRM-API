@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Sankore.Modules.Customers.Domain;
+using Sankore.Shared.Infrastructure.Persistence;
 
 namespace Sankore.Modules.Customers.Infrastructure.Configurations;
 
@@ -145,6 +146,18 @@ internal sealed class ClientConfiguration : IEntityTypeConfiguration<Client>
         // No physical foreign key on AgencyId / AdvisorUserId / SourceLeadId:
         // those rows live in the administration and leads schemas. Cross-module
         // references stay opaque so neither module can block the other's schema.
+        // ── PEP (BNF-B-13) ──────────────────────────────────────────────────
+        //
+        // Through the shared mapping, prefixed, so a conversion snapshot lines up field for field
+        // with the lead's principal.
+        builder.OwnsPepStatus(c => c.PrincipalPep, prefix: "principal_pep_");
+
+        builder.Property(c => c.HasPepExposure).HasDefaultValue(false);
+
+        // Partial: exposure is a small minority, and the queries that want it want only those.
+        builder.HasIndex(c => new { c.TenantId, c.HasPepExposure })
+               .HasFilter("has_pep_exposure");
+
         builder.Ignore(c => c.IsReadOnly);
         builder.Ignore(c => c.DomainEvents);
     }

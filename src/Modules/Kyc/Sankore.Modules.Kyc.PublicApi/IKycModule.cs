@@ -90,6 +90,22 @@ public enum KycStatus
 /// Published by the Leads module when a lead is converted and KYC must be initiated (US-M13-172).
 /// Consumed asynchronously by the KYC module — no synchronous call, no physical FK.
 /// </summary>
+/// <param name="HasPepExposure">
+/// Whether anybody in the converted lead's household is politically exposed (BNF-B-05/B-24). True
+/// opens the file at <c>High</c> vigilance, which widens the approval ladder to the compliance
+/// officer.
+///
+/// <para>
+/// A FLAG and not the exposure detail: the function, the country and the family link stay behind
+/// <c>lead:pep:read</c> in M13, and M02 re-collects what it needs during its own verification. An
+/// integration event is the wrong place to replicate a compliance classification.
+/// </para>
+///
+/// <para>
+/// Defaulted to false so the parameter is additive — an event serialised before this field existed
+/// and still sitting in an outbox deserialises to "not exposed", which is what it meant.
+/// </para>
+/// </param>
 public sealed record KycRequestedIntegrationEvent(
     Guid TenantId,
     Guid CustomerEntityId,
@@ -99,4 +115,5 @@ public sealed record KycRequestedIntegrationEvent(
     string? Email,
     string? NationalId,
     DateOnly? DateOfBirth,
-    Guid RequestedBy) : IntegrationEventBase;
+    Guid RequestedBy,
+    bool HasPepExposure = false) : IntegrationEventBase;

@@ -8,7 +8,8 @@ namespace Sankore.Modules.Administration.Features.Products.CreateProduct;
 
 internal sealed class CreateProductHandler(
     AdministrationDbContext db,
-    ITenantContext tenant
+    ITenantContext tenant,
+    ProductCatalogCache catalogCache
 ) : IRequestHandler<CreateProductCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateProductCommand request, CancellationToken ct)
@@ -31,6 +32,12 @@ internal sealed class CreateProductHandler(
 
         await db.ProductSpecialities.AddAsync(product, ct);
         await db.SaveChangesAsync(ct);
+
+        // Drops this tenant's cached policy and catalogue (BNF-B-06). AFTER SaveChanges on
+        // purpose: invalidating first opens a window in which a concurrent read repopulates the
+        // cache from the pre-write row, which is the one ordering that makes a cache permanently
+        // wrong instead of briefly stale.
+        await catalogCache.InvalidateAsync(tenant.CurrentTenantId, product.Id, ct);
 
         return Result.Ok(product.Id);
     }

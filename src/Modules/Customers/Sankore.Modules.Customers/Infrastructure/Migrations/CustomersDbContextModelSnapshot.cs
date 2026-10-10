@@ -18,7 +18,7 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("customers")
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -104,6 +104,117 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasDatabaseName("ix_beneficial_owners_tenant_id_linked_client_id");
 
                     b.ToTable("beneficial_owners", "customers");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.BeneficiaryDesignation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("ClauseVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("clause_version");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ExternalFullName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("external_full_name");
+
+                    b.Property<string>("ExternalRelationship")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_relationship");
+
+                    b.Property<Guid>("HoldingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("holding_id");
+
+                    b.Property<int>("Rank")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("rank");
+
+                    b.Property<Guid>("RecordedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recorded_by");
+
+                    b.Property<string>("RoleCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("role_code");
+
+                    b.Property<decimal?>("SharePercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("share_percent");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("status_reason");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("subject_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("ValidFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateTimeOffset?>("ValidTo")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_to");
+
+                    b.HasKey("Id")
+                        .HasName("pk_beneficiary_designations");
+
+                    b.HasIndex("HoldingId")
+                        .HasDatabaseName("ix_beneficiary_designations_holding_id");
+
+                    b.HasIndex("TenantId", "HoldingId")
+                        .HasDatabaseName("ix_beneficiary_designations_tenant_id_holding_id");
+
+                    b.HasIndex("TenantId", "SubjectId")
+                        .HasDatabaseName("ix_beneficiary_designations_tenant_id_subject_id")
+                        .HasFilter("subject_id IS NOT NULL AND valid_to IS NULL");
+
+                    b.HasIndex("TenantId", "HoldingId", "RoleCode")
+                        .HasDatabaseName("ix_designations_current")
+                        .HasFilter("valid_to IS NULL");
+
+                    b.ToTable("beneficiary_designations", "customers", t =>
+                        {
+                            t.HasCheckConstraint("ck_designation_rank", "rank >= 1");
+
+                            t.HasCheckConstraint("ck_designation_share", "share_percent IS NULL OR (share_percent >= 0 AND share_percent <= 100)");
+
+                            t.HasCheckConstraint("ck_designation_subject", "(subject_type = 'ExternalPerson' AND subject_id IS NULL AND external_full_name IS NOT NULL) OR (subject_type <> 'ExternalPerson' AND subject_id IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.Client", b =>
@@ -219,6 +330,12 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("gender");
 
+                    b.Property<bool>("HasPepExposure")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_pep_exposure");
+
                     b.Property<DateOnly?>("IdentityDocumentExpiresOn")
                         .HasColumnType("date")
                         .HasColumnName("identity_document_expires_on");
@@ -310,6 +427,10 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("nationality");
+
+                    b.Property<DateTimeOffset?>("PepDeclaredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pep_declared_at");
 
                     b.Property<string>("PhoneticKeyPrimary")
                         .HasMaxLength(32)
@@ -413,6 +534,10 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "FirstName")
                         .HasDatabaseName("ix_clients_tenant_id_first_name");
+
+                    b.HasIndex("TenantId", "HasPepExposure")
+                        .HasDatabaseName("ix_clients_tenant_id_has_pep_exposure")
+                        .HasFilter("has_pep_exposure");
 
                     b.HasIndex("TenantId", "IdentityDocumentNumberBlindIndex")
                         .IsUnique()
@@ -943,14 +1068,45 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("encrypted_external_document_number");
 
+                    b.Property<string>("ExternalAddressEncrypted")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("external_address_encrypted");
+
+                    b.Property<string>("ExternalCity")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_city");
+
+                    b.Property<string>("ExternalCountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("external_country_code");
+
                     b.Property<DateOnly?>("ExternalDateOfBirth")
                         .HasColumnType("date")
                         .HasColumnName("external_date_of_birth");
+
+                    b.Property<string>("ExternalFirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_first_name");
 
                     b.Property<string>("ExternalFullName")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)")
                         .HasColumnName("external_full_name");
+
+                    b.Property<string>("ExternalGender")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("external_gender");
+
+                    b.Property<string>("ExternalLastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_last_name");
 
                     b.Property<string>("ExternalPhoneBlindIndex")
                         .HasMaxLength(64)
@@ -962,6 +1118,20 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("external_phone_encrypted");
 
+                    b.Property<string>("ExternalPostalCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("external_postal_code");
+
+                    b.Property<string>("ExternalUsageName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_usage_name");
+
+                    b.Property<DateTimeOffset?>("PepDeclaredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pep_declared_at");
+
                     b.Property<Guid?>("ReciprocalRelationshipId")
                         .HasColumnType("uuid")
                         .HasColumnName("reciprocal_relationship_id");
@@ -969,6 +1139,15 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     b.Property<Guid?>("RelatedClientId")
                         .HasColumnType("uuid")
                         .HasColumnName("related_client_id");
+
+                    b.Property<Guid?>("SourceLeadMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_lead_member_id");
+
+                    b.Property<string>("SpouseUnionType")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("spouse_union_type");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -979,6 +1158,12 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("type");
+
+                    b.Property<bool>("UsesPrincipalAddress")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("uses_principal_address");
 
                     b.Property<DateTimeOffset>("ValidFrom")
                         .HasColumnType("timestamp with time zone")
@@ -1006,7 +1191,15 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClientId", "Type")
                         .HasDatabaseName("ix_client_relationships_tenant_id_client_id_type");
 
-                    b.ToTable("client_relationships", "customers");
+                    b.HasIndex(new[] { "TenantId", "ClientId" }, "uq_client_one_spouse")
+                        .IsUnique()
+                        .HasDatabaseName("uq_client_one_spouse")
+                        .HasFilter("type = 'Spouse' AND valid_to IS NULL");
+
+                    b.ToTable("client_relationships", "customers", t =>
+                        {
+                            t.HasCheckConstraint("ck_client_relationship_union", "(type = 'Spouse') OR (spouse_union_type IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientSegmentHistory", b =>
@@ -1436,6 +1629,148 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     b.ToTable("legal_forms", "customers");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.ProductHolding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("ClauseVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("clause_version");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("CloseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("close_reason");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("ExternalRef")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_ref");
+
+                    b.Property<string>("ExternalSystem")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("external_system");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("origin");
+
+                    b.Property<string>("ProductCategory")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("product_category");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("product_code");
+
+                    b.Property<Guid>("ProductLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_line_id");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<string>("SignatureReference")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("signature_reference");
+
+                    b.Property<DateTimeOffset?>("SignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("signed_at");
+
+                    b.Property<Guid?>("SourceLeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_lead_id");
+
+                    b.Property<string>("Specifics")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("specifics")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("SyncedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("synced_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_product_holdings");
+
+                    b.HasIndex("ClientId")
+                        .HasDatabaseName("ix_product_holdings_client_id");
+
+                    b.HasIndex("TenantId", "ExternalRef")
+                        .HasDatabaseName("ix_product_holdings_tenant_id_external_ref")
+                        .HasFilter("external_ref IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ProductLineId")
+                        .HasDatabaseName("ix_product_holdings_tenant_id_product_line_id");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_product_holdings_pending")
+                        .HasFilter("status IN ('PendingSync', 'Rejected')");
+
+                    b.HasIndex("TenantId", "ClientId", "ProductLineId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_product_holdings_live_per_line")
+                        .HasFilter("status IN ('Draft', 'PendingSignature', 'PendingSync', 'Active') AND origin = 'CrmSubscription'");
+
+                    b.HasIndex("TenantId", "ClientId", "Status")
+                        .HasDatabaseName("ix_product_holdings_tenant_id_client_id_status");
+
+                    b.ToTable("product_holdings", "customers");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.SensitiveDataAccessLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1531,6 +1866,68 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasConstraintName("fk_beneficial_owners_clients_linked_client_id");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.BeneficiaryDesignation", b =>
+                {
+                    b.HasOne("Sankore.Modules.Customers.Domain.ProductHolding", null)
+                        .WithMany("Designations")
+                        .HasForeignKey("HoldingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_beneficiary_designations_product_holdings_holding_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.Client", b =>
+                {
+                    b.OwnsOne("Sankore.Shared.Kernel.ValueObject.PepStatus", "PrincipalPep", b1 =>
+                        {
+                            b1.Property<Guid>("ClientId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<string>("CountryCode")
+                                .HasMaxLength(2)
+                                .HasColumnType("character(2)")
+                                .HasColumnName("principal_pep_country")
+                                .IsFixedLength();
+
+                            b1.Property<string>("Function")
+                                .HasMaxLength(150)
+                                .HasColumnType("character varying(150)")
+                                .HasColumnName("principal_pep_function");
+
+                            b1.Property<DateOnly?>("FunctionEndDate")
+                                .HasColumnType("date")
+                                .HasColumnName("principal_pep_end_date");
+
+                            b1.Property<bool>("IsPep")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("principal_pep_is_exposed");
+
+                            b1.Property<string>("Link")
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("principal_pep_link");
+
+                            b1.Property<string>("OverrideReason")
+                                .HasMaxLength(300)
+                                .HasColumnType("character varying(300)")
+                                .HasColumnName("principal_pep_override_reason");
+
+                            b1.HasKey("ClientId");
+
+                            b1.ToTable("clients", "customers");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ClientId")
+                                .HasConstraintName("fk_clients_clients_id");
+                        });
+
+                    b.Navigation("PrincipalPep")
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientContactPoint", b =>
                 {
                     b.HasOne("Sankore.Modules.Customers.Domain.Client", null)
@@ -1572,6 +1969,55 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasForeignKey("RelatedClientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_client_relationships_clients_related_client_id");
+
+                    b.OwnsOne("Sankore.Shared.Kernel.ValueObject.PepStatus", "Pep", b1 =>
+                        {
+                            b1.Property<Guid>("ClientRelationshipId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<string>("CountryCode")
+                                .HasMaxLength(2)
+                                .HasColumnType("character(2)")
+                                .HasColumnName("pep_country")
+                                .IsFixedLength();
+
+                            b1.Property<string>("Function")
+                                .HasMaxLength(150)
+                                .HasColumnType("character varying(150)")
+                                .HasColumnName("pep_function");
+
+                            b1.Property<DateOnly?>("FunctionEndDate")
+                                .HasColumnType("date")
+                                .HasColumnName("pep_end_date");
+
+                            b1.Property<bool>("IsPep")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("pep_is_exposed");
+
+                            b1.Property<string>("Link")
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("pep_link");
+
+                            b1.Property<string>("OverrideReason")
+                                .HasMaxLength(300)
+                                .HasColumnType("character varying(300)")
+                                .HasColumnName("pep_override_reason");
+
+                            b1.HasKey("ClientRelationshipId");
+
+                            b1.ToTable("client_relationships", "customers");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ClientRelationshipId")
+                                .HasConstraintName("fk_client_relationships_client_relationships_id");
+                        });
+
+                    b.Navigation("Pep")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientStatusHistory", b =>
@@ -1618,6 +2064,16 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasConstraintName("fk_group_memberships_client_groups_group_id");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.ProductHolding", b =>
+                {
+                    b.HasOne("Sankore.Modules.Customers.Domain.Client", null)
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_holdings_clients_client_id");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.Client", b =>
                 {
                     b.Navigation("ContactPoints");
@@ -1628,6 +2084,11 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientGroup", b =>
                 {
                     b.Navigation("Memberships");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.ProductHolding", b =>
+                {
+                    b.Navigation("Designations");
                 });
 #pragma warning restore 612, 618
         }

@@ -28,7 +28,9 @@ public sealed class CustomersModuleFacadeBatchTests : IDisposable
     {
         _factory = new TestCustomersDbContextFactory(_tenantId);
         _db = _factory.CreateContext();
-        _facade = new CustomersModuleFacade(_db, new UnusedLeadConversion());
+        _facade = new CustomersModuleFacade(
+            _db, new UnusedLeadConversion(), TestDoubles.Indexer(),
+            TestHoldingSync.For(_db, _tenantId));
     }
 
     public void Dispose()
@@ -108,6 +110,10 @@ public sealed class CustomersModuleFacadeBatchTests : IDisposable
     {
         public Task<Result<CreateFromLeadResult>> CreateFromLeadAsync(
             CreateFromLeadRequest request, CancellationToken ct)
+            => throw new NotSupportedException("The batch read never converts a lead.");
+
+        public Task<Result<Guid>> CreateHoldingFromLeadAsync(
+            CreateHoldingFromLeadRequest request, CancellationToken ct)
             => throw new NotSupportedException("The batch read never converts a lead.");
     }
 

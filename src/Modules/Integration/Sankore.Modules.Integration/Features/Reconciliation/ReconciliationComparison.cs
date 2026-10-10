@@ -148,6 +148,109 @@ internal static class ReconciliationComparison
     /// <c>crm_id</c> through <c>GET integration/references</c> by anyone who holds the permission.
     /// </para>
     /// </summary>
+    // ── Insurance holdings (BNF-B-17) ───────────────────────────────────────
+
+    /// <summary>
+    /// The divergence for one referenced HOLDING, or <c>null</c> when the two sides agree.
+    /// </summary>
+    /// <param name="crm">
+    /// What M01 believes, from the batched state read. <c>null</c> when the CRM has no such
+    /// holding — a reference pointing at nothing.
+    /// </param>
+    /// <param name="policyIsLive">
+    /// The insurer's answer, from <c>PolicyRecord.IsLive</c>. <c>null</c> when there is no policy
+    /// record at all, which is the read model's own convention for "the insurer never told us
+    /// about this one" — the same shape as the CBS snapshot's absence.
+    /// </param>
+    /// <param name="currentClauseSent">
+    /// Whether a <c>SubscribePolicy</c> command for the holding's CURRENT clause version has
+    /// succeeded.
+    ///
+    /// <para>
+    /// A boolean and not a "highest version sent", deliberately. The caller answers it by
+    /// recomputing the deterministic idempotency key for exactly that (holding, version) and
+    /// looking for a succeeded command — an EXACT lookup. Counting succeeded commands instead
+    /// would under-report whenever an intermediate avenant was rejected and a later one landed,
+    /// which is a false finding on a contract that is in fact up to date; this module's own
+    /// scope class argues at length that a figure measuring something other than what its label
+    /// says is worse than no figure.
+    /// </para>
+    /// </param>
+    /// <remarks>
+    /// <b>The order of the branches is the precedence, and it is deliberate</b> — the same
+    /// reasoning as the customer comparison. One holding yields at most one gap: a holding the
+    /// insurer does not know is reported as missing and its clause version is not compared,
+    /// because the remedy is the subscription and not the avenant. Reporting both would count one
+    /// contract twice in the summary an administrator reads.
+    /// </remarks>
+    internal static ReconciliationDivergence? CompareHolding(
+        HoldingSyncState? crm,
+        bool? policyIsLive,
+        bool currentClauseSent)
+    {
+        // A reference pointing at no holding. NOT reported as MissingInCrm, for the reason the
+        // scope class gives about its core-banking twin: M01 never deletes a holding (closing is a
+        // status), so this is a data-integrity anomaly rather than a reconciliation finding, and
+        // wiring it to a gap type would give that type a detector that in practice never fires.
+        if (crm is null)
+            return null;
+
+        if (policyIsLive is null)
+        {
+            // The CRM believes the contract is in force and the insurer has never confirmed it.
+            // This is the type that catches a subscription whose command was lost, which is what
+            // the whole story is for.
+            if (crm.IsLive)
+            {
+                return new ReconciliationDivergence(
+                    GapType.MissingInExternal,
+                    Details(new Dictionary<string, object?>
+                    {
+                        ["crmStatus"] = crm.Status,
+                        ["crmExternalRef"] = crm.ExternalRef,
+                        ["presentInExternal"] = false,
+                    }));
+            }
+
+            // Not live here and unknown there: the two sides agree that nothing is in force. A
+            // closed or rejected holding whose policy record was never written is the ordinary
+            // end of a subscription that never happened, not a divergence.
+            return null;
+        }
+
+        if (crm.IsLive != policyIsLive)
+        {
+            return new ReconciliationDivergence(
+                GapType.StatusMismatch,
+                Details(new Dictionary<string, object?>
+                {
+                    ["crmStatus"] = crm.Status,
+                    ["liveInCrm"] = crm.IsLive,
+                    ["liveInExternal"] = policyIsLive,
+                }));
+        }
+
+        // Both agree the contract is in force, and the insurer is working from a clause we have
+        // since replaced. An avenant recorded while the insurer was unreachable, or one whose
+        // command was rejected and never re-sent, lands here — and it matters: the policy would
+        // pay the previous beneficiaries.
+        //
+        // Only for a LIVE holding. A closed one whose last avenant never left is history, and
+        // reporting it would fill the ledger with findings that have no remedy.
+        if (crm.IsLive && !currentClauseSent)
+        {
+            return new ReconciliationDivergence(
+                GapType.DesignationOutOfSync,
+                Details(new Dictionary<string, object?>
+                {
+                    ["crmClauseVersion"] = crm.ClauseVersion,
+                    ["currentClauseSent"] = false,
+                }));
+        }
+
+        return null;
+    }
+
     private static string Details(Dictionary<string, object?> values)
         => JsonSerializer.Serialize(values, DetailsJsonOptions);
 

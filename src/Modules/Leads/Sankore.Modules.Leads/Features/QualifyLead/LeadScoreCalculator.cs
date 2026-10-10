@@ -73,7 +73,24 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
     // ── 2. Source quality (0-20) ──────────────────────────────────────────────
     // In-branch and referred leads carry the highest intent signal.
 
-    private static int SourceQualityScore(Lead lead) => lead.Source switch
+    private static int SourceQualityScore(Lead lead)
+    {
+        // A customer M01 already holds, coming back for another product, is the strongest intent
+        // signal this dimension can carry — stronger than a walk-in, because the relationship is
+        // established rather than merely in person (BNF-B-22).
+        //
+        // Capped at the dimension's existing maximum of 20, deliberately: it does not add a
+        // dimension and does not raise the 100-point ceiling, so the measured ceilings documented
+        // for an UNATTACHED lead (60 for a walk-in, 45 for a file import) stay exactly as they
+        // were. An attached file-import lead now reaches 60 instead of 45, which is the whole
+        // point — it should clear the qualification threshold without waiting for activity history.
+        if (lead.CustomerId.HasValue)
+            return 20;
+
+        return SourceOnlyQualityScore(lead);
+    }
+
+    private static int SourceOnlyQualityScore(Lead lead) => lead.Source switch
     {
         LeadSource.Agency      => 20,
         LeadSource.CallCenter  => 18,

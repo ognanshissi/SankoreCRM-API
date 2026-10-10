@@ -52,4 +52,36 @@ public sealed record ConvertLeadResult(
     /// Populated when <see cref="DuplicateDetected"/> is true.
     /// In Block mode (Force=false) the conversion did NOT proceed — re-submit with Force=true.
     /// </summary>
-    IReadOnlyList<DuplicateMatchResult>? PotentialDuplicates = null);
+    IReadOnlyList<DuplicateMatchResult>? PotentialDuplicates = null,
+    /// <summary>
+    /// Populated when <see cref="BlockingCode"/> is <c>MISSING_QUESTIONNAIRE_RESPONSES</c>
+    /// (BNF-B-08). Listed PER PERSON with a label, so the agent is told who still has to answer
+    /// what instead of being handed a bare refusal.
+    /// </summary>
+    IReadOnlyList<Features.Questionnaires.MissingQuestionnaire>? MissingQuestionnaires = null,
+    /// <summary>
+    /// Which of BNF-B-12's two paths ran — <c>NewCustomer</c> or
+    /// <c>ExistingCustomerNewProduct</c>. Empty on a refusal, because no path ran.
+    /// </summary>
+    string ConversionType = "",
+    /// <summary>
+    /// True when the lead was ALREADY converted and this call changed nothing (BNF-B-24).
+    /// <see cref="CustomerId"/> is the client it produced the first time. Distinct from
+    /// <c>CreateFromLeadResult.AlreadyExisted</c>, which is about the CLIENT already existing: a
+    /// first conversion of a re-captured prospect sets that and not this.
+    /// </summary>
+    bool AlreadyConverted = false,
+    /// <summary>
+    /// The DRAFT product holding the conversion opened on the client (BNF-B-24), or null when the
+    /// lead had no resolved product line or M01 declined — the client already holds the line, say.
+    /// Null is NOT a conversion failure: the holding is a consequence of the conversion, not a
+    /// condition of it, and an agent can open the subscription by hand on the client record.
+    /// </summary>
+    Guid? HoldingId = null,
+    /// <summary>
+    /// The completeness report the gate ran (BNF-B-04) — the same object
+    /// <c>GET leads/{id}/completeness</c> returns. Populated on a refusal so the agent is told
+    /// everything that is missing, not only the first thing, and on success so a screen can show
+    /// the file was complete.
+    /// </summary>
+    Features.Enrichment.LeadCompletenessDto? Completeness = null);

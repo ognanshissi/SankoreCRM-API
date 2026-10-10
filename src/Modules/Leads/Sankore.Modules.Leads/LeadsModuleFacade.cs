@@ -43,6 +43,39 @@ public sealed class LeadsModuleFacade(LeadsDbContext db) : ILeadsModule
     /// <c>CtiCallReference</c> and every field of the lead itself
     /// (phone, e-mail, national id, date of birth).
     /// </remarks>
+    public async Task<IReadOnlyList<CustomerOpenLead>> GetOpenLeadsForCustomerAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct)
+    {
+        if (customerId == Guid.Empty)
+            return [];
+
+        // IgnoreQueryFilters plus an explicit tenant predicate: the caller is M01's client screen
+        // or a consumer, and its ambient tenant is not guaranteed to be this one.
+        //
+        // Status filter rather than Lead.IsDispatchable: "open" here means "still being worked",
+        // which is the same set of terminal statuses but a different question — a Nurturing lead is
+        // not dispatchable and IS an open request the client record must show.
+        return await db.Leads
+            .IgnoreQueryFilters()
+            .Where(l => l.TenantId == tenantId
+                     && l.CustomerId == customerId
+                     && l.Status != LeadStatus.Converted
+                     && l.Status != LeadStatus.Lost
+                     && l.Status != LeadStatus.Disqualified
+                     && l.Status != LeadStatus.Archived)
+            .OrderByDescending(l => l.CapturedAt)
+            .Select(l => new CustomerOpenLead(
+                l.Id,
+                l.Status.ToString(),
+                l.PipelineStage.ToString(),
+                l.ProductLineId,
+                l.InterestedProduct,
+                l.CurrentAssignedId,
+                l.CapturedAt,
+                l.LastActivityAt))
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<LeadHistoryItem>> GetLeadHistoryAsync(
         Guid tenantId, Guid leadId, CancellationToken ct)
     {

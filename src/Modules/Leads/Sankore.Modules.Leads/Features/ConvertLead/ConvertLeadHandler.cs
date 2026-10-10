@@ -8,6 +8,7 @@ using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.ConvertLead.Events;
+using Sankore.Modules.Leads.Features.Enrichment;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
@@ -18,6 +19,8 @@ internal sealed class ConvertLeadHandler(
     LeadsDbContext db,
     ICurrentUser currentUser,
     ICustomersModule customersModule,
+    ILeadEmailIndexer emailIndexer,
+    Features.Enrichment.LeadCompletenessCalculator completeness,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<ConvertLeadCommand, Result<ConvertLeadResult>>
 {
@@ -26,14 +29,72 @@ internal sealed class ConvertLeadHandler(
     {
         var lead = await db.Leads
             .AsTracking()
+            // The household is needed for the questionnaire gate below: the expectation is computed
+            // over the ACTIVE members, so a lead loaded without them would appear to owe nothing.
+            .Include(l => l.HouseholdMembers)
             .FirstOrDefaultAsync(l => l.Id == cmd.LeadId, ct);
 
         if (lead is null)
             return Result.Fail<ConvertLeadResult>("LEAD_NOT_FOUND");
 
+        // ── Already converted: answer, change nothing (BNF-B-24) ─────────
+        //
+        // Reached by a retried request and by an agent double-clicking. Returning the existing
+        // client is the honest answer to "convert this lead"; falling through would re-publish
+        // LeadConverted and tell a back office to open the same holding twice.
+        if (lead.Status == LeadStatus.Converted && lead.ConvertedToCustomerId is { } already)
+        {
+            if (cmd.CustomerId is { } asked && asked != already)
+                return Result.Fail<ConvertLeadResult>("LEAD_ALREADY_CONVERTED_TO_ANOTHER_CUSTOMER");
+
+            return Result.Ok(new ConvertLeadResult(
+                LeadId:          cmd.LeadId,
+                CustomerId:      already,
+                ConvertedAt:     lead.ConvertedAt ?? default,
+                AlreadyConverted: true));
+        }
+
+        // ── The file must be complete (BNF-B-04, BNF-B-08, BNF-B-11) ─────
+        //
+        // The SAME calculator the completeness endpoint and the enrichment response use, so the
+        // screen showing 100% and the conversion accepting the lead cannot disagree. Before Lot 6
+        // this gate checked questionnaires only, and a required field or a missing FATCA
+        // declaration passed through it.
+        //
+        // Before the duplicate gate and before M01 is asked to create anything: a conversion that
+        // created a client and then refused would leave the client behind, and the idempotency on
+        // SourceLeadId would hand the same one back on the retry — correct, but it means the
+        // refusal has already had a side effect. No-side-effect checks first.
+        //
+        // NOT bypassed by Force. That flag exists to override the DUPLICATE gate, which is a
+        // judgement about whether two records are the same person; a missing health declaration or
+        // an unresolved product line is not a judgement call.
+        var report = await completeness.ComputeAsync(lead, ct);
+        if (!report.CanConvert)
+        {
+            return Result.Ok(new ConvertLeadResult(
+                LeadId:       cmd.LeadId,
+                CustomerId:   Guid.Empty,
+                ConvertedAt:  default,
+                // The questionnaire code when questionnaires are what is missing, so a client
+                // written against Lot 4 keeps working; the general code otherwise.
+                BlockingCode: report.MissingQuestionnaires.Count > 0
+                    ? Features.Questionnaires.QuestionnaireCompletenessChecker.MissingResponses
+                    : Features.Enrichment.LeadCompletenessCalculator.Incomplete,
+                MissingQuestionnaires: report.MissingQuestionnaires,
+                Completeness:          report));
+        }
+
         // ── US-M13-171: Validate existing customer if provided ──────────
         if (cmd.CustomerId.HasValue)
         {
+            // An attached lead already names the client its identity comes from (BNF-B-23). A
+            // caller naming a DIFFERENT one is not a choice to honour silently: one of the two
+            // records is wrong, and picking either would convert the request against a file the
+            // agent never reviewed. Detaching is an explicit act with its own endpoint.
+            if (lead.CustomerId is { } attached && attached != cmd.CustomerId.Value)
+                return Result.Fail<ConvertLeadResult>("CUSTOMER_LINK_CONFLICT");
+
             var exists = await customersModule.ExistsAsync(
                 lead.TenantId, cmd.CustomerId.Value, ct);
 
@@ -42,7 +103,14 @@ internal sealed class ConvertLeadHandler(
         }
 
         // ── Duplicate gate before conversion ─────────────────────────────
-        if (!cmd.Force)
+        //
+        // SKIPPED for a lead that belongs to a known customer (BNF-B-22/B-24). This gate looks for
+        // other LEADS matching the same person, and for an existing customer asking for a second
+        // product those are the expected state of affairs — the client record lists them as
+        // "requests in progress". Blocking on them would make a second subscription impossible.
+        // The duplicate question that does apply to such a lead is "does this client already hold
+        // this product line", which is AllowMultipleHoldings against the holdings, not lead dedup.
+        if (!cmd.Force && lead.Kind == LeadKind.NewProspect)
         {
             var probe = MatchProbe.From(
                 lead.PhoneNumber, lead.Email, lead.NationalId, lead.CustomerReference,
@@ -53,6 +121,7 @@ internal sealed class ConvertLeadHandler(
 
             var phoneDigits = probe.PhoneDigits;
             var emailNorm   = probe.EmailNorm;
+            var emailIndex  = emailIndexer.Compute(lead.Email ?? lead.LegacyEmailClear);
             var nationalId  = probe.NationalId;
             var customerRef = probe.CustomerReference;
 
@@ -67,7 +136,11 @@ internal sealed class ConvertLeadHandler(
                         l.Status != LeadStatus.Disqualified &&
                         l.Status != LeadStatus.Converted &&
                         ((phoneDigits != null && l.PhoneNumber.EndsWith(phoneDigits)) ||
-                         (emailNorm != null && l.Email != null && l.Email.ToLower() == emailNorm) ||
+                         // Blind index, never the encrypted column — see CaptureLeadHandler.
+                         (emailIndex != null && l.EmailBlindIndex == emailIndex) ||
+                         (emailIndex != null && l.EmailBlindIndex == null
+                            && emailNorm != null && l.LegacyEmailClear != null
+                            && l.LegacyEmailClear.ToLower() == emailNorm) ||
                          (nationalId != null && l.NationalId != null && l.NationalId.ToLower() == nationalId.ToLower()) ||
                          (customerRef != null && l.CustomerReference != null && l.CustomerReference.ToLower() == customerRef.ToLower())))
                     .ToListAsync(ct);
@@ -109,18 +182,34 @@ internal sealed class ConvertLeadHandler(
             }
         }
 
-        // ── Proceed with conversion ─────────────────────────────────────
-        // Either the caller attached an existing customer (already validated above), or M01
-        // creates one now. Creation happens BEFORE lead.Convert so a refusal leaves the lead
-        // untouched rather than marking it converted against a client that was never created.
+        // ── Proceed with conversion (BNF-B-12) ──────────────────────────
+        //
+        // Three ways to end up with a client id, in priority order: the caller named one, the lead
+        // is already attached to one (BNF-B-22 — "sans ressaisie": nothing of their identity is
+        // re-entered and M01 is not asked to create anything), or M01 creates one now. Creation
+        // happens BEFORE lead.Convert so a refusal leaves the lead untouched rather than marking
+        // it converted against a client that was never created.
         Guid customerId;
+        string conversionType;
 
         if (cmd.CustomerId.HasValue)
         {
             customerId = cmd.CustomerId.Value;
+            // An explicit id on an attached lead is the same client — the conflict was refused
+            // above — so this is the existing-customer path either way.
+            conversionType = lead.CustomerId.HasValue
+                ? LeadConversionType.ExistingCustomerNewProduct
+                : LeadConversionType.NewCustomer;
+        }
+        else if (lead.CustomerId is { } linkedCustomerId)
+        {
+            customerId     = linkedCustomerId;
+            conversionType = LeadConversionType.ExistingCustomerNewProduct;
         }
         else
         {
+            conversionType = LeadConversionType.NewCustomer;
+
             var creation = await CreateClientAsync(lead, ct);
             if (creation.IsFailure)
                 return Result.Fail<ConvertLeadResult>(creation.Error!);
@@ -156,7 +245,11 @@ internal sealed class ConvertLeadHandler(
                 FullName:    lead.FullName,
                 PhoneNumber: lead.PhoneNumber,
                 Email:       lead.Email,
-                ConvertedAt: lead.ConvertedAt!.Value),
+                ConvertedAt: lead.ConvertedAt!.Value,
+                // BNF-B-24: which path ran, and on which catalogue line. A consumer cannot derive
+                // either — both paths end with a lead pointing at a client.
+                ConversionType: conversionType,
+                ProductLineId:  lead.ProductLineId),
             ct);
 
         // ── US-M13-172: Publish KycRequested event via outbox ───────────
@@ -170,15 +263,81 @@ internal sealed class ConvertLeadHandler(
                 Email:            lead.Email,
                 NationalId:       lead.NationalId,
                 DateOfBirth:      lead.DateOfBirth,
-                RequestedBy:      currentUser.Id),
+                RequestedBy:      currentUser.Id,
+                // BNF-B-24: an exposed household opens the KYC file at High vigilance, which adds
+                // the compliance officer to the approval ladder. The FLAG only — the function, the
+                // country and the family link stay behind lead:pep:read.
+                HasPepExposure:   lead.HasPepExposure),
             ct);
 
         await db.SaveChangesAsync(ct);
 
+        // ── The draft holding (BNF-B-24) ─────────────────────────────────
+        //
+        // AFTER the lead is committed, and BEST-EFFORT. The subscription is a consequence of the
+        // conversion, not a condition of it: a lead that produced a client has converted, and
+        // failing the whole command because M01 could not open a draft would leave the agent with
+        // a client, a converted lead and an error telling them none of it worked.
+        //
+        // Only when the product line is resolved — there is no line to subscribe to otherwise, and
+        // the completeness gate above already reported that.
+        var holdingId = await TryOpenHoldingAsync(lead, customerId, ct);
+
         return Result.Ok(new ConvertLeadResult(
-            LeadId:      lead.Id,
-            CustomerId:  customerId,
-            ConvertedAt: lead.ConvertedAt!.Value));
+            LeadId:         lead.Id,
+            CustomerId:     customerId,
+            ConvertedAt:    lead.ConvertedAt!.Value,
+            ConversionType: conversionType,
+            HoldingId:      holdingId,
+            Completeness:   report));
+    }
+
+    /// <summary>
+    /// Opens the draft product holding a converted lead leaves behind (BNF-B-24), or returns null
+    /// when there is nothing to open or M01 refused.
+    /// </summary>
+    /// <remarks>
+    /// <b>Swallows every failure, and logs none of them as an error.</b> Two of the refusals are
+    /// ordinary: <c>HOLDING_ALREADY_HELD</c> for a line that forbids a second holding (the client
+    /// already has one — the conversion is still correct), and a retried conversion, which M01
+    /// answers idempotently. The rest are an M12 or M01 problem the agent can resolve by opening
+    /// the subscription by hand on the client record.
+    ///
+    /// <para>
+    /// Suppressed transaction scope, like every other cross-module call on this path: M01 writes
+    /// through its own DbContext, and a second connection enlisting in the ambient
+    /// <c>System.Transactions</c> scope promotes it to a distributed transaction Npgsql cannot do.
+    /// </para>
+    /// </remarks>
+    private async Task<Guid?> TryOpenHoldingAsync(Lead lead, Guid customerId, CancellationToken ct)
+    {
+        if (lead.ProductLineId is not { } lineId)
+            return null;
+
+        try
+        {
+            using var suppressed = new TransactionScope(
+                TransactionScopeOption.Suppress,
+                TransactionScopeAsyncFlowOption.Enabled);
+
+            var result = await customersModule.CreateHoldingFromLeadAsync(
+                new CreateHoldingFromLeadRequest(
+                    TenantId:          lead.TenantId,
+                    ClientId:          customerId,
+                    ProductLineId:     lineId,
+                    SourceLeadId:      lead.Id,
+                    ConvertedByUserId: currentUser.Id),
+                ct);
+
+            suppressed.Complete();
+
+            return result.IsSuccess ? result.Value : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _ = ex;
+            return null;
+        }
     }
 
     /// <summary>

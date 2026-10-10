@@ -215,6 +215,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
         var capacityService = new AgentCapacityService(db, null);
         return new DispatchLeadHandler(
             db, usersModule, scorer, factory, new DispatchingRuleResolver(db), capacityService,
+            TestSupport.TestClientAdvisorResolver.None(),
             publisher, NullLogger<DispatchLeadHandler>.Instance, TimeProvider.System);
     }
 }

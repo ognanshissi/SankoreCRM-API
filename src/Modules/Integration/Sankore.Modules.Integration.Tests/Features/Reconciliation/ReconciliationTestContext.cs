@@ -83,6 +83,112 @@ internal static class ReconciliationTestContext
             externalId: externalId,
             clock: new FixedClock(NightOne));
 
+    /// <summary>An ACTIVE insurance connection — what the holding comparison reconciles (BNF-B-17).</summary>
+    internal static IntegrationConnection InsuranceConnection(Guid tenantId, Guid id)
+        => CommandsTestHarness.Connection(
+            tenantId, family: IntegrationFamily.Insurance, id: id);
+
+    /// <summary>
+    /// A POLICY reference — the CRM side of the holding comparison. Its <c>CrmId</c> is a HOLDING
+    /// id since BNF-B-16, which is what lets the return path and the reconciliation name the
+    /// contract rather than the customer.
+    /// </summary>
+    internal static IntegrationReference PolicyReference(
+        Guid tenantId, Guid holdingId, string externalId, Guid connectionId)
+        => IntegrationReference.Create(
+            tenantId: tenantId,
+            connectionId: connectionId,
+            kind: IntegrationKind.Fake,
+            entityType: IntegrationEntityTypes.Policy,
+            crmId: holdingId,
+            externalId: externalId,
+            clock: new FixedClock(NightOne));
+
+    /// <summary>
+    /// An M01 double answering the batched holding-state read from a fixed table (BNF-B-17).
+    /// Absent ids are absent from the answer, as the contract specifies.
+    /// </summary>
+    internal static ICustomersModule Holdings(params HoldingSyncState[] states)
+    {
+        var table = states.ToDictionary(h => h.HoldingId);
+        var module = Substitute.For<ICustomersModule>();
+
+        module.GetHoldingSyncStatesAsync(
+                Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var asked = (IReadOnlyCollection<Guid>)call[1];
+
+                return Task.FromResult<IReadOnlyDictionary<Guid, HoldingSyncState>>(
+                    asked.Where(table.ContainsKey).ToDictionary(id => id, id => table[id]));
+            });
+
+        return module;
+    }
+
+    /// <summary>One holding's state as M01 reports it.</summary>
+    internal static HoldingSyncState HoldingState(
+        Guid holdingId,
+        string status = "Active",
+        int clauseVersion = 1,
+        string? externalRef = "POL-00042")
+        => new(holdingId, status, externalRef, clauseVersion, status == "Active");
+
+    /// <summary>
+    /// A policy the insurer holds. <paramref name="live"/> is the one fact the comparison reads
+    /// besides its existence; the premium and the dates are left at their defaults because a
+    /// reconciliation has no use for them and a test depending on one would pin the wrong thing.
+    /// </summary>
+    internal static PolicyRecord Policy(
+        Guid tenantId, Guid connectionId, string externalPolicyId, bool live = true)
+    {
+        var clock = new FixedClock(NightOne);
+
+        var policy = PolicyRecord.Create(
+            tenantId: tenantId,
+            connectionId: connectionId,
+            crmCustomerId: Guid.NewGuid(),
+            externalPolicyId: externalPolicyId,
+            policyNumber: externalPolicyId,
+            insurerProductCode: "VIE-01",
+            status: live ? PolicyStatus.Issued : PolicyStatus.Cancelled,
+            effectiveDate: new DateOnly(2026, 1, 1),
+            premiumAmount: 25_000m,
+            currency: "XOF",
+            periodicity: PremiumPeriodicity.Monthly,
+            clock: clock);
+
+        return policy;
+    }
+
+    /// <summary>
+    /// A SUCCEEDED <c>SubscribePolicy</c> command for one (holding, clause version) — what the
+    /// comparison looks for to decide whether the current clause was actually sent. Its
+    /// idempotency key is built by the production factory, so a test cannot disagree with the job
+    /// about what the key is.
+    /// </summary>
+    internal static IntegrationCommand SentClause(
+        Guid tenantId, Guid connectionId, Guid holdingId, int clauseVersion)
+    {
+        var clock = new FixedClock(NightOne);
+
+        var command = IntegrationCommand.Create(
+            tenantId: tenantId,
+            connectionId: connectionId,
+            commandType: CommandType.SubscribePolicy,
+            entityType: IntegrationEntityTypes.Policy,
+            crmId: holdingId,
+            idempotencyKey: Sankore.Modules.Integration.Features.Commands.IdempotencyKeyFactory
+                .ForHoldingSubscription(tenantId, connectionId, holdingId, clauseVersion),
+            createdBy: CommandsTestHarness.Actor,
+            clock: clock);
+
+        command.BeginSending(clock);
+        command.Succeed("POL-00042", clock);
+
+        return command;
+    }
+
     /// <summary>
     /// A snapshot carrying the one fact the comparison reads from it besides its own existence:
     /// the tier the CBS holds. The balances are left at zero on purpose — a reconciliation has no

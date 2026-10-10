@@ -24,4 +24,9 @@ internal sealed class LeadConversionService(ISender sender) : ILeadConversionSer
     public Task<Result<CreateFromLeadResult>> CreateFromLeadAsync(
         CreateFromLeadRequest request, CancellationToken ct)
         => sender.Send(CreateClientFromLeadCommand.From(request), ct);
+
+    public Task<Result<Guid>> CreateHoldingFromLeadAsync(
+        CreateHoldingFromLeadRequest request, CancellationToken ct)
+        => sender.Send(
+            Holdings.CreateFromLead.CreateHoldingFromLeadCommand.From(request), ct);
 }

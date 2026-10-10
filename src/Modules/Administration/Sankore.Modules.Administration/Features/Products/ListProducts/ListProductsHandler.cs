@@ -25,7 +25,8 @@ internal sealed class ListProductsHandler(AdministrationDbContext db)
                 p.Id, p.Name, p.Code, p.Category,
                 p.Description, p.ParametersJson,
                 p.IsActive, p.EffectiveFrom, p.EffectiveTo,
-                p.BusinessProductId, p.BusinessPlatformName))
+                p.BusinessProductId, p.BusinessPlatformName,
+                p.BeneficiaryPolicy, p.AllowMultipleHoldings))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<ProductDto>>(products);

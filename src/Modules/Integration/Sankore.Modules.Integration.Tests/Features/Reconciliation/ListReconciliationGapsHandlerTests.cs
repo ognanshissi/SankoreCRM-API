@@ -82,6 +82,12 @@ public sealed class ListReconciliationGapsHandlerTests
         {
             // A clean type is a ZERO and not a missing key: a reader must be able to tell
             // "looked for, none found" from "not in the answer".
+            //
+            // This read names no connection, so the seeded set is the tenant-wide UNION of both
+            // comparisons (BNF-B-17) — which is why DesignationOutOfSync appears as a zero here
+            // even though only an insurance run can produce one. A type one family detects is not
+            // undetectable for the tenant.
+            [nameof(GapType.DesignationOutOfSync)] = 0,
             [nameof(GapType.MissingInExternal)] = 2,
             [nameof(GapType.StatusMismatch)] = 1,
             [nameof(GapType.KycMismatch)] = 0,

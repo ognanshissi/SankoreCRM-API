@@ -520,10 +520,26 @@ internal sealed class ExecuteIntegrationCommandHandler(
                 break;
 
             default:
-                // Every other success is between this module and the external system. The policy
-                // and claim events of ASS-04/ASS-09 carry insurer-side detail this handler does
-                // not have (a policy number, a status) and are published by the slices that read
-                // it back.
+                // Everything else gets the GENERIC success signal (BNF-B-16). The policy and claim
+                // events of ASS-04/ASS-09 still carry the insurer-side detail this handler does
+                // not have — a policy number, a status — and are still published by the slices
+                // that read it back; but the module that OWNS the entity needs to know its write
+                // landed, and before this it had no way to. A ProductHolding stayed in
+                // PendingSync for ever.
+                //
+                // Through the outbox like the two above, so the announcement and the status commit
+                // together.
+                await publisher.PublishAsync(new IntegrationCommandSucceededEvent(
+                    TenantId: command.TenantId,
+                    CommandId: command.Id,
+                    ConnectionId: connection.Id,
+                    CommandType: command.CommandType.ToString(),
+                    EntityType: command.EntityType,
+                    CrmId: command.CrmId,
+                    // The reference the far end answered with, whichever shape it took: a created
+                    // entity's external id when there is one, the raw response reference otherwise.
+                    ExternalRef: outcome.ReferenceExternalId ?? outcome.ExternalResponseRef,
+                    SucceededAt: now), ct);
                 break;
         }
     }

@@ -22,6 +22,11 @@ internal sealed class DesignTimeLeadsDbContextFactory: IDesignTimeDbContextFacto
             .UseSnakeCaseNamingConvention()
             .Options;
 
-        return new LeadsDbContext(opts, new FixedTenantContext(Guid.Empty));
+        // Crypto.LeadFieldEncryption.Offline and not the real key: this factory exists to emit
+        // DDL. It reads and writes no row, so the key it builds the converter with is irrelevant —
+        // and reaching for the real one would make `dotnet ef migrations add` fail on a machine
+        // that has no secrets configured.
+        return new LeadsDbContext(
+            opts, new FixedTenantContext(Guid.Empty), Crypto.LeadFieldEncryption.Offline);
     }
 }

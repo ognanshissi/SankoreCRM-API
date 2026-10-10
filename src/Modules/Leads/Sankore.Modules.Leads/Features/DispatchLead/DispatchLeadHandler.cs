@@ -28,6 +28,7 @@ internal sealed class DispatchLeadHandler(
     DispatchingStrategyFactory strategyFactory,
     DispatchingRuleResolver ruleResolver,
     AgentCapacityService capacityService,
+    ClientAdvisorResolver clientAdvisorResolver,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     ILogger<DispatchLeadHandler> logger,
     TimeProvider clock)
@@ -171,6 +172,67 @@ internal sealed class DispatchLeadHandler(
             await publisher.PublishAsync(
                 new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS"), ct);
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
+        }
+
+        // 4b. Client history (F13.10 / BNF-B-22): a request from a customer already on file goes
+        //     to that customer's own advisor. The relationship is worth more than a balanced
+        //     queue — the client expects the person they know, and that person has the context.
+        //
+        //     Placed AFTER the exclusion list (an administrator saying "not this one" still binds)
+        //     and BEFORE the load heuristics, which are deliberately skipped: MaxTasksPerAgent and
+        //     the anti-monopoly threshold exist to shape how the engine spreads work around, and
+        //     "this client's advisor" is not the engine spreading work around. The same reasoning
+        //     the explicit-agent override above already applies.
+        //
+        //     It is a PREFERENCE, not a requirement: an unavailable advisor falls through to the
+        //     configured strategy rather than failing the dispatch.
+        var clientAdvisor = await clientAdvisorResolver.ResolveAsync(lead, eligible_candidates, ct);
+
+        if (clientAdvisor is not null)
+        {
+            var advisorRules = rules;
+
+            var advisorAssignment = LeadAssignment.Create(
+                tenantId: cmd.TenantId,
+                leadId: lead.Id,
+                agentId: clientAdvisor.Id,
+                strategy: DispatchingStrategy.StickyAssignment,
+                compatibilityScore: 100,
+                slaDeadline: clock.GetUtcNow().Add(advisorRules.FirstContactSla),
+                createdAt: clock.GetUtcNow(),
+                // Same convention as the strategy path below: Guid.Empty is the built-in default
+                // rule, which has no row, so the assignment records null rather than a dangling id.
+                ruleId: advisorRules.Id == Guid.Empty ? null : advisorRules.Id);
+
+            var advisorResult = lead.AssignTo(advisorAssignment, outgoingAssignment);
+            if (advisorResult.IsFailure)
+                return Result.Fail<DispatchLeadResult>(advisorResult.Error!);
+
+            db.LeadAssignments.Add(advisorAssignment);
+
+            await publisher.PublishAsync(
+                new LeadDispatchedEvent(
+                    LeadId: lead.Id,
+                    TenantId: cmd.TenantId,
+                    AgentId: clientAdvisor.Id,
+                    Strategy: advisorAssignment.Strategy,
+                    Score: advisorAssignment.CompatibilityScore,
+                    SlaDeadline: advisorAssignment.SlaDeadline),
+                ct);
+
+            await db.SaveChangesAsync(ct);
+
+            logger.LogInformation(
+                "Lead {LeadId} routed to customer {CustomerId}'s own advisor {AgentId} "
+                + "(client-history criterion)",
+                lead.Id, lead.CustomerId, clientAdvisor.Id);
+
+            return Result.Ok(new DispatchLeadResult(
+                AssignmentId: advisorAssignment.Id,
+                AgentId: clientAdvisor.Id,
+                AgentName: clientAdvisor.FullName,
+                CompatibilityScore: advisorAssignment.CompatibilityScore,
+                SlaDeadline: advisorAssignment.SlaDeadline));
         }
 
         // 5a. Saturation filter (US-M13-082): exclude agents whose open CRM task

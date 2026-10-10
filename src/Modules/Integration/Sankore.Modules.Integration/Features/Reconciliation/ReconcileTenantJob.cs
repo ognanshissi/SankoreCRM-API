@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Integration.Domain;
+using Sankore.Modules.Integration.Features.Commands;
 using Sankore.Modules.Integration.Features.Snapshot;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.PublicApi;
@@ -177,28 +178,34 @@ public sealed class ReconcileTenantJob(IServiceScopeFactory scopeFactory)
         // does: a job runs outside any HTTP request and the ambient tenant is not necessarily the
         // one being swept.
         //
-        // CORE BANKING only, and active only. The external side of this comparison is
-        // cbs_customer_snapshot, which no insurance connection writes — reconciling one would
-        // report its whole portfolio as MissingInExternal on the strength of a read model that was
-        // never meant to describe it. A deactivated connection is not compared either: its
-        // references are frozen history, and the snapshot behind it stopped being refreshed.
+        // Two families, two comparisons, and they may NOT be merged. A core-banking connection
+        // is compared against cbs_customer_snapshot and an insurance one against the policy read
+        // model; reconciling either against the other's source would report its whole portfolio as
+        // MissingInExternal on the strength of a read model that was never meant to describe it.
+        // What they DO share is the ledger, the dedup, the auto-close and the run row — which is
+        // why this is one job with two comparisons rather than two jobs.
+        //
+        // A deactivated connection is not compared: its references are frozen history, and the
+        // read model behind it stopped being refreshed.
         var connections = await db.Connections
             .IgnoreQueryFilters()
             .Where(c => c.TenantId == tenantId
                      && c.IsActive
-                     && c.Family == IntegrationFamily.CoreBanking)
-            .OrderBy(c => c.Id)
-            .Select(c => c.Id)
+                     && (c.Family == IntegrationFamily.CoreBanking
+                      || c.Family == IntegrationFamily.Insurance))
+            .OrderBy(c => c.Family).ThenBy(c => c.Id)
+            .Select(c => new { c.Id, c.Family })
             .ToListAsync(ct);
 
-        foreach (var connectionId in connections)
+        foreach (var connection in connections)
         {
             report.Connections++;
 
             try
             {
                 var one = await ReconcileConnectionAsync(
-                    db, customers, kyc, publisher, clock, logger, tenantId, connectionId, ct);
+                    db, customers, kyc, publisher, clock, logger,
+                    tenantId, connection.Id, connection.Family, ct);
 
                 report.Add(one);
             }
@@ -210,7 +217,7 @@ public sealed class ReconcileTenantJob(IServiceScopeFactory scopeFactory)
                     ex,
                     "Reconciliation of connection {ConnectionId} of tenant {TenantId} failed; the "
                     + "run row records the failure and the other connections are unaffected.",
-                    connectionId, tenantId);
+                    connection.Id, tenantId);
             }
         }
 
@@ -245,10 +252,14 @@ public sealed class ReconcileTenantJob(IServiceScopeFactory scopeFactory)
         ILogger logger,
         Guid tenantId,
         Guid connectionId,
+        IntegrationFamily family,
         CancellationToken ct)
     {
+        // The undetectable set is per FAMILY: an insurance run cannot look for a KYC mismatch and
+        // a core-banking one cannot look for a clause that was never sent, and a gap type that
+        // can never fire must not read as one that fired and found nothing.
         var run = IntegrationReconciliationRun.Start(
-            tenantId, connectionId, clock, ReconciliationScope.NotDetected);
+            tenantId, connectionId, clock, ReconciliationScope.NotDetectedFor(family));
 
         db.ReconciliationRuns.Add(run);
         await db.SaveChangesAsync(ct);
@@ -257,8 +268,11 @@ public sealed class ReconcileTenantJob(IServiceScopeFactory scopeFactory)
 
         try
         {
-            var gapsByType = await ComparePortfolioAsync(
-                db, customers, kyc, clock, logger, tenantId, connectionId, run.Id, report, ct);
+            var gapsByType = family == IntegrationFamily.Insurance
+                ? await CompareHoldingsAsync(
+                    db, customers, clock, logger, tenantId, connectionId, run.Id, report, ct)
+                : await ComparePortfolioAsync(
+                    db, customers, kyc, clock, logger, tenantId, connectionId, run.Id, report, ct);
 
             run.Finish(report.Checked, report.Observed, report.Closed, clock);
 
@@ -388,6 +402,10 @@ public sealed class ReconcileTenantJob(IServiceScopeFactory scopeFactory)
             .Where(g => ReconciliationScope.Detected.Contains(g.GapType))
             .Select(g => g.Id)
             .ToHashSet();
+
+        // Note the scoping that makes two comparisons on one ledger safe: openGaps above is read
+        // per CONNECTION, and a connection belongs to exactly one family. So a customer run can
+        // never see — nor close — a holding run's gaps, and vice versa.
 
         string? cursor = null;
 
@@ -541,6 +559,249 @@ public sealed class ReconcileTenantJob(IServiceScopeFactory scopeFactory)
 
         return opened;
     }
+
+
+    /// <summary>
+    /// The INSURANCE comparison (BNF-B-17): the holdings this connection has subscribed, against
+    /// the insurer's own policy record and against what was actually sent.
+    ///
+    /// <para>
+    /// Same shape as the customer comparison on purpose — keyset paging over
+    /// <c>integration_reference</c>, one batched CRM read per page, one external read per page,
+    /// the same dedup and the same auto-close — because the ledger, the de-duplication and the
+    /// resolution workflow are shared and must behave identically whichever side found the gap.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The CRM side is enumerated from the reference table, not from M01.</b> That is both what
+    /// the story asks for and the only route that exists: <c>ICustomersModule</c> exposes no "list
+    /// this tenant's holdings", and adding one would hand back every holding of the tenant
+    /// including those on lines this connection has never carried. The reference table is scoped
+    /// to a tenant AND a connection and holds exactly the policies this connection issued —
+    /// written by <c>ExecuteIntegrationCommandHandler</c> on a successful subscription, keyed by
+    /// the HOLDING since BNF-B-16.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Three gap types, and one deliberately absent.</b> A holding the insurer never confirmed
+    /// (<c>MissingInExternal</c>), the two sides disagreeing about whether the policy is in force
+    /// (<c>StatusMismatch</c>), and a clause the insurer was never sent
+    /// (<c>DesignationOutOfSync</c>). What is NOT here is "the insurer's beneficiaries differ from
+    /// ours": nothing in <c>PolicyRecord</c> records the insurer's clause, so that comparison has
+    /// no input — see <see cref="ReconciliationScope.NotDetectedForHoldings"/>.
+    /// </para>
+    /// </summary>
+    private static async Task<Dictionary<string, int>> CompareHoldingsAsync(
+        IntegrationDbContext db,
+        ICustomersModule customers,
+        TimeProvider clock,
+        ILogger logger,
+        Guid tenantId,
+        Guid connectionId,
+        Guid runId,
+        ReconciliationReport report,
+        CancellationToken ct)
+    {
+        var opened = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        var openGaps = await db.ReconciliationGaps
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .Where(g => g.TenantId == tenantId
+                     && g.ConnectionId == connectionId
+                     && g.Resolution == GapResolution.Open)
+            .ToListAsync(ct);
+
+        var byKey = new Dictionary<GapKey, IntegrationReconciliationGap>();
+
+        foreach (var gap in openGaps)
+            byKey[new GapKey(gap.GapType, gap.CrmId, gap.ExternalId)] = gap;
+
+        // The auto-close candidates are the types an INSURANCE run looks for. Passing the
+        // core-banking set here would close every DesignationOutOfSync row on the first night and
+        // leave every StatusMismatch of a policy open for ever.
+        var unseen = openGaps
+            .Where(g => ReconciliationScope.DetectedForHoldings.Contains(g.GapType))
+            .Select(g => g.Id)
+            .ToHashSet();
+
+        string? cursor = null;
+
+        while (true)
+        {
+            var query = db.References
+                .IgnoreQueryFilters()
+                .Where(r => r.TenantId == tenantId
+                         && r.ConnectionId == connectionId
+                         && r.EntityType == IntegrationEntityTypes.Policy);
+
+            if (cursor is not null)
+            {
+                // Ordinal is deliberately NOT specified — the comparison is translated to SQL and
+                // evaluated under the column's collation, the same one the OrderBy sorts under. A
+                // keyset cursor is only sound while its predicate and its ordering agree. The
+                // customer comparison carries the same suppression and the same reasoning.
+#pragma warning disable CA1309
+                query = query.Where(r => string.Compare(r.ExternalId, cursor) > 0);
+#pragma warning restore CA1309
+            }
+
+            var page = await query
+                .OrderBy(r => r.ExternalId)
+                .Take(PageSize)
+                .Select(r => new ReferencedPolicy(r.CrmId, r.ExternalId))
+                .ToListAsync(ct);
+
+            if (page.Count == 0) break;
+
+            cursor = page[^1].ExternalId;
+
+            // Lists, never arrays: on .NET 10 an array's Contains binds to the ReadOnlySpan<T>
+            // extension and stops translating, which would turn these reads into client-side
+            // evaluations over the whole table.
+            var holdingIds = page.Select(p => p.HoldingId).Distinct().ToList();
+            var externalIds = page.Select(p => p.ExternalId).Distinct().ToList();
+
+            var states = await customers.GetHoldingSyncStatesAsync(tenantId, holdingIds, ct);
+
+            // Narrowed by CONNECTION, unlike the CBS snapshot read of the customer comparison —
+            // and the difference is real rather than an inconsistency. A tenant has one core
+            // banking system, so that read model is per tenant; it may distribute for SEVERAL
+            // insurers at once, each with its own policies, so a policy record of another insurer
+            // says nothing about this connection's portfolio.
+            var policies = await db.Policies
+                .IgnoreQueryFilters()
+                .Where(p => p.TenantId == tenantId
+                         && p.ConnectionId == connectionId
+                         && externalIds.Contains(p.ExternalPolicyId))
+                .Select(p => new PolicyFacts(p.ExternalPolicyId, p.IsLive))
+                .ToListAsync(ct);
+
+            var policyByExternalId = policies.ToDictionary(p => p.ExternalPolicyId, StringComparer.Ordinal);
+
+            // Was each holding's CURRENT clause version actually sent? Answered by recomputing the
+            // deterministic idempotency key for exactly that (holding, version) and looking for a
+            // succeeded command — one query per page, and EXACT. Counting succeeded commands
+            // instead would under-report whenever an intermediate avenant was rejected and a later
+            // one landed, which is a false finding on a contract that is in fact up to date.
+            var expectedKeys = new Dictionary<string, Guid>(StringComparer.Ordinal);
+
+            foreach (var reference in page)
+            {
+                if (!states.TryGetValue(reference.HoldingId, out var state)) continue;
+
+                var key = IdempotencyKeyFactory
+                    .ForHoldingSubscription(tenantId, connectionId, reference.HoldingId, state.ClauseVersion)
+                    .Value;
+
+                expectedKeys[key] = reference.HoldingId;
+            }
+
+            var sentHoldingIds = new HashSet<Guid>();
+
+            if (expectedKeys.Count > 0)
+            {
+                var keys = expectedKeys.Keys.ToList();
+
+                var landed = await db.Commands
+                    .IgnoreQueryFilters()
+                    .Where(c => c.TenantId == tenantId
+                             && c.ConnectionId == connectionId
+                             && c.Status == CommandStatus.Succeeded
+                             && keys.Contains(c.IdempotencyKey))
+                    .Select(c => c.IdempotencyKey)
+                    .ToListAsync(ct);
+
+                foreach (var key in landed)
+                {
+                    if (expectedKeys.TryGetValue(key, out var holdingId))
+                        sentHoldingIds.Add(holdingId);
+                }
+            }
+
+            foreach (var reference in page)
+            {
+                report.Checked++;
+
+                if (!states.TryGetValue(reference.HoldingId, out var state))
+                {
+                    // A reference pointing at no holding. Counted and logged, never a gap — the
+                    // same call the customer comparison makes for an unknown client, and for the
+                    // same reason: M01 deletes no holding (closing is a status), so this is a
+                    // data-integrity anomaly rather than a reconciliation finding.
+                    report.UnknownInCrm++;
+
+                    logger.LogWarning(
+                        "Reconciliation: connection {ConnectionId} of tenant {TenantId} holds a "
+                        + "policy reference for holding {HoldingId}, which M01 does not know. "
+                        + "No gap is opened; the reference table and M01 disagree.",
+                        connectionId, tenantId, reference.HoldingId);
+
+                    continue;
+                }
+
+                bool? policyIsLive = policyByExternalId.TryGetValue(reference.ExternalId, out var facts)
+                    ? facts.IsLive
+                    : null;
+
+                var divergence = ReconciliationComparison.CompareHolding(
+                    state, policyIsLive, sentHoldingIds.Contains(reference.HoldingId));
+
+                if (divergence is null) continue;
+
+                report.Observed++;
+
+                // MissingInExternal carries NO external id, per the aggregate's field contract —
+                // the same rule the customer comparison follows. The gap points at the holding,
+                // and GET integration/references answers the external identifier for anyone
+                // holding the permission.
+                var externalId = divergence.GapType == GapType.MissingInExternal
+                    ? null
+                    : reference.ExternalId;
+
+                var key = new GapKey(divergence.GapType, reference.HoldingId, externalId);
+
+                if (byKey.TryGetValue(key, out var existing))
+                {
+                    existing.Touch(clock);
+                    unseen.Remove(existing.Id);
+                    report.Recurring++;
+                    continue;
+                }
+
+                db.ReconciliationGaps.Add(IntegrationReconciliationGap.Open(
+                    tenantId: tenantId,
+                    runId: runId,
+                    connectionId: connectionId,
+                    gapType: divergence.GapType,
+                    crmId: reference.HoldingId,
+                    externalId: externalId,
+                    clock: clock,
+                    detailsJson: divergence.DetailsJson));
+
+                report.New++;
+
+                var typeName = divergence.GapType.ToString();
+                opened[typeName] = opened.TryGetValue(typeName, out var count) ? count + 1 : 1;
+            }
+
+            if (page.Count < PageSize) break;
+        }
+
+        foreach (var gap in openGaps.Where(g => unseen.Contains(g.Id)))
+        {
+            gap.CloseAutomatically(clock);
+            report.Closed++;
+        }
+
+        return opened;
+    }
+
+    /// <summary>One policy reference of the page. The CRM id of a policy reference IS a holding id.</summary>
+    private sealed record ReferencedPolicy(Guid HoldingId, string ExternalId);
+
+    /// <summary>The insurer's answer about one policy, from the read model.</summary>
+    private sealed record PolicyFacts(string ExternalPolicyId, bool IsLive);
 
     /// <summary>
     /// The tier M02 believes, in this module's vocabulary — or <c>null</c> when M02 could not be

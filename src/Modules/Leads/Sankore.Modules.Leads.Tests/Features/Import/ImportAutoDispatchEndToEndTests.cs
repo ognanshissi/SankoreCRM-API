@@ -101,6 +101,16 @@ public sealed class ImportAutoDispatchEndToEndTests : IDisposable
         var indexer = Substitute.For<IPhoneBlindIndexer>();
         indexer.Compute(Arg.Any<string>()).Returns(ci => "idx-" + ci.Arg<string>());
         services.AddSingleton(indexer);
+        // The e-mail blind index is a real HMAC over the suite's key, not a stub — see
+        // TestLeadEmailIndexer for why echoing the address back would hide what dedup relies on.
+        services.AddSingleton(TestSupport.TestLeadEmailIndexer.Instance);
+        // No existing-customer match configured: FindMatchesAsync returns an empty list by
+        // default, so every imported lead is captured unattached — which is what this test's
+        // score and dispatch expectations assume.
+        services.AddSingleton(Substitute.For<Sankore.Modules.Customers.PublicApi.ICustomersModule>());
+        // The real resolver over that empty M01: with no CustomerId on the lead it returns null
+        // without a call, so dispatching runs the configured strategy exactly as before.
+        services.AddSingleton(TestSupport.TestClientAdvisorResolver.None());
 
         services.AddSingleton(Options.Create(new LeadModuleSettings
         {

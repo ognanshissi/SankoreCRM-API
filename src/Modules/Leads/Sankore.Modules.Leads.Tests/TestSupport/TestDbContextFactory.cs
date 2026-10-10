@@ -24,7 +24,10 @@ public sealed class TestDbContextFactory(Guid tenantId) : IDisposable
 
         ITenantContext tenantContext = new FixedTenantContext(tenantId);
 
-        return new LeadsDbContext(options, tenantContext);
+        // A real AES-GCM encryptor under a non-secret key, not a pass-through: Lead.Email is
+        // mapped through an encrypting value converter, and a test that stored the clear value
+        // would not be exercising the shape the database actually holds.
+        return new LeadsDbContext(options, tenantContext, LeadsTestEncryptor.Instance);
     }
 
     public void Dispose()

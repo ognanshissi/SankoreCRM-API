@@ -522,17 +522,33 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             var tenantId = facade.TenantId;
             var connection = await facade.ResolveInsurerForProductAsync(tenantId, payload.CrmProductId, ct);
 
+            // ── Which CRM entity this command is about ──────────────────────
+            //
+            // M01 now owns a contract record — ProductHolding (BNF-B-14) — so a subscription
+            // driven by one is keyed by the HOLDING and its clause version. That is what lets the
+            // return path name the holding the insurer answered about, and what makes an avenant a
+            // second send instead of a swallowed replay.
+            //
+            // Without a holding the old keying stands: by customer and product, because the caller
+            // has no CRM-side contract record to point at. The comment that used to say no module
+            // owns one is no longer true, and the two cases are now distinguished rather than
+            // conflated.
+            var (crmId, idempotencyKey) = payload.CrmHoldingId is { } holdingId
+                ? (holdingId,
+                   IdempotencyKeyFactory.ForHoldingSubscription(
+                       tenantId, connection.Id, holdingId, payload.ClauseVersion))
+                : (payload.CrmCustomerId,
+                   IdempotencyKeyFactory.ForPolicySubscription(
+                       tenantId, connection.Id, payload.CrmCustomerId,
+                       payload.CrmProductId, payload.EffectiveDate));
+
             return await facade.EnqueueAsync(
                 tenantId,
                 connection,
                 CommandType.SubscribePolicy,
                 IntegrationEntityTypes.Policy,
-                // The policy has no CRM id of its own — no module owns a policy record yet — so
-                // the command, and the reference it will produce, are keyed by the customer.
-                payload.CrmCustomerId,
-                IdempotencyKeyFactory.ForPolicySubscription(
-                    tenantId, connection.Id, payload.CrmCustomerId,
-                    payload.CrmProductId, payload.EffectiveDate),
+                crmId,
+                idempotencyKey,
                 // The beneficiaries carry names and dates of birth, so this payload is genuinely
                 // sensitive and genuinely encrypted. Only its top-level field names are in clear.
                 facade._protector.Protect(payload),

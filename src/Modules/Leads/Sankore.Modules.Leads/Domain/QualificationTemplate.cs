@@ -22,6 +22,43 @@ public sealed class QualificationTemplate : AggregateRoot
 
     public TemplateStatus Status { get; private set; }
 
+    // ── Multi-person questionnaires (BNF-B-07) ──────────────────────────────
+
+    /// <summary>
+    /// Who this questionnaire is answered about (BNF-B-07). Defaults to
+    /// <see cref="QualificationSubjectScope.Lead"/>, which is the pre-existing behaviour — every
+    /// template written before this evolution keeps it and behaves exactly as it did.
+    /// </summary>
+    public QualificationSubjectScope SubjectScope { get; private set; } = QualificationSubjectScope.Lead;
+
+    /// <summary>
+    /// Whether this questionnaire collects health data (BNF-B-09).
+    ///
+    /// <para>
+    /// Setting it forces <see cref="ExcludeFromScoring"/> true and makes it unsettable — see
+    /// <see cref="SetSubjectScope"/>. It also changes how the answers are STORED: encrypted in
+    /// bulk, with no blind index, and readable only with <c>lead:health:read</c>.
+    /// </para>
+    /// </summary>
+    public bool IsHealthQuestionnaire { get; private set; }
+
+    /// <summary>
+    /// Whether the answers are kept out of the F13.6 score (BNF-B-07).
+    ///
+    /// <para>
+    /// Always true for a health questionnaire, and not negotiable: BNF-B-09 forbids health data
+    /// from reaching the scoring or the dispatching, and a flag an administrator could untick
+    /// would make that a configuration rather than a rule. An architecture test pins the
+    /// structural half.
+    /// </para>
+    /// </summary>
+    public bool ExcludeFromScoring { get; private set; }
+
+    /// <summary>
+    /// True when this questionnaire produces one response PER PERSON rather than one per lead.
+    /// </summary>
+    public bool IsPerPerson => SubjectScope != QualificationSubjectScope.Lead;
+
     /// <summary>Monotonically increasing counter — incremented each time the template is published.</summary>
     public int Version { get; private set; }
 
@@ -55,6 +92,68 @@ public sealed class QualificationTemplate : AggregateRoot
             Version     = 0,
             CreatedAt   = now
         };
+
+    /// <summary>
+    /// Categories a HEALTH questionnaire may be attached to (BNF-B-07: "une ligne de produit de
+    /// catégorie Insurance").
+    ///
+    /// <para>
+    /// THREE values, not one. The Kernel's <c>ProductCategory</c> splits insurance into
+    /// <c>Insurance</c>, <c>HealthInsurance</c> and <c>ForecastInsurance</c>, and a health
+    /// questionnaire is most obviously for the second of those — reading the specification's
+    /// "Insurance" as the single enum member of that name would refuse the very product it was
+    /// written for.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// Fully qualified, because this class has an INSTANCE property named <c>ProductCategory</c>
+    /// which shadows the enum type — the unqualified form resolves to the property and does not
+    /// compile.
+    /// </remarks>
+    private static readonly Sankore.Shared.Kernel.ProductCategory[] HealthEligibleCategories =
+    [
+        Sankore.Shared.Kernel.ProductCategory.Insurance,
+        Sankore.Shared.Kernel.ProductCategory.HealthInsurance,
+        Sankore.Shared.Kernel.ProductCategory.ForecastInsurance,
+    ];
+
+    /// <summary>
+    /// Sets the questionnaire's subject scope and its health flag (BNF-B-07). Draft only, like
+    /// every other edit.
+    /// </summary>
+    /// <param name="excludeFromScoring">
+    /// Ignored when <paramref name="isHealthQuestionnaire"/> is true — it is then forced on.
+    /// </param>
+    /// <returns>
+    /// <c>TEMPLATE_NOT_IN_DRAFT_STATUS</c>, or <c>HEALTH_QUESTIONNAIRE_REQUIRES_INSURANCE_LINE</c>
+    /// when a health questionnaire is scoped to a category that is not an insurance one.
+    /// </returns>
+    public Result SetSubjectScope(
+        QualificationSubjectScope subjectScope,
+        bool isHealthQuestionnaire,
+        bool excludeFromScoring)
+    {
+        if (Status != TemplateStatus.Draft)
+            return Result.Fail("TEMPLATE_NOT_IN_DRAFT_STATUS");
+
+        if (isHealthQuestionnaire)
+        {
+            // A health questionnaire with no category at all is refused too: "generic health
+            // questions" would be collected from every lead of every product line, which is the
+            // opposite of what a purpose limitation means.
+            if (ProductCategory is not { } category || !HealthEligibleCategories.Contains(category))
+                return Result.Fail("HEALTH_QUESTIONNAIRE_REQUIRES_INSURANCE_LINE");
+        }
+
+        SubjectScope          = subjectScope;
+        IsHealthQuestionnaire = isHealthQuestionnaire;
+
+        // Forced, not merely defaulted (BNF-B-07). Health answers must never reach the score, and
+        // a flag an administrator could untick would make that a setting rather than a rule.
+        ExcludeFromScoring = isHealthQuestionnaire || excludeFromScoring;
+
+        return Result.Ok();
+    }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -134,6 +233,13 @@ public sealed class QualificationTemplate : AggregateRoot
     {
         var copy = Create(TenantId, name, now, Description, ProductCategory, ProductCode);
 
+        // Carried onto the copy. A duplicated health questionnaire that came back as a scoring
+        // one, answered per lead, would be the most dangerous possible default — the copy is made
+        // precisely to start the next revision of THIS questionnaire.
+        copy.SubjectScope          = SubjectScope;
+        copy.IsHealthQuestionnaire = IsHealthQuestionnaire;
+        copy.ExcludeFromScoring    = ExcludeFromScoring;
+
         // Sections first: every question carries a SectionId that has to point at the
         // copy's own section rather than the source's.
         var sectionIdMap = new Dictionary<Guid, Guid>();
@@ -170,6 +276,14 @@ public sealed class QualificationTemplate : AggregateRoot
     {
         if (Status != TemplateStatus.Draft)
             return Result.Fail("TEMPLATE_NOT_IN_DRAFT_STATUS");
+
+        // Checked BEFORE the category moves: a health questionnaire re-scoped onto a savings
+        // line would otherwise keep collecting health answers under a product that has no business
+        // asking for them, and SetSubjectScope — the only place that rule lives — is not involved
+        // in this call.
+        if (IsHealthQuestionnaire
+            && (productCategory is not { } moved || !HealthEligibleCategories.Contains(moved)))
+            return Result.Fail("HEALTH_QUESTIONNAIRE_REQUIRES_INSURANCE_LINE");
 
         Name        = name.Trim();
         Description = description?.Trim();

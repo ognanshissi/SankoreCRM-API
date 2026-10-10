@@ -308,7 +308,14 @@ public sealed class ReconcileTenantJobTests
         // The visible half of design decision 1: a gap type that can never fire must not read
         // like one that fired and found nothing. If this is ever null, a zero MissingInCrm count
         // on a compliance report becomes indistinguishable from a measurement.
-        run.UndetectableGapTypes.Should().Be(nameof(GapType.MissingInCrm));
+        //
+        // This is a CORE-BANKING run, so it also declares that it cannot look for a beneficiary
+        // clause divergence (BNF-B-17) — the mirror of an insurance run declaring it cannot look
+        // for a KYC mismatch. Both are listed rather than ignored because the detected set is
+        // also the auto-close filter: a type nobody declared is a type one comparison might
+        // quietly close without ever having looked for it.
+        run.UndetectableGapTypes.Should().Be(
+            $"{nameof(GapType.MissingInCrm)},{nameof(GapType.DesignationOutOfSync)}");
     }
 
     [Fact]
@@ -420,29 +427,18 @@ public sealed class ReconcileTenantJobTests
     // ── Scope: which connections, which tenants, which references ───────────
 
     [Fact]
-    public async Task Reconciles_only_active_core_banking_connections()
+    public async Task A_deactivated_connection_is_not_reconciled()
     {
-        // An insurance connection writes no cbs_customer_snapshot, so comparing one would report
-        // its entire portfolio as MissingInExternal against a read model that was never meant to
-        // describe it. A deactivated connection is frozen history whose snapshot stopped being
-        // refreshed.
+        // Frozen history: its references are closed and the read model behind it stopped being
+        // refreshed, so comparing it would report a portfolio that nobody is maintaining.
         var databaseName = Guid.NewGuid().ToString();
-        var insuranceId = new Guid("eeeeeeee-0000-0000-0000-00000000000e");
         var inactiveId = new Guid("ffffffff-0000-0000-0000-00000000000f");
 
         await using (var seed = ReconciliationTestContext.NewDb(
             ReconciliationTestContext.Tenant, databaseName))
         {
             seed.Connections.Add(CommandsTestHarness.Connection(
-                ReconciliationTestContext.Tenant,
-                family: IntegrationFamily.Insurance,
-                id: insuranceId));
-
-            seed.Connections.Add(CommandsTestHarness.Connection(
                 ReconciliationTestContext.Tenant, active: false, id: inactiveId));
-
-            seed.References.Add(ReconciliationTestContext.Reference(
-                ReconciliationTestContext.Tenant, CustomerA, "EXT-001", insuranceId));
 
             seed.References.Add(ReconciliationTestContext.Reference(
                 ReconciliationTestContext.Tenant, CustomerB, "EXT-002", inactiveId));
@@ -453,9 +449,7 @@ public sealed class ReconcileTenantJobTests
         var report = await Run(
             databaseName,
             ReconciliationTestContext.NightOne,
-            ReconciliationTestContext.Customers(
-                ReconciliationTestContext.Client(CustomerA),
-                ReconciliationTestContext.Client(CustomerB)),
+            ReconciliationTestContext.Customers(ReconciliationTestContext.Client(CustomerB)),
             ReconciliationTestContext.Kyc("Full"));
 
         report.Connections.Should().Be(0);
@@ -466,6 +460,56 @@ public sealed class ReconcileTenantJobTests
 
         db.ReconciliationRuns.Should().BeEmpty();
         db.ReconciliationGaps.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_insurance_connections_CUSTOMER_references_are_never_compared()
+    {
+        // BNF-B-17 added an insurance comparison, and this is the line it must not cross: an
+        // insurance connection writes no cbs_customer_snapshot, so comparing its CUSTOMER
+        // references against that read model would report them all as MissingInExternal. The
+        // insurance run reads POLICY references only, so a stray customer reference on an
+        // insurance connection is invisible to both comparisons rather than wrongly reported by
+        // either.
+        //
+        // The run row still appears — the connection IS reconciled now — and that is the whole
+        // difference from the pre-BNF-B-17 behaviour.
+        var databaseName = Guid.NewGuid().ToString();
+        var insuranceId = new Guid("eeeeeeee-0000-0000-0000-00000000000e");
+
+        await using (var seed = ReconciliationTestContext.NewDb(
+            ReconciliationTestContext.Tenant, databaseName))
+        {
+            seed.Connections.Add(CommandsTestHarness.Connection(
+                ReconciliationTestContext.Tenant,
+                family: IntegrationFamily.Insurance,
+                id: insuranceId));
+
+            seed.References.Add(ReconciliationTestContext.Reference(
+                ReconciliationTestContext.Tenant, CustomerA, "EXT-001", insuranceId));
+
+            await seed.SaveChangesAsync();
+        }
+
+        var report = await Run(
+            databaseName,
+            ReconciliationTestContext.NightOne,
+            ReconciliationTestContext.Customers(ReconciliationTestContext.Client(CustomerA)),
+            ReconciliationTestContext.Kyc("Full"));
+
+        report.Connections.Should().Be(1, "the insurance connection is reconciled");
+        report.Checked.Should().Be(0, "but its CUSTOMER reference is not a policy");
+
+        await using var db = ReconciliationTestContext.NewDb(
+            ReconciliationTestContext.Tenant, databaseName);
+
+        db.ReconciliationGaps.Should().BeEmpty();
+
+        var run = db.ReconciliationRuns.Should().ContainSingle().Subject;
+        run.ConnectionId.Should().Be(insuranceId);
+        run.UndetectableGapTypes.Should().NotBeNull();
+        run.UndetectableGapTypes.Should().Contain(nameof(GapType.KycMismatch),
+            "an insurance run cannot look for a KYC mismatch, and the run row says so");
     }
 
     [Fact]

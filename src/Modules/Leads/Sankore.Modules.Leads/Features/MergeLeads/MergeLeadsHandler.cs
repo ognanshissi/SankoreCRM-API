@@ -3,11 +3,13 @@ namespace Sankore.Modules.Leads.Features.MergeLeads;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
 
-internal sealed class MergeLeadsHandler(LeadsDbContext db, TimeProvider clock)
+internal sealed class MergeLeadsHandler(
+    LeadsDbContext db, TimeProvider clock, ILeadEmailIndexer emailIndexer)
     : IRequestHandler<MergeLeadsCommand, Result<MergeLeadResult>>
 {
     public async Task<Result<MergeLeadResult>> Handle(MergeLeadsCommand cmd, CancellationToken ct)
@@ -46,7 +48,13 @@ internal sealed class MergeLeadsHandler(LeadsDbContext db, TimeProvider clock)
         if (prefs is not null)
         {
             target.ApplyMergeOverrides(
-                email:             prefs.TakeEmail             && source.Email             is not null ? source.Email             : null,
+                // source.Email ?? source.LegacyEmailClear: a source captured before the
+                // encryption migration still has its address in the legacy column, and a merge
+                // must not drop it just because the backfill has not reached that row.
+                email:             prefs.TakeEmail ? (source.Email ?? source.LegacyEmailClear) : null,
+                emailBlindIndex:   prefs.TakeEmail
+                                       ? emailIndexer.Compute(source.Email ?? source.LegacyEmailClear)
+                                       : null,
                 firstName:         prefs.TakeFirstName         && source.FirstName         is not null ? source.FirstName         : null,
                 lastName:          prefs.TakeLastName          && source.LastName          is not null ? source.LastName          : null,
                 nationalId:        prefs.TakeNationalId        && source.NationalId        is not null ? source.NationalId        : null,

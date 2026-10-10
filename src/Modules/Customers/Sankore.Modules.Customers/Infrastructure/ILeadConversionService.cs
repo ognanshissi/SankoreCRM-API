@@ -17,4 +17,12 @@ using Sankore.Shared.Kernel;
 internal interface ILeadConversionService
 {
     Task<Result<CreateFromLeadResult>> CreateFromLeadAsync(CreateFromLeadRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// The draft holding a converted lead leaves behind (BNF-B-24). Same seam and same reason:
+    /// dispatching through MediatR is what puts it behind the validation, transaction and audit
+    /// behaviours.
+    /// </summary>
+    Task<Result<Guid>> CreateHoldingFromLeadAsync(
+        CreateHoldingFromLeadRequest request, CancellationToken ct);
 }

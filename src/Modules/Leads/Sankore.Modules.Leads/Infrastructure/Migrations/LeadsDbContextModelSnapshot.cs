@@ -231,6 +231,106 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("duplicate_dismissals", "leads");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.FatcaDeclaration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Documentation")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("documentation");
+
+                    b.Property<string>("EvidenceDocRef")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("evidence_doc_ref");
+
+                    b.Property<string>("Indicia")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("indicia")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<Guid>("LeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lead_id");
+
+                    b.Property<Guid>("RecordedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recorded_by");
+
+                    b.Property<string>("RefusalReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("refusal_reason");
+
+                    b.Property<string>("SelfCertificationDocRef")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("self_certification_doc_ref");
+
+                    b.Property<DateTimeOffset?>("SignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("signed_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("subject_type");
+
+                    b.Property<DateTimeOffset?>("SupersededAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("superseded_at");
+
+                    b.Property<Guid?>("SupersededByDeclarationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("superseded_by_declaration_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("UsTin")
+                        .HasColumnType("text")
+                        .HasColumnName("us_tin_enc");
+
+                    b.HasKey("Id")
+                        .HasName("pk_fatca_declarations");
+
+                    b.HasIndex("TenantId", "LeadId")
+                        .HasDatabaseName("ix_fatca_declarations_tenant_id_lead_id");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_fatca_declarations_tenant_id_status")
+                        .HasFilter("superseded_at IS NULL AND status IN ('UsPerson', 'Recalcitrant')");
+
+                    b.HasIndex("LeadId", "SubjectType", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_fatca_declarations_active_per_subject")
+                        .HasFilter("superseded_at IS NULL");
+
+                    b.ToTable("fatca_declarations", "leads");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.Lead", b =>
                 {
                     b.Property<Guid>("Id")
@@ -245,6 +345,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<Guid?>("AgentCollectedLeadId")
                         .HasColumnType("uuid")
                         .HasColumnName("agent_collected_lead_id");
+
+                    b.Property<DateTimeOffset?>("AnonymizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("anonymized_at");
 
                     b.Property<string>("Campaign")
                         .HasMaxLength(100)
@@ -300,6 +404,25 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("current_assignment_id");
 
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<bool>("CustomerLinkIsAutomatic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("customer_link_is_automatic");
+
+                    b.Property<string>("CustomerLinkReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("customer_link_reason");
+
+                    b.Property<DateTimeOffset?>("CustomerLinkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("customer_linked_at");
+
                     b.Property<string>("CustomerReference")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -310,9 +433,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnName("date_of_birth");
 
                     b.Property<string>("Email")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("email");
+                        .HasColumnType("text")
+                        .HasColumnName("email_enc");
+
+                    b.Property<string>("EmailBlindIndex")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("email_blind_index");
 
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
@@ -345,6 +472,12 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("gender");
 
+                    b.Property<bool>("HasPepExposure")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_pep_exposure");
+
                     b.Property<string>("IntentLevel")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -356,6 +489,12 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("interested_product");
+
+                    b.Property<bool>("IsAnonymized")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_anonymized");
 
                     b.Property<bool>("IsTest")
                         .HasColumnType("boolean")
@@ -379,6 +518,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("lead_source_config_id");
 
+                    b.Property<string>("LegacyEmailClear")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("email");
+
                     b.Property<string>("LossReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -392,6 +536,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<Guid?>("OwnerId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_id");
+
+                    b.Property<DateTimeOffset?>("PepDeclaredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pep_declared_at");
 
                     b.Property<string>("PhoneBlindIndex")
                         .HasMaxLength(64)
@@ -419,6 +567,35 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("preferred_language");
+
+                    b.Property<string>("PrincipalAddressLine")
+                        .HasColumnType("text")
+                        .HasColumnName("principal_address_enc");
+
+                    b.Property<string>("PrincipalCity")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("principal_city");
+
+                    b.Property<string>("PrincipalCountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("principal_country_code")
+                        .IsFixedLength(false);
+
+                    b.Property<string>("PrincipalPostalCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("principal_postal_code");
+
+                    b.Property<string>("PrincipalUsageName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("principal_usage_name");
+
+                    b.Property<Guid?>("ProductLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_line_id");
 
                     b.Property<string>("ProspectType")
                         .IsRequired()
@@ -511,9 +688,21 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.HasIndex("PhoneNumber")
                         .HasDatabaseName("ix_leads_phone_number");
 
+                    b.HasIndex("TenantId", "CustomerId")
+                        .HasDatabaseName("ix_leads_tenant_id_customer_id")
+                        .HasFilter("customer_id IS NOT NULL");
+
                     b.HasIndex("TenantId", "CustomerReference")
                         .HasDatabaseName("ix_leads_tenant_id_customer_reference")
                         .HasFilter("customer_reference IS NOT NULL");
+
+                    b.HasIndex("TenantId", "EmailBlindIndex")
+                        .HasDatabaseName("ix_leads_tenant_id_email_blind_index")
+                        .HasFilter("email_blind_index IS NOT NULL");
+
+                    b.HasIndex("TenantId", "HasPepExposure")
+                        .HasDatabaseName("ix_leads_tenant_id_has_pep_exposure")
+                        .HasFilter("has_pep_exposure");
 
                     b.HasIndex("TenantId", "LeadSourceConfigId")
                         .HasDatabaseName("ix_leads_tenant_id_lead_source_config_id")
@@ -532,6 +721,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "Status")
                         .HasDatabaseName("ix_leads_tenant_id_status");
+
+                    b.HasIndex("TenantId", "UpdatedAt")
+                        .HasDatabaseName("ix_leads_retention_candidates")
+                        .HasFilter("NOT is_anonymized");
 
                     b.ToTable("leads", "leads");
                 });
@@ -716,6 +909,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("channel");
 
+                    b.Property<Guid?>("GivenBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("given_by");
+
                     b.Property<DateTimeOffset>("GrantedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("granted_at");
@@ -738,6 +935,15 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("status");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<string>("SubjectType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("subject_type");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -772,7 +978,76 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasDatabaseName("ix_lead_consents_tenant_id_lead_id_type")
                         .HasFilter("status = 'Active'");
 
+                    b.HasIndex("TenantId", "LeadId", "Type", "SubjectId")
+                        .HasDatabaseName("ix_lead_consents_tenant_id_lead_id_type_subject_id")
+                        .HasFilter("status = 'Active' AND subject_id IS NOT NULL");
+
                     b.ToTable("lead_consents", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadHouseholdMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("LeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lead_id");
+
+                    b.Property<DateTimeOffset?>("PepDeclaredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pep_declared_at");
+
+                    b.Property<string>("RemovalReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("removal_reason");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("removed_at");
+
+                    b.Property<string>("SpouseUnionType")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("spouse_union_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("type");
+
+                    b.Property<bool>("UsesPrincipalAddress")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("uses_principal_address");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lead_household_members");
+
+                    b.HasIndex("LeadId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_lead_one_spouse")
+                        .HasFilter("type = 'Spouse' AND removed_at IS NULL");
+
+                    b.HasIndex("TenantId", "LeadId")
+                        .HasDatabaseName("ix_lead_household_members_tenant_id_lead_id");
+
+                    b.ToTable("lead_household_members", "leads", t =>
+                        {
+                            t.HasCheckConstraint("ck_lhm_union", "(type = 'Spouse') = (spouse_union_type IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadImportJob", b =>
@@ -1077,6 +1352,58 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasDatabaseName("ix_lead_reminders_tenant_id_due_at_status");
 
                     b.ToTable("lead_reminders", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("key");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("value");
+
+                    b.Property<string>("ValueType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("value_type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lead_settings");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ux_lead_settings_key");
+
+                    b.ToTable("lead_settings", "leads");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadSourceConfig", b =>
@@ -1700,26 +2027,70 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<DateTimeOffset>("AnsweredAt")
+                    b.Property<DateTimeOffset?>("AnsweredAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("answered_at");
 
-                    b.Property<Guid>("AnsweredBy")
+                    b.Property<Guid?>("AnsweredBy")
                         .HasColumnType("uuid")
                         .HasColumnName("answered_by");
-
-                    b.Property<string>("AnswersJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("answers_json");
 
                     b.Property<int>("ComputedScore")
                         .HasColumnType("integer")
                         .HasColumnName("computed_score");
 
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("HealthAnswersJson")
+                        .HasColumnType("text")
+                        .HasColumnName("health_answers_enc");
+
+                    b.Property<bool>("IsHealthData")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_health_data");
+
+                    b.Property<bool>("IsPurged")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_purged");
+
                     b.Property<Guid>("LeadId")
                         .HasColumnType("uuid")
                         .HasColumnName("lead_id");
+
+                    b.Property<string>("PlainAnswersJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("answers");
+
+                    b.Property<int>("QuestionnaireVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("questionnaire_version");
+
+                    b.Property<Guid?>("RespondentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("respondent_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("subject_type");
 
                     b.Property<Guid>("TemplateId")
                         .HasColumnType("uuid")
@@ -1729,17 +2100,26 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<DateTimeOffset?>("TransmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("transmitted_at");
+
                     b.HasKey("Id")
                         .HasName("pk_qualification_responses");
-
-                    b.HasIndex("LeadId")
-                        .HasDatabaseName("ix_qualification_responses_lead_id");
 
                     b.HasIndex("TenantId", "LeadId")
                         .HasDatabaseName("ix_qualification_responses_tenant_id_lead_id");
 
                     b.HasIndex("TenantId", "TemplateId")
                         .HasDatabaseName("ix_qualification_responses_tenant_id_template_id");
+
+                    b.HasIndex("TenantId", "TransmittedAt")
+                        .HasDatabaseName("ix_qualification_responses_tenant_id_transmitted_at")
+                        .HasFilter("is_health_data AND NOT is_purged AND transmitted_at IS NOT NULL");
+
+                    b.HasIndex("LeadId", "TemplateId", "SubjectType", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_qualification_responses_subject");
 
                     b.ToTable("qualification_responses", "leads");
                 });
@@ -1795,6 +2175,18 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("description");
 
+                    b.Property<bool>("ExcludeFromScoring")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("exclude_from_scoring");
+
+                    b.Property<bool>("IsHealthQuestionnaire")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_health_questionnaire");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1821,6 +2213,12 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("status");
+
+                    b.Property<string>("SubjectScope")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("subject_scope");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -2385,6 +2783,16 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.FatcaDeclaration", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.Lead", null)
+                        .WithMany()
+                        .HasForeignKey("LeadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_fatca_declarations_leads_lead_id");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.Lead", b =>
                 {
                     b.OwnsOne("Sankore.Shared.Kernel.ValueObject.Money", "AcquisitionCost", b1 =>
@@ -2462,11 +2870,60 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                                 .HasConstraintName("fk_leads_leads_id");
                         });
 
+                    b.OwnsOne("Sankore.Shared.Kernel.ValueObject.PepStatus", "PrincipalPep", b1 =>
+                        {
+                            b1.Property<Guid>("LeadId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<string>("CountryCode")
+                                .HasMaxLength(2)
+                                .HasColumnType("character(2)")
+                                .HasColumnName("principal_pep_country")
+                                .IsFixedLength();
+
+                            b1.Property<string>("Function")
+                                .HasMaxLength(150)
+                                .HasColumnType("character varying(150)")
+                                .HasColumnName("principal_pep_function");
+
+                            b1.Property<DateOnly?>("FunctionEndDate")
+                                .HasColumnType("date")
+                                .HasColumnName("principal_pep_end_date");
+
+                            b1.Property<bool>("IsPep")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("principal_pep_is_exposed");
+
+                            b1.Property<string>("Link")
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("principal_pep_link");
+
+                            b1.Property<string>("OverrideReason")
+                                .HasMaxLength(300)
+                                .HasColumnType("character varying(300)")
+                                .HasColumnName("principal_pep_override_reason");
+
+                            b1.HasKey("LeadId");
+
+                            b1.ToTable("leads", "leads");
+
+                            b1.WithOwner()
+                                .HasForeignKey("LeadId")
+                                .HasConstraintName("fk_leads_leads_id");
+                        });
+
                     b.Navigation("AcquisitionCost");
 
                     b.Navigation("DesiredAmount");
 
                     b.Navigation("Location");
+
+                    b.Navigation("PrincipalPep")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadActivity", b =>
@@ -2512,6 +2969,160 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_lead_assignments_leads_lead_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadHouseholdMember", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.Lead", null)
+                        .WithMany("HouseholdMembers")
+                        .HasForeignKey("LeadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_lead_household_members_leads_lead_id");
+
+                    b.OwnsOne("Sankore.Shared.Kernel.ValueObject.PepStatus", "Pep", b1 =>
+                        {
+                            b1.Property<Guid>("LeadHouseholdMemberId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<string>("CountryCode")
+                                .HasMaxLength(2)
+                                .HasColumnType("character(2)")
+                                .HasColumnName("pep_country")
+                                .IsFixedLength();
+
+                            b1.Property<string>("Function")
+                                .HasMaxLength(150)
+                                .HasColumnType("character varying(150)")
+                                .HasColumnName("pep_function");
+
+                            b1.Property<DateOnly?>("FunctionEndDate")
+                                .HasColumnType("date")
+                                .HasColumnName("pep_end_date");
+
+                            b1.Property<bool>("IsPep")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("pep_is_exposed");
+
+                            b1.Property<string>("Link")
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("pep_link");
+
+                            b1.Property<string>("OverrideReason")
+                                .HasMaxLength(300)
+                                .HasColumnType("character varying(300)")
+                                .HasColumnName("pep_override_reason");
+
+                            b1.HasKey("LeadHouseholdMemberId");
+
+                            b1.ToTable("lead_household_members", "leads");
+
+                            b1.WithOwner()
+                                .HasForeignKey("LeadHouseholdMemberId")
+                                .HasConstraintName("fk_lead_household_members_lead_household_members_id");
+                        });
+
+                    b.OwnsOne("Sankore.Shared.Kernel.ValueObject.PersonIdentity", "Identity", b1 =>
+                        {
+                            b1.Property<Guid>("LeadHouseholdMemberId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<string>("AddressLine")
+                                .HasColumnType("text")
+                                .HasColumnName("address_enc");
+
+                            b1.Property<string>("BirthDate")
+                                .HasColumnType("text")
+                                .HasColumnName("birth_date_enc");
+
+                            b1.Property<string>("City")
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)")
+                                .HasColumnName("city");
+
+                            b1.Property<string>("CountryCode")
+                                .HasMaxLength(2)
+                                .HasColumnType("character(2)")
+                                .HasColumnName("country_code")
+                                .IsFixedLength();
+
+                            b1.Property<string>("FirstName")
+                                .IsRequired()
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)")
+                                .HasColumnName("first_name");
+
+                            b1.Property<string>("Gender")
+                                .IsRequired()
+                                .HasMaxLength(10)
+                                .HasColumnType("character varying(10)")
+                                .HasColumnName("gender");
+
+                            b1.Property<string>("LastName")
+                                .IsRequired()
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)")
+                                .HasColumnName("last_name");
+
+                            b1.Property<string>("PostalCode")
+                                .HasMaxLength(10)
+                                .HasColumnType("character varying(10)")
+                                .HasColumnName("postal_code");
+
+                            b1.Property<string>("UsageName")
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)")
+                                .HasColumnName("usage_name");
+
+                            b1.HasKey("LeadHouseholdMemberId");
+
+                            b1.ToTable("lead_household_members", "leads");
+
+                            b1.WithOwner()
+                                .HasForeignKey("LeadHouseholdMemberId")
+                                .HasConstraintName("fk_lead_household_members_lead_household_members_id");
+
+                            b1.OwnsOne("Sankore.Shared.Kernel.ValueObject.FrenchSocialSecurity", "FrenchSocialSecurity", b2 =>
+                                {
+                                    b2.Property<Guid>("PersonIdentityLeadHouseholdMemberId")
+                                        .HasColumnType("uuid")
+                                        .HasColumnName("id");
+
+                                    b2.Property<Guid?>("AttachedToMemberId")
+                                        .HasColumnType("uuid")
+                                        .HasColumnName("fr_attached_to_member_id");
+
+                                    b2.Property<string>("Nir")
+                                        .HasColumnType("text")
+                                        .HasColumnName("fr_nir_enc");
+
+                                    b2.Property<string>("OrganismCode")
+                                        .HasMaxLength(9)
+                                        .HasColumnType("character varying(9)")
+                                        .HasColumnName("fr_organism_code");
+
+                                    b2.HasKey("PersonIdentityLeadHouseholdMemberId");
+
+                                    b2.ToTable("lead_household_members", "leads");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("PersonIdentityLeadHouseholdMemberId")
+                                        .HasConstraintName("fk_lead_household_members_lead_household_members_id");
+                                });
+
+                            b1.Navigation("FrenchSocialSecurity");
+                        });
+
+                    b.Navigation("Identity")
+                        .IsRequired();
+
+                    b.Navigation("Pep")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadIngestion", b =>
@@ -2683,6 +3294,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_task_reassignments_crm_tasks_task_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.Lead", b =>
+                {
+                    b.Navigation("HouseholdMembers");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.NurturingSequence", b =>

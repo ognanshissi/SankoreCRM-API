@@ -26,7 +26,51 @@ public interface ILeadsModule
     /// an at-least-once event consumer and must not fail on a lead that was purged.
     /// </summary>
     Task<IReadOnlyList<LeadHistoryItem>> GetLeadHistoryAsync(Guid tenantId, Guid leadId, CancellationToken ct);
+
+    /// <summary>
+    /// The requests a known customer currently has in progress (BNF-B-22) — what the client record
+    /// shows so an advisor opening it can see "this client is already asking for a loan" instead of
+    /// starting a second one.
+    ///
+    /// <para>
+    /// OPEN only: converted, lost, disqualified and archived leads are excluded, because the
+    /// question the client record asks is "what is live right now". A caller wanting the history of
+    /// closed requests is asking something else and should say so.
+    /// </para>
+    ///
+    /// <para>
+    /// NO SENSITIVE DATA, the same rule as <see cref="GetLeadHistoryAsync"/>: a product label, a
+    /// status, a stage and dates. Never the prospect's own contact details — the client record
+    /// already holds the authoritative copy of those, and a second one travelling on this contract
+    /// would be the copy that goes stale.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns an empty list for a customer with no open request, and for one M13 has never heard
+    /// of. The caller is a screen, and a missing customer is not an error it can act on.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<CustomerOpenLead>> GetOpenLeadsForCustomerAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct);
 }
+
+/// <summary>
+/// One request a customer has in progress (BNF-B-22). Non-sensitive by construction.
+/// </summary>
+/// <param name="ProductLineId">
+/// The resolved M12 product line, or null when nobody has resolved it yet. The client record uses
+/// it to warn that a request duplicates a product line the customer already holds.
+/// </param>
+/// <param name="InterestedProduct">The product as CAPTURED — a free-text label, not a catalogue code.</param>
+public sealed record CustomerOpenLead(
+    Guid LeadId,
+    string Status,
+    string PipelineStage,
+    Guid? ProductLineId,
+    string InterestedProduct,
+    Guid? AssignedAgentId,
+    DateTimeOffset CapturedAt,
+    DateTimeOffset? LastActivityAt);
 
 public sealed record LeadSummary(
     Guid Id,

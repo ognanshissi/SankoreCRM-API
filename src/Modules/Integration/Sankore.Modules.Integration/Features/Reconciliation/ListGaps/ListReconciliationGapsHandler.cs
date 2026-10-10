@@ -70,6 +70,10 @@ internal sealed class ListReconciliationGapsHandler(IntegrationDbContext db)
             })
             .ToListAsync(ct);
 
+        // Which types this request's scope can report on — one connection's family, or the
+        // tenant-wide union. See ResolveScopeAsync.
+        var scope = await ResolveScopeAsync(request.ConnectionId, ct);
+
         return Result.Ok(new ReconciliationGapPage(
             // The enums are turned into text here and not in the Select above: both columns are
             // mapped through HasConversion<string>, and asking the provider to translate
@@ -92,10 +96,63 @@ internal sealed class ListReconciliationGapsHandler(IntegrationDbContext db)
             TotalCount: totalCount,
             Page: page,
             PageSize: pageSize,
-            OpenCountsByType: await OpenCountsAsync(request.ConnectionId, ct),
-            UndetectableGapTypes: [.. ReconciliationScope.NotDetected.Select(t => t.ToString())],
+            OpenCountsByType: await OpenCountsAsync(request.ConnectionId, scope, ct),
+            UndetectableGapTypes: [.. scope.Undetectable.Select(t => t.ToString())],
             LastRun: await LastRunAsync(request.ConnectionId, ct)));
     }
+
+    /// <summary>
+    /// Which gap types this REQUEST's scope can look for, and which it cannot (BNF-B-17).
+    /// </summary>
+    /// <remarks>
+    /// There are two comparisons now, with different inputs and therefore different sets, so the
+    /// answer depends on what the caller asked about:
+    ///
+    /// <list type="bullet">
+    /// <item>ONE connection — the family is known, so the sets are that family's exactly.</item>
+    /// <item>The whole tenant — the honest answer is the UNION of what the comparisons detect and
+    ///   the INTERSECTION of what none of them can. A type one family detects is not undetectable
+    ///   for the tenant, and seeding a zero against it would be the exact lie this slice exists to
+    ///   avoid; a type neither can look for still belongs in the undetectable list.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// A connection id the tenant does not have falls back to the tenant-wide sets rather than
+    /// failing: the gap query below will return nothing anyway, and answering "no such connection"
+    /// from a ledger read would tell a caller whether a connection id exists.
+    /// </para>
+    /// </remarks>
+    private async Task<LedgerScope> ResolveScopeAsync(Guid? connectionId, CancellationToken ct)
+    {
+        if (connectionId is { } id)
+        {
+            var family = await db.Connections
+                .Where(c => c.Id == id)
+                .Select(c => (IntegrationFamily?)c.Family)
+                .FirstOrDefaultAsync(ct);
+
+            if (family is { } known)
+            {
+                return new LedgerScope(
+                    ReconciliationScope.DetectedFor(known),
+                    ReconciliationScope.NotDetectedFor(known));
+            }
+        }
+
+        var detected = ReconciliationScope.Detected
+            .Union(ReconciliationScope.DetectedForHoldings)
+            .ToHashSet();
+
+        var undetectable = ReconciliationScope.NotDetected
+            .Intersect(ReconciliationScope.NotDetectedForHoldings)
+            .ToList();
+
+        return new LedgerScope(detected, undetectable);
+    }
+
+    /// <summary>What one ledger read can and cannot report. See <see cref="ResolveScopeAsync"/>.</summary>
+    private sealed record LedgerScope(
+        IReadOnlySet<GapType> Detected, IReadOnlyCollection<GapType> Undetectable);
 
     /// <summary>
     /// Open gaps per type, for the whole scope rather than for the page.
@@ -109,9 +166,9 @@ internal sealed class ListReconciliationGapsHandler(IntegrationDbContext db)
     /// </para>
     /// </summary>
     private async Task<IReadOnlyDictionary<string, int>> OpenCountsAsync(
-        Guid? connectionId, CancellationToken ct)
+        Guid? connectionId, LedgerScope scope, CancellationToken ct)
     {
-        var counts = ReconciliationScope.Detected.ToDictionary(t => t.ToString(), _ => 0);
+        var counts = scope.Detected.ToDictionary(t => t.ToString(), _ => 0);
 
         var query = db.ReconciliationGaps.Where(g => g.Resolution == GapResolution.Open);
 

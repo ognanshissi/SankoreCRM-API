@@ -3,6 +3,7 @@ namespace Sankore.Modules.Customers.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.PublicApi;
+using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -20,9 +21,136 @@ using Sankore.Shared.Kernel;
 /// phone number or a document number must go through M01's audited reveal endpoint so
 /// the access is logged against a named user.
 /// </summary>
-internal sealed class CustomersModuleFacade(CustomersDbContext db, ILeadConversionService leadConversion)
+internal sealed class CustomersModuleFacade(
+    CustomersDbContext db,
+    ILeadConversionService leadConversion,
+    Sankore.Shared.Infrastructure.Crypto.IBlindIndexer indexer,
+    Features.Holdings.Sync.HoldingSyncService holdingSync)
     : ICustomersModule
 {
+    /// <summary>
+    /// The statuses a client must be in to count as "a customer making a request". Archived and
+    /// Merged are excluded: attaching a lead to an archived record would revive it by the side
+    /// door, and to a merged one would point the request at an id that no longer answers.
+    /// PendingKyc IS included — a client whose file is still being built is very much a customer,
+    /// and refusing to recognise them is how a second record for the same person gets created.
+    /// </summary>
+    private static readonly ClientStatus[] AttachableStatuses =
+    [
+        ClientStatus.PendingKyc,
+        ClientStatus.Active,
+        ClientStatus.Suspended,
+        ClientStatus.KycRejected,
+    ];
+
+    // ── The back-office side of a holding (BNF-B-16) ────────────────────────
+    //
+    // Straight through to HoldingSyncService, which explains why these three are not behind
+    // MediatR like the rest of the zone.
+
+    public Task<HoldingForSync?> GetHoldingForSyncAsync(
+        Guid tenantId, Guid holdingId, CancellationToken ct)
+        => holdingSync.GetForSyncAsync(tenantId, holdingId, ct);
+
+    public Task<Result> ConfirmHoldingSyncAsync(
+        Guid tenantId, Guid holdingId, string externalSystem, string externalRef, CancellationToken ct)
+        => holdingSync.ConfirmAsync(tenantId, holdingId, externalSystem, externalRef, ct);
+
+    public Task<Result> RejectHoldingSyncAsync(
+        Guid tenantId, Guid holdingId, string reason, CancellationToken ct)
+        => holdingSync.RejectAsync(tenantId, holdingId, reason, ct);
+
+    public Task<IReadOnlyDictionary<Guid, HoldingSyncState>> GetHoldingSyncStatesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> holdingIds, CancellationToken ct)
+        => holdingSync.GetSyncStatesAsync(tenantId, holdingIds, ct);
+
+    /// <summary>
+    /// Straight through to the conversion seam (BNF-B-24): no logic here, because the MediatR
+    /// pipeline is where the guarantees are.
+    /// </summary>
+    public Task<Result<Guid>> CreateHoldingFromLeadAsync(
+        CreateHoldingFromLeadRequest request, CancellationToken ct)
+        => leadConversion.CreateHoldingFromLeadAsync(request, ct);
+
+    public async Task<IReadOnlyList<CustomerMatch>> FindMatchesAsync(
+        Guid tenantId,
+        string? phoneNumber,
+        string? email,
+        string? identityDocumentNumber,
+        CancellationToken ct)
+    {
+        // M01 indexes the clear values with ITS OWN key — the caller could not have done it, which
+        // is why the contract takes clear text. See ICustomersModule.FindMatchesAsync.
+        var phoneIndex = Index(BlindIndexPurpose.Phone, phoneNumber);
+        var emailIndex = Index(BlindIndexPurpose.Email, email);
+        var docIndex   = Index(BlindIndexPurpose.IdentityDocument, identityDocumentNumber);
+
+        if (phoneIndex is null && emailIndex is null && docIndex is null)
+            return [];
+
+        // Contact points first: phone and e-mail live on the child table, and a client may hold
+        // the same value on several rows (a number labelled "personal" and "shop"), so the ids are
+        // collapsed before they reach the client query. ValidTo == null — a closed contact point
+        // is a number the client USED to have, and a lead reaching that number is not evidence
+        // about this client any more.
+        var contactHits = phoneIndex is null && emailIndex is null
+            ? []
+            : await db.ClientContactPoints
+                .IgnoreQueryFilters()
+                .Where(cp => cp.TenantId == tenantId
+                          && cp.ValidTo == null
+                          && ((phoneIndex != null && cp.Type == ContactPointType.Phone
+                                                  && cp.BlindIndex == phoneIndex)
+                           || (emailIndex != null && cp.Type == ContactPointType.Email
+                                                  && cp.BlindIndex == emailIndex)))
+                .Select(cp => new { cp.ClientId, cp.Type })
+                .Distinct()
+                .ToListAsync(ct);
+
+        var byPhone = contactHits.Where(h => h.Type == ContactPointType.Phone)
+                                 .Select(h => h.ClientId).ToHashSet();
+        var byEmail = contactHits.Where(h => h.Type == ContactPointType.Email)
+                                 .Select(h => h.ClientId).ToHashSet();
+
+        var candidateIds = byPhone.Union(byEmail).ToList();
+
+        var clients = await db.Clients
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId
+                     && AttachableStatuses.Contains(c.Status)
+                     && (candidateIds.Contains(c.Id)
+                      || (docIndex != null && c.IdentityDocumentNumberBlindIndex == docIndex)))
+            .Select(c => new
+            {
+                c.Id, c.ClientNumber, c.DisplayName, c.AgencyId, c.AdvisorUserId,
+                Status = c.Status, Kyc = c.KycStatus, c.IdentityDocumentNumberBlindIndex
+            })
+            .ToListAsync(ct);
+
+        return
+        [
+            .. clients.Select(c =>
+            {
+                var matchedOn = new List<string>(3);
+                if (byPhone.Contains(c.Id)) matchedOn.Add("phone");
+                if (byEmail.Contains(c.Id)) matchedOn.Add("email");
+                if (docIndex is not null && c.IdentityDocumentNumberBlindIndex == docIndex)
+                    matchedOn.Add("identityDocument");
+
+                return new CustomerMatch(
+                    c.Id, c.ClientNumber, c.DisplayName, c.AgencyId, c.AdvisorUserId,
+                    c.Status.ToString(), c.Kyc.ToString(), matchedOn);
+            })
+            // Most corroborated first: a client matched on document AND phone is a better
+            // suggestion than one matched on a shared household phone alone.
+            .OrderByDescending(m => m.MatchedOn.Count)
+            .ThenBy(m => m.ClientNumber, StringComparer.Ordinal)
+        ];
+    }
+
+    private string? Index(BlindIndexPurpose purpose, string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : indexer.Compute(purpose, value);
+
     /// <summary>
     /// Depth limit while walking the merge chain. A chain is normally one or two hops;
     /// the cap turns a corrupted cycle (A merged into B merged into A) into a bounded

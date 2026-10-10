@@ -38,6 +38,13 @@ public sealed class CaptureLeadSourceConfigTests : IDisposable
             TimeProvider.System,
             Substitute.For<IBus>(),
             indexer,
+            TestSupport.TestLeadEmailIndexer.Instance,
+            // No match configured: FindMatchesAsync returns an empty list by default under
+            // NSubstitute, so these leads are captured unattached — which is what they assert on.
+            Substitute.For<Sankore.Modules.Customers.PublicApi.ICustomersModule>(),
+            // No product line configured: ResolveProductLineAsync returns null by default under
+            // NSubstitute, so these leads carry none — which is what they assert on.
+            Substitute.For<Sankore.Modules.Administration.PublicApi.IAdministrationModule>(),
             Substitute.For<IEventPublisher>());
     }
 

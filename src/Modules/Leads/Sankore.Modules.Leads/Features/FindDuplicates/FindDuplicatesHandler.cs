@@ -6,7 +6,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class FindDuplicatesHandler(LeadsDbContext db)
+internal sealed class FindDuplicatesHandler(LeadsDbContext db, ILeadEmailIndexer emailIndexer)
     : IRequestHandler<FindDuplicatesQuery, Result<IReadOnlyList<DuplicateMatchResult>>>
 {
     public async Task<Result<IReadOnlyList<DuplicateMatchResult>>> Handle(
@@ -27,6 +27,7 @@ internal sealed class FindDuplicatesHandler(LeadsDbContext db)
 
         var phoneDigits    = probe.PhoneDigits;
         var emailNorm      = probe.EmailNorm;
+        var emailIndex     = emailIndexer.Compute(query.Email);
         var nationalId     = probe.NationalId;
         var customerRef    = probe.CustomerReference;
 
@@ -39,7 +40,11 @@ internal sealed class FindDuplicatesHandler(LeadsDbContext db)
                 l.Status != LeadStatus.Archived &&
                 l.Status != LeadStatus.Disqualified &&
                 ((phoneDigits != null && l.PhoneNumber.EndsWith(phoneDigits)) ||
-                 (emailNorm != null && l.Email != null && l.Email.ToLower() == emailNorm) ||
+                 // Blind index, never the encrypted column — see CaptureLeadHandler.
+                 (emailIndex != null && l.EmailBlindIndex == emailIndex) ||
+                 (emailIndex != null && l.EmailBlindIndex == null
+                    && emailNorm != null && l.LegacyEmailClear != null
+                    && l.LegacyEmailClear.ToLower() == emailNorm) ||
                  (nationalId != null && l.NationalId != null && l.NationalId.ToLower() == nationalId.ToLower()) ||
                  (customerRef != null && l.CustomerReference != null && l.CustomerReference.ToLower() == customerRef.ToLower())))
             .ToListAsync(ct);

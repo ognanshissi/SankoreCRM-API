@@ -194,6 +194,29 @@ public static class Permissions
     public static readonly PermissionItem CanLogLeadActivity =
         new("lead:activity:log", "Log an Activity on a Lead", ApplicationModules.Leads, "activity:log");
 
+    /// <summary>
+    /// Reading the PEP DETAIL of a lead's principal and household (BNF-B-05) — the function, the
+    /// country, the link. Separate from <c>lead:read</c> because a function title and a country
+    /// together often name the person outright, while the exposure FLAG stays readable by anyone
+    /// who can see the lead: dispatching has to route an exposed lead to a cleared agent without
+    /// showing anybody why.
+    /// </summary>
+    public static readonly PermissionItem CanReadLeadPep =
+        new("lead:pep:read", "Read Politically-Exposed-Person Details of a Lead", ApplicationModules.Leads, "pep:read");
+
+    /// <summary>
+    /// Reading HEALTH questionnaire answers (BNF-B-09). Deliberately absent from the agency roles
+    /// by default: a health declaration is special-category data, and the agent who collected it
+    /// does not need to re-read it to do their job. The EXISTENCE and status of a response stay
+    /// readable with <c>lead:read</c> — only the answers are gated.
+    /// </summary>
+    public static readonly PermissionItem CanReadLeadHealth =
+        new("lead:health:read", "Read Health Questionnaire Answers of a Lead", ApplicationModules.Leads, "health:read");
+
+    /// <summary>Recording the household and the PEP status of its members (BNF-B-03, BNF-B-05).</summary>
+    public static readonly PermissionItem CanManageLeadHousehold =
+        new("lead:household:manage", "Record a Lead's Household and PEP Status", ApplicationModules.Leads, "household:manage");
+
     public static readonly PermissionItem CanConvertLead =
         new("lead:convert", "Convert a Lead into a Customer", ApplicationModules.Leads, "convert");
 
@@ -318,6 +341,18 @@ public static class Permissions
     public static readonly PermissionItem CanManageEmailQuota =
         new("notification:settings:quota", "Set Monthly Email Quota", ApplicationModules.Administration, "quota");
 
+    // ── Compliance settings (Administration module) — BNF-B-10 ─────────────
+    //
+    // The FATCA regime of the institution and the PEP post-mandate window. Separate from the
+    // notification pair above because the audience is: a compliance officer configures these, a
+    // platform administrator configures the email provider, and the two are rarely the same person.
+
+    public static readonly PermissionItem CanReadCompliance =
+        new("admin:compliance:read", "Read Tenant Compliance Settings", ApplicationModules.Administration, "read");
+
+    public static readonly PermissionItem CanManageCompliance =
+        new("admin:compliance:manage", "Configure FATCA and PEP Compliance Parameters", ApplicationModules.Administration, "manage");
+
     // ── Notifications module ───────────────────────────────────────────────
 
     public static readonly PermissionItem CanReadEmailTemplates =
@@ -363,6 +398,43 @@ public static class Permissions
 
     public static readonly PermissionItem CanExportCustomers =
         new("customers:export", "Export a Customer Search Result", ApplicationModules.Customers, "export");
+
+    /// <summary>
+    /// Record a client's household — spouse, children, dependents — and declare the political
+    /// exposure of the people in it (BNF-B-13).
+    ///
+    /// <para>
+    /// Separate from <c>customers:update</c> because the two are not the same act: updating a
+    /// client edits their own record, while this records third parties who never dealt with the
+    /// institution and classifies them under LBC/FT rules.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanManageCustomerHousehold =
+        new("customers:household_manage", "Record a Customer's Household and PEP Status", ApplicationModules.Customers, "household_manage");
+
+    /// <summary>
+    /// Read the PEP DETAIL of a client and their household — function, country, family link
+    /// (BNF-B-13). The mirror of <c>lead:pep:read</c>, and separate from <c>customers:read</c> for
+    /// the same reason: a function title and a country can identify a person by themselves, while
+    /// the exposure FLAG has to stay visible to everyone who can see the client.
+    /// </summary>
+    public static readonly PermissionItem CanReadCustomerPep =
+        new("customers:pep_read", "Read Politically-Exposed-Person Details of a Customer", ApplicationModules.Customers, "pep_read");
+
+    /// <summary>
+    /// Subscribe a client to a product and move the holding through its life — sign it, send it,
+    /// close it (BNF-B-14). Separate from <c>customers:update</c>: it commits the institution to a
+    /// contract and, past the signature, reaches a back office.
+    /// </summary>
+    public static readonly PermissionItem CanManageCustomerHolding =
+        new("customers:holding_manage", "Subscribe and Manage a Customer's Product Holdings", ApplicationModules.Customers, "holding_manage");
+
+    /// <summary>
+    /// Record who is designated on a holding — beneficiaries, dependents, co-holders, proxies
+    /// (BNF-B-15). Its own permission because a designation decides who receives a capital.
+    /// </summary>
+    public static readonly PermissionItem CanManageDesignations =
+        new("customers:designation_manage", "Record Beneficiary Designations on a Holding", ApplicationModules.Customers, "designation_manage");
 
     // ── KYC module (M02) ───────────────────────────────────────────────────
     // Read and the two write verbs are separate because a KYC file is evidence: an agent
@@ -578,6 +650,8 @@ public static class Permissions
         CanReadEmailDeliveryLogs,
         CanReadNotificationSettings,
         CanManageNotificationSettings,
+        CanReadCompliance,
+        CanManageCompliance,
         CanManageEmailQuota,
         CanReadCompanyInfo,
         CanUpdateCompanyInfo,
@@ -590,6 +664,9 @@ public static class Permissions
         CanMovePipelineStage,
         CanLogLeadActivity,
         CanConvertLead,
+        CanReadLeadPep,
+        CanManageLeadHousehold,
+        CanReadLeadHealth,
         CanNurtureLead,
         CanRecycleLead,
         CanManageDispatchingRules,
@@ -631,6 +708,10 @@ public static class Permissions
         CanMergeCustomers,
         CanManageCustomerGroups,
         CanExportCustomers,
+        CanManageCustomerHousehold,
+        CanReadCustomerPep,
+        CanManageCustomerHolding,
+        CanManageDesignations,
 
         // Integration module (INT-11)
         CanViewIntegrationConnection,

@@ -1,11 +1,23 @@
 namespace Sankore.Modules.Leads.Infrastructure;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Infrastructure.Crypto;
+using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
 
-public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITenantContext tenant)
+/// <param name="encryptor">
+/// M13's OWN encryptor, resolved by DI key. It is a constructor dependency because
+/// <c>Lead.Email</c> is protected by an EF value converter, and converters are built while the
+/// model is built — see <c>LeadConfiguration</c>. The key is M13's: a lead's e-mail must not be
+/// decryptable with M01's or M02's.
+/// </param>
+public sealed class LeadsDbContext(
+    DbContextOptions<LeadsDbContext> options,
+    ITenantContext tenant,
+    [FromKeyedServices(LeadsFieldProtection.Key)] IFieldEncryptor encryptor)
     : DbContext(options)
 {
     public DbSet<Lead> Leads => Set<Lead>();
@@ -39,12 +51,31 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
     public DbSet<NurturingStep> NurturingSteps => Set<NurturingStep>();
     public DbSet<NurturingEnrollment> NurturingEnrollments => Set<NurturingEnrollment>();
     public DbSet<SdkVersion> SdkVersions => Set<SdkVersion>();
+    public DbSet<LeadHouseholdMember> LeadHouseholdMembers => Set<LeadHouseholdMember>();
+    public DbSet<FatcaDeclaration> FatcaDeclarations => Set<FatcaDeclaration>();
+    public DbSet<LeadSetting> LeadSettings => Set<LeadSetting>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(LeadsDbContext).Assembly);
+
+        // LeadConfiguration is applied BY HAND and excluded from the scan, because it is the one
+        // configuration in this module that needs a dependency: the encrypting value converter on
+        // Lead.Email. A scanned IEntityTypeConfiguration is instantiated by EF through its
+        // parameterless constructor, so there is no way to hand it anything — and the alternatives
+        // (a static field, a service locator) would make which key built the converter depend on
+        // whichever context happened to build the model first.
+        modelBuilder.ApplyConfiguration(new Configurations.LeadConfiguration(encryptor));
+        modelBuilder.ApplyConfiguration(new Configurations.LeadHouseholdMemberConfiguration(encryptor));
+        modelBuilder.ApplyConfiguration(new Configurations.QualificationResponseConfiguration(encryptor));
+        modelBuilder.ApplyConfiguration(new Configurations.FatcaDeclarationConfiguration(encryptor));
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(LeadsDbContext).Assembly,
+            type => type != typeof(Configurations.LeadConfiguration)
+                 && type != typeof(Configurations.LeadHouseholdMemberConfiguration)
+                 && type != typeof(Configurations.QualificationResponseConfiguration)
+                 && type != typeof(Configurations.FatcaDeclarationConfiguration));
         
         modelBuilder.HasDefaultSchema("leads");
 
@@ -112,6 +143,9 @@ public sealed class LeadsDbContext(DbContextOptions<LeadsDbContext> options, ITe
         modelBuilder.Entity<NurturingSequence>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<NurturingEnrollment>().HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<Opportunity>().HasQueryFilter(o => o.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<LeadSetting>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<LeadHouseholdMember>().HasQueryFilter(m => m.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<FatcaDeclaration>().HasQueryFilter(d => d.TenantId == tenant.CurrentTenantId);
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

@@ -26,6 +26,11 @@ using Sankore.Shared.Infrastructure.BackgroundJobs;
 /// used here: this slice only opens the file, and copying a sensitive value into this module
 /// before the verification phase can encrypt it would create a second, unprotected home for it.
 /// </para>
+///
+/// <para>
+/// <c>HasPepExposure</c> is the exception, and it is a FLAG rather than a value: it decides the
+/// file's vigilance level, which decides who has to sign it (BNF-B-24).
+/// </para>
 /// </summary>
 public sealed class KycRequestedConsumer(
     IServiceScopeFactory scopeFactory,
@@ -58,7 +63,16 @@ public sealed class KycRequestedConsumer(
                     TenantId: evt.TenantId,
                     CustomerId: evt.CustomerEntityId,
                     Channel: KycChannel.LeadConversion,
-                    InitiatedBy: evt.RequestedBy),
+                    InitiatedBy: evt.RequestedBy,
+                    // BNF-B-24: a politically exposed household opens the file at High, which is
+                    // what adds the compliance officer to the approval ladder. The level is
+                    // RAISED and never lowered — see CreateKycFileHandler, which also applies it
+                    // to a file ClientCreatedKycConsumer opened first. That race is the normal
+                    // case here, so passing the level only on creation would mean the flag
+                    // usually had no effect at all.
+                    VigilanceLevel: evt.HasPepExposure
+                        ? KycVigilanceLevel.High
+                        : KycVigilanceLevel.Standard),
                 context.CancellationToken);
 
             if (result.IsFailure)

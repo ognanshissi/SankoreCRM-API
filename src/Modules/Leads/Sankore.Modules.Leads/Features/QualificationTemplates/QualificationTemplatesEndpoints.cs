@@ -255,9 +255,12 @@ public static class QualificationTemplatesEndpoints
     private static async Task<IResult> ResolveTemplate(
         string productCode,
         ISender sender,
-        CancellationToken ct)
+        CancellationToken ct,
+        // Optional, and preferred when supplied (BNF-B-01) — see the query.
+        Guid? productLineId = null)
     {
-        var result = await sender.Send(new ResolveQualificationTemplateQuery(productCode), ct);
+        var result = await sender.Send(
+            new ResolveQualificationTemplateQuery(productCode, productLineId), ct);
         return result.IsSuccess
             ? Results.Ok(result.Value)
             : Results.NotFound(new { error = result.Error });

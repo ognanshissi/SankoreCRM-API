@@ -5,6 +5,7 @@ namespace Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Domain.Matching;
 using Sankore.Modules.Customers.Domain.Events;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Kernel.ValueObject;
 
 /// <summary>
 /// Aggregate root of module M01: a client, individual or legal entity.
@@ -113,6 +114,36 @@ public sealed class Client : AggregateRoot
 
     /// <summary>PostgreSQL <c>xmin</c>, mapped as the optimistic concurrency token.</summary>
     public uint Version { get; private set; }
+
+    // ── PEP (BNF-B-13) ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The client's OWN political exposure. Never null — <see cref="PepStatus.NotExposed"/> until
+    /// somebody declares otherwise, and <see cref="PepDeclaredAt"/> is what separates that default
+    /// from an answer.
+    ///
+    /// <para>
+    /// Written at conversion from the lead's <c>PrincipalPep</c> and by the household endpoints
+    /// afterwards. It is NOT derived from <see cref="RiskLevel"/> or from the KYC file: the
+    /// vigilance level M02 computes is a CONSEQUENCE of this, so reading it back would be circular.
+    /// </para>
+    /// </summary>
+    public PepStatus PrincipalPep { get; private set; } = PepStatus.NotExposed;
+
+    /// <summary>Null = never asked. See <c>Lead.PepDeclaredAt</c>.</summary>
+    public DateTimeOffset? PepDeclaredAt { get; private set; }
+
+    /// <summary>
+    /// Whether anybody in this client's household is politically exposed (BNF-B-13) — the flag a
+    /// KYC review and a designation screen read.
+    ///
+    /// <para>
+    /// STORED and not computed, for the same reasons as <c>Lead.HasPepExposure</c>: a screen
+    /// filters on it in SQL, and a RISE has to raise an event at the moment it happens, which a
+    /// computed property cannot notice. <see cref="RecalculateHasPepExposure"/> is the only writer.
+    /// </para>
+    /// </summary>
+    public bool HasPepExposure { get; private set; }
 
     // ── Children ────────────────────────────────────────────────────────────
     public IReadOnlyCollection<ClientContactPoint> ContactPoints => _contactPoints.AsReadOnly();
@@ -604,6 +635,56 @@ public sealed class Client : AggregateRoot
     }
 
     public void RecomputeDependentsCount(int count) => DependentsCount = Math.Max(0, count);
+
+    // ── PEP (BNF-B-13) ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Declares the client's own PEP status. An explicit "not exposed" IS a declaration.
+    /// </summary>
+    public Result DeclarePepStatus(PepStatus pep, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(pep);
+
+        if (IsReadOnly)
+            return Result.Fail(CustomerErrors.ClientReadOnly);
+
+        PrincipalPep = pep;
+        PepDeclaredAt = now;
+        UpdatedAt = now;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Recomputes <see cref="HasPepExposure"/> over the client and their household, and raises
+    /// <c>ClientPepExposureRaised</c> when the answer went from false to TRUE.
+    /// </summary>
+    /// <param name="householdExposed">
+    /// Whether any ACTIVE household member is exposed at <paramref name="asOf"/>. Passed in rather
+    /// than read here: the members are a separate aggregate, and <c>PepStatus.IsExposedAt</c> needs
+    /// the tenant's post-mandate window, which a client does not know.
+    /// </param>
+    /// <returns>
+    /// True when the flag ROSE. Only a rise is worth an event: BNF-B-13 asks for a KYC review when
+    /// exposure appears, and firing on a fall would ask the compliance officer to re-review a file
+    /// because a mandate expired — the opposite of the intent.
+    /// </returns>
+    public bool RecalculateHasPepExposure(
+        bool householdExposed, DateOnly asOf, int postMandateMonths, DateTimeOffset now)
+    {
+        var exposed = PrincipalPep.IsExposedAt(asOf, postMandateMonths) || householdExposed;
+
+        if (exposed == HasPepExposure)
+            return false;
+
+        var rose = exposed && !HasPepExposure;
+        HasPepExposure = exposed;
+        UpdatedAt = now;
+
+        if (rose)
+            RaiseDomainEvent(new ClientPepExposureRaisedDomainEvent(Id, TenantId));
+
+        return rose;
+    }
 
     /// <summary>
     /// Irreversible GDPR-style erasure: identity, encrypted payloads, blind indexes, phonetic keys

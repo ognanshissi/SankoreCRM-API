@@ -19,7 +19,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("administration")
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -595,6 +595,80 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.ToTable("company_info", "administration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.ComplianceSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("FatcaEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("fatca_enabled");
+
+                    b.Property<bool>("FatcaForCoHolders")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("fatca_for_co_holders");
+
+                    b.Property<string>("FatcaGiin")
+                        .HasMaxLength(19)
+                        .HasColumnType("character(19)")
+                        .HasColumnName("fatca_giin")
+                        .IsFixedLength();
+
+                    b.Property<string>("FatcaRegime")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("fatca_regime");
+
+                    b.Property<string>("FatcaRequiredAt")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("fatca_required_at");
+
+                    b.Property<int>("PepPostMandateMonths")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(12)
+                        .HasColumnName("pep_post_mandate_months");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_compliance_settings");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_compliance_settings_tenant");
+
+                    b.ToTable("compliance_settings", "administration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.PasswordHistory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -740,6 +814,19 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<bool>("AllowMultipleHoldings")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("allow_multiple_holdings");
+
+                    b.Property<string>("BeneficiaryPolicy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("beneficiary_policy")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<string>("BusinessPlatformName")
                         .IsRequired()

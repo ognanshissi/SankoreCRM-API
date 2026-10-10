@@ -25,5 +25,19 @@ public enum ConsentType
     ProfilingAndAnalytics,
 
     /// <summary>Recording GPS location during field visits (E03 — Addendum F13.1 §3.6).</summary>
-    LocationTracking
+    LocationTracking,
+
+    /// <summary>
+    /// Processing HEALTH data — the explicit consent BNF-B-09 requires before any health
+    /// questionnaire may be answered, PER PERSON.
+    ///
+    /// <para>
+    /// A consent type rather than a <c>HealthConsent</c> entity of its own:
+    /// <see cref="LeadConsent"/> already carries the status, the channel, the proof reference, the
+    /// recorder and a tracked withdrawal, and the nurturing cancellation already reacts to a
+    /// withdrawal. A separate entity would have duplicated that machinery and kept health consent
+    /// out of the consent screens the agent already uses.
+    /// </para>
+    /// </summary>
+    HealthData
 }

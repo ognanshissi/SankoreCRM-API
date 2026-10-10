@@ -26,3 +26,20 @@ public sealed record GroupMembershipChangedDomainEvent(
     Guid GroupId, Guid ClientId, string Change) : DomainEventBase;
 
 public sealed record GroupDissolvedDomainEvent(Guid GroupId) : DomainEventBase;
+
+/// <summary>
+/// The client's household became politically exposed when it was not (BNF-B-13).
+///
+/// <para>
+/// A RISE only. Firing on a fall would ask a compliance officer to re-review a file because a
+/// mandate expired, which is the opposite of what the story wants — and it is why
+/// <c>Client.RecalculateHasPepExposure</c> returns a boolean rather than raising on every change.
+/// </para>
+///
+/// <para>
+/// It carries no detail of the exposure: the function, the country and the family link are behind
+/// a permission, and the consumer's job is to open a review, not to read the classification.
+/// </para>
+/// </summary>
+public sealed record ClientPepExposureRaisedDomainEvent(Guid ClientId, Guid TenantId)
+    : DomainEventBase;

@@ -111,6 +111,24 @@ internal static class IdempotencyKeyFactory
             IntegrationEntityTypes.Policy, crmCustomerId, crmProductId, effectiveDate);
 
     /// <summary>
+    /// A subscription driven by an M01 <c>ProductHolding</c> (BNF-B-16). The HOLDING is the entity
+    /// and the CLAUSE VERSION discriminates.
+    ///
+    /// <para>
+    /// Not <see cref="ForPolicySubscription"/>: that one keys by customer and product because it
+    /// predates any CRM-side contract record, so two subscriptions to the same product on the same
+    /// effective date collapse into one — correct when the CRM holds nothing, wrong when it holds
+    /// two distinct holdings. And the version is in the key because an avenant IS a second write:
+    /// without it a changed clause would be swallowed as a replay and the insurer would never
+    /// learn about it.
+    /// </para>
+    /// </summary>
+    internal static IdempotencyKey ForHoldingSubscription(
+        Guid tenantId, Guid connectionId, Guid crmHoldingId, int clauseVersion)
+        => For(tenantId, connectionId, CommandType.SubscribePolicy,
+            IntegrationEntityTypes.Policy, crmHoldingId, clauseVersion);
+
+    /// <summary>
     /// The policy, the date of the loss and its nature discriminate. Two losses on the same
     /// policy on the same day are rare and real (a fire and a theft), so the nature is in;
     /// the free-text description is not, because retyping it must not declare a second claim.

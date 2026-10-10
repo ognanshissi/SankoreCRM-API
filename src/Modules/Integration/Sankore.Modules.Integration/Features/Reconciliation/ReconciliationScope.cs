@@ -1,9 +1,17 @@
 namespace Sankore.Modules.Integration.Features.Reconciliation;
 
 using Sankore.Modules.Integration.Domain;
+using Sankore.Modules.Integration.PublicApi;
 
 /// <summary>
-/// <b>What the daily comparison can and cannot look for, and why (INT-34).</b>
+/// <b>What the daily comparisons can and cannot look for, and why (INT-34, BNF-B-17).</b>
+///
+/// <para>
+/// There are now TWO comparisons with different inputs — customers against the CBS snapshot, and
+/// insurance holdings against the policy read model — so the sets are per connection FAMILY. They
+/// are kept in one class because the argument is the same in both cases and because the detected
+/// set doubles as the auto-close filter: a run must close only what it was able to look for.
+/// </para>
 ///
 /// <para>
 /// INT-34 names four gap types. Three of them have an input in this deployment; one does not, and
@@ -71,9 +79,9 @@ using Sankore.Modules.Integration.Domain;
 internal static class ReconciliationScope
 {
     /// <summary>
-    /// The types one run actually looks for. <b>It is also the auto-close filter</b>: a run may
-    /// only close what it was able to look for, or the first run after a deployment would
-    /// silently close every open gap of a type it never scanned.
+    /// What a CORE-BANKING run looks for. <b>It is also the auto-close filter</b>: a run may only
+    /// close what it was able to look for, or the first run after a deployment would silently
+    /// close every open gap of a type it never scanned.
     /// </summary>
     internal static readonly IReadOnlySet<GapType> Detected = new HashSet<GapType>
     {
@@ -83,8 +91,68 @@ internal static class ReconciliationScope
     };
 
     /// <summary>
-    /// The types no source in this deployment can feed. Stamped on the run row and surfaced by
-    /// the ledger endpoint.
+    /// The types a core-banking run cannot look for. Stamped on the run row and surfaced by the
+    /// ledger endpoint.
+    ///
+    /// <para>
+    /// <see cref="GapType.MissingInCrm"/> for the reason argued at length above.
+    /// <see cref="GapType.DesignationOutOfSync"/> is a question about a beneficiary clause, which
+    /// a customer comparison has no business asking — the mirror of
+    /// <see cref="GapType.KycMismatch"/> being absent from the insurance side. It is listed rather
+    /// than ignored because the per-family guard test requires EVERY gap type to be accounted for
+    /// by EVERY family: a type nobody declared would otherwise be a type one comparison might
+    /// quietly auto-close without ever having looked for it.
+    /// </para>
     /// </summary>
-    internal static readonly IReadOnlyCollection<GapType> NotDetected = [GapType.MissingInCrm];
+    internal static readonly IReadOnlyCollection<GapType> NotDetected =
+        [GapType.MissingInCrm, GapType.DesignationOutOfSync];
+
+    // ── Insurance holdings (BNF-B-17) ───────────────────────────────────────
+
+    /// <summary>
+    /// What an INSURANCE run looks for: a holding the insurer does not know, the two sides
+    /// disagreeing about whether a policy is in force, and a clause the insurer was never sent.
+    /// </summary>
+    internal static readonly IReadOnlySet<GapType> DetectedForHoldings = new HashSet<GapType>
+    {
+        GapType.MissingInExternal,
+        GapType.StatusMismatch,
+        GapType.DesignationOutOfSync,
+    };
+
+    /// <summary>
+    /// What an insurance run cannot look for, and why.
+    ///
+    /// <para>
+    /// <see cref="GapType.MissingInCrm"/> — "the insurer holds a policy the CRM has no reference
+    /// for" — needs an exhaustive enumeration of the insurer's portfolio. The only external source
+    /// is <c>PolicyRecord</c>, which is written from what a subscription or a status push told us
+    /// about policies we already hold a reference for: structurally incapable of naming a policy
+    /// the CRM does not know. The same argument as the core-banking side, for the same reason.
+    /// </para>
+    ///
+    /// <para>
+    /// <see cref="GapType.KycMismatch"/> is not a question about a policy at all; it belongs to
+    /// the customer comparison and would be a category error here.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>And note what is NOT in this list.</b> A true clause comparison — "the insurer's
+    /// beneficiaries differ from ours" — would need the insurer's own clause, and nothing in
+    /// <c>PolicyRecord</c> records it. Rather than declare a gap type that can never fire, the
+    /// detectable half of the question is reported instead:
+    /// <see cref="GapType.DesignationOutOfSync"/>, which compares the CRM's clause version against
+    /// the latest version this module actually succeeded in sending. That is a real divergence
+    /// with a real remedy, and it is measured from data this module owns.
+    /// </para>
+    /// </summary>
+    internal static readonly IReadOnlyCollection<GapType> NotDetectedForHoldings =
+        [GapType.MissingInCrm, GapType.KycMismatch];
+
+    /// <summary>The detected set for a connection family, so a run stamps and closes its own.</summary>
+    internal static IReadOnlySet<GapType> DetectedFor(IntegrationFamily family)
+        => family == IntegrationFamily.Insurance ? DetectedForHoldings : Detected;
+
+    internal static IReadOnlyCollection<GapType> NotDetectedFor(IntegrationFamily family)
+        => family == IntegrationFamily.Insurance ? NotDetectedForHoldings : NotDetected;
 }

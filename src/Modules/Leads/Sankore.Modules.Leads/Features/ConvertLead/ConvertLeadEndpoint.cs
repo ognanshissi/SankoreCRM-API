@@ -38,14 +38,31 @@ public static class ConvertLeadEndpoint
 
         if (!result.IsSuccess)
         {
-            return result.Error == "LEAD_NOT_FOUND"
-                ? Results.NotFound()
-                : Results.Problem(title: "Conversion failed", detail: result.Error, statusCode: 422);
+            return result.Error switch
+            {
+                "LEAD_NOT_FOUND" or "CUSTOMER_NOT_FOUND" => Results.NotFound(new { result.Error }),
+
+                // Two records disagree about which client this request belongs to, and both are
+                // in the caller's hands to reconcile — a conflict, not a malformed request.
+                "CUSTOMER_LINK_CONFLICT"
+                or "LEAD_ALREADY_CONVERTED_TO_ANOTHER_CUSTOMER"
+                    => Results.Conflict(new { result.Error }),
+
+                _ => Results.Problem(
+                    title: "Conversion failed", detail: result.Error, statusCode: 422),
+            };
         }
 
         // Duplicate gate blocked the conversion — return 409 with the list.
         if (result.Value.DuplicateDetected)
             return Results.Conflict(result.Value);
+
+        // The file is not complete (BNF-B-04). 422 with the full report rather than 200: the
+        // conversion did NOT happen, and a 200 carrying CustomerId = Guid.Empty was read as
+        // success by anything that only checked the status code.
+        if (result.Value.BlockingCode is Features.Enrichment.LeadCompletenessCalculator.Incomplete
+            or Features.Questionnaires.QuestionnaireCompletenessChecker.MissingResponses)
+            return Results.UnprocessableEntity(result.Value);
 
         return Results.Ok(result.Value);
     }

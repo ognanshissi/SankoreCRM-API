@@ -58,6 +58,34 @@ public sealed record IntegrationCommandRejectedEvent(
     DateTimeOffset RejectedAt) : IntegrationEventBase;
 
 /// <summary>
+/// A queued write SUCCEEDED at the far end — the symmetric counterpart of
+/// <see cref="IntegrationCommandRejectedEvent"/> (BNF-B-16).
+///
+/// <para>
+/// Published only for command types that have no richer success event of their own.
+/// <c>CreateCustomer</c> and <c>OpenAccount</c> announce themselves with the external ids the
+/// onboarding chain needs; everything else — a policy subscription, a KYC level, a cancellation —
+/// had no CRM-side signal at all, so the module that owns the entity could never learn its write
+/// landed. That gap is what left a <c>ProductHolding</c> sitting in <c>PendingSync</c> for ever.
+/// </para>
+///
+/// <para>
+/// <paramref name="EntityType"/> and <paramref name="CrmId"/> are what a consumer filters on:
+/// <c>Policy</c> plus the holding id, in M01's case. <paramref name="ExternalRef"/> is the far
+/// end's own identifier, which the CRM records so the two sides can be reconciled.
+/// </para>
+/// </summary>
+public sealed record IntegrationCommandSucceededEvent(
+    Guid TenantId,
+    Guid CommandId,
+    Guid ConnectionId,
+    string CommandType,
+    string EntityType,
+    Guid CrmId,
+    string? ExternalRef,
+    DateTimeOffset SucceededAt) : IntegrationEventBase;
+
+/// <summary>
 /// The CBS and the CRM disagree about a customer's KYC tier (INT-21). Not corrected
 /// automatically: which side is right is a compliance decision, so it is reported.
 /// </summary>

@@ -282,6 +282,13 @@ builder.Services.AddMassTransit(x =>
     // derives a per-consumer id so its two consumers can share one event.
     x.AddConsumer<Sankore.Modules.Integration.Features.Onboarding.KycValidatedOnboardingConsumer>();
     x.AddConsumer<Sankore.Modules.Integration.Features.Onboarding.CbsCustomerCreatedOnboardingConsumer>();
+
+    // BNF-B-16 — the subscription chain, both directions. Integration turns a signed holding into
+    // a queued command; M01 turns the far end's answer back into Active or Rejected. Registering
+    // one without the other leaves a holding stuck in PendingSync with nothing to move it.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.HoldingSubscription.HoldingSubscriptionConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncConfirmedConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRiskLevelChangedConsumer>();
     // Development-only auto-validation stub; inert outside Development (US-M01-BE-13).
@@ -389,6 +396,11 @@ builder.Services.AddEndpointsApiExplorer();
 #region Swagger Generation
 builder.Services.AddSwaggerGen(options => 
 {
+    // Short names, except where two modules declare the same one — see SwaggerSchemaIds. Without
+    // it the first such collision makes the WHOLE document ungenerable, which is a start-up
+    // failure that only running the host reveals.
+    options.CustomSchemaIds(Sankore.Api.Infrastructure.SwaggerSchemaIds.For);
+
     options.AddSecurityDefinition("BearerToken", new ()
     {
         Name = "Authorization",
@@ -538,6 +550,23 @@ if (emitOpenApiTo is null) {
             $"reactivate-recycled-leads-{suffix}",
             job => job.ExecuteAsync(tenantId),
             "0 3 * * *");
+
+        // Health questionnaire retention (BNF-B-09). Nightly, offset from the other jobs: it
+        // reads the tenant's own retention period and blanks only answers already transmitted to
+        // the insurer, so there is nothing to race with.
+        AddOrUpdate<Sankore.Modules.Leads.Features.Questionnaires.PurgeHealthResponsesJob>(
+            $"purge-health-responses-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "30 3 * * *");
+
+        // Lead anonymisation (BNF-B-19). AFTER the health purge, deliberately: that one blanks
+        // transmitted answers on leads of any age, this one destroys everything about leads closed
+        // for the tenant's retention period. Running them the other way round would have the
+        // anonymisation purge answers the health job is the right place to reason about.
+        AddOrUpdate<Sankore.Modules.Leads.Features.Retention.AnonymizeClosedLeadsJob>(
+            $"anonymize-closed-leads-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "45 3 * * *");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)

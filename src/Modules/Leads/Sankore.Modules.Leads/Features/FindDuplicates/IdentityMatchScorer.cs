@@ -66,8 +66,14 @@ internal sealed class IdentityMatchScorer
         }
 
         // ── Email ─────────────────────────────────────────────────────────────
-        if (probe.EmailNorm is not null && candidate.Email is not null &&
-            string.Equals(candidate.Email.Trim(), probe.EmailNorm, StringComparison.OrdinalIgnoreCase))
+        //
+        // In memory, after materialisation, so the CLEAR value is compared — the encryption is a
+        // column concern. LegacyEmailClear is the fallback for a lead the query matched through
+        // the transitional branch: its email_enc is still null, and without this the scorer would
+        // award it no e-mail points and could drop it below the confidence threshold.
+        var candidateEmail = candidate.Email ?? candidate.LegacyEmailClear;
+        if (probe.EmailNorm is not null && candidateEmail is not null &&
+            string.Equals(candidateEmail.Trim(), probe.EmailNorm, StringComparison.OrdinalIgnoreCase))
         {
             const double pts = 45;
             total += pts;
@@ -143,7 +149,7 @@ internal sealed class IdentityMatchScorer
             LeadId:            candidate.Id,
             FullName:          candidate.FullName,
             PhoneNumber:       candidate.PhoneNumber,
-            Email:             candidate.Email,
+            Email:             candidate.Email ?? candidate.LegacyEmailClear,
             NationalId:        candidate.NationalId,
             CustomerReference: candidate.CustomerReference,
             Status:            candidate.Status,

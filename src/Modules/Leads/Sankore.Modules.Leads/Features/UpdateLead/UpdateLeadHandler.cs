@@ -3,12 +3,13 @@ namespace Sankore.Modules.Leads.Features.UpdateLead;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
 using Money = Sankore.Shared.Kernel.ValueObject.Money;
 
-internal sealed class UpdateLeadHandler(LeadsDbContext db)
+internal sealed class UpdateLeadHandler(LeadsDbContext db, ILeadEmailIndexer emailIndexer)
     : IRequestHandler<UpdateLeadCommand, Result>
 {
     public async Task<Result> Handle(UpdateLeadCommand cmd, CancellationToken ct)
@@ -31,7 +32,6 @@ internal sealed class UpdateLeadHandler(LeadsDbContext db)
             fullName:         cmd.FullName,
             firstName:        cmd.FirstName,
             lastName:         cmd.LastName,
-            email:            cmd.Email,
             gender:           cmd.Gender,
             dateOfBirth:      cmd.DateOfBirth,
             interestedProduct: cmd.InterestedProduct,
@@ -46,6 +46,16 @@ internal sealed class UpdateLeadHandler(LeadsDbContext db)
 
         if (result.IsFailure)
             return result;
+
+        // The e-mail goes through its own setter so the blind index is rewritten with it — see
+        // Lead.SetEmail. A null cmd.Email means "not supplied" here, as for every other field of
+        // this command, so it leaves the stored address alone rather than clearing it.
+        if (cmd.Email is not null)
+        {
+            var emailResult = lead.SetEmail(cmd.Email, emailIndexer.Compute(cmd.Email));
+            if (emailResult.IsFailure)
+                return emailResult;
+        }
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

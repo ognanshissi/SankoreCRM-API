@@ -67,7 +67,25 @@ public enum GapType
     KycMismatch,
 
     /// <summary>Both know the customer and disagree on whether it is active.</summary>
-    StatusMismatch
+    StatusMismatch,
+
+    /// <summary>
+    /// The CRM holds a beneficiary clause the back office was never sent (BNF-B-17).
+    ///
+    /// <para>
+    /// Detected from the CRM's clause version against the latest version a <c>SubscribePolicy</c>
+    /// command actually succeeded with — both of which this module can see, so unlike a true
+    /// clause comparison it needs nothing from the insurer. An avenant recorded while the insurer
+    /// was unreachable, or one whose command was rejected and never re-sent, lands here.
+    /// </para>
+    ///
+    /// <para>
+    /// It is NOT "the two sides' clauses differ". Nothing on the insurer side records which
+    /// version it holds, so that comparison has no input in this deployment — see
+    /// <c>ReconciliationScope</c>, which says so rather than reporting a figure it cannot measure.
+    /// </para>
+    /// </summary>
+    DesignationOutOfSync
 }
 
 /// <summary>

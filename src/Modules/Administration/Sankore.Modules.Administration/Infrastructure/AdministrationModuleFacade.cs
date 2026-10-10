@@ -12,7 +12,10 @@ using Sankore.Shared.Kernel;
 /// Internal on purpose: consumers depend on IAdministrationModule (PublicApi),
 /// never on this class or on AdministrationDbContext directly.
 /// </summary>
-internal sealed class AdministrationModuleFacade(AdministrationDbContext db) : IAdministrationModule
+internal sealed class AdministrationModuleFacade(
+    AdministrationDbContext db,
+    ProductCatalogCache catalogCache)
+    : IAdministrationModule
 {
     /// <summary>
     /// Roles that put a user in the lead-dispatch pool.
@@ -200,7 +203,7 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db) : I
             .IgnoreQueryFilters()
             .Where(p => p.TenantId == tenantId && p.Code == code)
             .Select(p => new ProductSummary(
-                p.Code, p.Name, p.Category.ToString(), p.IsActive))
+                p.Code, p.Name, p.Category.ToString(), p.IsActive, p.Id, p.AllowMultipleHoldings))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -224,7 +227,7 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db) : I
         return await query
             .OrderBy(p => p.Code)
             .Select(p => new ProductSummary(
-                p.Code, p.Name, p.Category.ToString(), p.IsActive))
+                p.Code, p.Name, p.Category.ToString(), p.IsActive, p.Id, p.AllowMultipleHoldings))
             .ToListAsync(ct);
     }
 
@@ -291,6 +294,156 @@ internal sealed class AdministrationModuleFacade(AdministrationDbContext db) : I
             .Select(a => new AgencySummary(a.Id, a.Code, a.Name, a.ParentAgencyId, a.IsActive))
             .FirstOrDefaultAsync(ct);
     }
+
+    public async Task<BeneficiaryPolicyDto?> GetBeneficiaryPolicyAsync(
+        Guid tenantId, Guid productLineId, CancellationToken ct)
+    {
+        if (productLineId == Guid.Empty)
+            return null;
+
+        var key = ProductCatalogCache.PolicyKey(tenantId, productLineId);
+
+        var cached = await catalogCache.GetAsync<BeneficiaryPolicyDto>(key, ct);
+        if (cached is not null)
+            return cached;
+
+        // IgnoreQueryFilters + explicit tenant predicate: M13's completeness check and M01's
+        // designation rules run from consumers and jobs with no ambient tenant.
+        var line = await db.ProductSpecialities
+            .IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId && p.Id == productLineId)
+            .Select(p => new
+            {
+                p.Id, p.Code, p.Category, p.IsActive, p.AllowMultipleHoldings, p.BeneficiaryPolicy
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (line is null)
+            return null;   // dangling reference — NOT the same as "asks for nothing"
+
+        var policy = line.BeneficiaryPolicy;
+
+        var dto = new BeneficiaryPolicyDto(
+            ProductLineId:         line.Id,
+            ProductCode:           line.Code,
+            Category:              line.Category.ToString(),
+            IsActive:              line.IsActive,
+            HouseholdEnabled:      policy.HouseholdEnabled,
+            AllowMultipleHoldings: line.AllowMultipleHoldings,
+            AllowedRoles:          [.. policy.Roles.Select(r => new DesignationRoleDto(
+                                        r.Code, r.Label, r.MinCount, r.MaxCount, r.SharesMustTotal100))],
+            MaxChildren:           policy.MaxChildren,
+            ChildMaxAge:           policy.ChildMaxAge,
+            RequiredFieldsBeforeConversion: policy.RequiredFields,
+            RequiredKycTier:       policy.RequiredKycTier,
+            IntegrationSystem:     policy.IntegrationSystem);
+
+        await catalogCache.SetAsync(key, dto, ct);
+        return dto;
+    }
+
+    public async Task<Guid?> ResolveProductLineAsync(
+        Guid tenantId, string? label, CancellationToken ct)
+    {
+        var probe = ProductLabelNormalizer.Normalize(label);
+        if (probe is null)
+            return null;
+
+        var catalogue = await ActiveCatalogueAsync(tenantId, ct);
+
+        // Code first, then name. A code is an identifier an administrator chose; a name is a label
+        // that two lines could plausibly share, and when they do the ambiguity must not be resolved
+        // by row order — so a duplicate name resolves to NOTHING and an agent picks the line.
+        var byCode = catalogue.Where(e => e.NormalizedCode == probe).ToList();
+        if (byCode.Count == 1)
+            return byCode[0].Id;
+        if (byCode.Count > 1)
+            return null;
+
+        var byName = catalogue.Where(e => e.NormalizedName == probe).ToList();
+        return byName.Count == 1 ? byName[0].Id : null;
+    }
+
+    /// <summary>
+    /// The tenant's ACTIVE lines, normalised for matching and cached for five minutes.
+    ///
+    /// <para>
+    /// Loaded whole and matched in memory rather than compared in SQL, because the comparison has
+    /// to be accent-insensitive — "CREDIT COMMERCANT" must find "Crédit commerçant" — and
+    /// PostgreSQL cannot do that without <c>unaccent</c> and a functional index on both columns.
+    /// A tenant's catalogue is tens of rows; the cache makes it one query per five minutes, which
+    /// matters because the capture path calls this on every lead.
+    /// </para>
+    ///
+    /// <para>
+    /// Retired lines are excluded: resolving a label onto a product that is no longer sold would
+    /// apply its policy to a brand-new request.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<CatalogueEntry>> ActiveCatalogueAsync(
+        Guid tenantId, CancellationToken ct)
+    {
+        var key = ProductCatalogCache.CatalogueKey(tenantId);
+
+        var cached = await catalogCache.GetAsync<List<CatalogueEntry>>(key, ct);
+        if (cached is not null)
+            return cached;
+
+        var rows = await db.ProductSpecialities
+            .IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId && p.IsActive)
+            .Select(p => new { p.Id, p.Code, p.Name })
+            .ToListAsync(ct);
+
+        var catalogue = rows
+            .Select(r => new CatalogueEntry(
+                r.Id,
+                ProductLabelNormalizer.Normalize(r.Code) ?? string.Empty,
+                ProductLabelNormalizer.Normalize(r.Name) ?? string.Empty))
+            .ToList();
+
+        await catalogCache.SetAsync(key, catalogue, ct);
+        return catalogue;
+    }
+
+    /// <summary>Public for the cache's serializer only; not part of any contract.</summary>
+    internal sealed record CatalogueEntry(Guid Id, string NormalizedCode, string NormalizedName);
+
+    public async Task<ComplianceSettingsDto> GetComplianceSettingsAsync(Guid tenantId, CancellationToken ct)
+    {
+        // IgnoreQueryFilters + explicit predicate: M02's vigilance scoring and M13's nightly jobs
+        // read this with no ambient tenant.
+        var row = await db.ComplianceSettings
+            .IgnoreQueryFilters()
+            .Where(s => s.TenantId == tenantId)
+            .Select(s => new ComplianceSettingsDto(
+                s.FatcaEnabled,
+                s.FatcaRegime == null ? null : s.FatcaRegime.ToString(),
+                s.FatcaGiin,
+                s.FatcaRequiredAt.ToString(),
+                s.FatcaForCoHolders,
+                s.PepPostMandateMonths))
+            .FirstOrDefaultAsync(ct);
+
+        // No row means the tenant has never opened the compliance screen, which is the same thing
+        // as running on the platform defaults — so answer with them rather than null. Materialising
+        // a row here would make a READ write, and three modules call this on hot paths.
+        return row ?? PlatformDefaultCompliance;
+    }
+
+    /// <summary>
+    /// Must stay in step with <c>ComplianceSettings.CreateDefault</c>. Two declarations of one set
+    /// of defaults is a real risk, and the alternative — building the entity here just to project
+    /// it — would pull the domain type into a projection that exists to keep it out.
+    /// <c>ComplianceSettingsDefaultsTests</c> pins the two together.
+    /// </summary>
+    private static readonly ComplianceSettingsDto PlatformDefaultCompliance = new(
+        FatcaEnabled:         false,
+        FatcaRegime:          null,
+        FatcaGiin:            null,
+        FatcaRequiredAt:      nameof(Domain.FatcaRequiredAt.Conversion),
+        FatcaForCoHolders:    true,
+        PepPostMandateMonths: Domain.ComplianceSettings.DefaultPepPostMandateMonths);
 
     public async Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct)
     {

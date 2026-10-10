@@ -339,7 +339,9 @@ public sealed class ClientMergeExecutorTests : IDisposable
         db.ChangeTracker.Clear();
 
         await using var verify = _factory.CreateContext();
-        var facade = new CustomersModuleFacade(verify, new UnusedLeadConversionService());
+        var facade = new CustomersModuleFacade(
+            verify, new UnusedLeadConversionService(), TestDoubles.Indexer(),
+            TestHoldingSync.For(verify, _tenantId));
 
         (await facade.ResolveClientIdAsync(_tenantId, first.Id, CancellationToken.None))
             .Should().Be(last.Id, "a reference to the oldest record must land on the surviving one");

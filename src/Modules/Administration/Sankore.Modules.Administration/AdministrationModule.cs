@@ -19,6 +19,7 @@ using Sankore.Modules.Administration.Features.Authentication.ResetPassword;
 using Sankore.Modules.Administration.Features.Authentication.RefreshToken;
 using Sankore.Modules.Administration.Features.Authentication.VerifyToken;
 using Sankore.Modules.Administration.Features.NotificationSettings;
+using Sankore.Modules.Administration.Features.ComplianceSettings;
 using Sankore.Modules.Administration.Features.Products;
 using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;
@@ -71,6 +72,11 @@ public static class AdministrationModule
             .AddEntityFrameworkStores<AdministrationDbContext>();
 
         AddTokenLifespans(services, config);
+
+        // Product catalogue cache (BNF-B-06, 5 min). IDistributedCache is OPTIONAL — Redis is
+        // provisioned for the API and absent in unit tests, so every read falls back to a query.
+        services.AddScoped(sp => new Infrastructure.ProductCatalogCache(
+            sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
         // Agency perimeter (Kernel contract) — Administration owns the agency tree.
@@ -167,6 +173,7 @@ public static class AdministrationModule
         app.MapPermissionsEndpoints();
         app.MapProductsEndpoints();
         app.MapNotificationSettingsEndpoints();
+        app.MapComplianceSettingsEndpoints();
         app.MapCompanyInfoEndpoints();
         app.MapImportUsersEndpoints();
         app.MapValidateImport();

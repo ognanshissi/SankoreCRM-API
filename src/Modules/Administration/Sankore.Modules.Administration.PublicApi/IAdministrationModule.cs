@@ -106,7 +106,129 @@ public interface IAdministrationModule
     /// visible before anyone sets one.
     /// </summary>
     Task<EmailQuotaDecision> TryConsumeEmailQuotaAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// The institution's compliance parameters — FATCA regime and PEP post-mandate window
+    /// (BNF-B-10, BNF-B-05).
+    ///
+    /// <para>
+    /// <b>Never returns null.</b> A tenant that has never opened the compliance screen has no row,
+    /// and the platform defaults ARE its configuration: FATCA off, PEP window 12 months. Returning
+    /// null would hand every caller the same decision to make — "no row, so is FATCA on?" — and
+    /// one of them would eventually answer it the wrong way. Callers get the effective values and
+    /// nothing to interpret.
+    /// </para>
+    ///
+    /// <para>
+    /// Read by M13 (a lead's completeness and its PEP exposure), M01 (the client record) and M02
+    /// (the vigilance level). Cheap enough to call per request: one indexed read on
+    /// <c>(tenant_id)</c>.
+    /// </para>
+    /// </summary>
+    Task<ComplianceSettingsDto> GetComplianceSettingsAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// The beneficiary policy of a product line (BNF-B-06) — what it asks of the household and of
+    /// the people designated on it. Read by M13 (a lead's completeness and the household gate) and
+    /// by M01 (designations).
+    /// </summary>
+    /// <param name="productLineId">
+    /// A <c>ProductSpeciality</c> id. Opaque to the caller: M13 carries it on
+    /// <c>Lead.ProductLineId</c> with no foreign key.
+    /// </param>
+    /// <returns>
+    /// <c>null</c> when the line does not exist in that tenant — distinct from a line that exists
+    /// and collects nothing, which answers a policy with <c>HouseholdEnabled = false</c> and no
+    /// role. A caller must be able to tell "this reference is dangling" from "this product asks
+    /// for nothing", because the first is a bug and the second is a current account.
+    /// </returns>
+    Task<BeneficiaryPolicyDto?> GetBeneficiaryPolicyAsync(
+        Guid tenantId, Guid productLineId, CancellationToken ct);
+
+    /// <summary>
+    /// Resolves a free-text product label to a product line id (BNF-B-01), or <c>null</c> when
+    /// nothing matches exactly.
+    ///
+    /// <para>
+    /// Exists because <c>Lead.InterestedProduct</c> is a LABEL — "Crédit commerçant", and
+    /// "Unknown" when a source said nothing — while a beneficiary policy can only be reached
+    /// through a catalogue id. This is the bridge, and it is best-effort by design: a label that
+    /// matches nothing resolves to null, and an agent picks the line during enrichment.
+    /// </para>
+    ///
+    /// <para>
+    /// Matching is EXACT on the product's code or its name, with casing and accents neutralised
+    /// ("CREDIT COMMERCANT" finds "Crédit commerçant"), over ACTIVE products only. Never fuzzy:
+    /// the resolved line decides which fields gate a conversion and which KYC tier is required, so
+    /// a near-miss must not silently apply another product's rules.
+    /// </para>
+    /// </summary>
+    Task<Guid?> ResolveProductLineAsync(Guid tenantId, string? label, CancellationToken ct);
 }
+
+/// <summary>
+/// A product line's beneficiary policy as other modules see it (BNF-B-06). Enum-typed concepts are
+/// strings so no consumer references the Administration domain assembly.
+/// </summary>
+/// <param name="AllowMultipleHoldings">
+/// Whether a customer may hold this line more than once (BNF-B-22). Carried here rather than left
+/// on the product summary so a caller gating a second subscription makes one call, not two — it is
+/// a column on the entity, not part of the stored policy.
+/// </param>
+/// <param name="RequiredFieldsBeforeConversion">Stable field codes, not labels.</param>
+/// <param name="RequiredKycTier">"Simplified" | "Full", or null.</param>
+/// <param name="IntegrationSystem">An <c>IntegrationKind</c> name, or null when the line is CRM-only.</param>
+public sealed record BeneficiaryPolicyDto(
+    Guid ProductLineId,
+    string ProductCode,
+    string Category,
+    bool IsActive,
+    bool HouseholdEnabled,
+    bool AllowMultipleHoldings,
+    IReadOnlyList<DesignationRoleDto> AllowedRoles,
+    int? MaxChildren,
+    int? ChildMaxAge,
+    IReadOnlyList<string> RequiredFieldsBeforeConversion,
+    string? RequiredKycTier,
+    string? IntegrationSystem);
+
+/// <param name="SharesMustTotal100">
+/// Whether the quote-parts of this role must sum to 100% within a rank (BNF-B-15).
+/// </param>
+public sealed record DesignationRoleDto(
+    string Code,
+    string Label,
+    int MinCount,
+    int? MaxCount,
+    bool SharesMustTotal100);
+
+/// <summary>
+/// The compliance parameters of one tenant, as other modules see them. Enum-typed domain concepts
+/// are exposed as strings so no consumer has to reference the Administration domain assembly.
+/// </summary>
+/// <param name="FatcaEnabled">
+/// When false every other FATCA member is null or meaningless, and no FATCA field may be required,
+/// exposed, or counted towards a lead's completeness.
+/// </param>
+/// <param name="FatcaRegime">"IgaModel1" | "IgaModel2" | "DirectFfiAgreement", or null when disabled.</param>
+/// <param name="FatcaGiin">
+/// The institution's GIIN, <c>XXXXXX.XXXXX.XX.XXX</c>, or null when disabled. Well-formed by
+/// construction: enabling FATCA without one is refused.
+/// </param>
+/// <param name="FatcaRequiredAt">"Conversion" | "Enrichment".</param>
+/// <param name="FatcaForCoHolders">Whether indicia are collected from co-holders as well.</param>
+/// <param name="PepPostMandateMonths">
+/// Months a person stays politically exposed after their function ends. Feed it to
+/// <c>PepStatus.IsExposedAt</c> rather than comparing dates by hand — that method is the single
+/// definition of the window.
+/// </param>
+public sealed record ComplianceSettingsDto(
+    bool FatcaEnabled,
+    string? FatcaRegime,
+    string? FatcaGiin,
+    string FatcaRequiredAt,
+    bool FatcaForCoHolders,
+    int PepPostMandateMonths);
 
 /// <summary>
 /// Read-only projection of tenant email provider settings exposed to
@@ -185,8 +307,16 @@ public sealed record EmailQuotaDecision(bool Granted, int? Limit, int UsedThisMo
 /// <c>false</c> once the product has been retired from the catalogue. A retirement never deletes
 /// the row, so a code other modules hold keeps resolving — it resolves to an inactive product.
 /// </param>
+/// <param name="Id">
+/// The product line id — what <c>Lead.ProductLineId</c> stores and what
+/// <see cref="IAdministrationModule.GetBeneficiaryPolicyAsync"/> takes. Appended with a default so
+/// the existing positional call sites keep compiling; the facade always fills it.
+/// </param>
+/// <param name="AllowMultipleHoldings">Whether a customer may hold this line more than once (BNF-B-22).</param>
 public sealed record ProductSummary(
     string Code,
     string Name,
     string Category,
-    bool IsActive);
+    bool IsActive,
+    Guid Id = default,
+    bool AllowMultipleHoldings = true);

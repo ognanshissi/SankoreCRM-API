@@ -161,3 +161,87 @@ public sealed record ClientAnonymizedEvent(
     Guid TenantId,
     Guid ClientId,
     DateTimeOffset AnonymizedAt) : IntegrationEventBase;
+
+/// <summary>
+/// A client's household became politically exposed when it was not (BNF-B-13) — the trigger for a
+/// KYC review at raised vigilance.
+///
+/// <para>
+/// A RISE only. Publishing on a fall would ask a compliance officer to re-review a file because a
+/// mandate expired, which is the opposite of the intent.
+/// </para>
+///
+/// <para>
+/// It carries NO detail of the exposure: the function, the country and the family link sit behind
+/// <c>customers:pep_read</c>, and the consumer's job is to open a review, not to read the
+/// classification. <paramref name="DeclaredBy"/> is the authenticated agent, so the review names an
+/// accountable actor rather than a SYSTEM placeholder.
+/// </para>
+/// </summary>
+public sealed record ClientPepExposureRaisedEvent(
+    Guid TenantId,
+    Guid ClientId,
+    Guid DeclaredBy) : IntegrationEventBase;
+
+/// <summary>
+/// A client subscribed to a product through the CRM and the holding is now signed and queued for
+/// its back office (BNF-B-14/B-16).
+///
+/// <para>
+/// IDS ONLY, deliberately: the terms, the signature reference and the designations all stay in M01,
+/// and an outbox row carrying them would be a second copy of a contract that nothing purges. The
+/// consumer reads what it needs through the module's contract.
+/// </para>
+/// </summary>
+/// <param name="ClauseVersion">
+/// Which version of the beneficiary clause is being sent. Part of the idempotency key a back-office
+/// command is built from, because an avenant is a second send for the same holding.
+/// </param>
+public sealed record ProductSubscriptionRequestedEvent(
+    Guid TenantId,
+    Guid ClientId,
+    Guid HoldingId,
+    Guid ProductLineId,
+    string ProductCode,
+    int ClauseVersion,
+    Guid RequestedBy) : IntegrationEventBase;
+
+/// <summary>
+/// The beneficiary clause of a holding changed (BNF-B-15/B-16). Ids and the new version only.
+/// </summary>
+/// <param name="IsAmendment">
+/// True when the holding was already <c>Active</c>, so this is an avenant to a live contract rather
+/// than a clause still being captured. The consumer needs it: the first reaches a back office as a
+/// modification of an existing policy, the second travels with the subscription itself.
+/// </param>
+public sealed record BeneficiaryDesignationChangedEvent(
+    Guid TenantId,
+    Guid ClientId,
+    Guid HoldingId,
+    int ClauseVersion,
+    int DesignationCount,
+    bool IsAmendment,
+    Guid RecordedBy) : IntegrationEventBase;
+
+/// <summary>
+/// A household member was removed and left beneficiary designations behind (BNF-B-13) — the agent
+/// has to decide what becomes of them.
+///
+/// <para>
+/// Published ONLY when designations were actually flagged. A removal that affects nothing is
+/// ordinary housekeeping, and notifying on it would train the recipient to ignore the ones that
+/// matter.
+/// </para>
+///
+/// <para>
+/// Counts and ids, never a name: the designations were not deleted and the agent will read them on
+/// the holdings this points to.
+/// </para>
+/// </summary>
+public sealed record HouseholdMemberRemovedEvent(
+    Guid TenantId,
+    Guid ClientId,
+    Guid MemberId,
+    int DesignationsToReview,
+    IReadOnlyList<Guid> AffectedHoldingIds,
+    Guid RemovedBy) : IntegrationEventBase;

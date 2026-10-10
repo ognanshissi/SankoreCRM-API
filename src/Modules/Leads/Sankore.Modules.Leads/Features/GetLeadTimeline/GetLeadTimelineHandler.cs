@@ -45,15 +45,19 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
             .ToListAsync(ct);
 
         // Qualification responses joined with template metadata for rich context.
+        //
+        // AnsweredAt != null filters out the EXPECTED-but-unanswered responses the system creates
+        // when a product line asks a questionnaire of each household member (BNF-B-08). A
+        // timeline is what happened; a questionnaire nobody has filled in yet has not happened.
         var qualifications = await (
             from r in db.QualificationResponses
-            where r.LeadId == query.LeadId
+            where r.LeadId == query.LeadId && r.AnsweredAt != null
             join t in db.QualificationTemplates on r.TemplateId equals t.Id
             select new
             {
                 r.Id,
                 r.AnsweredBy,
-                r.AnsweredAt,
+                AnsweredAt = r.AnsweredAt!.Value,
                 r.ComputedScore,
                 TemplateName = t.Name,
                 t.ProductCategory

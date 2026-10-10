@@ -50,7 +50,7 @@ public sealed class GetAvailableAgentsTests : IDisposable
         db.SaveChanges();
     }
 
-    private AdministrationModuleFacade Facade() => new(_factory.CreateContext());
+    private AdministrationModuleFacade Facade() => new(_factory.CreateContext(), new ProductCatalogCache());
 
     /// <summary>Creates an agent and grants it a role through the tenant-scoped mirror.</summary>
     private AppUser SeedAgent(

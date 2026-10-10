@@ -41,6 +41,22 @@ public sealed record InsuranceBeneficiary(
 /// at the field level and reaches the adapter through its own protected channel, never through a
 /// record that could be logged or audited in clear (ASS-12).
 /// </summary>
+/// <param name="CrmHoldingId">
+/// The M01 <c>ProductHolding</c> this subscription is (BNF-B-14/B-16), when the request comes from
+/// one. Null for the pre-existing callers, which subscribe a customer to a product with no CRM-side
+/// contract record.
+///
+/// <para>
+/// When it is set it becomes the command's <c>CrmId</c> and the idempotency key is built from it
+/// and <paramref name="ClauseVersion"/> — so the return path can say WHICH holding the insurer
+/// answered about, and an avenant is a second, distinct send rather than a swallowed replay.
+/// </para>
+/// </param>
+/// <param name="ClauseVersion">
+/// Which version of the beneficiary clause is being sent. Meaningful only with
+/// <paramref name="CrmHoldingId"/>; part of the idempotency key, because the same holding
+/// legitimately owes a second write when its clause changes.
+/// </param>
 public sealed record InsurancePolicyPayload(
     Guid CrmCustomerId,
     Guid CrmProductId,
@@ -51,7 +67,9 @@ public sealed record InsurancePolicyPayload(
     PremiumPeriodicity Periodicity,
     IReadOnlyList<InsuranceBeneficiary> Beneficiaries,
     string? LinkedLoanReference,
-    string? ConsentEvidenceRef);
+    string? ConsentEvidenceRef,
+    Guid? CrmHoldingId = null,
+    int ClauseVersion = 1);
 
 public sealed record InsurancePolicy(
     ExternalId PolicyId,

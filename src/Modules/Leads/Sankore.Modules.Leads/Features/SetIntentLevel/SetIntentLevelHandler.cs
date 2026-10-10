@@ -18,7 +18,9 @@ internal sealed class SetIntentLevelHandler(LeadsDbContext db)
             return Result.Fail("LEAD_NOT_FOUND");
 
         lead.UpdateIntentLevel(cmd.IntentLevel);
-        db.Leads.Update(lead);
+        // No db.Leads.Update(lead): the lead is already tracked, and calling Update marks the
+        // OWNED PrincipalPep's identifying key as modified — EF then refuses the save with
+        // "part of a key and so cannot be modified".
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

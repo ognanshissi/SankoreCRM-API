@@ -38,15 +38,18 @@ internal sealed class CreateKycFileHandler(
         // ambient tenant is not the one being processed.
         var existing = await db.KycFiles
             .IgnoreQueryFilters()
+            .AsTracking()
             .Where(f => f.TenantId == cmd.TenantId
                      && f.CustomerId == cmd.CustomerId
                      && f.Status != KycFileStatus.Rejected
                      && f.Status != KycFileStatus.Suspended)
-            .Select(f => (Guid?)f.Id)
             .FirstOrDefaultAsync(ct);
 
         if (existing is not null)
-            return Result.Ok(new CreateKycFileResult(existing.Value, AlreadyExisted: true));
+        {
+            await RaiseVigilanceAsync(existing, cmd, ct);
+            return Result.Ok(new CreateKycFileResult(existing.Id, AlreadyExisted: true));
+        }
 
         var file = KycFile.Open(
             tenantId: cmd.TenantId,
@@ -86,21 +89,56 @@ internal sealed class CreateKycFileHandler(
 
             var winner = await db.KycFiles
                 .IgnoreQueryFilters()
+                .AsTracking()
                 .Where(f => f.TenantId == cmd.TenantId
                          && f.CustomerId == cmd.CustomerId
                          && f.Status != KycFileStatus.Rejected
                          && f.Status != KycFileStatus.Suspended)
-                .Select(f => (Guid?)f.Id)
                 .FirstOrDefaultAsync(ct);
 
+            if (winner is not null)
+                await RaiseVigilanceAsync(winner, cmd, ct);
+
             return winner is not null
-                ? Result.Ok(new CreateKycFileResult(winner.Value, AlreadyExisted: true))
+                ? Result.Ok(new CreateKycFileResult(winner.Id, AlreadyExisted: true))
                 // The violation was real but the row is gone: something else closed it between
                 // the two statements. Report the code rather than invent an id.
                 : Result.Fail<CreateKycFileResult>(KycErrors.FileAlreadyExists);
         }
 
         return Result.Ok(new CreateKycFileResult(file.Id, AlreadyExisted: false));
+    }
+
+    /// <summary>
+    /// Raises an EXISTING file's vigilance level when the trigger asks for more than it carries
+    /// (BNF-B-24: a converted lead with a politically exposed household).
+    ///
+    /// <para>
+    /// <b>Raised, never lowered.</b> A file already marked <c>High</c> — by a duplicate suspicion,
+    /// by a compliance decision, by an earlier trigger — must not be relaxed because a second,
+    /// ordinary trigger arrived for the same customer. The level selects the approval ladder, so
+    /// lowering it would remove a signature somebody already decided was required.
+    /// </para>
+    ///
+    /// <para>
+    /// It happens on the already-existed path precisely because that path is the NORMAL one here:
+    /// <c>ClientCreatedKycConsumer</c> and <c>KycRequestedConsumer</c> both fire for a converted
+    /// lead, and M01's event usually wins. Applying the level only on creation would mean the PEP
+    /// flag had no effect in the common case — which is the kind of gap that looks like it works.
+    /// </para>
+    /// </summary>
+    private async Task RaiseVigilanceAsync(
+        KycFile file, CreateKycFileCommand cmd, CancellationToken ct)
+    {
+        if (cmd.VigilanceLevel <= file.VigilanceLevel)
+            return;
+
+        file.SetVigilanceLevel(cmd.VigilanceLevel, clock);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation(
+            "KYC file {KycFileId} raised to {Level} vigilance by a {Channel} trigger",
+            file.Id, cmd.VigilanceLevel, cmd.Channel);
     }
 
     /// <summary>

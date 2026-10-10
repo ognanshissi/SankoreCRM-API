@@ -17,8 +17,8 @@ using Xunit;
 /// </summary>
 public sealed class CustomerPermissionsTests
 {
-    /// <summary>The nine codes named by the US, verbatim. This array IS the specification.</summary>
-    private static readonly string[] ExpectedCodes =
+    /// <summary>The nine codes named by US-M01-BE-01, verbatim. This array IS that specification.</summary>
+    private static readonly string[] OriginalCodes =
     [
         "customers:read",
         "customers:create",
@@ -31,8 +31,24 @@ public sealed class CustomerPermissionsTests
         "customers:export"
     ];
 
+    /// <summary>
+    /// Added by the BNF-B evolution (household, holdings, designations). Kept as a SEPARATE array
+    /// rather than appended to the one above, so each code's provenance stays visible — the
+    /// closed-set guard below is the point of these tests, and losing track of which specification
+    /// asked for which permission would make the next addition look like it had always been there.
+    /// </summary>
+    private static readonly string[] EvolutionCodes =
+    [
+        "customers:household_manage",   // BNF-B-13
+        "customers:pep_read",           // BNF-B-13
+        "customers:holding_manage",     // BNF-B-14
+        "customers:designation_manage", // BNF-B-15
+    ];
+
+    private static readonly string[] ExpectedCodes = [.. OriginalCodes, .. EvolutionCodes];
+
     [Fact]
-    public void The_nine_customer_permissions_are_registered_in_Permissions_All()
+    public void Every_customer_permission_is_registered_in_Permissions_All()
     {
         var registered = Permissions.All.Select(p => p.Code).ToList();
 
@@ -67,10 +83,11 @@ public sealed class CustomerPermissionsTests
     }
 
     [Fact]
-    public void The_Customers_module_declares_no_permission_beyond_the_nine_of_the_specification()
+    public void The_Customers_module_declares_no_permission_beyond_the_declared_set()
     {
         // Guards the other direction: an extra "customers:*" permission slipped in by another
-        // slice would be granted by RoleSeeder without ever appearing in the US.
+        // slice would be granted by RoleSeeder without ever appearing in a specification. This is
+        // the case that caught BNF-B-13's four additions and forced them to be declared here.
         var codes = Permissions.All
             .Where(p => p.Code.StartsWith("customers:", StringComparison.Ordinal))
             .Select(p => p.Code);
@@ -100,5 +117,14 @@ public sealed class CustomerPermissionsTests
         Permissions.CanUpdateCustomerSensitive.Code.Should().Be("customers:update_sensitive");
         Permissions.CanArchiveCustomer.Code.Should().Be("customers:archive");
         Permissions.CanExportCustomers.Code.Should().Be("customers:export");
+    }
+
+    [Fact]
+    public void The_permission_constants_added_by_the_evolution_resolve_to_the_expected_codes()
+    {
+        Permissions.CanManageCustomerHousehold.Code.Should().Be("customers:household_manage");
+        Permissions.CanReadCustomerPep.Code.Should().Be("customers:pep_read");
+        Permissions.CanManageCustomerHolding.Code.Should().Be("customers:holding_manage");
+        Permissions.CanManageDesignations.Code.Should().Be("customers:designation_manage");
     }
 }

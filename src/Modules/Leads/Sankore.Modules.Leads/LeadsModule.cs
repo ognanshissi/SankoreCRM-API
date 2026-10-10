@@ -18,6 +18,11 @@ using Sankore.Modules.Leads.Features.DispatchLead.PreviewDispatch;
 using Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 using Sankore.Modules.Leads.Features.GetLead;
 using Sankore.Modules.Leads.Features.ConvertLead;
+using Sankore.Modules.Leads.Features.CustomerLink;
+using Sankore.Modules.Leads.Features.Fatca;
+using Sankore.Modules.Leads.Features.Household;
+using Sankore.Modules.Leads.Features.Enrichment;
+using Sankore.Modules.Leads.Features.Questionnaires;
 using Sankore.Modules.Leads.Features.Bulk;
 using Sankore.Modules.Leads.Features.Import;
 using Sankore.Shared.Infrastructure.FileStore;
@@ -83,6 +88,7 @@ using Sankore.Modules.Leads.Features.SystemCaptureLead;
 using Sankore.Modules.Leads.Features.UpdatePipelineStage;
 using Sankore.Modules.Leads.Features.NurturingSequences;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Infrastructure.Crypto;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Infrastructure.Workflow;
 
@@ -122,17 +128,51 @@ public static class LeadsModule
         services.AddScoped<StickyAssignmentStrategy>();
         services.AddScoped<CherryPickingStrategy>();
         services.AddScoped<DispatchingStrategyFactory>();
+        // Client-history criterion (F13.10 / BNF-B-22).
+        services.AddScoped<ClientAdvisorResolver>();
         // AgentExclusionService: Redis-cached per-task decline exclusions (US-M13-084).
         services.AddScoped(sp =>
             new AgentExclusionService(
                 sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 
-        // Phone blind index (HMAC-SHA256) for duplicate detection (US-M13-010)
+        // Phone blind index (HMAC-SHA256) for duplicate detection (US-M13-010).
+        // Predates LeadsFieldProtection and stays: its indexes are already stored and F13.2 reads
+        // them — recomputing them under another key would stop every phone match from resolving.
         services.AddSingleton<IPhoneBlindIndexer, HmacPhoneBlindIndexer>();
+
+        // Field protection, KEYED to this module. Never AddFieldProtection(config, "Leads") —
+        // see LeadsFieldProtection for why that would hand M01's data to M13's key.
+        services.AddLeadsFieldProtection(config);
+
+        // E-mail blind index over the keyed indexer above — the second dedup key of F13.2
+        // (BNF-B-01). Scoped, not singleton: it resolves a keyed service and has no state.
+        services.AddScoped<ILeadEmailIndexer, LeadEmailIndexer>();
+
+        // Household and PEP (BNF-B-03, BNF-B-05). LeadAccessGuard and HouseholdPolicyResolver are
+        // the two gates every household write runs; HouseholdWriteContext sequences them.
+        services.AddScoped<LeadAccessGuard>();
+        services.AddScoped<HouseholdPolicyResolver>();
+        services.AddScoped<HouseholdWriteContext>();
+
+        // Multi-person questionnaires (BNF-B-07/08/09).
+        services.AddScoped<Features.Questionnaires.ExpectedResponsePlanner>();
+        services.AddScoped<Features.Questionnaires.HealthConsentGuard>();
+        services.AddScoped<Features.Questionnaires.QuestionnaireCompletenessChecker>();
+
+        // FATCA (BNF-B-11).
+        services.AddScoped<Features.Fatca.FatcaSubjectPlanner>();
+
+        // Completeness (BNF-B-04). ONE calculator, read by the completeness endpoint, by the
+        // enrichment response and by the conversion gate — see LeadCompletenessCalculator.
+        services.AddScoped<Features.Enrichment.LeadCompletenessCalculator>();
 
         // QualifyLead slice-internal services
         services.AddScoped<LeadScoreCalculator>();
         services.AddScoped<Features.DispatchLead.DispatchingRuleResolver>();
+
+        // Per-tenant M13 parameters (leads.lead_settings). Distinct from the `Leads`
+        // configuration section, which is per deployment — see LeadSetting for why both exist.
+        services.AddScoped<ILeadSettings, LeadSettingsService>();
 
         services.AddScoped<IContextProvider, LeadContextProvider>();
         // Public contract of M13. Consumed by the Customers module (M01) to import a
@@ -152,6 +192,10 @@ public static class LeadsModule
 
         // Recycled lead reactivation — Hangfire recurring job (US-M13-160/161)
         services.AddTransient<ReactivateRecycledLeadsJob>();
+
+        // Health questionnaire retention purge — Hangfire recurring job (BNF-B-09)
+        services.AddTransient<Features.Questionnaires.PurgeHealthResponsesJob>();
+        services.AddTransient<Features.Retention.AnonymizeClosedLeadsJob>();
 
         // Ingestion replay — Hangfire on-demand job (F13.37-BE-11)
         services.AddTransient<ReplayIngestionJob>();
@@ -213,6 +257,19 @@ public static class LeadsModule
         // dispatching behaves exactly as before.
         await Features.DispatchingRules.DispatchingRuleSeeder.SeedAsync(
             db, sp.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>(), logger);
+
+        // One lead_settings row per declared key per tenant. Idempotent: inserts only what is
+        // missing, so an operator's change survives a restart.
+        await Infrastructure.LeadSettingSeeder.SeedAsync(
+            db, sp.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>(), logger);
+
+        // Moves pre-encryption e-mails into email_enc + email_blind_index. Before the host serves
+        // its first request on purpose — see LeadEmailProtectionBackfill. Idempotent and resumable,
+        // so a completed migration costs one indexed count.
+        await Infrastructure.LeadEmailProtectionBackfill.RunAsync(
+            db,
+            sp.GetRequiredService<Features.FindDuplicates.ILeadEmailIndexer>(),
+            logger);
     }
 
     public static IEndpointRouteBuilder MapLeadsEndpoints(this IEndpointRouteBuilder app)
@@ -247,6 +304,21 @@ public static class LeadsModule
 
         // Phase 4 — Conversion
         group.MapConvertLead();
+
+        // Existing-customer link (BNF-B-22)
+        group.MapCustomerLinkEndpoints();
+
+        // Household and PEP (BNF-B-03, BNF-B-05)
+        group.MapHouseholdEndpoints();
+
+        // Per-person questionnaires and health consent (BNF-B-07/08/09)
+        group.MapQuestionnaireEndpoints();
+
+        // FATCA indicia and self-certification (BNF-B-11)
+        group.MapFatcaEndpoints();
+
+        // Enrichment and completeness (BNF-B-02, BNF-B-04)
+        group.MapEnrichmentEndpoints();
 
         // Phase 5 — Nurturing, Recycling & Lifecycle
         group.MapGetLeadStats();

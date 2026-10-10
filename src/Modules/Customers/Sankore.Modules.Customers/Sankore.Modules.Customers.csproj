@@ -36,6 +36,9 @@
     <ProjectReference Include="..\..\Kyc\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
     <!-- Leads PublicApi: lead commercial-history import into the client timeline (US-M01-BE-26 / F13.29) -->
     <ProjectReference Include="..\..\Leads\Sankore.Modules.Leads.PublicApi\Sankore.Modules.Leads.PublicApi.csproj" />
+    <!-- BNF-B-16: the return path. M01 consumes IntegrationCommandSucceeded/Rejected to move a
+         holding to Active or Rejected. The PublicApi contract only, as always. -->
+    <ProjectReference Include="..\..\Integration\Sankore.Modules.Integration.PublicApi\Sankore.Modules.Integration.PublicApi.csproj" />
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />
   </ItemGroup>
 

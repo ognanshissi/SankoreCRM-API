@@ -96,13 +96,30 @@ internal sealed class IngestInboundLeadHandler(
 
         // ── 4. Extract required fields ──────────────────────────────────
         mapped.TryGetValue("phoneNumber", out var phone);
-        mapped.TryGetValue("fullName", out var fullName);
+
+        // ── The name, v1 or v2 (BNF-B-18) ───────────────────────────────
+        //
+        // DERIVED and no longer required outright. A v2 form collects a first and a last name
+        // separately, and this route used to answer REQUIRED_FIELDS_MISSING:fullName to a payload
+        // that plainly had the prospect's name — while the same payload pulled from a partner's
+        // API was accepted, because the pull job already derived it. One rule now, in
+        // LeadNameResolver, shared by all four inbound paths.
+        mapped.TryGetValue("fullName", out var suppliedFullName);
+        mapped.TryGetValue("firstName", out var suppliedFirstName);
+        mapped.TryGetValue("lastName", out var suppliedLastName);
+
+        var fullName = Features.CaptureLead.LeadNameResolver.Resolve(
+            suppliedFullName, suppliedFirstName, suppliedLastName);
 
         if (string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(fullName))
         {
             var missing = new List<string>();
             if (string.IsNullOrWhiteSpace(phone)) missing.Add("phoneNumber");
-            if (string.IsNullOrWhiteSpace(fullName)) missing.Add("fullName");
+
+            // Names the three fields any ONE of which would have satisfied it, rather than just
+            // "fullName": an integrator reading the rejection has to know a first and last name
+            // would do.
+            if (string.IsNullOrWhiteSpace(fullName)) missing.Add("fullName|firstName|lastName");
 
             var failedIngestion = LeadIngestion.CreateFailed(
                 cmd.TenantId, cmd.SourceId,

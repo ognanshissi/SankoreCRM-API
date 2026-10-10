@@ -24,6 +24,10 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
     public DbSet<BeneficialOwner> BeneficialOwners => Set<BeneficialOwner>();
     public DbSet<ClientRelationship> ClientRelationships => Set<ClientRelationship>();
 
+    // ── Products held and who is designated on them (BNF-B-14, BNF-B-15) ────
+    public DbSet<ProductHolding> ProductHoldings => Set<ProductHolding>();
+    public DbSet<BeneficiaryDesignation> BeneficiaryDesignations => Set<BeneficiaryDesignation>();
+
     // ── Groups ──────────────────────────────────────────────────────────────
     public DbSet<ClientGroup> ClientGroups => Set<ClientGroup>();
     public DbSet<GroupMembership> GroupMemberships => Set<GroupMembership>();
@@ -107,6 +111,8 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
         modelBuilder.Entity<ClientNumberSequence>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<BeneficialOwner>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ClientRelationship>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ProductHolding>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<BeneficiaryDesignation>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ClientGroup>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<GroupMembership>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ClientTimelineEntry>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);

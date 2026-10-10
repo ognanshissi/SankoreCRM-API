@@ -63,17 +63,50 @@ internal sealed class QualifyLeadHandler(
             var answeredActive    = activeQuestions.Count(q => answerMap.TryGetValue(q.Id, out var v) && !string.IsNullOrWhiteSpace(v));
             completeness          = activeQuestions.Count > 0 ? (double)answeredActive / activeQuestions.Count : 0.0;
 
-            var response = QualificationResponse.Create(
-                tenantId:      lead.TenantId,
-                leadId:        lead.Id,
-                templateId:    template.Id,
-                answeredBy:    cmd.QualifiedBy,
-                clock:         clock,
-                answers:       cmd.Answers.Select(a => (a.QuestionId, a.Value)).ToList(),
-                computedScore: score);
+            var answers = cmd.Answers.Select(a => (a.QuestionId, a.Value)).ToList();
 
-            db.QualificationResponses.Add(response);
-            qualificationResponseId = response.Id;
+            // Re-qualifying the same lead against the same template UPDATES its response, it does
+            // not add a second one. The identity of a response is
+            // (lead, template, subject type, subject id) and `ux_qualification_responses_subject`
+            // enforces it, so a blind Add here raised a unique violation on the second
+            // qualification — a 500 on an ordinary re-qualify. Same shape as
+            // SubmitQuestionnaireResponseHandler, which has always looked first.
+            //
+            // Nothing is lost by overwriting: the ScoreHistory row written below keeps each
+            // qualification's score, trigger and factors, so the succession stays on the lead's
+            // timeline even though only the latest ANSWERS are kept.
+            var existing = await db.QualificationResponses
+                .AsTracking()
+                .FirstOrDefaultAsync(
+                    r => r.LeadId == lead.Id
+                      && r.TemplateId == template.Id
+                      && r.SubjectType == QualificationSubjectType.Lead
+                      && r.SubjectId == lead.Id,
+                    ct);
+
+            if (existing is not null)
+            {
+                var answered = existing.Answer(
+                    answers, cmd.QualifiedBy, respondentId: null, score, clock.GetUtcNow());
+                if (answered.IsFailure)
+                    return Result.Fail<QualifyLeadResult>(answered.Error!);
+
+                qualificationResponseId = existing.Id;
+            }
+            else
+            {
+                var response = QualificationResponse.Create(
+                    tenantId:      lead.TenantId,
+                    leadId:        lead.Id,
+                    templateId:    template.Id,
+                    answeredBy:    cmd.QualifiedBy,
+                    clock:         clock,
+                    answers:       answers,
+                    computedScore: score);
+
+                db.QualificationResponses.Add(response);
+                qualificationResponseId = response.Id;
+            }
         }
         // ── Path 2: explicit score override ──────────────────────────────────
         else if (cmd.Score.HasValue)

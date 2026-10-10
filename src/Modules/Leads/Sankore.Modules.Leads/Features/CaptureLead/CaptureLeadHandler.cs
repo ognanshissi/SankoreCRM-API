@@ -2,7 +2,11 @@ using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Sankore.Modules.Administration.PublicApi;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.CustomerLink;
+using Sankore.Modules.Leads.Features.CustomerLink.Events;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,14 +27,18 @@ public sealed class CaptureLeadHandler(
     TimeProvider clock,
     IBus bus,
     IPhoneBlindIndexer phoneBlindIndexer,
+    ILeadEmailIndexer emailIndexer,
+    ICustomersModule customers,
+    IAdministrationModule administration,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<CaptureLeadCommand, Result<CaptureLeadResult>>
 {
     public async Task<Result<CaptureLeadResult>> Handle(
         CaptureLeadCommand cmd, CancellationToken ct)
     {
-        // ── Compute phone blind index (HMAC-SHA256 on normalized phone) ────
+        // ── Blind indexes (HMAC-SHA256) — the searchable half of the protected columns ────
         var phoneIndex = phoneBlindIndexer.Compute(cmd.PhoneNumber);
+        var emailIndex = emailIndexer.Compute(cmd.Email);
 
         // ── Duplicate detection (multi-signal identity scoring) ──────────────
         IReadOnlyList<DuplicateMatchResult>? warnMatches = null;
@@ -58,7 +66,16 @@ public sealed class CaptureLeadHandler(
                     l.Status != LeadStatus.Disqualified &&
                     ((l.PhoneBlindIndex != null && l.PhoneBlindIndex == phoneIndex) ||
                      (l.PhoneBlindIndex == null && phoneDigits != null && l.PhoneNumber.EndsWith(phoneDigits)) ||
-                     (emailNorm != null && l.Email != null && l.Email.ToLower() == emailNorm) ||
+                     // E-mail dedup reads the BLIND INDEX, never the e-mail column: that column is
+                     // non-deterministic ciphertext, so comparing it matches nothing — silently,
+                     // because it compiles and runs. The second branch is the transitional fallback
+                     // for leads captured before the encryption migration, whose index
+                     // BackfillLeadEmailProtectionJob has not filled yet; it mirrors the phone
+                     // fallback above and is removed with the legacy column.
+                     (emailIndex != null && l.EmailBlindIndex == emailIndex) ||
+                     (emailIndex != null && l.EmailBlindIndex == null
+                        && emailNorm != null && l.LegacyEmailClear != null
+                        && l.LegacyEmailClear.ToLower() == emailNorm) ||
                      (nationalId != null && l.NationalId != null && l.NationalId.ToLower() == nationalId.ToLower()) ||
                      (customerRef != null && l.CustomerReference != null && l.CustomerReference.ToLower() == customerRef.ToLower())))
                 .ToListAsync(ct);
@@ -94,15 +111,46 @@ public sealed class CaptureLeadHandler(
             }
         }
 
+        // ── Is this a customer we already hold? (BNF-B-22) ───────────────────
+        //
+        // Attached automatically ONLY on a unique, person-identifying match — see
+        // CustomerMatchPolicy. Anything less is left for an agent to confirm through
+        // GET leads/{id}/customer-matches, because BNF-B-22 forbids a silent attachment and a
+        // wrong one redirects the whole request at another person's client record (BNF-B-23).
+        //
+        // An M01 OUTAGE MUST NOT COST THE LEAD. A prospect on the phone is the thing being
+        // captured; recognising them is an enrichment of it. So the lookup is best-effort and its
+        // failure is logged, not propagated — the agent can still attach by hand afterwards.
+        Guid? matchedCustomerId = null;
+
+        if (cmd.CustomerId is { } explicitCustomerId && explicitCustomerId != Guid.Empty)
+        {
+            // A caller that already knows whose request this is — a counter clerk opening a second
+            // product for the client in front of them. Trusted, because reaching this command at
+            // all required authentication and the agency perimeter; the public ingest contracts do
+            // not carry the field.
+            matchedCustomerId = explicitCustomerId;
+        }
+        else
+        {
+            matchedCustomerId = await TryMatchCustomerAsync(cmd, ct);
+        }
+
+        // ── Which product line is this about? (BNF-B-01) ─────────────────────
+        //
+        // Best-effort resolution of the captured LABEL onto a catalogue line. A label that matches
+        // nothing — and "Unknown", which is what the pull job and the system endpoint write when a
+        // source names no product — resolves to null, and an agent picks the line at enrichment.
+        // Never fuzzy: the resolved line decides which fields gate the conversion.
+        var productLineId = cmd.ProductLineId ?? await TryResolveProductLineAsync(cmd, ct);
+
         // ── Create the lead ───────────────────────────────────────────────────
         var lead = Lead.Capture(
             tenantId:             cmd.TenantId,
-            // FullName is the authoritative field; first/last are optional refinements.
-            // Composing it blindly produced " " for callers that only send FullName
-            // (file import, web forms), which Lead.Capture rejects.
-            fullName:             string.IsNullOrWhiteSpace(cmd.FullName)
-                                      ? $"{cmd.FirstName} {cmd.LastName}".Trim()
-                                      : cmd.FullName,
+            // Passed through as captured. Lead.Capture decides what FullName holds — structured
+            // names win, an explicit full name is the fallback for the contracts that carry only
+            // it, and a full name is never split (BNF-B-01). One rule, one place.
+            fullName:             cmd.FullName,
             phoneNumber:          cmd.PhoneNumber,
             source:               cmd.Source,
             interestedProduct:    cmd.InterestedProduct,
@@ -113,6 +161,13 @@ public sealed class CaptureLeadHandler(
             firstName:            cmd.FirstName,
             lastName:             cmd.LastName,
             email:                cmd.Email,
+            emailBlindIndex:      emailIndex,
+            productLineId:        productLineId,
+            customerId:           matchedCustomerId,
+            customerLinkIsAutomatic: cmd.CustomerId is null,
+            customerLinkReason:   cmd.CustomerId is null
+                                      ? "Rattachement automatique : correspondance unique et exacte à la capture"
+                                      : "Client renseigné par l'appelant à la capture",
             gender:               cmd.Gender,
             dateOfBirth:          cmd.DateOfBirth,
             desiredAmount:        cmd.DesiredAmount.HasValue && cmd.DesiredCurrency is not null
@@ -133,6 +188,23 @@ public sealed class CaptureLeadHandler(
 
         db.Leads.Add(lead);
 
+        // ── The household and the questionnaires of v2 (BNF-B-18) ───────────
+        //
+        // In the SAME transaction as the lead. A household recorded by a second request is one
+        // that can fail on its own, leaving a lead whose family somebody has to remember to
+        // re-enter — and a health declaration in that position is worse: the consent was given
+        // and the answers are gone.
+        var extras = await CaptureExtras.ApplyAsync(db, lead, cmd, clock.GetUtcNow(), ct);
+
+        if (extras.IsFailure)
+        {
+            // Nothing is committed: the lead, its outbox rows and the half-built household all
+            // live in this one unit of work, so returning here leaves no trace of a capture that
+            // was refused. The caller gets a code it can act on rather than a lead missing the
+            // family it just typed.
+            return Result.Fail<CaptureLeadResult>(extras.Error!);
+        }
+
         // Outbox row written into THIS DbContext so it commits with the lead: a captured lead
         // whose event was lost would never be dispatched, and an event without its lead would
         // dispatch a row that does not exist.
@@ -144,6 +216,17 @@ public sealed class CaptureLeadHandler(
                 HasExplicitOwner:   cmd.OwnerId.HasValue,
                 DuplicateSuspected: warnMatches is not null),
             ct);
+
+        if (lead.CustomerId is { } linkedCustomerId)
+        {
+            await publisher.PublishAsync(
+                new LeadLinkedToCustomerIntegrationEvent(
+                    TenantId:    cmd.TenantId,
+                    LeadId:      lead.Id,
+                    CustomerId:  linkedCustomerId,
+                    IsAutomatic: lead.CustomerLinkIsAutomatic),
+                ct);
+        }
 
         await db.SaveChangesAsync(ct);
 
@@ -169,6 +252,119 @@ public sealed class CaptureLeadHandler(
             LeadId:              lead.Id,
             Status:              lead.Status.ToString(),
             DuplicateDetected:   warnMatches is not null,
-            PotentialDuplicates: warnMatches));
+            PotentialDuplicates: warnMatches,
+            LinkedCustomerId:    lead.CustomerId));
+    }
+
+    /// <summary>
+    /// Asks M01 whether this prospect is already a client, and returns the id only when the match
+    /// is strong enough to act on without asking anybody (BNF-B-22, <see cref="CustomerMatchPolicy"/>).
+    /// </summary>
+    /// <remarks>
+    /// Two deliberate choices here.
+    ///
+    /// <para>
+    /// <b>The ambient transaction is SUPPRESSED.</b> TransactionBehavior has a
+    /// <c>System.Transactions</c> scope open around this command and M01 reads through its own
+    /// DbContext; a second connection enlisting in that scope promotes it to a distributed
+    /// transaction, which Npgsql does not support — and it throws at run time, not at build time.
+    /// The same reason <c>ConvertLeadHandler</c> suppresses around <c>CreateFromLeadAsync</c>.
+    /// Safe because this is a READ: nothing to roll back if the capture then fails.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>A failure is swallowed, on purpose.</b> The thing being captured is a prospect, often
+    /// with somebody on the phone; recognising them as an existing client is an enrichment of that,
+    /// not a precondition for it. If M01 is down, losing the lead would be the worse outcome by a
+    /// wide margin — and the agent can still attach by hand through
+    /// <c>PUT leads/{id}/customer</c>. It is logged at warning so an outage is visible rather
+    /// than merely survived.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Resolves <c>InterestedProduct</c> onto a product line id, or null (BNF-B-01).
+    /// </summary>
+    /// <remarks>
+    /// Same two choices as <see cref="TryMatchCustomerAsync"/>, for the same reasons: the ambient
+    /// transaction is SUPPRESSED because M12 reads through its own DbContext and a second
+    /// connection enlisting would promote the scope to a distributed transaction Npgsql cannot do;
+    /// and a failure is swallowed, because an unresolved product line is a lead an agent completes
+    /// rather than a lead nobody captured.
+    ///
+    /// <para>
+    /// The read is cheap in the common case: M12 caches the tenant's active catalogue for five
+    /// minutes, so this is one query per tenant per five minutes rather than one per lead.
+    /// </para>
+    /// </remarks>
+    private async Task<Guid?> TryResolveProductLineAsync(CaptureLeadCommand cmd, CancellationToken ct)
+    {
+        try
+        {
+            using var suppressed = new System.Transactions.TransactionScope(
+                System.Transactions.TransactionScopeOption.Suppress,
+                System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+
+            var resolved = await administration.ResolveProductLineAsync(
+                cmd.TenantId, cmd.InterestedProduct, ct);
+
+            suppressed.Complete();
+
+            if (resolved is null)
+            {
+                logger.LogInformation(
+                    "Captured product label {Label} matched no active product line; "
+                    + "the lead carries none until an agent resolves it.",
+                    cmd.InterestedProduct);
+            }
+
+            return resolved;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex, "Product line resolution failed at capture; the lead is created without one.");
+            return null;
+        }
+    }
+
+    private async Task<Guid?> TryMatchCustomerAsync(CaptureLeadCommand cmd, CancellationToken ct)
+    {
+        try
+        {
+            using var suppressed = new System.Transactions.TransactionScope(
+                System.Transactions.TransactionScopeOption.Suppress,
+                System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+
+            // Clear values: M01 holds a different blind-index key and indexes them itself.
+            var matches = await customers.FindMatchesAsync(
+                cmd.TenantId, cmd.PhoneNumber, cmd.Email, cmd.NationalId, ct);
+
+            suppressed.Complete();
+
+            if (matches.Count == 0)
+                return null;
+
+            var single = matches[0];
+            if (CustomerMatchPolicy.IsAutoAttachable(single, matches.Count))
+            {
+                logger.LogInformation(
+                    "Capture matched existing customer {CustomerId} on {MatchedOn} — attaching.",
+                    single.ClientId, string.Join('+', single.MatchedOn));
+                return single.ClientId;
+            }
+
+            // Deliberately NOT attached. The suggestion endpoint will surface these.
+            logger.LogInformation(
+                "Capture found {Count} possible customer(s) but none attachable automatically; "
+                + "left for an agent to confirm.",
+                matches.Count);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex, "Existing-customer lookup failed at capture; the lead is created unattached.");
+            return null;
+        }
     }
 }

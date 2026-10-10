@@ -27,7 +27,9 @@ internal sealed class ReturnLeadToQueueHandler(LeadsDbContext db)
         if (result.IsFailure)
             return result;
 
-        db.Leads.Update(lead);
+        // No db.Leads.Update(lead): the lead is already tracked, and calling Update marks the
+        // OWNED PrincipalPep's identifying key as modified — EF then refuses the save with
+        // "part of a key and so cannot be modified".
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

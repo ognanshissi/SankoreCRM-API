@@ -198,14 +198,52 @@ public sealed class ReconciliationComparisonTests
         // The visible half of design decision 1. If a later lot gains a full external portfolio
         // enumeration, moving the value between these two collections is the whole change — and
         // this test is what says the move was deliberate.
-        ReconciliationScope.NotDetected.Should().BeEquivalentTo([GapType.MissingInCrm]);
+        ReconciliationScope.NotDetected.Should().BeEquivalentTo(
+            [GapType.MissingInCrm, GapType.DesignationOutOfSync]);
 
         ReconciliationScope.Detected.Should().BeEquivalentTo(
             [GapType.MissingInExternal, GapType.KycMismatch, GapType.StatusMismatch]);
+    }
 
-        // Every value of the enum is accounted for in exactly one of the two: a fifth gap type
-        // added without a decision about whether it can be detected would fail here.
-        ReconciliationScope.Detected.Concat(ReconciliationScope.NotDetected)
+    [Fact]
+    public void An_insurance_run_scans_the_three_types_a_policy_can_diverge_on()
+    {
+        // BNF-B-17. KycMismatch is a category error on a policy, and MissingInCrm needs an
+        // exhaustive enumeration of the insurer's portfolio that no source here can give.
+        ReconciliationScope.DetectedForHoldings.Should().BeEquivalentTo(
+            [GapType.MissingInExternal, GapType.StatusMismatch, GapType.DesignationOutOfSync]);
+
+        ReconciliationScope.NotDetectedForHoldings.Should().BeEquivalentTo(
+            [GapType.MissingInCrm, GapType.KycMismatch]);
+    }
+
+    [Theory]
+    [InlineData(IntegrationFamily.CoreBanking)]
+    [InlineData(IntegrationFamily.Insurance)]
+    public void Every_gap_type_is_accounted_for_by_every_family(IntegrationFamily family)
+    {
+        // The guard that matters, and it is now per FAMILY: a sixth gap type added without a
+        // decision about whether EACH comparison can detect it would fail here. Before BNF-B-17
+        // there was one comparison and one pair of sets; a type accounted for by one family and
+        // forgotten by the other would otherwise slip through — and because the detected set is
+        // also the auto-close filter, the consequence would be a gap type that opens and never
+        // closes, or one closed by a run that never looked for it.
+        ReconciliationScope.DetectedFor(family)
+            .Concat(ReconciliationScope.NotDetectedFor(family))
             .Should().BeEquivalentTo(Enum.GetValues<GapType>());
+    }
+
+    [Fact]
+    public void No_gap_type_is_both_detected_and_undetectable_for_one_family()
+    {
+        // The other direction of the same guard: the union covering the enum would also pass if a
+        // type were in BOTH sets, and that would make the auto-close filter and the run's own
+        // "could not look for this" stamp contradict each other.
+        foreach (var family in new[] { IntegrationFamily.CoreBanking, IntegrationFamily.Insurance })
+        {
+            ReconciliationScope.DetectedFor(family)
+                .Intersect(ReconciliationScope.NotDetectedFor(family))
+                .Should().BeEmpty($"for {family}");
+        }
     }
 }

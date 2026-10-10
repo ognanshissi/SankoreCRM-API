@@ -47,6 +47,7 @@ public sealed class PreviewDispatchHandlerTests : IDisposable
         LeadsDbContext db, IAdministrationModule users, IEventPublisher publisher) =>
         new(db, users, new CompatibilityScorer(), Strategies(),
             new DispatchingRuleResolver(db), new AgentCapacityService(db, null),
+            TestSupport.TestClientAdvisorResolver.None(),
             publisher, NullLogger<DispatchLeadHandler>.Instance, TimeProvider.System);
 
     private static IAdministrationModule Users(params AgentSummary[] agents)

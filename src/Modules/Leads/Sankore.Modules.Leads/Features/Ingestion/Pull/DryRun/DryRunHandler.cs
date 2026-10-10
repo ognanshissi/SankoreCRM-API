@@ -103,8 +103,15 @@ internal sealed class DryRunHandler(
         string? GetField(string leadField)
             => mapped.MappedValues.TryGetValue(leadField, out var value) ? value : null;
 
-        var fullName = GetField("fullName")
-            ?? $"{GetField("firstName") ?? ""} {GetField("lastName") ?? ""}".Trim();
+        // The shared rule (BNF-B-18) — a DEDUPLICATION here, not a behaviour change: the local
+        // concatenation this replaces produced the same answer in every case, including the empty
+        // string for a payload with no names at all, which the check below already refused.
+        //
+        // What the shared rule DID change is the web ingest, which required fullName outright and
+        // rejected a v2 form that had the structured pair. Pulling the rule out is what made the
+        // four inbound paths agree instead of three of them agreeing by coincidence.
+        var fullName = Features.CaptureLead.LeadNameResolver.Resolve(
+            GetField("fullName"), GetField("firstName"), GetField("lastName"));
         var phone = GetField("phoneNumber");
         var email = GetField("email");
 

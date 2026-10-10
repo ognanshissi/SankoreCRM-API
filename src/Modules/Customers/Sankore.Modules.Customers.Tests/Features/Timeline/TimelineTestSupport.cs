@@ -75,6 +75,10 @@ internal sealed class RecordingTimelineProjector : IClientTimelineProjector
 internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = null, bool throwOnHistory = false)
     : ILeadsModule
 {
+    public Task<IReadOnlyList<CustomerOpenLead>> GetOpenLeadsForCustomerAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<CustomerOpenLead>>([]);
+
     public int HistoryCalls { get; private set; }
 
     public Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)

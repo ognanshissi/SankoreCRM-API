@@ -51,8 +51,14 @@ public sealed class ConvertLeadHandlerTests : IDisposable
         currentUser.Id.Returns(_userId);
         currentUser.TenantId.Returns(_tenantId);
 
+        // A real calculator over substituted modules. These leads carry no ProductLineId, so
+        // nothing is required of them and the gate is inert — which is what every pre-Lot-6 case
+        // in this file assumes. See TestCompleteness.
+        var db = _factory.CreateContext();
+
         return new ConvertLeadHandler(
-            _factory.CreateContext(), currentUser, _customers, _publisher);
+            db, currentUser, _customers, TestSupport.TestLeadEmailIndexer.Instance,
+            TestCompleteness.Calculator(db, customers: _customers), _publisher);
     }
 
     private void CustomersReturn(CreateFromLeadResult result) =>

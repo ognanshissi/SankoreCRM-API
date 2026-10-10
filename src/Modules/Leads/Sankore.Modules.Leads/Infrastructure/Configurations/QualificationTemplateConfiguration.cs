@@ -16,6 +16,14 @@ internal sealed class QualificationTemplateConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.ProductCategory).HasMaxLength(30);
         builder.Property(t => t.ProductCode).HasMaxLength(50);
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+
+        // Multi-person questionnaires (BNF-B-07). As a STRING, the repo convention: an integer
+        // column would re-label every stored row the day somebody reorders the enum.
+        builder.Property(t => t.SubjectScope)
+               .HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(t => t.IsHealthQuestionnaire).HasDefaultValue(false);
+        builder.Property(t => t.ExcludeFromScoring).HasDefaultValue(false);
+        builder.Ignore(t => t.IsPerPerson);
         builder.Property(t => t.ProductCategory).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(t => t.Version).IsRequired();
         builder.Property(t => t.PublishedAt);

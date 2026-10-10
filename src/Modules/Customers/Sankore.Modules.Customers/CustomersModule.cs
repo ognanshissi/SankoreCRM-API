@@ -16,6 +16,8 @@ using Sankore.Modules.Customers.Features.Groups;
 using Sankore.Modules.Customers.Features.LeadConversion;
 using Sankore.Modules.Customers.Features.LegalEntities;
 using Sankore.Modules.Customers.Features.Lifecycle;
+using Sankore.Modules.Customers.Features.Holdings;
+using Sankore.Modules.Customers.Features.Household;
 using Sankore.Modules.Customers.Features.Relationships;
 using Sankore.Modules.Customers.Features.Timeline;
 using Sankore.Modules.Customers.Infrastructure;
@@ -81,7 +83,9 @@ public static class CustomersModule
         services.AddLifecycleServices();
         services.AddLegalEntitiesServices();
         services.AddGroupsServices();
-        services.AddRelationshipsServices();
+        services.AddRelationshipsServices()
+            .AddHouseholdServices()
+            .AddHoldingsServices();
         services.AddDuplicatesServices();
         services.AddTimelineServices();
         services.AddComplianceServices();
@@ -121,6 +125,11 @@ public static class CustomersModule
         app.MapLegalEntitiesEndpoints();
         app.MapGroupsEndpoints();
         app.MapRelationshipsEndpoints();
+
+        // The client's household, and the products they hold with who is designated on them
+        // (BNF-B-13/14/15)
+        app.MapHouseholdEndpoints();
+        app.MapHoldingsEndpoints();
         app.MapDuplicatesEndpoints();
         app.MapTimelineEndpoints();
         app.MapComplianceEndpoints();

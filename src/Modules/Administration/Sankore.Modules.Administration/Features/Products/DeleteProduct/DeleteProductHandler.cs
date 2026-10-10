@@ -5,7 +5,8 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Products.DeleteProduct;
 
-internal sealed class DeleteProductHandler(AdministrationDbContext db)
+internal sealed class DeleteProductHandler(
+    AdministrationDbContext db, ProductCatalogCache catalogCache)
     : IRequestHandler<DeleteProductCommand, Result>
 {
     public async Task<Result> Handle(DeleteProductCommand request, CancellationToken ct)
@@ -24,6 +25,12 @@ internal sealed class DeleteProductHandler(AdministrationDbContext db)
             return result;
 
         await db.SaveChangesAsync(ct);
+
+        // A retired line must stop resolving from a label immediately: the catalogue cache is
+        // what ResolveProductLineAsync reads, and five stale minutes would attach new leads to a
+        // product that is no longer sold.
+        await catalogCache.InvalidateAsync(product.TenantId, product.Id, ct);
+
         return Result.Ok();
     }
 }
