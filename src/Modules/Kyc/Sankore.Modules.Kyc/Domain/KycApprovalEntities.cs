@@ -7,7 +7,21 @@ public enum KycApprovalLevel
 {
     Agent = 1,
     BranchManager = 2,
-    ComplianceOfficer = 3
+    ComplianceOfficer = 3,
+
+    /// <summary>
+    /// The institution's general management. Required before entering into a relationship with a
+    /// POLITICALLY EXPOSED person: the CIMA LBC/FT text asks to « obtenir l'autorisation de la
+    /// Direction générale avant d'entrer en relation », which is a decision above the compliance
+    /// officer rather than the same one by another name.
+    ///
+    /// <para>
+    /// Appended with the next number so no stored level moves, and numerically last so the
+    /// SortedSet puts it at the top of the ladder — which is where an authorisation belongs: the
+    /// officer prepares the file, management decides whether the institution takes the client.
+    /// </para>
+    /// </summary>
+    GeneralManagement = 4,
 }
 
 public enum KycApprovalDecision

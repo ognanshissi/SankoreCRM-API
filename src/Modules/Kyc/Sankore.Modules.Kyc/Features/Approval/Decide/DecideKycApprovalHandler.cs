@@ -42,6 +42,7 @@ internal sealed class DecideKycApprovalHandler(
     [FromKeyedServices(nameof(KycDbContext))] IEventPublisher publisher,
     IWorkflowModule workflow,
     RemoteSaleEvidence remoteSaleEvidence,
+    PepAuthorizationEvidence pepEvidence,
     TimeProvider clock,
     ILogger<DecideKycApprovalHandler> logger)
     : IRequestHandler<DecideKycApprovalCommand, Result<DecideKycApprovalResult>>
@@ -116,6 +117,13 @@ internal sealed class DecideKycApprovalHandler(
             var evidence = await remoteSaleEvidence.EnsureSatisfiedAsync(file, ct);
             if (evidence.IsFailure)
                 return Result.Fail<DecideKycApprovalResult>(evidence.Error!);
+
+            // And, for a politically exposed file, that somebody established where the money
+            // comes from. The GeneralManagement rung is the authorisation; this is what that
+            // authorisation has to be able to rest on.
+            var pep = await pepEvidence.EnsureSatisfiedAsync(file, ct);
+            if (pep.IsFailure)
+                return Result.Fail<DecideKycApprovalResult>(pep.Error!);
         }
 
         // Read BEFORE the aggregate is touched: Approve sets the tier, and KycTierChangedEvent is

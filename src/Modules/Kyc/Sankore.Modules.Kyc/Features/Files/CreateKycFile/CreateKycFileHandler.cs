@@ -130,15 +130,25 @@ internal sealed class CreateKycFileHandler(
     private async Task RaiseVigilanceAsync(
         KycFile file, CreateKycFileCommand cmd, CancellationToken ct)
     {
-        if (cmd.VigilanceLevel <= file.VigilanceLevel)
+        var raisedLevel = cmd.VigilanceLevel > file.VigilanceLevel;
+
+        // The PEP marker follows the same "raise, never lower" posture and the same reason for
+        // being applied on the already-existed path: M01's event usually wins the race, so
+        // marking only on creation would leave the flag with no effect in the common case.
+        var markedPep = cmd.IsPoliticallyExposed && !file.IsPoliticallyExposed;
+
+        if (!raisedLevel && !markedPep)
             return;
 
-        file.SetVigilanceLevel(cmd.VigilanceLevel, clock);
+        if (raisedLevel) file.SetVigilanceLevel(cmd.VigilanceLevel, clock);
+        if (markedPep) file.MarkPoliticallyExposed(clock);
+
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "KYC file {KycFileId} raised to {Level} vigilance by a {Channel} trigger",
-            file.Id, cmd.VigilanceLevel, cmd.Channel);
+            "KYC file {KycFileId}: vigilance {Level}, politically exposed {Pep}, "
+            + "set by a {Channel} trigger",
+            file.Id, file.VigilanceLevel, file.IsPoliticallyExposed, cmd.Channel);
     }
 
     /// <summary>

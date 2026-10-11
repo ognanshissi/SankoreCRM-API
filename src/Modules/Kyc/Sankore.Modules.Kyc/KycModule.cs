@@ -190,6 +190,10 @@ public static class KycModule
         // CIMA LBC/FT article 13.6: the proof of address a remotely-opened file needs before its
         // holder becomes a customer.
         services.AddScoped<Features.Approval.RemoteSaleEvidence>();
+
+        // CIMA LBC/FT: the origin of patrimony and funds, which a PEP relationship cannot be
+        // authorised without.
+        services.AddScoped<Features.Approval.PepAuthorizationEvidence>();
         services.AddScoped<Features.Duplicates.KycDuplicateDetector>();
         services.AddScoped<Features.Reviews.KycReviewScheduler>();
         services.AddTransient<Features.Reviews.KycReviewOrchestratorJob>();

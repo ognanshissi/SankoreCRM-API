@@ -16,7 +16,19 @@ internal sealed record CreateKycFileCommand(
     Guid CustomerId,
     KycChannel Channel,
     Guid InitiatedBy,
-    KycVigilanceLevel VigilanceLevel = KycVigilanceLevel.Standard
+    KycVigilanceLevel VigilanceLevel = KycVigilanceLevel.Standard,
+
+    /// <summary>
+    /// Whether the customer (or their household) is politically exposed.
+    ///
+    /// <para>
+    /// Carried separately from <paramref name="VigilanceLevel"/> and not inferred from it: a PEP
+    /// opens the file at <c>High</c>, but so do other causes, and only a PEP calls for the general
+    /// management's authorisation before the relationship is entered into. Inferring it from the
+    /// level would put management on every high-risk file.
+    /// </para>
+    /// </summary>
+    bool IsPoliticallyExposed = false
 ) : IRequest<Result<CreateKycFileResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "KycFile";

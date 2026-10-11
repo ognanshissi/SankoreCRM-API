@@ -435,6 +435,10 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("face_match_attempts");
 
+                    b.Property<bool>("IsPoliticallyExposed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_politically_exposed");
+
                     b.Property<Guid?>("LastSubmittedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("last_submitted_by");

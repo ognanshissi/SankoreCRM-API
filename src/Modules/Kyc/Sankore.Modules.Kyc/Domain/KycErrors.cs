@@ -63,4 +63,12 @@ public static class KycErrors
     /// into a generic refusal: what the validator needs to be told is which document to ask for.
     /// </summary>
     public const string ProofOfAddressRequired = "KYC_PROOF_OF_ADDRESS_REQUIRED";
+
+    /// <summary>
+    /// A POLITICALLY EXPOSED file reached its final approval while the client record carried no
+    /// recorded origin of patrimony and funds — which the CIMA LBC/FT text requires to be
+    /// established BEFORE the relationship is entered into. Also what an outage reading it
+    /// answers: the gate fails closed.
+    /// </summary>
+    public const string FundsOriginRequired = "KYC_FUNDS_ORIGIN_REQUIRED";
 }

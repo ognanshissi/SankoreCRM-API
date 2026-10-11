@@ -64,6 +64,26 @@ public sealed class KycFile : AggregateRoot
     /// <summary>Set when a document number collides with another open file of the tenant.</summary>
     public bool DuplicateSuspected { get; private set; }
 
+    /// <summary>
+    /// Whether this file is about a POLITICALLY EXPOSED person (or a household containing one),
+    /// as M13 and M01 report it.
+    ///
+    /// <para>
+    /// Its own flag rather than being read off <see cref="VigilanceLevel"/>. The level is raised
+    /// to <c>High</c> for a PEP, but it is also raised for other reasons, and only a PEP calls for
+    /// the general management's authorisation before the relationship is entered into. Inferring
+    /// "this file is High, so it must be a PEP" would put management on every high-risk file and
+    /// make an authorisation a formality.
+    /// </para>
+    ///
+    /// <para>
+    /// Set and never cleared by <see cref="MarkPoliticallyExposed"/>, the same posture as the
+    /// vigilance level: exposure lapsing is a decision M01 records on the client, and a KYC file
+    /// already in a circuit must not quietly lose a rung under its approvers.
+    /// </para>
+    /// </summary>
+    public bool IsPoliticallyExposed { get; private set; }
+
     public DateOnly? NextReviewDate { get; private set; }
     public DateTimeOffset? ValidatedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -373,6 +393,18 @@ public sealed class KycFile : AggregateRoot
 
         Tier = KycTier.Simplified;
         return Result.Ok();
+    }
+
+    /// <summary>
+    /// Records that this file concerns a politically exposed person. RAISING only — see the
+    /// property's own remarks for why it is never cleared.
+    /// </summary>
+    public void MarkPoliticallyExposed(TimeProvider clock)
+    {
+        if (IsPoliticallyExposed) return;
+
+        IsPoliticallyExposed = true;
+        UpdatedAt = clock.GetUtcNow();
     }
 
     public void SetVigilanceLevel(KycVigilanceLevel level, TimeProvider clock)

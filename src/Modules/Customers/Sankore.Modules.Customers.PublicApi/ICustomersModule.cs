@@ -74,6 +74,25 @@ public interface ICustomersModule
     Task<bool> ExistsAsync(Guid tenantId, Guid customerId, CancellationToken ct);
 
     /// <summary>
+    /// Whether the origin of the client's patrimony and funds has been RECORDED — a boolean, never
+    /// the value.
+    ///
+    /// <para>
+    /// The CIMA LBC/FT text requires an institution to « établir l'origine du patrimoine et des
+    /// fonds » before entering into a relationship with a politically exposed person. M02 is where
+    /// that relationship is authorised, so M02 has to be able to ask — but the narrative behind
+    /// the answer describes a named person's assets, and the one thing M02 needs is whether the
+    /// work was done.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>false</c> for an unknown client, deliberately: a gate that read "client not found" as
+    /// "requirement satisfied" would be satisfied by every mistake.
+    /// </para>
+    /// </summary>
+    Task<bool> HasRecordedFundsOriginAsync(Guid tenantId, Guid clientId, CancellationToken ct);
+
+    /// <summary>
     /// Returns a lightweight summary of a customer, or null if not found.
     /// </summary>
     Task<CustomerSummary?> GetCustomerAsync(Guid tenantId, Guid customerId, CancellationToken ct);

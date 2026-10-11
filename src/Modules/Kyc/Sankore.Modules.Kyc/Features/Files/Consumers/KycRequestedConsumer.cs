@@ -72,7 +72,10 @@ public sealed class KycRequestedConsumer(
                     // usually had no effect at all.
                     VigilanceLevel: evt.HasPepExposure
                         ? KycVigilanceLevel.High
-                        : KycVigilanceLevel.Standard),
+                        : KycVigilanceLevel.Standard,
+                    // Carried as its own fact: High alone does not call for the general
+                    // management's authorisation, a PEP does.
+                    IsPoliticallyExposed: evt.HasPepExposure),
                 context.CancellationToken);
 
             if (result.IsFailure)

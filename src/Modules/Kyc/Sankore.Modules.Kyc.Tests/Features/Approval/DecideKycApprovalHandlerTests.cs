@@ -52,7 +52,8 @@ public sealed class DecideKycApprovalHandlerTests : IDisposable
         // default (a null Result) stands in for "no instance to record against".
         _handler = new DecideKycApprovalHandler(
             _db, _currentUser, _publisher, _workflow,
-            TestSupport.TestRemoteSaleEvidence.For(_db, _clock), _clock,
+            TestSupport.TestRemoteSaleEvidence.For(_db, _clock),
+            TestSupport.TestPepEvidence.For(), _clock,
             NullLogger<DecideKycApprovalHandler>.Instance);
     }
 

@@ -83,7 +83,8 @@ public sealed class FourEyesOnEveryLevelTests : IDisposable
 
         return new(db, User(approver),
             Substitute.For<IEventPublisher>(), Substitute.For<IWorkflowModule>(),
-            TestSupport.TestRemoteSaleEvidence.For(db, TimeProvider.System), TimeProvider.System,
+            TestSupport.TestRemoteSaleEvidence.For(db, TimeProvider.System),
+            TestSupport.TestPepEvidence.For(), TimeProvider.System,
             NullLogger<DecideKycApprovalHandler>.Instance);
     }
 

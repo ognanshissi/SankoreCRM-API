@@ -259,6 +259,30 @@ internal sealed class CustomersModuleFacade(
         => ExistsAndActiveAsync(tenantId, customerId, ct);
 
     /// <summary>
+    /// Whether the origin of the funds has been recorded. A boolean out of a projection that
+    /// never loads the narrative: the caller is a KYC approval gate, and the sentence behind the
+    /// answer describes a named person's assets.
+    ///
+    /// <para>
+    /// A CODE is what counts as recorded, not the narrative. The code comes from a closed list and
+    /// is what an institution can report on; a free-text sentence with no code is work somebody
+    /// started and did not finish.
+    /// </para>
+    /// </summary>
+    public async Task<bool> HasRecordedFundsOriginAsync(
+        Guid tenantId, Guid clientId, CancellationToken ct)
+        // IgnoreQueryFilters with an explicit tenant predicate: the caller is a consumer or an
+        // approval handler in another module, whose ambient tenant is not necessarily this one.
+        => await db.Clients
+            .IgnoreQueryFilters()
+            .AnyAsync(
+                c => c.TenantId == tenantId
+                  && c.Id == clientId
+                  && c.FundsOriginCode != null
+                  && c.FundsOriginCode != "",
+                ct);
+
+    /// <summary>
     /// Email and PhoneNumber are deliberately left null: both are encrypted at rest in
     /// M01 and only reachable through the audited reveal endpoint. No sensitive data
     /// crosses this boundary — a legacy caller that needs a contact detail has to ask

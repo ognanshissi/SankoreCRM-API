@@ -17,7 +17,8 @@ using Sankore.Modules.Kyc.Infrastructure.Settings;
 ///
 /// <para>
 /// Levels come back in ladder order, which is the numeric order of
-/// <see cref="KycApprovalLevel"/> — Agent, then BranchManager, then ComplianceOfficer. The set is
+/// <see cref="KycApprovalLevel"/> — Agent, BranchManager, ComplianceOfficer, then
+/// GeneralManagement. The set is
 /// sorted rather than appended in sequence so no caller can produce the same level twice: the
 /// unique index <c>ux_kyc_approval_steps_file_level</c> would refuse it, and a circuit that cannot
 /// be created is a file that can never be validated.
@@ -76,6 +77,22 @@ internal sealed class KycApprovalCircuit(IKycSettings settings)
         // shorter re-review cycle as a side effect.
         if (file.ManuallyValidatedBy is not null)
             levels.Add(KycApprovalLevel.BranchManager);
+
+        // A POLITICALLY EXPOSED person needs the general management's authorisation before the
+        // institution enters into the relationship — the CIMA LBC/FT text asks for it in those
+        // words, alongside establishing the origin of the patrimony and reinforced monitoring.
+        //
+        // On the file's OWN PEP flag and not on High vigilance, although a PEP opens the file at
+        // High: the level is also raised by other causes, and putting management on every
+        // high-risk file would turn an authorisation into a formality. KycFile.IsPoliticallyExposed
+        // is carried from M13's event precisely so the two can be told apart.
+        //
+        // Note what this does NOT change: the face-attempt clause above remains the only thing
+        // that adds a second signature to a LOW-risk file. A PEP file is never low risk — the
+        // same event that sets this flag raises the level to High — so the two clauses cannot
+        // collide, and the test that pins the face-attempt clause as unique still holds.
+        if (file.IsPoliticallyExposed)
+            levels.Add(KycApprovalLevel.GeneralManagement);
 
         return [.. levels];
     }

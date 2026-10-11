@@ -32,3 +32,33 @@ internal static class TestRemoteSaleEvidence
         return new RemoteSaleEvidence(db, settings, clock);
     }
 }
+
+/// <summary>
+/// The CIMA PEP funds-origin gate, built for a test.
+///
+/// <para>
+/// A REAL <c>PepAuthorizationEvidence</c> over a substituted <c>ICustomersModule</c>: the rule is
+/// that it applies only to a politically exposed file and that it fails CLOSED, and a double of
+/// the check itself would let the approval handler be tested against behaviour it does not have.
+/// The default answers "recorded", which is the ordinary case for every suite that is about
+/// something else.
+/// </para>
+/// </summary>
+internal static class TestPepEvidence
+{
+    internal static Sankore.Modules.Kyc.Features.Approval.PepAuthorizationEvidence
+        For(bool fundsOriginRecorded = true)
+    {
+        var customers = Substitute.For<Sankore.Modules.Customers.PublicApi.ICustomersModule>();
+
+        customers.HasRecordedFundsOriginAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(fundsOriginRecorded);
+
+        return new Sankore.Modules.Kyc.Features.Approval.PepAuthorizationEvidence(
+            customers,
+            Microsoft.Extensions.Logging.Abstractions
+                .NullLogger<Sankore.Modules.Kyc.Features.Approval.PepAuthorizationEvidence>
+                .Instance);
+    }
+}
