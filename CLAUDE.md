@@ -874,7 +874,7 @@ whose product somebody else removed.
 
 | Stored as | What | Why |
 |---|---|---|
-| `beneficiary_policy`, typed jsonb | `HouseholdEnabled`, `AllowedRoles`, `MaxChildren`, `ChildMaxAge`, `RequiredFieldsBeforeConversion`, `RequiredKycTier`, `IntegrationSystem` | eight optional fields M13 and M01 read **whole** and never filter on |
+| `beneficiary_policy`, typed jsonb | `AllowedRoles`, `MaxChildren`, `ChildMaxAge`, `RequiredFieldsBeforeConversion`, `RequiredKycTier`, `IntegrationSystem` | optional fields M13 and M01 read **whole** and never filter on |
 | `allow_multiple_holdings`, a column | `AllowMultipleHoldings` | it **is** queried (BNF-B-22's duplicate-request warning), and it is not a designation rule |
 
 `AllowMultipleHoldings` defaults to **true**: a savings account, a tontine or a credit are
@@ -1044,10 +1044,34 @@ maintains the blind index), the household, the questionnaires and FATCA.
 ### `HouseholdWriteContext` has two loads, not one with a flag
 
 `LoadLeadAsync` = load with members + staleness + ownership + PEP window. `LoadAsync` = that plus
-the product line's household rules. Enrichment uses the **first**, because the policy gate answers
-`HOUSEHOLD_DISABLED_FOR_PRODUCT_LINE` on a line that records no household — right for adding a
-spouse, absurd for writing a current-account principal's identity. Two methods rather than a
-boolean: a gate flag is one a call site eventually passes the wrong way round.
+the product line's household ceilings. Enrichment uses the **first**, because resolving the policy
+costs an M12 call and brings `PRODUCT_POLICY_UNAVAILABLE` with it — a write that never consults a
+ceiling should not fail for want of one. Two methods rather than a boolean: a gate flag is one a
+call site eventually passes the wrong way round.
+
+**No product line refuses a household, and none can.** A household is a fact about the prospect,
+not a feature of the product they are asking about: the agent records the family once, whatever the
+request is later qualified as. `HouseholdPolicyResolver` therefore reads only `MaxChildren` and
+`ChildMaxAge` — ceilings bound a household the product will carry rather than deciding whether one
+exists.
+
+`BeneficiaryPolicy.HouseholdEnabled` is **gone from M12 entirely** — the jsonb record, the
+`BeneficiaryPolicyDto`, `SetBeneficiaryPolicyRequest`, and the "Activer le foyer" checkbox in the
+product settings editor. It answered `HOUSEHOLD_DISABLED_FOR_PRODUCT_LINE` and defaulted to
+**false**, so every line whose policy was saved without ticking it refused a spouse nobody had meant
+to forbid. Two more things fell out with it:
+
+- `BeneficiaryPolicy.Create` no longer blanks the ceilings. It used to keep them only when the flag
+  was set, so "at most 3 children" typed without ticking a separate box was silently discarded —
+  the ceilings are now reachable on every line.
+- The front gates are gone: `LeadHouseholdDto` has no `HouseholdEnabled`, and M01's
+  `designations-editor` shows "add to household" on every line. That one never had a server
+  counterpart at all — `DesignationSubjectValidator` only checks that a subject is an active
+  household member or a client of the tenant.
+
+Old jsonb rows keep a dead `householdEnabled` key; the converter reads with
+`JsonSerializerDefaults.Web`, which skips unmapped members, so no migration is needed and the key
+disappears the next time a policy is saved.
 
 ### Conversion branches on `Lead.Kind` (BNF-B-12, BNF-B-24)
 

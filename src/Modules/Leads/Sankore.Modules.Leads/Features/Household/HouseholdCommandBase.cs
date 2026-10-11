@@ -90,12 +90,12 @@ internal sealed class HouseholdWriteContext(
     /// TOUCHES the household needs.
     /// </summary>
     /// <remarks>
-    /// Split from the load because the policy gate refuses outright
-    /// (<c>HOUSEHOLD_DISABLED_FOR_PRODUCT_LINE</c>) on a line that records no household — correct
-    /// for adding a spouse, wrong for anything else. Lot 6's enrichment writes the principal's own
-    /// identity and would have been refused on every current-account lead, which is why the two
-    /// are now separate methods rather than one with a flag: a boolean gate is one a call site
-    /// eventually passes the wrong way round.
+    /// Still split from the load now that no product line refuses a household outright, because
+    /// resolving the policy costs an M12 call and brings its failure mode with it: an outage answers
+    /// <c>PRODUCT_POLICY_UNAVAILABLE</c> rather than guessing at the child ceiling. A write that
+    /// does not touch the household — Lot 6's enrichment writes the principal's own identity —
+    /// should not fail for want of a limit it never consults. Two methods rather than one with a
+    /// flag: a boolean gate is one a call site eventually passes the wrong way round.
     /// </remarks>
     internal async Task<Result<HouseholdWriteScope>> LoadAsync(
         Guid leadId, DateTimeOffset? expectedUpdatedAt, CancellationToken ct)

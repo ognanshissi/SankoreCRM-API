@@ -39,7 +39,7 @@ public sealed class EnrichLeadHandlerTests : IDisposable
         _admin.GetBeneficiaryPolicyAsync(_tenant, _line, Arg.Any<CancellationToken>())
               .Returns(new BeneficiaryPolicyDto(
                   _line, "SANTE-01", nameof(ProductCategory.HealthInsurance),
-                  true, true, false, [], null, null, [], null, null));
+                  true, false, [], null, null, [], null, null));
     }
 
     public void Dispose() => _factory.Dispose();
@@ -296,14 +296,14 @@ public sealed class EnrichLeadHandlerTests : IDisposable
     [Fact]
     public async Task A_line_that_records_no_household_does_not_refuse_an_identity_write()
     {
-        // The regression this guards: the household policy gate answers
-        // HOUSEHOLD_DISABLED_FOR_PRODUCT_LINE, and routing enrichment through it would have made
-        // every current-account lead unenrichable. Hence LoadLeadAsync, not LoadAsync.
+        // The gate this once guarded against is gone — no product line refuses a household any
+        // more — but the case is still worth pinning: enrichment goes through LoadLeadAsync, so an
+        // identity write resolves no policy at all and cannot fail on one.
         var lead = await SeedAsync(withNames: true);
         _admin.GetBeneficiaryPolicyAsync(_tenant, _line, Arg.Any<CancellationToken>())
               .Returns(new BeneficiaryPolicyDto(
                   _line, "CPT-01", nameof(ProductCategory.CurrentAccount),
-                  true, HouseholdEnabled: false, false, [], null, null, [], null, null));
+                  true, false, [], null, null, [], null, null));
 
         await SendAsync(new EnrichLeadCommand(lead.Id, ProductLineId: _line));
         var result = await SendAsync(new EnrichLeadCommand(lead.Id, City: "Abidjan"));

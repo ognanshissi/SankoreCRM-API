@@ -69,14 +69,14 @@ public sealed record HouseholdMemberDto(
 /// <summary>
 /// The household of a lead (BNF-B-03, BNF-B-05).
 /// </summary>
-/// <param name="HouseholdEnabled">
-/// False when the product line records no household. The screen needs it to explain why the add
-/// buttons are absent, rather than letting the agent discover it on a refused write.
-/// </param>
 /// <param name="Members">Active members first; removed ones are kept and flagged, never dropped.</param>
+/// <remarks>
+/// There is no <c>HouseholdEnabled</c>: a household can be recorded on any lead, so the screen has
+/// no "not applicable" state to render. <see cref="MaxChildren"/> and <see cref="ChildMaxAge"/> are
+/// still the product line's, and still enforced on write.
+/// </remarks>
 public sealed record LeadHouseholdDto(
     Guid LeadId,
-    bool HouseholdEnabled,
     int? MaxChildren,
     int? ChildMaxAge,
     PersonIdentityDto? Principal,

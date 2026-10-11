@@ -32,7 +32,6 @@ internal static class SetBeneficiaryPolicyEndpoint
     {
         var result = await sender.Send(new SetBeneficiaryPolicyCommand(
             ProductId:                      productId,
-            HouseholdEnabled:               req.HouseholdEnabled,
             AllowMultipleHoldings:          req.AllowMultipleHoldings,
             AllowedRoles:                   req.AllowedRoles,
             MaxChildren:                    req.MaxChildren,
@@ -56,7 +55,6 @@ internal static class SetBeneficiaryPolicyEndpoint
 /// is no PATCH.
 /// </summary>
 public sealed record SetBeneficiaryPolicyRequest(
-    bool HouseholdEnabled,
     bool AllowMultipleHoldings = true,
     IReadOnlyList<DesignationRoleInput>? AllowedRoles = null,
     int? MaxChildren = null,

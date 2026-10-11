@@ -45,7 +45,7 @@ public sealed class ExistingCustomerCompletenessTests : IDisposable
         => _admin.GetBeneficiaryPolicyAsync(_tenant, _line, Arg.Any<CancellationToken>())
                  .Returns(new BeneficiaryPolicyDto(
                      _line, "SANTE-01", nameof(ProductCategory.HealthInsurance),
-                     true, true, false, [], null, null, fields, requiredKycTier, null));
+                     true, false, [], null, null, fields, requiredKycTier, null));
 
     private void ClientIs(string status)
         => _customers.GetClientSummaryAsync(_tenant, _customer, Arg.Any<CancellationToken>())

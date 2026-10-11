@@ -16,16 +16,15 @@ internal sealed record HouseholdLimits(int? MaxChildren, int? ChildMaxAge)
 }
 
 /// <summary>
-/// Resolves the household rules of a lead's product line, and refuses the write when that line
-/// does not record a household.
+/// Resolves the household rules of a lead's product line — the ceilings it configures, and nothing
+/// that refuses a household outright.
 /// </summary>
 internal sealed class HouseholdPolicyResolver(IAdministrationModule administration)
 {
-    internal const string Disabled = "HOUSEHOLD_DISABLED_FOR_PRODUCT_LINE";
     internal const string PolicyUnavailable = "PRODUCT_POLICY_UNAVAILABLE";
 
     /// <summary>
-    /// The limits to apply, or a failure when the line refuses a household altogether.
+    /// The limits to apply.
     /// </summary>
     /// <remarks>
     /// <b>An UNRESOLVED product line is allowed, not refused.</b> An agent collects the household
@@ -69,9 +68,16 @@ internal sealed class HouseholdPolicyResolver(IAdministrationModule administrati
         if (policy is null)
             return Result.Ok(HouseholdLimits.Unlimited);
 
-        if (!policy.HouseholdEnabled)
-            return Result.Fail<HouseholdLimits>(Disabled);
-
+        // `policy.HouseholdEnabled` is deliberately NOT read. A household is a fact about the
+        // prospect, not a feature of the product they are asking about: the agent has the family in
+        // front of them and records it once, whatever line the request is later qualified as. The
+        // flag used to refuse the write with HOUSEHOLD_DISABLED_FOR_PRODUCT_LINE, which made the
+        // household unrecordable on most lines — `BeneficiaryPolicy.HouseholdEnabled` defaults to
+        // FALSE, so every line whose policy was saved without ticking it refused a spouse that
+        // nobody had meant to forbid.
+        //
+        // The CEILINGS below still apply, because they bound a household this product will carry
+        // rather than deciding whether one exists.
         return Result.Ok(new HouseholdLimits(policy.MaxChildren, policy.ChildMaxAge));
     }
 }

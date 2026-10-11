@@ -138,9 +138,9 @@ public interface IAdministrationModule
     /// </param>
     /// <returns>
     /// <c>null</c> when the line does not exist in that tenant — distinct from a line that exists
-    /// and collects nothing, which answers a policy with <c>HouseholdEnabled = false</c> and no
-    /// role. A caller must be able to tell "this reference is dangling" from "this product asks
-    /// for nothing", because the first is a bug and the second is a current account.
+    /// and collects nothing, which answers a policy with no role. A caller must be able to tell
+    /// "this reference is dangling" from "this product asks for nothing", because the first is a
+    /// bug and the second is a current account.
     /// </returns>
     Task<BeneficiaryPolicyDto?> GetBeneficiaryPolicyAsync(
         Guid tenantId, Guid productLineId, CancellationToken ct);
@@ -183,7 +183,6 @@ public sealed record BeneficiaryPolicyDto(
     string ProductCode,
     string Category,
     bool IsActive,
-    bool HouseholdEnabled,
     bool AllowMultipleHoldings,
     IReadOnlyList<DesignationRoleDto> AllowedRoles,
     int? MaxChildren,

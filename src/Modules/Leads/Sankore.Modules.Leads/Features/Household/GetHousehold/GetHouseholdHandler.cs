@@ -94,7 +94,6 @@ internal sealed class GetHouseholdHandler(
 
         return Result.Ok(new LeadHouseholdDto(
             LeadId:                lead.Id,
-            HouseholdEnabled:      policy?.HouseholdEnabled ?? true,
             MaxChildren:           policy?.MaxChildren,
             ChildMaxAge:           policy?.ChildMaxAge,
             Principal:             principal is null ? null : HouseholdMapping.ToDto(principal),

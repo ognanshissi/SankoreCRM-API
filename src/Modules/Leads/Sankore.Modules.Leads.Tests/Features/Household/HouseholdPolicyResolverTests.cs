@@ -25,12 +25,11 @@ public sealed class HouseholdPolicyResolverTests
         preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0), preferredAgencyId: null,
         clock: TimeProvider.System, ownerId: Guid.NewGuid(), productLineId: productLineId);
 
-    private void PolicyFor(
-        Guid lineId, bool householdEnabled, int? maxChildren = null, int? childMaxAge = null) =>
+    private void PolicyFor(Guid lineId, int? maxChildren = null, int? childMaxAge = null) =>
         _admin.GetBeneficiaryPolicyAsync(Tenant, lineId, Arg.Any<CancellationToken>())
             .Returns(new BeneficiaryPolicyDto(
                 ProductLineId: lineId, ProductCode: "SANTE-01", Category: "Insurance",
-                IsActive: true, HouseholdEnabled: householdEnabled, AllowMultipleHoldings: false,
+                IsActive: true, AllowMultipleHoldings: false,
                 AllowedRoles: [], MaxChildren: maxChildren, ChildMaxAge: childMaxAge,
                 RequiredFieldsBeforeConversion: [], RequiredKycTier: null, IntegrationSystem: null));
 
@@ -50,22 +49,30 @@ public sealed class HouseholdPolicyResolverTests
     }
 
     [Fact]
-    public async Task A_line_that_records_no_household_refuses()
+    public async Task No_product_line_refuses_a_household()
     {
+        // A household is a fact about the prospect, not a feature of the product. This used to
+        // answer HOUSEHOLD_DISABLED_FOR_PRODUCT_LINE on a line whose policy had no household flag
+        // set — which was EVERY line saved without ticking it, the flag having defaulted to false.
+        // The flag is gone from M12's contract altogether, so a policy can no longer express the
+        // refusal; this pins that the resolver grew no replacement for it.
         var line = Guid.NewGuid();
-        PolicyFor(line, householdEnabled: false);
+        PolicyFor(line);
 
         var result = await Resolver().ResolveAsync(LeadWith(line), CancellationToken.None);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(HouseholdPolicyResolver.Disabled);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(HouseholdLimits.Unlimited);
     }
 
     [Fact]
-    public async Task A_line_that_records_a_household_returns_its_limits()
+    public async Task A_line_returns_its_ceilings()
     {
+        // The ceilings are the product's remaining say over the household, and they are now
+        // reachable on any line: BeneficiaryPolicy.Create used to blank them unless the household
+        // flag was set, so a "max 3 children" typed without ticking the box was discarded.
         var line = Guid.NewGuid();
-        PolicyFor(line, householdEnabled: true, maxChildren: 10, childMaxAge: 21);
+        PolicyFor(line, maxChildren: 10, childMaxAge: 21);
 
         var result = await Resolver().ResolveAsync(LeadWith(line), CancellationToken.None);
 

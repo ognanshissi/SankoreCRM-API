@@ -186,8 +186,7 @@ internal static class HouseholdEndpoints
             => Results.Problem(title: "Not your lead", detail: error, statusCode: 403),
         "CONFLICT"
             => Results.Conflict(new { error }),
-        HouseholdPolicyResolver.Disabled
-        or HouseholdPolicyResolver.PolicyUnavailable
+        HouseholdPolicyResolver.PolicyUnavailable
         or HouseholdWriteContext.ComplianceUnavailable
             => Results.Problem(title: "Household not available", detail: error, statusCode: 422),
         _   => Results.Problem(title: "Household update failed", detail: error, statusCode: 422),

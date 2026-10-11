@@ -16,16 +16,12 @@ using Sankore.Shared.Kernel.ValueObject;
 /// </para>
 ///
 /// <para>
-/// <b>Why a record and not columns.</b> Eight optional, product-shaped fields that M13 and M01 read
-/// whole and never query individually. Columns would be eight migrations' worth of nullable fields
+/// <b>Why a record and not columns.</b> Optional, product-shaped fields that M13 and M01 read
+/// whole and never query individually. Columns would be as many migrations' worth of nullable fields
 /// nobody filters on; the exception is <c>AllowMultipleHoldings</c>, which sits on the entity as a
 /// real column precisely because it IS queried — see <see cref="ProductSpeciality.AllowMultipleHoldings"/>.
 /// </para>
 /// </summary>
-/// <param name="HouseholdEnabled">
-/// Whether a spouse and children may be recorded at all. False refuses the household commands with
-/// <c>HOUSEHOLD_DISABLED_FOR_PRODUCT_LINE</c> (BNF-B-03).
-/// </param>
 /// <param name="AllowedRoles">
 /// The designation roles this line accepts, with their cardinality and share rules. Empty means
 /// the line designates nobody — a current account with no beneficiary clause.
@@ -51,7 +47,6 @@ using Sankore.Shared.Kernel.ValueObject;
 /// anywhere, and the holding stays CRM-only.
 /// </param>
 public sealed record BeneficiaryPolicy(
-    bool HouseholdEnabled = false,
     IReadOnlyList<DesignationRoleDefinition>? AllowedRoles = null,
     int? MaxChildren = null,
     int? ChildMaxAge = null,
@@ -60,10 +55,14 @@ public sealed record BeneficiaryPolicy(
     string? IntegrationSystem = null)
 {
     /// <summary>
-    /// The policy a product line has until an administrator configures one: no household, no
-    /// designation, nothing required. Deliberately the most RESTRICTIVE reading of "unconfigured" —
-    /// a line nobody has set up must not silently enable a household and start collecting a
-    /// spouse's identity.
+    /// The policy a product line has until an administrator configures one: no designation role,
+    /// no ceiling, nothing required. The most RESTRICTIVE reading of "unconfigured" for everything
+    /// it still carries — a line nobody has set up designates nobody.
+    /// <para>
+    /// It no longer says anything about the household. A <c>HouseholdEnabled</c> flag lived here
+    /// and defaulted to false, which made this "restrictive" default refuse a spouse on every
+    /// unconfigured line — see <see cref="Create"/>.
+    /// </para>
     /// </summary>
     public static BeneficiaryPolicy None { get; } = new();
 
@@ -84,7 +83,6 @@ public sealed record BeneficiaryPolicy(
     /// <see cref="DesignationRoleDefinition"/>'s codes.
     /// </returns>
     public static Result<BeneficiaryPolicy> Create(
-        bool householdEnabled,
         IReadOnlyList<DesignationRoleDefinition>? allowedRoles,
         int? maxChildren,
         int? childMaxAge,
@@ -122,13 +120,15 @@ public sealed record BeneficiaryPolicy(
             return Result.Fail<BeneficiaryPolicy>(
                 $"BENEFICIARY_POLICY_UNKNOWN_REQUIRED_FIELD:{unknown.Trim()}");
 
-        // A household ceiling on a line that records no household is a contradiction a reader
-        // would have to guess about, so it is dropped rather than stored.
+        // The ceilings are stored as submitted. They used to be discarded unless a now-removed
+        // `householdEnabled` flag was set — and since that flag defaulted to false, an
+        // administrator who typed "at most 3 children" without ticking a separate box had the
+        // limit silently thrown away. A household is recordable on every line, so a ceiling always
+        // means something.
         return Result.Ok(new BeneficiaryPolicy(
-            HouseholdEnabled: householdEnabled,
             AllowedRoles: [.. roles.Select(r => r.Normalized())],
-            MaxChildren: householdEnabled ? maxChildren : null,
-            ChildMaxAge: householdEnabled ? childMaxAge : null,
+            MaxChildren: maxChildren,
+            ChildMaxAge: childMaxAge,
             // Normalised through PersonFieldCode, so a stored policy holds one spelling per field
             // and M13's lookup never has to care how an administrator typed it.
             RequiredFieldsBeforeConversion:

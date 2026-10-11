@@ -18,7 +18,6 @@ public sealed class BeneficiaryPolicyTests
         => new(code, label, min, max, shares);
 
     private static Result<BeneficiaryPolicy> Create(
-        bool household = true,
         IReadOnlyList<DesignationRoleDefinition>? roles = null,
         int? maxChildren = null,
         int? childMaxAge = null,
@@ -26,18 +25,18 @@ public sealed class BeneficiaryPolicyTests
         string? kycTier = null,
         string? integrationSystem = null)
         => BeneficiaryPolicy.Create(
-            household, roles, maxChildren, childMaxAge, requiredFields, kycTier, integrationSystem);
+            roles, maxChildren, childMaxAge, requiredFields, kycTier, integrationSystem);
 
     // ── The unconfigured default ──────────────────────────────────────────
 
     [Fact]
     public void None_is_the_most_restrictive_reading()
     {
-        // A line nobody has set up must not silently enable a household and start collecting a
-        // spouse's identity.
+        // A line nobody has set up designates nobody and requires nothing. It says nothing about
+        // the household any more: the flag that used to live here defaulted to false and so made
+        // this default refuse a spouse on every unconfigured line.
         var none = BeneficiaryPolicy.None;
 
-        none.HouseholdEnabled.Should().BeFalse();
         none.Roles.Should().BeEmpty();
         none.RequiredFields.Should().BeEmpty();
         none.MaxChildren.Should().BeNull();
@@ -104,20 +103,13 @@ public sealed class BeneficiaryPolicyTests
     // ── Fields that constrain each other ──────────────────────────────────
 
     [Fact]
-    public void Child_limits_are_dropped_when_the_line_records_no_household()
+    public void Child_limits_are_stored_as_submitted()
     {
-        // A household ceiling on a line that records no household is a contradiction a reader
-        // would have to guess about, so it is not stored.
-        var policy = Create(household: false, maxChildren: 4, childMaxAge: 21);
-
-        policy.Value.MaxChildren.Should().BeNull();
-        policy.Value.ChildMaxAge.Should().BeNull();
-    }
-
-    [Fact]
-    public void Child_limits_are_kept_when_the_household_is_enabled()
-    {
-        var policy = Create(household: true, maxChildren: 4, childMaxAge: 21);
+        // They used to be blanked unless a `householdEnabled` flag was also set — and since that
+        // flag defaulted to false, an administrator who typed "at most 4 children" without ticking
+        // a separate box had the limit silently discarded. A household is recordable on every line,
+        // so a ceiling always means something.
+        var policy = Create(maxChildren: 4, childMaxAge: 21);
 
         policy.Value.MaxChildren.Should().Be(4);
         policy.Value.ChildMaxAge.Should().Be(21);
@@ -189,7 +181,6 @@ public sealed class BeneficiaryPolicyTests
     public void A_health_insurance_line_configures_household_roles_and_gates()
     {
         var policy = Create(
-            household: true,
             roles:
             [
                 Role("AYANTDROITSANTE", "Ayant droit santé", min: 0, max: 10),
@@ -205,7 +196,6 @@ public sealed class BeneficiaryPolicyTests
         policy.IsSuccess.Should().BeTrue();
 
         var value = policy.Value;
-        value.HouseholdEnabled.Should().BeTrue();
         value.Roles.Should().HaveCount(2);
         value.Role("ayantdroitsante")!.MaxCount.Should().Be(10);
         value.Role("beneficiairedeces")!.SharesMustTotal100.Should().BeTrue();

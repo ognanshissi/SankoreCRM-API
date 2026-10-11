@@ -33,7 +33,7 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
     private void LineIs(string code, string category) =>
         _admin.GetBeneficiaryPolicyAsync(_tenant, _productLine, Arg.Any<CancellationToken>())
             .Returns(new BeneficiaryPolicyDto(
-                _productLine, code, category, true, true, false,
+                _productLine, code, category, true, false,
                 [], null, null, [], null, null));
 
     private ExpectedResponsePlanner Planner(Sankore.Modules.Leads.Infrastructure.LeadsDbContext db)

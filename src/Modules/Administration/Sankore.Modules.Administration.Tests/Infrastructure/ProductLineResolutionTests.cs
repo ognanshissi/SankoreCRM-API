@@ -146,7 +146,6 @@ public sealed class ProductLineResolutionTests : IDisposable
     public async Task Reads_a_configured_policy()
     {
         var policy = BeneficiaryPolicy.Create(
-            householdEnabled: true,
             allowedRoles: [new DesignationRoleDefinition(
                 "BENEFICIAIREDECES", "Bénéficiaire décès", 1, 4, SharesMustTotal100: true)],
             maxChildren: 10,
@@ -165,7 +164,6 @@ public sealed class ProductLineResolutionTests : IDisposable
         dto.Should().NotBeNull();
         dto!.ProductCode.Should().Be("SANTE-01");
         dto.Category.Should().Be(nameof(ProductCategory.Insurance));
-        dto.HouseholdEnabled.Should().BeTrue();
         dto.AllowMultipleHoldings.Should().BeFalse();
         dto.AllowedRoles.Should().ContainSingle();
         dto.AllowedRoles[0].SharesMustTotal100.Should().BeTrue();
@@ -185,8 +183,7 @@ public sealed class ProductLineResolutionTests : IDisposable
             _tenant, product.Id, CancellationToken.None);
 
         dto.Should().NotBeNull("the line exists; it simply collects nothing");
-        dto!.HouseholdEnabled.Should().BeFalse();
-        dto.AllowedRoles.Should().BeEmpty();
+        dto!.AllowedRoles.Should().BeEmpty();
         dto.RequiredFieldsBeforeConversion.Should().BeEmpty();
     }
 
@@ -225,7 +222,6 @@ public sealed class ProductLineResolutionTests : IDisposable
         // The column is a typed jsonb document behind a value converter; a record holding lists is
         // exactly where a converter/comparer pair gets this wrong.
         var policy = BeneficiaryPolicy.Create(
-            householdEnabled: true,
             allowedRoles:
             [
                 new("AYANTDROITSANTE", "Ayant droit santé", 0, 10),

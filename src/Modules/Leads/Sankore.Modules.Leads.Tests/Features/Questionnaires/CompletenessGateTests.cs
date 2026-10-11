@@ -34,7 +34,7 @@ public sealed class CompletenessGateTests : IDisposable
         _admin.GetBeneficiaryPolicyAsync(_tenant, _productLine, Arg.Any<CancellationToken>())
             .Returns(new BeneficiaryPolicyDto(
                 _productLine, "SANTE-01", nameof(ProductCategory.HealthInsurance),
-                true, true, false, [], null, null, [], null, null));
+                true, false, [], null, null, [], null, null));
 
         // The completeness calculator asks for these on every lead, and FatcaSubjectPlanner FAILS
         // on an outage — an unstubbed substitute returns a null Task and the whole report becomes

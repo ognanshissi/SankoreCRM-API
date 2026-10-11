@@ -41,7 +41,6 @@ public sealed class LeadCompletenessTests : IDisposable
                      ProductCode: "SANTE-01",
                      Category: nameof(ProductCategory.HealthInsurance),
                      IsActive: true,
-                     HouseholdEnabled: true,
                      AllowMultipleHoldings: false,
                      AllowedRoles: [],
                      MaxChildren: null,

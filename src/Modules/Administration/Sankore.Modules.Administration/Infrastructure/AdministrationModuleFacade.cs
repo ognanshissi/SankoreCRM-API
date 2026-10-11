@@ -328,7 +328,6 @@ internal sealed class AdministrationModuleFacade(
             ProductCode:           line.Code,
             Category:              line.Category.ToString(),
             IsActive:              line.IsActive,
-            HouseholdEnabled:      policy.HouseholdEnabled,
             AllowMultipleHoldings: line.AllowMultipleHoldings,
             AllowedRoles:          [.. policy.Roles.Select(r => new DesignationRoleDto(
                                         r.Code, r.Label, r.MinCount, r.MaxCount, r.SharesMustTotal100))],

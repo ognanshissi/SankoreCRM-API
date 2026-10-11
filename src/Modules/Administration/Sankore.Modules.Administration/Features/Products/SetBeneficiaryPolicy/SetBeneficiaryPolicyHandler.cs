@@ -21,7 +21,6 @@ internal sealed class SetBeneficiaryPolicyHandler(
             return Result.Fail("PRODUCT_NOT_FOUND");
 
         var policy = BeneficiaryPolicy.Create(
-            householdEnabled: cmd.HouseholdEnabled,
             allowedRoles: [.. (cmd.AllowedRoles ?? []).Select(r => new DesignationRoleDefinition(
                 r.Code, r.Label, r.MinCount, r.MaxCount, r.SharesMustTotal100))],
             maxChildren: cmd.MaxChildren,

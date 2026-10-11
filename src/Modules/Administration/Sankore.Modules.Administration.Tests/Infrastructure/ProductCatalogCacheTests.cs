@@ -111,7 +111,6 @@ public sealed class ProductCatalogCacheTests : IDisposable
         var result = await new SetBeneficiaryPolicyHandler(db, Catalog()).Handle(
             new SetBeneficiaryPolicyCommand(
                 ProductId: product.Id,
-                HouseholdEnabled: true,
                 AllowMultipleHoldings: false,
                 AllowedRoles: [new DesignationRoleInput("AYANTDROITSANTE", "Ayant droit santé")]),
             CancellationToken.None);
@@ -134,7 +133,6 @@ public sealed class ProductCatalogCacheTests : IDisposable
             await new SetBeneficiaryPolicyHandler(db, Catalog()).Handle(
                 new SetBeneficiaryPolicyCommand(
                     ProductId: product.Id,
-                    HouseholdEnabled: true,
                     AllowMultipleHoldings: false,
                     MaxChildren: 6,
                     AllowedRoles: [new DesignationRoleInput("AYANTDROITSANTE", "Ayant droit santé")]),
@@ -144,8 +142,7 @@ public sealed class ProductCatalogCacheTests : IDisposable
         var after = await Facade().GetBeneficiaryPolicyAsync(
             _tenant, product.Id, CancellationToken.None);
 
-        after!.HouseholdEnabled.Should().BeTrue();
-        after.MaxChildren.Should().Be(6);
+        after!.MaxChildren.Should().Be(6);
         after.AllowMultipleHoldings.Should().BeFalse();
         after.AllowedRoles.Should().ContainSingle();
     }

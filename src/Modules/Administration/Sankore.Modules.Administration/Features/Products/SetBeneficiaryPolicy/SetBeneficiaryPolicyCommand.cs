@@ -22,7 +22,6 @@ using Sankore.Shared.Kernel;
 /// </param>
 internal sealed record SetBeneficiaryPolicyCommand(
     Guid ProductId,
-    bool HouseholdEnabled,
     bool AllowMultipleHoldings,
     IReadOnlyList<DesignationRoleInput>? AllowedRoles = null,
     int? MaxChildren = null,
