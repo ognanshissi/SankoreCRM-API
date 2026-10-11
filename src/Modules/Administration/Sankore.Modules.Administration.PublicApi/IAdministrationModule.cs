@@ -108,6 +108,33 @@ public interface IAdministrationModule
     Task<EmailQuotaDecision> TryConsumeEmailQuotaAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
+    /// Sends a templated notification to one of the tenant's USERS — an agent, an advisor, a
+    /// manager. Returns whether it was actually queued.
+    ///
+    /// <para>
+    /// <b>A send, not an address lookup, and that is the whole point.</b> This module owns the
+    /// user's email, their locale preference and the "mail server down must not undo the decision
+    /// that triggered the mail" rule (<c>ModuleEmailSender</c>). Handing an address to another
+    /// module would duplicate the locale fallback — which matters more than it looks, because
+    /// template locales are resolved case-sensitively in PostgreSQL and a wrong one mails the
+    /// message's own JSON payload as its body.
+    /// </para>
+    ///
+    /// <para>
+    /// Before this existed, modules notifying an agent had nowhere to get an address:
+    /// <c>AgentSummary</c> carries none, and M13's task-assignment consumer was sending to
+    /// <c>{agentId}@agent.internal</c> — a dead address, failing silently.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Never throws.</b> A user with no address, an unknown user and a failure to queue all
+    /// return <c>false</c>, because every caller is a consumer or a job whose own work must stand
+    /// whether or not the mail went out.
+    /// </para>
+    /// </summary>
+    Task<bool> NotifyUserAsync(NotifyUserRequest request, CancellationToken ct);
+
+    /// <summary>
     /// The institution's compliance parameters — FATCA regime and PEP post-mandate window
     /// (BNF-B-10, BNF-B-05).
     ///
@@ -319,3 +346,27 @@ public sealed record ProductSummary(
     bool IsActive,
     Guid Id = default,
     bool AllowMultipleHoldings = true);
+
+/// <summary>
+/// A templated notification addressed to one of the tenant's users (see
+/// <see cref="IAdministrationModule.NotifyUserAsync"/>).
+/// </summary>
+/// <param name="TemplateKey">
+/// Key of a seeded email template. An unknown key is a failed send, not an exception.
+/// </param>
+/// <param name="IdempotencyKey">
+/// Deduplicates the message in M08. Key it on what the notification is ABOUT — the removed
+/// household member, the assigned task — rather than on the broker's message id, so a replayed
+/// event cannot produce a second mail even if an inbox table was recreated.
+/// </param>
+/// <param name="TemplateData">
+/// Values the template needs. <c>full_name</c> and <c>company_name</c> are added by this module.
+/// Must carry NO sensitive value: a rendered body travels to a mail provider and sits in the
+/// delivery log.
+/// </param>
+public sealed record NotifyUserRequest(
+    Guid TenantId,
+    Guid UserId,
+    string TemplateKey,
+    string IdempotencyKey,
+    IReadOnlyDictionary<string, object>? TemplateData = null);

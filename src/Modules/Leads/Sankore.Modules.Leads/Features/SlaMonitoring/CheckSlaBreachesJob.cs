@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Features.SlaMonitoring;
 
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,6 @@ using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Domain.Events;
 using Sankore.Modules.Leads.Infrastructure;
-using Sankore.Modules.Notifications.PublicApi;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 
 /// <summary>
@@ -39,7 +39,6 @@ public sealed class CheckSlaBreachesJob(IServiceScopeFactory scopeFactory)
         var sp     = scope.ServiceProvider;
         var db     = sp.GetRequiredService<LeadsDbContext>();
         var admin  = sp.GetRequiredService<IAdministrationModule>();
-        var notif  = sp.GetRequiredService<INotificationsModule>();
         var clock  = sp.GetRequiredService<TimeProvider>();
         var logger = sp.GetRequiredService<ILogger<CheckSlaBreachesJob>>();
 
@@ -82,36 +81,37 @@ public sealed class CheckSlaBreachesJob(IServiceScopeFactory scopeFactory)
                 continue;
 
             // ── US-M13-141: Send alert via M08 ──────────────────────────
-            var agent = await admin.GetAgentAsync(assignment.AgentId, CancellationToken.None);
-            if (agent is not null)
-            {
-                try
-                {
-                    await notif.QueueEmailAsync(new QueueEmailRequest(
-                        TemplateKey:    "lead.sla-breach",
-                        RecipientEmail: $"{agent.FullName}@notification.internal",
-                        RecipientName:  agent.FullName,
-                        Module:         "Leads",
-                        Locale:         "fr",
+            // Addressed through M12, which owns the agent's address and locale. It used to queue
+            // in M08 directly against "{agent.FullName}@notification.internal" — a synthetic
+            // address, with spaces in its local part — and with camelCase template data against a
+            // snake_case template, so the alert reached nobody and would have rendered empty if
+            // it had. Both halves are fixed here; NotifyUserAsync never throws, which is why the
+            // try/catch and the existence check are gone.
+            if (await admin.NotifyUserAsync(
+                    new NotifyUserRequest(
+                        TenantId: tenantId,
+                        UserId: assignment.AgentId,
+                        TemplateKey: "lead.sla-breach",
+                        IdempotencyKey: $"sla-breach-{assignment.Id}-{now:yyyyMMdd}",
                         TemplateData: new Dictionary<string, object>
                         {
-                            ["leadName"]    = lead.FullName,
-                            ["leadId"]      = lead.Id.ToString(),
-                            ["agentName"]   = agent.FullName,
-                            ["slaDeadline"] = assignment.SlaDeadline.ToString("g"),
-                            ["breachHours"] = Math.Round((now - assignment.SlaDeadline).TotalHours, 1),
-                        },
-                        IdempotencyKey: $"sla-breach-{assignment.Id}-{now:yyyyMMdd}",
-                        TenantId:       tenantId));
-
-                    alertsSent++;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex,
-                        "Failed to send SLA breach alert for assignment {AssignmentId}",
-                        assignment.Id);
-                }
+                            ["lead_name"] = lead.FullName,
+                            ["lead_id"] = lead.Id.ToString(),
+                            ["sla_deadline"] =
+                                assignment.SlaDeadline.ToString("g", CultureInfo.InvariantCulture),
+                            ["breach_hours"] =
+                                Math.Round((now - assignment.SlaDeadline).TotalHours, 1),
+                        }),
+                    CancellationToken.None))
+            {
+                alertsSent++;
+            }
+            else
+            {
+                logger.LogWarning(
+                    "No SLA breach alert sent for assignment {AssignmentId}: agent {AgentId} is "
+                    + "unknown or has no email address",
+                    assignment.Id, assignment.AgentId);
             }
 
             // ── US-M13-142: Auto-escalation ─────────────────────────────

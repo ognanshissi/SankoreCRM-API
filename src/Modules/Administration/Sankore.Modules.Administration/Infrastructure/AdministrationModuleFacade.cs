@@ -12,9 +12,17 @@ using Sankore.Shared.Kernel;
 /// Internal on purpose: consumers depend on IAdministrationModule (PublicApi),
 /// never on this class or on AdministrationDbContext directly.
 /// </summary>
+/// <param name="emailSender">
+/// Optional only for the sake of unit tests, which construct this facade directly and in the
+/// main do not notify anybody — the same arrangement <c>AgentExclusionService</c>'s cache uses.
+/// DI always supplies it; <see cref="NotifyUserAsync"/> throws rather than quietly sending
+/// nothing when it is absent, because a notification silently disabled is the failure this whole
+/// change exists to remove.
+/// </param>
 internal sealed class AdministrationModuleFacade(
     AdministrationDbContext db,
-    ProductCatalogCache catalogCache)
+    ProductCatalogCache catalogCache,
+    ModuleEmailSender? emailSender = null)
     : IAdministrationModule
 {
     /// <summary>
@@ -151,6 +159,43 @@ internal sealed class AdministrationModuleFacade(
 
         // Persistent contention: refuse rather than send uncounted. The outbox will retry.
         return new EmailQuotaDecision(Granted: false, Limit: null, UsedThisMonth: 0);
+    }
+
+    /// <summary>
+    /// Notifies one of the tenant's users. The address never leaves this module — see the
+    /// contract's own remarks for why that is the point rather than an accident.
+    /// </summary>
+    public async Task<bool> NotifyUserAsync(NotifyUserRequest request, CancellationToken ct)
+    {
+        if (emailSender is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(AdministrationModuleFacade)} was built without a "
+                + $"{nameof(ModuleEmailSender)}, so it cannot notify user {request.UserId}. "
+                + "DI supplies one; a test calling this must pass it.");
+        }
+
+        // IgnoreQueryFilters paired with an explicit tenant predicate, the rule this file follows
+        // throughout: the callers are consumers and jobs, whose ambient tenant is not necessarily
+        // the tenant being notified.
+        var user = await db.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.TenantId == request.TenantId && u.Id == request.UserId, ct);
+
+        if (user is null)
+        {
+            // False and not an exception: the caller is a consumer whose own work has already
+            // happened. A deactivated or deleted recipient is an ordinary outcome.
+            return false;
+        }
+
+        return await emailSender.SendAsync(
+            request.TenantId,
+            user,
+            request.TemplateKey,
+            request.IdempotencyKey,
+            request.TemplateData,
+            ct);
     }
 
     public async Task<TenantNotificationConfigDto?> GetNotificationConfigAsync(

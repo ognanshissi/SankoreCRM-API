@@ -48,6 +48,11 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
 
         _notifications.QueueEmailAsync(Arg.Any<QueueEmailRequest>(), Arg.Any<CancellationToken>())
             .Returns(Result.Ok(Guid.NewGuid()));
+
+        // The alert now goes through M12, which owns the agent's address and locale. The job used
+        // to queue in M08 itself, against a synthetic address nobody receives.
+        _admin.NotifyUserAsync(Arg.Any<NotifyUserRequest>(), Arg.Any<CancellationToken>())
+            .Returns(true);
     }
 
     public void Dispose() => _db.Dispose();
@@ -143,13 +148,13 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
         await SeedBreachedAsync();
 
         await Job().ExecuteAsync(_tenantId);
-        _notifications.ClearReceivedCalls();
+        _admin.ClearReceivedCalls();
 
         // The escalated row's own deadline is in the future, so the second run has nothing to do.
         await Job().ExecuteAsync(_tenantId);
 
-        await _notifications.DidNotReceive().QueueEmailAsync(
-            Arg.Any<QueueEmailRequest>(), Arg.Any<CancellationToken>());
+        await _admin.DidNotReceive().NotifyUserAsync(
+            Arg.Any<NotifyUserRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -159,8 +164,53 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
 
         await Job().ExecuteAsync(_tenantId);
 
-        await _notifications.Received(1).QueueEmailAsync(
-            Arg.Is<QueueEmailRequest>(r => r.TemplateKey == "lead.sla-breach"),
+        await _admin.Received(1).NotifyUserAsync(
+            Arg.Is<NotifyUserRequest>(r =>
+                r.TemplateKey == "lead.sla-breach"
+                && r.TenantId == _tenantId
+                && r.UserId == _agentId),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task The_alert_carries_the_variables_the_template_actually_reads()
+    {
+        // Snake_case, not camelCase. The job used to pass leadName / agentName / slaDeadline
+        // against a template reading {{ lead_name }} / {{ full_name }} / {{ sla_deadline }}, so
+        // every placeholder rendered empty — a mismatch that fails by producing nothing rather
+        // than by raising, which is why nothing caught it. The recipient's own name is NOT among
+        // them: M12 adds full_name.
+        await SeedBreachedAsync();
+
+        await Job().ExecuteAsync(_tenantId);
+
+        await _admin.Received(1).NotifyUserAsync(
+            Arg.Is<NotifyUserRequest>(r =>
+                r.TemplateData != null
+                && r.TemplateData.ContainsKey("lead_name")
+                && r.TemplateData.ContainsKey("lead_id")
+                && r.TemplateData.ContainsKey("sla_deadline")
+                && r.TemplateData.ContainsKey("breach_hours")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task An_agent_with_no_address_does_not_stop_the_escalation()
+    {
+        // NotifyUserAsync returning false is an ordinary outcome — a deactivated agent, a user
+        // with no email. The escalation is the half that protects the lead, and it must happen
+        // whether or not anybody could be told.
+        _admin.NotifyUserAsync(Arg.Any<NotifyUserRequest>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var (lead, assignment) = await SeedBreachedAsync();
+
+        await Job().ExecuteAsync(_tenantId);
+
+        await using var db = _db.Create();
+        var escalated = await db.LeadAssignments
+            .FirstOrDefaultAsync(a => a.Id != assignment.Id && a.LeadId == lead.Id);
+
+        escalated.Should().NotBeNull();
     }
 }

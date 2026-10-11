@@ -264,6 +264,11 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Kyc.Features.Files.Consumers.ClientCreatedKycConsumer>();
     x.AddConsumer<Sankore.Modules.Kyc.Features.Files.Consumers.KycRequestedConsumer>();
 
+    // A rise in a client's PEP exposure owes a KYC review (BNF-B-13). Lives in M02 because
+    // RaiseKycReviewCommand is internal to it, and its handler already announces the review
+    // through the same sweep a periodic one goes through.
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Reviews.Consumers.ClientPepExposureRaisedConsumer>();
+
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer>();
     x.AddConsumer<LeadDispatchedTaskConsumer>();
     x.AddConsumer<LeadDispatchingFailedTaskConsumer>();
@@ -299,6 +304,10 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientCreatedTimelineConsumer>();
     // Welcomes a prospect who just became a client (lead conversions only).
     x.AddConsumer<Sankore.Modules.Customers.Features.LeadConversion.Consumers.ClientWelcomeEmailConsumer>();
+
+    // A departing household member leaves designations in ToReview, so the rank no longer totals
+    // 100% — the one state BNF-B-13 requires an agent be shown, and nothing else surfaces it.
+    x.AddConsumer<Sankore.Modules.Customers.Features.Household.Consumers.HouseholdMemberRemovedAlertConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientActivatedTimelineConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientSuspendedTimelineConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientArchivedTimelineConsumer>();

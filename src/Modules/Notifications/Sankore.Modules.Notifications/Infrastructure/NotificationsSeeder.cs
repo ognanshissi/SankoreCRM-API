@@ -23,6 +23,7 @@ internal static class NotificationsSeeder
         await SeedUserAgencyChangedAsync(db, logger, ct);
         await SeedUserRoleGrantedAsync(db, logger, ct);
         await SeedClientWelcomeAsync(db, logger, ct);
+        await SeedHouseholdDesignationsToReviewAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -205,7 +206,7 @@ internal static class NotificationsSeeder
     }
 
     // ── task.assigned ─────────────────────────────────────────────────────────
-    // Variables: {{ agent_name }}, {{ task_title }}, {{ task_id }}, {{ due_at }}, {{ lead_id }}
+    // Variables: {{ full_name }}, {{ task_title }}, {{ task_id }}, {{ due_at }}, {{ lead_id }}
 
     private static async Task SeedTaskAssignedAsync(
         NotificationsDbContext db, ILogger logger, CancellationToken ct)
@@ -232,7 +233,7 @@ internal static class NotificationsSeeder
                     <html lang="fr">
                     <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
                       <h2>Nouvelle tâche assignée</h2>
-                      <p>Bonjour {{ agent_name }},</p>
+                      <p>Bonjour {{ full_name }},</p>
                       <p>Une nouvelle tâche vous a été assignée :</p>
                       <table style="border-collapse:collapse;width:100%;margin:16px 0">
                         <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Titre</td><td style="padding:8px;border:1px solid #eee">{{ task_title }}</td></tr>
@@ -263,7 +264,7 @@ internal static class NotificationsSeeder
                     <html lang="en">
                     <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
                       <h2>New task assigned</h2>
-                      <p>Hello {{ agent_name }},</p>
+                      <p>Hello {{ full_name }},</p>
                       <p>A new task has been assigned to you:</p>
                       <table style="border-collapse:collapse;width:100%;margin:16px 0">
                         <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Title</td><td style="padding:8px;border:1px solid #eee">{{ task_title }}</td></tr>
@@ -282,7 +283,7 @@ internal static class NotificationsSeeder
     }
 
     // ── lead.sla-breach ──────────────────────────────────────────────────────
-    // Variables: {{ lead_name }}, {{ lead_id }}, {{ agent_name }}, {{ sla_deadline }}, {{ breach_hours }}
+    // Variables: {{ lead_name }}, {{ lead_id }}, {{ full_name }}, {{ sla_deadline }}, {{ breach_hours }}
 
     private static async Task SeedLeadSlaBreachAsync(
         NotificationsDbContext db, ILogger logger, CancellationToken ct)
@@ -309,7 +310,7 @@ internal static class NotificationsSeeder
                     <html lang="fr">
                     <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
                       <h2 style="color:#dc2626">Alerte SLA dépassé</h2>
-                      <p>Bonjour {{ agent_name }},</p>
+                      <p>Bonjour {{ full_name }},</p>
                       <p>Le délai de premier contact pour le lead suivant a été dépassé :</p>
                       <table style="border-collapse:collapse;width:100%;margin:16px 0">
                         <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_name }}</td></tr>
@@ -340,7 +341,7 @@ internal static class NotificationsSeeder
                     <html lang="en">
                     <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
                       <h2 style="color:#dc2626">SLA breach alert</h2>
-                      <p>Hello {{ agent_name }},</p>
+                      <p>Hello {{ full_name }},</p>
                       <p>The first-contact deadline for the following lead has been exceeded:</p>
                       <table style="border-collapse:collapse;width:100%;margin:16px 0">
                         <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_name }}</td></tr>
@@ -827,6 +828,102 @@ internal static class NotificationsSeeder
                       <p style="color:#999;font-size:12px">
                         You are receiving this because a file was opened in your name. If that was not
                         you, please contact us right away.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── customers.household.designations_to_review ──────────────────────────
+    // Variables: {{ client_number }}, {{ client_name }}, {{ designations_to_review }},
+    //            {{ holdings_affected }}
+    //
+    // Carries NO identification of the departing member: a rendered body reaches a mail
+    // provider and sits in the delivery log, and who belongs to a client's household is
+    // exactly what this module keeps out of both.
+
+    private static async Task SeedHouseholdDesignationsToReviewAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "customers.household.designations_to_review";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Clause bénéficiaire à revoir — client {{ client_number }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        Un membre du foyer du client <strong>{{ client_name }}</strong>
+                        ({{ client_number }}) vient d'être retiré. Il restait
+                        <strong>{{ designations_to_review }}</strong> désignation(s) bénéficiaire(s)
+                        à son nom, sur {{ holdings_affected }} produit(s) détenu(s).
+                      </p>
+                      <p>
+                        Ces désignations sont passées en <strong>à revoir</strong> : elles n'ont été
+                        ni supprimées ni réattribuées, donc le rang auquel elles appartenaient
+                        <strong>ne totalise plus 100 %</strong>. Une clause dans cet état ne se
+                        découvre sinon qu'au moment du sinistre.
+                      </p>
+                      <p>Ouvrez la fiche du client pour reprendre la clause.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Beneficiary clause to review — client {{ client_number }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        A household member of client <strong>{{ client_name }}</strong>
+                        ({{ client_number }}) has just been removed. They still held
+                        <strong>{{ designations_to_review }}</strong> beneficiary designation(s),
+                        across {{ holdings_affected }} holding(s).
+                      </p>
+                      <p>
+                        Those designations are now <strong>to review</strong>: they were neither
+                        deleted nor reallocated, so the rank they belonged to
+                        <strong>no longer totals 100%</strong>. A clause in that state is otherwise
+                        only discovered at claim time.
+                      </p>
+                      <p>Open the client record to rework the clause.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
                       </p>
                     </body>
                     </html>
