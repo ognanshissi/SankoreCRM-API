@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Tests.Features.Fatca;
 
+using Microsoft.Extensions.Logging.Abstractions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -64,7 +65,7 @@ public sealed class SubmitFatcaDeclarationHandlerTests : IDisposable
         return new SubmitFatcaDeclarationHandler(
             db,
             new LeadAccessGuard(user, _admin),
-            new FatcaSubjectPlanner(_admin),
+            new FatcaSubjectPlanner(_admin, NullLogger<FatcaSubjectPlanner>.Instance),
             user,
             new FrozenClock(Now),
             _publisher);

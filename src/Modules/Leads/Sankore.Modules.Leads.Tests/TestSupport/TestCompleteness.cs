@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Tests.TestSupport;
 
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.PublicApi;
@@ -57,7 +58,7 @@ internal static class TestCompleteness
             kyc ?? Substitute.For<IKycModule>(),
             new QuestionnaireCompletenessChecker(
                 db, new ExpectedResponsePlanner(db, admin, TimeProvider.System)),
-            new FatcaSubjectPlanner(admin),
+            new FatcaSubjectPlanner(admin, NullLogger<FatcaSubjectPlanner>.Instance),
             FixedSettings(requireProductLine));
     }
 

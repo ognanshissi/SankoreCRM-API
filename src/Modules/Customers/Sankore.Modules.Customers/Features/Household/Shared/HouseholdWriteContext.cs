@@ -2,6 +2,7 @@ namespace Sankore.Modules.Customers.Features.Household.Shared;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
@@ -40,7 +41,8 @@ internal sealed class HouseholdWriteContext(
     IAgencyScopeProvider agencyScope,
     IAdministrationModule administration,
     [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
-    TimeProvider clock)
+    TimeProvider clock,
+    ILogger<HouseholdWriteContext> logger)
 {
     internal TimeProvider Clock => clock;
 
@@ -108,6 +110,14 @@ internal sealed class HouseholdWriteContext(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Same reason as M13's: the caller gets a bare error code, and every cause of this
+            // failure lives in another module.
+            logger.LogError(
+                ex,
+                "Compliance settings unavailable for tenant {TenantId}; the PEP post-mandate "
+                + "window could not be resolved, so the household write was refused.",
+                tenantId);
+
             return Result.Fail<int>(CustomerErrors.ComplianceSettingsUnavailable);
         }
     }

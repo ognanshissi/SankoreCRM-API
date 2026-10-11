@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Tests.Features.Enrichment;
 
+using Microsoft.Extensions.Logging.Abstractions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -77,7 +78,8 @@ public sealed class EnrichLeadHandlerTests : IDisposable
             _admin,
             new ExpectedResponsePlanner(db, _admin, TimeProvider.System),
             _publisher,
-            new FixedClock(Now));
+            new FixedClock(Now),
+            NullLogger<HouseholdWriteContext>.Instance);
 
         return new EnrichLeadHandler(
             context, db, _admin, TestCompleteness.Calculator(db, _admin), _publisher);
@@ -281,7 +283,7 @@ public sealed class EnrichLeadHandlerTests : IDisposable
         var context = new HouseholdWriteContext(
             db, new LeadAccessGuard(stranger, _admin), new HouseholdPolicyResolver(_admin),
             _admin, new ExpectedResponsePlanner(db, _admin, TimeProvider.System),
-            _publisher, new FixedClock(Now));
+            _publisher, new FixedClock(Now), NullLogger<HouseholdWriteContext>.Instance);
 
         var handler = new EnrichLeadHandler(
             context, db, _admin, TestCompleteness.Calculator(db, _admin), _publisher);

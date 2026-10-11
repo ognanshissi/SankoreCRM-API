@@ -11,6 +11,13 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // NOTE: tables here map a concurrency token onto PostgreSQL's xmin SYSTEM column.
+            // EF scaffolds that as a real column, which CREATE TABLE refuses:
+            //     ERROR: column name "xmin" conflicts with a system column name
+            // xmin already exists on every table, so mapping it is a read-only binding and not a
+            // schema change — the scaffolded lines were removed by hand. The model snapshot keeps
+            // the mapping, which is what matters at run time.
+
             migrationBuilder.CreateTable(
                 name: "integration_relay_agent",
                 schema: "integration",
@@ -31,7 +38,6 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     created_by = table.Column<Guid>(type: "uuid", nullable: false),
                     revoked_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     revoked_by = table.Column<Guid>(type: "uuid", nullable: true),
-                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false),
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>

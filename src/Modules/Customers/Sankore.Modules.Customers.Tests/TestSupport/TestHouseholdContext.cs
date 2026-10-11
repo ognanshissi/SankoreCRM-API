@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Customers.Tests.TestSupport;
 
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.Features.Holdings.Shared;
@@ -55,7 +56,8 @@ internal static class TestHouseholdContext
             agencyScope ?? TestDoubles.AgencyScope(),
             administration ?? Administration(tenantId),
             publisher,
-            clock ?? TimeProvider.System);
+            clock ?? TimeProvider.System,
+            NullLogger<HouseholdWriteContext>.Instance);
 
     internal static HoldingWriteContext Holdings(
         CustomersDbContext db,

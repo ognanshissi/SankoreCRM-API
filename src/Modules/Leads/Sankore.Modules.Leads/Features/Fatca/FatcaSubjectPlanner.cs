@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Features.Fatca;
 
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
@@ -17,7 +18,9 @@ internal sealed record FatcaScope(
 /// <summary>
 /// Resolves the tenant's FATCA configuration and the people it applies to.
 /// </summary>
-internal sealed class FatcaSubjectPlanner(IAdministrationModule administration)
+internal sealed class FatcaSubjectPlanner(
+    IAdministrationModule administration,
+    ILogger<FatcaSubjectPlanner> logger)
 {
     internal const string NotEnabled = "FATCA_NOT_ENABLED";
     internal const string SettingsUnavailable = "COMPLIANCE_SETTINGS_UNAVAILABLE";
@@ -54,6 +57,16 @@ internal sealed class FatcaSubjectPlanner(IAdministrationModule administration)
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // See HouseholdWriteContext.PepWindowAsync: refusing is right, refusing SILENTLY is
+            // not. Whether the institution is subject to FATCA is the question this failed to
+            // answer, and nothing downstream will ever name it again.
+            logger.LogError(
+                ex,
+                "Compliance settings unavailable for tenant {TenantId}; the FATCA scope of lead "
+                + "{LeadId} could not be resolved.",
+                lead.TenantId,
+                lead.Id);
+
             return Result.Fail<FatcaScope>(SettingsUnavailable);
         }
 

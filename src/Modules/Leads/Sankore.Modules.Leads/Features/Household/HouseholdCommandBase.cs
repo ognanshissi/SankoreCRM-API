@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.Household;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Household.Events;
@@ -42,7 +43,8 @@ internal sealed class HouseholdWriteContext(
     // KEYED: the outbox publisher is registered per module, keyed on the DbContext type name, so
     // the row lands in leads.outbox_messages and commits with the lead.
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
-    TimeProvider clock)
+    TimeProvider clock,
+    ILogger<HouseholdWriteContext> logger)
 {
     internal const string ComplianceUnavailable = "COMPLIANCE_SETTINGS_UNAVAILABLE";
 
@@ -137,6 +139,17 @@ internal sealed class HouseholdWriteContext(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // LOG the exception, do not just translate it. The caller gets a bare error code, and
+            // the reasons this read fails are all invisible from the lead's own endpoint — M12
+            // unreachable, a migration that never applied so administration.compliance_settings
+            // does not exist, the ambient transaction promoted. Without this line the only clue an
+            // agent reports is "COMPLIANCE_SETTINGS_UNAVAILABLE on the PEP screen".
+            logger.LogError(
+                ex,
+                "Compliance settings unavailable for tenant {TenantId}; the PEP post-mandate "
+                + "window could not be resolved, so the household write was refused.",
+                tenantId);
+
             return Result.Fail<int>(ComplianceUnavailable);
         }
     }
