@@ -10,6 +10,7 @@ using Sankore.Modules.Integration.Features.Insurance.GetInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.ListInsuranceProducts;
 using Sankore.Modules.Integration.Features.Insurance.ProductRouting;
 using Sankore.Modules.Integration.Features.Insurance.QuoteInsuranceProduct;
+using Sankore.Modules.Integration.Features.Insurance.SubscribePolicy;
 using Sankore.Modules.Integration.Features.Insurance.UpdateInsuranceProduct;
 
 /// <summary>
@@ -58,6 +59,10 @@ internal static class InsuranceEndpoints
         // product mapping is otherwise invisible — one warning line, and a holding stuck in
         // PendingSync for ever.
         products.MapProductRouting();
+
+        // ASS-04 and ASS-05. Its own group, not under `products`: a subscription is acted on by
+        // its own id, which is what an operator working a refund holds.
+        app.MapSubscribePolicy();
 
         return app;
     }

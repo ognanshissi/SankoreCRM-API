@@ -40,6 +40,40 @@ public interface ICoreBankingGateway
 
     Task<IntegrationCommandId> RequestAccountOpeningAsync(Guid crmCustomerId, string productCode, CancellationToken ct);
 
+    /// <summary>
+    /// Queues the debit of an insurance premium against a customer's account — the FIRST step of
+    /// the ASS-05 chain, before anything is asked of the insurer.
+    ///
+    /// <para>
+    /// That order is the whole design: a premium collected and a policy refused can be put right
+    /// by a reversal, while a policy issued against a premium that was never collected is an
+    /// insurer's receivable against a customer who was never debited. The reversal is the
+    /// compensating step, not an afterthought.
+    /// </para>
+    ///
+    /// <para>
+    /// Idempotent on the SUBSCRIPTION, so a retried request attaches to the debit already in
+    /// flight rather than taking the money twice.
+    /// </para>
+    /// </summary>
+    Task<IntegrationCommandId> RequestPremiumDebitAsync(
+        PremiumDebitRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// Queues the REVERSAL of a premium debit, keyed on the reference the original debit returned
+    /// — the only form a core banking system will safely accept twice.
+    ///
+    /// <para>
+    /// <paramref name="request"/> carries the attempt number because a refused reversal is NOT
+    /// retried automatically: the subscription sits in <c>PremiumRefundDue</c> until an operator
+    /// re-attempts, and without the attempt in the idempotency key that second attempt would be
+    /// swallowed as a replay — leaving a customer un-refunded while the platform reports a refund
+    /// as requested.
+    /// </para>
+    /// </summary>
+    Task<IntegrationCommandId> RequestDebitReversalAsync(
+        DebitReversalRequest request, CancellationToken ct);
+
     Task<CbsCustomerSnapshot?> GetCustomerSnapshotAsync(Guid crmCustomerId, CancellationToken ct);
 
     Task<CbsBalance?> GetLiveBalanceAsync(Guid crmCustomerId, string accountRef, CancellationToken ct);
@@ -72,3 +106,34 @@ public interface IInsuranceGateway
 
     IntegrationCapabilities GetCapabilities(Guid connectionId);
 }
+
+/// <param name="SubscriptionId">
+/// The subscription this premium belongs to. It is the idempotency anchor AND what the command
+/// row carries as its CRM id, so a command found in the rejection queue says what it was for.
+/// </param>
+/// <param name="AccountRef">The account to debit, as the core banking system knows it.</param>
+/// <param name="Label">
+/// What appears on the customer's statement. Operator-facing text, never personal data: it reaches
+/// a core banking system this platform does not control.
+/// </param>
+public sealed record PremiumDebitRequest(
+    Guid SubscriptionId,
+    string AccountRef,
+    decimal Amount,
+    string Currency,
+    string Label);
+
+/// <param name="OriginalReference">
+/// The reference the DEBIT returned. A reversal is keyed on it rather than on the account and the
+/// amount, because that is the only form a core banking system will accept twice without the risk
+/// of refunding twice.
+/// </param>
+/// <param name="Attempt">
+/// Which attempt this is, starting at 1. Part of the idempotency key — see
+/// <see cref="ICoreBankingGateway.RequestDebitReversalAsync"/>.
+/// </param>
+public sealed record DebitReversalRequest(
+    Guid SubscriptionId,
+    string AccountRef,
+    string OriginalReference,
+    int Attempt);

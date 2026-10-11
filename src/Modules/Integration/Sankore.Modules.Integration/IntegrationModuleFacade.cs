@@ -324,6 +324,72 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         }
 
         /// <summary>
+        /// The premium debit of ASS-05's first step. The connection is the tenant's core banking
+        /// one — a premium is collected from the customer's own account, whichever insurer the
+        /// policy is with.
+        /// </summary>
+        public async Task<IntegrationCommandId> RequestPremiumDebitAsync(
+            PremiumDebitRequest request, CancellationToken ct)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.AccountRef);
+
+            if (request.Amount <= 0m)
+            {
+                throw new DomainException(
+                    $"{IntegrationErrors.PayloadInvalid}: a premium debit needs a positive amount.");
+            }
+
+            var tenantId = facade.TenantId;
+            var connection = await facade.RequireCoreBankingAsync(tenantId, ct);
+
+            return await facade.EnqueueAsync(
+                tenantId,
+                connection,
+                CommandType.DebitAccount,
+                // A debit creates no addressable entity — AcknowledgementApplier maps it to no
+                // reference at all — so the entity type is the account it acts on and the CRM id
+                // is the SUBSCRIPTION, which is what makes this debit unique and what lets a
+                // command sitting in the rejection queue say what it was for.
+                IntegrationEntityTypes.Account,
+                request.SubscriptionId,
+                IdempotencyKeyFactory.ForPremiumDebit(
+                    tenantId, connection.Id, request.SubscriptionId),
+                facade._protector.Protect(new DebitAccountPayload(
+                    request.AccountRef.Trim(),
+                    request.Amount,
+                    request.Currency.Trim().ToUpperInvariant(),
+                    request.Label)),
+                ct);
+        }
+
+        public async Task<IntegrationCommandId> RequestDebitReversalAsync(
+            DebitReversalRequest request, CancellationToken ct)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.AccountRef);
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.OriginalReference);
+
+            var tenantId = facade.TenantId;
+            var connection = await facade.RequireCoreBankingAsync(tenantId, ct);
+
+            return await facade.EnqueueAsync(
+                tenantId,
+                connection,
+                CommandType.ReverseDebit,
+                IntegrationEntityTypes.Account,
+                request.SubscriptionId,
+                // The ATTEMPT is in the key. See the contract: without it an operator's second
+                // attempt after a refused reversal is swallowed as a replay, and the customer
+                // stays un-refunded while the platform reports the refund as requested.
+                IdempotencyKeyFactory.ForDebitReversal(
+                    tenantId, connection.Id, request.SubscriptionId, request.Attempt),
+                facade._protector.Protect(new ReverseDebitPayload(
+                    request.AccountRef.Trim(), request.OriginalReference.Trim())),
+                ct);
+        }
+
+        /// <summary>
         /// The read model Customer 360 shows without touching the CBS (INT-21). <c>null</c> when
         /// the synchronisation has never run for this customer — an ordinary state, and the
         /// screen says "not synchronised" rather than showing zeros.

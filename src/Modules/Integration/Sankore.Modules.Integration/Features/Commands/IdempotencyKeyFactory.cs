@@ -129,6 +129,52 @@ internal static class IdempotencyKeyFactory
             IntegrationEntityTypes.Policy, crmHoldingId, clauseVersion);
 
     /// <summary>
+    /// The premium debit of one subscription attempt (ASS-05, first step).
+    ///
+    /// <para>
+    /// Keyed on the SUBSCRIPTION and nothing else, which is what makes a retried subscription
+    /// request attach to the debit already in flight instead of taking the customer's money
+    /// twice. The amount is deliberately absent for the same reason it is absent from
+    /// <see cref="ForPolicySubscription"/>: a corrected premium on the same subscription is the
+    /// same debit, and keying on it would debit twice.
+    /// </para>
+    ///
+    /// <para>
+    /// The entity type is <c>Account</c> — a debit acts on an account and creates no addressable
+    /// entity of its own, which is why <c>AcknowledgementApplier</c> maps it to no reference at
+    /// all. The subscription is the CRM id because that is what makes this debit unique.
+    /// </para>
+    /// </summary>
+    internal static IdempotencyKey ForPremiumDebit(
+        Guid tenantId, Guid connectionId, Guid subscriptionId)
+        => For(tenantId, connectionId, CommandType.DebitAccount,
+            IntegrationEntityTypes.Account, subscriptionId);
+
+    /// <summary>
+    /// The reversal of a premium debit (ASS-05, compensating step).
+    ///
+    /// <para>
+    /// <b>The ATTEMPT is in the key, and it has to be.</b> A reversal the core banking system
+    /// refuses leaves the subscription in <c>PremiumRefundDue</c>, which this module does not
+    /// retry automatically — an operator re-attempts it, and
+    /// <c>InsuranceSubscription.ReversalAttempts</c> exists precisely so they know the CBS has
+    /// already said no once. Without the attempt in the key that second attempt would be
+    /// swallowed as a replay of the first, and the customer would stay un-refunded with the
+    /// platform reporting that a refund had been requested.
+    /// </para>
+    ///
+    /// <para>
+    /// This is the same argument <see cref="ForHoldingSubscription"/> makes about a clause
+    /// version, in the one place where getting it wrong costs a customer money rather than an
+    /// insurer an amendment.
+    /// </para>
+    /// </summary>
+    internal static IdempotencyKey ForDebitReversal(
+        Guid tenantId, Guid connectionId, Guid subscriptionId, int attempt)
+        => For(tenantId, connectionId, CommandType.ReverseDebit,
+            IntegrationEntityTypes.Account, subscriptionId, attempt);
+
+    /// <summary>
     /// The policy, the date of the loss and its nature discriminate. Two losses on the same
     /// policy on the same day are rare and real (a fire and a theft), so the nature is in;
     /// the free-text description is not, because retyping it must not declare a second claim.

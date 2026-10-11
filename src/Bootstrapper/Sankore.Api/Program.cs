@@ -292,6 +292,12 @@ builder.Services.AddMassTransit(x =>
     // a queued command; M01 turns the far end's answer back into Active or Rejected. Registering
     // one without the other leaves a holding stuck in PendingSync with nothing to move it.
     x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.HoldingSubscription.HoldingSubscriptionConsumer>();
+
+    // The ASS-05 chain, in both directions. Registered as a PAIR with the command that starts it:
+    // a saga whose outcome consumers are missing sits in PendingDebit for ever with nothing to
+    // move it — which is the defect lot 7 shipped for holdings and lot 8 had to close.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.SubscribePolicy.InsuranceSagaSucceededConsumer>();
+    x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.SubscribePolicy.InsuranceSagaRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncConfirmedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRejectedConsumer>();
