@@ -1071,6 +1071,69 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     b.ToTable("client_number_sequences", "customers");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientProfileChangeNotice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("DismissedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("dismissed_reason");
+
+                    b.Property<Guid?>("IntegratedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("integrated_by");
+
+                    b.Property<DateOnly?>("IntegratedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("integrated_on");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<DateOnly>("NoticedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("noticed_on");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<Guid>("RecordedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recorded_by");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_client_profile_change_notices");
+
+                    b.HasIndex("TenantId", "ClientId")
+                        .HasDatabaseName("ix_profile_notices_client");
+
+                    b.HasIndex("TenantId", "NoticedOn")
+                        .HasDatabaseName("ix_profile_notices_open")
+                        .HasFilter("integrated_on IS NULL AND dismissed_reason IS NULL");
+
+                    b.ToTable("client_profile_change_notices", "customers");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientRelationship", b =>
                 {
                     b.Property<Guid>("Id")

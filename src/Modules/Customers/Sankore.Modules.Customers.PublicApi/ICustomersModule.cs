@@ -93,6 +93,34 @@ public interface ICustomersModule
     Task<bool> HasRecordedFundsOriginAsync(Guid tenantId, Guid clientId, CancellationToken ct);
 
     /// <summary>
+    /// Clients holding a live product whose CONTRACT ANNIVERSARY falls on
+    /// <paramref name="onDay"/> — the day the CIMA LBC/FT text says the file's information is to
+    /// be brought up to date (« les informations sont mises à jour à la date anniversaire du
+    /// contrat »).
+    ///
+    /// <para>
+    /// <b>A date-driven lookup, not an enumeration of holdings.</b> It answers "which clients owe
+    /// an update today", which is a few rows a night; this contract deliberately exposes no way to
+    /// walk a tenant's portfolio, and the reconciliation run's own notes explain why.
+    /// </para>
+    ///
+    /// <para>
+    /// The anniversary is measured from the holding's effective date, falling back to its
+    /// signature: a contract that never recorded an effective date still began on the day the
+    /// client signed it. A holding with neither has no anniversary and is skipped rather than
+    /// given an arbitrary one — a review raised on a date nobody agreed to would be noise a
+    /// compliance officer learns to ignore.
+    /// </para>
+    ///
+    /// <para>
+    /// 29 February is folded onto 28 February in a non-leap year, so a contract signed on a leap
+    /// day is reviewed every year rather than once every four.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetClientsWithContractAnniversaryAsync(
+        Guid tenantId, DateOnly onDay, CancellationToken ct);
+
+    /// <summary>
     /// Returns a lightweight summary of a customer, or null if not found.
     /// </summary>
     Task<CustomerSummary?> GetCustomerAsync(Guid tenantId, Guid customerId, CancellationToken ct);

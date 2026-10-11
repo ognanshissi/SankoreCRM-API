@@ -269,6 +269,80 @@ internal sealed class CustomersModuleFacade(
     /// started and did not finish.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The clients whose contract anniversary falls today. Narrowed to LIVE holdings: a closed or
+    /// rejected contract has no anniversary to honour.
+    ///
+    /// <para>
+    /// The day-and-month comparison is done in memory over the live holdings of the tenant rather
+    /// than in SQL. Matching a recurring date in PostgreSQL means <c>EXTRACT</c> on two columns,
+    /// which no index covers, and the leap-day fold below cannot be expressed that way at all —
+    /// while a tenant's live portfolio is the set this job already has to walk once a night.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> GetClientsWithContractAnniversaryAsync(
+        Guid tenantId, DateOnly onDay, CancellationToken ct)
+    {
+        // IgnoreQueryFilters with an explicit tenant predicate: the caller is a Hangfire job in
+        // another module, running under SYSTEM identity with no ambient tenant of its own.
+        var candidates = await db.ProductHoldings
+            .IgnoreQueryFilters()
+            .Where(h => h.TenantId == tenantId
+                     && h.Status != HoldingStatus.Closed
+                     && h.Status != HoldingStatus.Rejected)
+            .Select(h => new
+            {
+                h.ClientId,
+                // Reached through the typed jsonb, so the fallback stays one expression.
+                EffectiveFrom = h.Specifics.EffectiveFrom,
+                h.SignedAt,
+            })
+            .ToListAsync(ct);
+
+        var anniversaries = candidates
+            .Select(h => h.EffectiveFrom
+                ?? (h.SignedAt.HasValue
+                    ? DateOnly.FromDateTime(h.SignedAt.Value.UtcDateTime)
+                    : (DateOnly?)null))
+            .Zip(candidates, (started, h) => (Started: started, h.ClientId))
+            // A holding with neither date has no anniversary. Skipped rather than given an
+            // arbitrary one: a review raised on a date nobody agreed to is noise a compliance
+            // officer learns to ignore.
+            .Where(x => x.Started is not null && FallsOn(x.Started!.Value, onDay))
+            .Select(x => x.ClientId)
+            .Distinct()
+            .ToList();
+
+        return anniversaries;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="onDay"/> is an anniversary of <paramref name="started"/>.
+    ///
+    /// <para>
+    /// The year the contract began is NOT an anniversary of itself — a file brought up to date on
+    /// the day it was opened is the opening, not an update.
+    /// </para>
+    ///
+    /// <para>
+    /// 29 February folds onto 28 February in a non-leap year, so a contract signed on a leap day
+    /// is reviewed every year rather than once every four.
+    /// </para>
+    /// </summary>
+    private static bool FallsOn(DateOnly started, DateOnly onDay)
+    {
+        if (onDay.Year <= started.Year) return false;
+
+        if (started.Month == onDay.Month && started.Day == onDay.Day) return true;
+
+        var leapDayInACommonYear =
+            started is { Month: 2, Day: 29 } &&
+            onDay is { Month: 2, Day: 28 } &&
+            !DateTime.IsLeapYear(onDay.Year);
+
+        return leapDayInACommonYear;
+    }
+
     public async Task<bool> HasRecordedFundsOriginAsync(
         Guid tenantId, Guid clientId, CancellationToken ct)
         // IgnoreQueryFilters with an explicit tenant predicate: the caller is a consumer or an

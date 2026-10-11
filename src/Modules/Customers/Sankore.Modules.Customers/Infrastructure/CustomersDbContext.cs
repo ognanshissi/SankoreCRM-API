@@ -35,6 +35,13 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
 
     // ── Timeline, segmentation & loyalty ────────────────────────────────────
     public DbSet<ClientTimelineEntry> ClientTimelineEntries => Set<ClientTimelineEntry>();
+
+    /// <summary>
+    /// Profile changes the institution has learned of and owes an update for — the CIMA LBC/FT
+    /// fifteen-day deadline.
+    /// </summary>
+    public DbSet<ClientProfileChangeNotice> ClientProfileChangeNotices
+        => Set<ClientProfileChangeNotice>();
     public DbSet<ClientSegmentHistory> ClientSegmentHistories => Set<ClientSegmentHistory>();
     public DbSet<ClientLoyaltyScore> ClientLoyaltyScores => Set<ClientLoyaltyScore>();
 
@@ -139,5 +146,6 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
         // be considered "already processed" because tenant B saw the same id.
         modelBuilder.Entity<ClientImportJob>().HasQueryFilter(j => j.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<InboxMessage>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ClientProfileChangeNotice>().HasQueryFilter(n => n.TenantId == tenant.CurrentTenantId);
     }
 }

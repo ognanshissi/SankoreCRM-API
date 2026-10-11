@@ -576,6 +576,20 @@ if (emitOpenApiTo is null) {
             $"anonymize-closed-leads-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "45 3 * * *");
+
+        // Contract-anniversary KYC updates (CIMA LBC/FT: « les informations sont mises à jour à la
+        // date anniversaire du contrat »). A different rule from the periodic review above, with a
+        // different clock: that one follows the vigilance level, this one the contract's date.
+        //
+        // 02:15, AFTER the 01:00 periodic review sweep, deliberately. A file that was already due
+        // for a periodic review this morning has an open review by then, and the anniversary job
+        // skips a file that has one — so a client does not get two tasks in one night for the two
+        // rules landing on the same day. The other order would raise the anniversary review first
+        // and let the periodic sweep add its own beside it.
+        AddOrUpdate<Sankore.Modules.Kyc.Features.Reviews.ContractAnniversaryReviewJob>(
+            $"kyc-contract-anniversary-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "15 2 * * *");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)

@@ -127,4 +127,10 @@ public static class CustomerErrors
 
     /// <summary>The operation only applies to a <c>ClientType.Legal</c> client.</summary>
     public const string ClientNotLegalEntity = "CLIENT_NOT_LEGAL_ENTITY";
+
+    // ── Profile-change notices (CIMA LBC/FT, 15-day integration deadline) ───
+    public const string ProfileNoticeNotFound = "PROFILE_NOTICE_NOT_FOUND";
+    public const string ProfileNoticeAlreadyClosed = "PROFILE_NOTICE_ALREADY_CLOSED";
+    public const string ProfileNoticeDismissReasonRequired = "PROFILE_NOTICE_DISMISS_REASON_REQUIRED";
+    public const string ProfileNoticeIntegratedBeforeNoticed = "PROFILE_NOTICE_INTEGRATED_BEFORE_NOTICED";
 }

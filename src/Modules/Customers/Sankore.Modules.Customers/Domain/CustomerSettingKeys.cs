@@ -38,6 +38,13 @@ public static class CustomerSettingKeys
     /// </summary>
     public const string RegistrationExtractMaxAgeMonths = "registration-extract-max-age-months";
 
+    /// <summary>
+    /// Days an institution has to carry a known profile change into its information system. The
+    /// CIMA LBC/FT text says fifteen; a parameter rather than a constant, like the other two
+    /// figures this work made configurable.
+    /// </summary>
+    public const string ProfileChangeIntegrationDays = "profile-change-integration-days";
+
     public const string KycStubEnabled = "kyc-stub-enabled";
 
     // ── Value types ─────────────────────────────────────────────────────────
@@ -81,6 +88,9 @@ public static class CustomerSettingKeys
         new(RegistrationExtractMaxAgeMonths, "3", TypeInt,
             "Maximum age, in months, of the trade-registry extract on a legal client's file "
             + "(CIMA LBC/FT article 13.2)."),
+        new(ProfileChangeIntegrationDays, "15", TypeInt,
+            "Days to carry a known change of client profile into the information system "
+            + "(CIMA LBC/FT)."),
         new(KycStubEnabled, "false", TypeBool,
             "Auto-approve KYC locally instead of waiting for module M02 (non-production only)."),
     ];
