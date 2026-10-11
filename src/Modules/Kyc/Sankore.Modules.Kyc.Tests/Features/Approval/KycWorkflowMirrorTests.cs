@@ -73,7 +73,8 @@ public sealed class KycWorkflowMirrorTests : IDisposable
             NullLogger<StartKycApprovalHandler>.Instance);
 
     private DecideKycApprovalHandler DecideHandler() =>
-        new(_db, _currentUser, Substitute.For<IEventPublisher>(), _workflow, _clock,
+        new(_db, _currentUser, Substitute.For<IEventPublisher>(), _workflow,
+            TestSupport.TestRemoteSaleEvidence.For(_db, _clock), _clock,
             NullLogger<DecideKycApprovalHandler>.Instance);
 
     /// <summary>A file in Validating, with its circuit opened through the real handler.</summary>

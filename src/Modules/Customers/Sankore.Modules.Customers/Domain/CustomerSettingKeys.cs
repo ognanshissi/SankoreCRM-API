@@ -31,6 +31,13 @@ public static class CustomerSettingKeys
     public const string SolidaritySingleGroupRule = "solidarity-single-group-rule";
     public const string SegmentRulesJson = "segment-rules-json";
     public const string LoyaltyWeightsJson = "loyalty-weights-json";
+    /// <summary>
+    /// How recent the registry extract of a legal client must be, in months. Article 13.2 of the
+    /// CIMA LBC/FT text says three; it is a parameter rather than a constant because the text is
+    /// being reformed and because a tenant's own supervisor may ask for less.
+    /// </summary>
+    public const string RegistrationExtractMaxAgeMonths = "registration-extract-max-age-months";
+
     public const string KycStubEnabled = "kyc-stub-enabled";
 
     // ── Value types ─────────────────────────────────────────────────────────
@@ -71,6 +78,9 @@ public static class CustomerSettingKeys
             "Ordered segmentation rules evaluated by the nightly segmentation job."),
         new(LoyaltyWeightsJson, """{"tenure":30,"regularity":30,"volume":20,"products":20}""", TypeJson,
             "Weights (summing to 100) of the loyalty score components."),
+        new(RegistrationExtractMaxAgeMonths, "3", TypeInt,
+            "Maximum age, in months, of the trade-registry extract on a legal client's file "
+            + "(CIMA LBC/FT article 13.2)."),
         new(KycStubEnabled, "false", TypeBool,
             "Auto-approve KYC locally instead of waiting for module M02 (non-production only)."),
     ];

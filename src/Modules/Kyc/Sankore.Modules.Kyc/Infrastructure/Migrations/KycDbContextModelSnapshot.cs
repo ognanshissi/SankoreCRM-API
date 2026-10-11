@@ -151,6 +151,10 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("content_type");
 
+                    b.Property<DateOnly?>("DocumentIssuedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("document_issued_on");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(32)

@@ -37,11 +37,16 @@ internal static class UploadKycDocumentEndpoint
     {
         app.MapPost("{kycFileId:guid}/documents", Handle)
             .WithName("UploadKycDocument")
-            .WithSummary("Upload an identity document or selfie image")
+            .WithSummary("Upload an identity document, a selfie, or a proof of address")
             .WithDescription(
                 "Stores the image encrypted and returns an opaque reference to hand to "
                 + "POST kyc-files/{id}/verify. Accepts image/jpeg, image/png and application/pdf, "
-                + "up to the tenant's configured size limit. Requires permission: kyc:manage.")
+                + "up to the tenant's configured size limit. "
+                + "`kind=ProofOfAddress` records the quittance CIMA LBC/FT article 13.6 requires "
+                + "of a REMOTE sale; pass `documentIssuedOn` with it, because the final KYC "
+                + "approval refuses a proof whose issue date is absent or older than the tenant's "
+                + "proof-of-address-max-age-days. A proof of address never enters the OCR or "
+                + "face-match chain. Requires permission: kyc:manage.")
             .RequireAuthorization(Permissions.CanManageKycFile.Code)
             .Accepts<IFormFile>("multipart/form-data")
             .Produces<UploadKycDocumentResponse>(StatusCodes.Status201Created)
@@ -59,6 +64,7 @@ internal static class UploadKycDocumentEndpoint
         Guid kycFileId,
         KycDocumentKind kind,
         IFormFile file,
+        DateOnly? documentIssuedOn,
         KycDbContext db,
         IKycDocumentStore store,
         ICurrentUser currentUser,
@@ -103,7 +109,13 @@ internal static class UploadKycDocumentEndpoint
                 sizeBytes: stored.SizeBytes,
                 sha256: stored.Sha256,
                 uploadedBy: currentUser.Id,
-                clock: clock);
+                clock: clock,
+                // Only meaningful for the kinds whose acceptability depends on their age — a
+                // proof of address, which CIMA article 13.6 requires to be recent. Optional
+                // rather than required on that kind: the validation gate is where an absent date
+                // is refused, and refusing the UPLOAD would leave the agent unable to put the
+                // document on file at all while they look the date up.
+                documentIssuedOn: documentIssuedOn);
 
             db.KycDocuments.Add(document);
 

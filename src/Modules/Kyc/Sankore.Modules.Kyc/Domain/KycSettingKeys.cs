@@ -40,6 +40,13 @@ public static class KycSettingKeys
     public const string ReviewGraceDays = "review-grace-days";
 
     // ── Verification ────────────────────────────────────────────────────────
+    /// <summary>
+    /// How recent a proof of address must be, in days, for a REMOTE sale (CIMA LBC/FT article
+    /// 13.6 asks for « moins de trois mois »). A parameter rather than a constant: the text is
+    /// being reformed, and a tenant's own supervisor may ask for less.
+    /// </summary>
+    public const string ProofOfAddressMaxAgeDays = "proof-of-address-max-age-days";
+
     public const string FaceMatchMaxAttempts = "face-match-max-attempts";
     public const string VerificationRejectionFloor = "verification-rejection-floor";
 
@@ -71,6 +78,9 @@ public static class KycSettingKeys
         new(ReviewGraceDays, "30", TypeInt,
             "Délai de grâce après l'échéance avant expiration du dossier."),
 
+        new(ProofOfAddressMaxAgeDays, "90", TypeInt,
+            "Maximum age, in days, of the proof of address required on a remote sale "
+            + "(CIMA LBC/FT article 13.6)."),
         new(FaceMatchMaxAttempts, "2", TypeInt,
             "Nombre d'essais de comparaison faciale avant validation obligatoire du chef d'agence."),
         new(VerificationRejectionFloor, "40", TypeInt,

@@ -89,6 +89,14 @@ public sealed class KycDocument : AggregateRoot
     /// </summary>
     public string Sha256 { get; private set; } = default!;
 
+    /// <summary>
+    /// When the DOCUMENT was issued, where that is part of what makes it acceptable — a proof of
+    /// address has to be recent (CIMA LBC/FT article 13.6). Null for the kinds where it is
+    /// meaningless, and for rows recorded before the column existed: a freshness rule that read
+    /// null as "fresh" would pass every legacy row, so the check treats null as NOT satisfying it.
+    /// </summary>
+    public DateOnly? DocumentIssuedOn { get; private set; }
+
     public Guid UploadedBy { get; private set; }
     public DateTimeOffset UploadedAt { get; private set; }
 
@@ -143,7 +151,8 @@ public sealed class KycDocument : AggregateRoot
         long sizeBytes,
         string sha256,
         Guid uploadedBy,
-        TimeProvider clock)
+        TimeProvider clock,
+        DateOnly? documentIssuedOn = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
         if (kycFileId == Guid.Empty) throw new DomainException("KycFileId is required.");
@@ -161,6 +170,7 @@ public sealed class KycDocument : AggregateRoot
             ContentType = contentType,
             SizeBytes = sizeBytes,
             Sha256 = sha256,
+            DocumentIssuedOn = documentIssuedOn,
             UploadedBy = uploadedBy,
             UploadedAt = clock.GetUtcNow(),
             ReviewDecision = KycDocumentReviewDecision.Pending,

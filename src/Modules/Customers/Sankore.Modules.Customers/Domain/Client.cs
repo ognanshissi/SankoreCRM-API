@@ -67,6 +67,52 @@ public sealed class Client : AggregateRoot
     public string PreferredLanguage { get; private set; } = default!;
     public int DependentsCount { get; private set; }
 
+    // ── AML / LBC-FT profile ────────────────────────────────────────────────
+    //
+    // The CIMA LBC/FT regulation (article 13.1 of the 2021 text, carried into the 2025 one) is
+    // explicit that a profession alone is not enough: « les mentions vagues (commerçant, homme
+    // d'affaires) ne suffisent pas ; il faut se renseigner sur le secteur d'activité du client ».
+    // Profession above is what the client calls themselves; these two are what the institution
+    // established.
+
+    /// <summary>
+    /// The client's sector of activity, as a CODE.
+    ///
+    /// <para>
+    /// Deliberately the SAME referential the core banking mapping already expects —
+    /// <c>MappingDomain.Sector</c> in M-Integration — rather than a second list of this module's
+    /// own. A client whose sector cannot be sent to the CBS is a client whose sector was recorded
+    /// for nobody.
+    /// </para>
+    /// </summary>
+    public string? ActivitySectorCode { get; private set; }
+
+    /// <summary>
+    /// What the institution actually established about the activity, in words. In clear: it is a
+    /// description of a trade, not an identifier of a person, and a compliance officer reads it.
+    /// </summary>
+    public string? ActivitySectorDetail { get; private set; }
+
+    /// <summary>
+    /// Where the client's assets and funds come from, as a code from a closed list.
+    ///
+    /// <para>
+    /// Required of a POLITICALLY EXPOSED person — « établir l'origine du patrimoine et des
+    /// fonds » — and useful of anybody. It is not gated on the PEP flag here: the field records a
+    /// fact about the client, and the gate that makes it mandatory belongs to the KYC approval
+    /// path, where the vigilance level is known.
+    /// </para>
+    /// </summary>
+    public string? FundsOriginCode { get; private set; }
+
+    /// <summary>
+    /// The narrative behind <see cref="FundsOriginCode"/>, ENCRYPTED: it describes a named
+    /// person's assets, which is the most sensitive sentence in a client file after their health.
+    /// No blind index — nothing searches for a client by the origin of their wealth, and an index
+    /// would make "who inherited money" a query.
+    /// </summary>
+    public string? EncryptedFundsOriginDetail { get; private set; }
+
     // ── Identity document ───────────────────────────────────────────────────
     public IdentityDocumentType? IdentityDocumentType { get; private set; }
     public string? EncryptedIdentityDocumentNumber { get; private set; }
@@ -81,6 +127,25 @@ public sealed class Client : AggregateRoot
     public string? RegistrationNumberBlindIndex { get; private set; }
     public string? EncryptedTaxIdNumber { get; private set; }
     public DateOnly? IncorporationDate { get; private set; }
+
+    /// <summary>
+    /// The company's stated object (<i>objet social</i>), required of a legal person by article
+    /// 13.2. In clear — it is public registry data, printed on the statutes.
+    /// </summary>
+    public string? CorporatePurpose { get; private set; }
+
+    /// <summary>
+    /// When the registry extract on file was ISSUED, not when the company was registered.
+    ///
+    /// <para>
+    /// Article 13.2 asks for « un extrait du registre du commerce et du crédit mobilier de moins
+    /// de trois mois ». That is a property of the DOCUMENT, so it cannot be derived from
+    /// <see cref="IncorporationDate"/> — and the freshness rule is enforced where the document is
+    /// REQUIRED (creating a legal client, validating its KYC) rather than as an invariant here: a
+    /// row recorded two years ago must not become invalid tonight.
+    /// </para>
+    /// </summary>
+    public DateOnly? RegistrationExtractIssuedOn { get; private set; }
 
     // ── Duplicate detection ─────────────────────────────────────────────────
     public string? PhoneticKeyPrimary { get; private set; }
@@ -351,6 +416,80 @@ public sealed class Client : AggregateRoot
         Touch(actor);
         return Result.Ok();
     }
+
+    /// <summary>
+    /// Records what the institution established for its LBC/FT file: the sector of activity, the
+    /// origin of the funds, and — for a legal person — the stated object and the issue date of the
+    /// registry extract on file.
+    ///
+    /// <para>
+    /// Its own method rather than widening <see cref="UpdateNonSensitive"/>, for two reasons. It
+    /// names the purpose, which is what an auditor reading this aggregate is looking for; and the
+    /// funds-origin narrative is ENCRYPTED, so it does not belong among fields a caller passes in
+    /// clear.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Null leaves alone, blank clears</b> — the convention
+    /// <c>Lead.EnrichPrincipalIdentity</c> established. A compliance file is completed over
+    /// several conversations from a screen that posts only what it collected, so a null that
+    /// cleared would make each save erase the last.
+    /// </para>
+    /// </summary>
+    public Result UpdateAmlProfile(
+        string? activitySectorCode,
+        string? activitySectorDetail,
+        string? fundsOriginCode,
+        string? encryptedFundsOriginDetail,
+        string? corporatePurpose,
+        DateOnly? registrationExtractIssuedOn,
+        Guid actor)
+    {
+        if (IsReadOnly)
+            return Result.Fail(CustomerErrors.ClientReadOnly);
+
+        if (activitySectorCode is not null)
+            ActivitySectorCode = Clean(activitySectorCode)?.ToUpperInvariant();
+
+        if (activitySectorDetail is not null) ActivitySectorDetail = Clean(activitySectorDetail);
+        if (fundsOriginCode is not null) FundsOriginCode = Clean(fundsOriginCode)?.ToUpperInvariant();
+
+        if (encryptedFundsOriginDetail is not null)
+        {
+            // Blank clears, and clearing means clearing the CIPHERTEXT — an empty string
+            // encrypted is still a payload, and a file "with no origin recorded" must read as
+            // null rather than as a decryptable blank.
+            EncryptedFundsOriginDetail = encryptedFundsOriginDetail.Length == 0
+                ? null
+                : encryptedFundsOriginDetail;
+        }
+
+        // Legal-person fields. Set on an individual they would simply be unused, so they are not
+        // refused: the one caller is a legal-entity screen, and a type check here would be a
+        // second place to keep in step with ClientType.
+        if (corporatePurpose is not null) CorporatePurpose = Clean(corporatePurpose);
+        if (registrationExtractIssuedOn is not null)
+            RegistrationExtractIssuedOn = registrationExtractIssuedOn;
+
+        Touch(actor);
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Whether the registry extract on file satisfies article 13.2's three-month rule
+    /// <paramref name="asOf"/>. <c>false</c> when none is recorded — an absent document does not
+    /// satisfy a requirement for a recent one.
+    ///
+    /// <para>
+    /// The single definition, so the creation path and the KYC validation path cannot grow two
+    /// different notions of "recent". <paramref name="maxAgeMonths"/> is passed in rather than
+    /// fixed at three: the figure belongs to a tenant parameter, against a reforming text.
+    /// </para>
+    /// </summary>
+    public bool HasFreshRegistrationExtract(DateOnly asOf, int maxAgeMonths)
+        => RegistrationExtractIssuedOn is { } issued
+        && issued <= asOf
+        && issued >= asOf.AddMonths(-maxAgeMonths);
 
     public Result UpdateSensitiveIdentity(
         string? firstName,

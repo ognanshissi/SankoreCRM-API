@@ -51,7 +51,8 @@ public sealed class DecideKycApprovalHandlerTests : IDisposable
         // The mirror onto M12 is best-effort; these tests are about the circuit, so the substitute's
         // default (a null Result) stands in for "no instance to record against".
         _handler = new DecideKycApprovalHandler(
-            _db, _currentUser, _publisher, _workflow, _clock,
+            _db, _currentUser, _publisher, _workflow,
+            TestSupport.TestRemoteSaleEvidence.For(_db, _clock), _clock,
             NullLogger<DecideKycApprovalHandler>.Instance);
     }
 

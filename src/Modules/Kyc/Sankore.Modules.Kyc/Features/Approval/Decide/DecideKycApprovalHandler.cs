@@ -41,6 +41,7 @@ internal sealed class DecideKycApprovalHandler(
     ICurrentUser currentUser,
     [FromKeyedServices(nameof(KycDbContext))] IEventPublisher publisher,
     IWorkflowModule workflow,
+    RemoteSaleEvidence remoteSaleEvidence,
     TimeProvider clock,
     ILogger<DecideKycApprovalHandler> logger)
     : IRequestHandler<DecideKycApprovalCommand, Result<DecideKycApprovalResult>>
@@ -104,6 +105,18 @@ internal sealed class DecideKycApprovalHandler(
         // level 1 of a file they themselves put into the circuit.
         if (currentUser.Id == file.LastSubmittedBy || currentUser.Id == file.ManuallyValidatedBy)
             return Result.Fail<DecideKycApprovalResult>(KycErrors.SelfApprovalForbidden);
+
+        // CIMA LBC/FT article 13.6, at the last moment it can still be asked for: a file opened
+        // remotely needs an accepted, recent proof of address before its holder becomes a
+        // customer. Checked only on the FINAL approval — an intermediate signature is a person
+        // saying "as far as I am concerned, yes", and blocking it would stop the circuit from
+        // progressing while the document is being chased.
+        if (cmd.Decision == KycApprovalDecision.Approved && isFinalLevel)
+        {
+            var evidence = await remoteSaleEvidence.EnsureSatisfiedAsync(file, ct);
+            if (evidence.IsFailure)
+                return Result.Fail<DecideKycApprovalResult>(evidence.Error!);
+        }
 
         // Read BEFORE the aggregate is touched: Approve sets the tier, and KycTierChangedEvent is
         // about the move from one to the other.

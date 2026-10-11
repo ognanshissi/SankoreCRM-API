@@ -56,4 +56,11 @@ public static class KycErrors
     /// which sends an administrator looking for a formatting mistake that is not there.
     /// </summary>
     public const string SettingValueOutOfRange = "KYC_SETTING_VALUE_OUT_OF_RANGE";
+
+    /// <summary>
+    /// A remotely-opened file (<c>Web</c> or <c>MobileAgent</c>) reached its final approval with
+    /// no accepted, recent proof of address — CIMA LBC/FT article 13.6. Named rather than folded
+    /// into a generic refusal: what the validator needs to be told is which document to ask for.
+    /// </summary>
+    public const string ProofOfAddressRequired = "KYC_PROOF_OF_ADDRESS_REQUIRED";
 }

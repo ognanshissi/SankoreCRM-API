@@ -46,6 +46,26 @@ internal sealed class ClientConfiguration : IEntityTypeConfiguration<Client>
         builder.Property(c => c.PreferredLanguage).HasMaxLength(10).IsRequired();
         builder.Property(c => c.DeclaredIncomeCurrency).HasMaxLength(3);
 
+        // ── AML / LBC-FT profile ────────────────────────────────────────────
+        //
+        // A sector CODE from the same referential the CBS mapping uses, so it stays short; the
+        // detail and the corporate purpose are narrative and sized accordingly. The funds-origin
+        // NARRATIVE is uncapped and encrypted: a `v1:nonce:tag:ciphertext` payload grows with its
+        // plaintext, and a cap is a write that fails rather than a validation that explains
+        // itself. No blind index over it, deliberately — nothing searches for a client by the
+        // origin of their wealth.
+        builder.Property(c => c.ActivitySectorCode).HasMaxLength(30);
+        builder.Property(c => c.ActivitySectorDetail).HasMaxLength(500);
+        builder.Property(c => c.FundsOriginCode).HasMaxLength(40);
+        builder.Property(c => c.EncryptedFundsOriginDetail);
+
+        builder.Property(c => c.CorporatePurpose).HasMaxLength(1000);
+
+        // Indexed with the tenant: the compliance report sweeps for extracts that have aged past
+        // the three-month rule, which is a date scan over the whole tenant.
+        builder.HasIndex(c => new { c.TenantId, c.RegistrationExtractIssuedOn })
+            .HasDatabaseName("ix_clients_registration_extract");
+
         // ── Legal entity identity ───────────────────────────────────────────
         builder.Property(c => c.LegalName).HasMaxLength(150);
         builder.Property(c => c.LegalFormCode).HasMaxLength(30);

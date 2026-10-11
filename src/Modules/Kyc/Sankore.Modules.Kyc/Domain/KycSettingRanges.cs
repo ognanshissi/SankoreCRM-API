@@ -63,6 +63,12 @@ public static class KycSettingRanges
             KycSettingKeys.VerificationRejectionFloor
                 => Int(value, 0, 100, "Le plancher de rejet est un score entre 0 et 100."),
 
+            // Zero would accept a proof of address issued today and nothing else, which no
+            // counter can satisfy; a year is already far beyond what article 13.6 allows.
+            KycSettingKeys.ProofOfAddressMaxAgeDays
+                => Int(value, 1, 365,
+                    "L'ancienneté maximale du justificatif de domicile doit tenir entre 1 et 365 jours."),
+
             _ => null,
         };
     }

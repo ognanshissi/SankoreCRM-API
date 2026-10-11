@@ -223,6 +223,16 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ActivitySectorCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("activity_sector_code");
+
+                    b.Property<string>("ActivitySectorDetail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("activity_sector_detail");
+
                     b.Property<Guid?>("AdvisorUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("advisor_user_id");
@@ -256,6 +266,11 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("client_number");
+
+                    b.Property<string>("CorporatePurpose")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("corporate_purpose");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -300,6 +315,10 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("encrypted_declared_income");
 
+                    b.Property<string>("EncryptedFundsOriginDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_funds_origin_detail");
+
                     b.Property<string>("EncryptedIdentityDocumentNumber")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
@@ -324,6 +343,11 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)")
                         .HasColumnName("first_name");
+
+                    b.Property<string>("FundsOriginCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("funds_origin_code");
 
                     b.Property<string>("Gender")
                         .HasMaxLength(30)
@@ -453,6 +477,10 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("character varying(150)")
                         .HasColumnName("profession");
 
+                    b.Property<DateOnly?>("RegistrationExtractIssuedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("registration_extract_issued_on");
+
                     b.Property<string>("RegistrationNumberBlindIndex")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -555,6 +583,9 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "PhoneticKeyPrimary")
                         .HasDatabaseName("ix_clients_tenant_id_phonetic_key_primary");
+
+                    b.HasIndex("TenantId", "RegistrationExtractIssuedOn")
+                        .HasDatabaseName("ix_clients_registration_extract");
 
                     b.HasIndex("TenantId", "RegistrationNumberBlindIndex")
                         .IsUnique()

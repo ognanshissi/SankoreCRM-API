@@ -74,9 +74,13 @@ public sealed class UploadKycDocumentTests : IDisposable
     }
 
     private async Task<IResult> UploadAsync(
-        Guid kycFileId, IFormFile file, IKycDocumentStore? store = null)
+        Guid kycFileId,
+        IFormFile file,
+        IKycDocumentStore? store = null,
+        KycDocumentKind kind = KycDocumentKind.IdentityDocumentFront,
+        DateOnly? documentIssuedOn = null)
         => await UploadKycDocumentEndpoint.Handle(
-            kycFileId, KycDocumentKind.IdentityDocumentFront, file,
+            kycFileId, kind, file, documentIssuedOn,
             _factory.CreateContext(),
             store ?? StoreReturning("k1.abc.def"),
             User(), TimeProvider.System, NullLoggerFactory.Instance, CancellationToken.None);

@@ -9,6 +9,7 @@ using Sankore.Modules.Customers.Features.Compliance.Export.RequestClientExport;
 using Sankore.Modules.Customers.Features.Compliance.Retention.AnonymizeClient;
 using Sankore.Modules.Customers.Features.Compliance.Retention.ListRetentionCandidates;
 using Sankore.Modules.Customers.Features.Compliance.Settings.GetCustomerSetting;
+using Sankore.Modules.Customers.Features.Compliance.AmlProfile;
 using Sankore.Modules.Customers.Features.Compliance.Settings.ListCustomerSettings;
 using Sankore.Modules.Customers.Features.Compliance.Settings.UpdateCustomerSetting;
 
@@ -40,7 +41,11 @@ public static class ComplianceEndpoints
             .MapAnonymizeClient()
             .MapRequestClientExport()
             .MapGetClientExport()
-            .MapDownloadClientExport();
+            .MapDownloadClientExport()
+            // The LBC/FT profile belongs in this area and not next to UpdateClient: these are not
+            // profile fields an agent tidies up, they are the answers an institution owes a
+            // supervisor (CIMA LBC/FT article 13).
+            .MapUpdateAmlProfile();
 
         return app;
     }

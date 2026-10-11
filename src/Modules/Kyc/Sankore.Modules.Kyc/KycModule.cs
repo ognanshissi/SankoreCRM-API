@@ -186,6 +186,10 @@ public static class KycModule
             config.GetSection(Infrastructure.Biometry.BiometryOptions.SectionName));
 
         services.AddScoped<Features.Approval.KycApprovalCircuit>();
+
+        // CIMA LBC/FT article 13.6: the proof of address a remotely-opened file needs before its
+        // holder becomes a customer.
+        services.AddScoped<Features.Approval.RemoteSaleEvidence>();
         services.AddScoped<Features.Duplicates.KycDuplicateDetector>();
         services.AddScoped<Features.Reviews.KycReviewScheduler>();
         services.AddTransient<Features.Reviews.KycReviewOrchestratorJob>();

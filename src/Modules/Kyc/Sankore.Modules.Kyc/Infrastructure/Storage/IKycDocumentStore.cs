@@ -48,7 +48,21 @@ public enum KycDocumentKind
 {
     IdentityDocumentFront,
     IdentityDocumentBack,
-    Selfie
+    Selfie,
+
+    /// <summary>
+    /// A proof of address — the « quittance de moins de trois mois attestant du domicile » that
+    /// CIMA LBC/FT article 13.6 requires of a REMOTE sale, alongside the identity document.
+    ///
+    /// <para>
+    /// Added here, to the storage KIND, and deliberately NOT to <c>KycDocumentType</c>: that enum
+    /// selects the OCR extraction template (<c>/v1/ocr</c> needs it to know which fields to look
+    /// for), and a utility bill has no MRZ, no face and no document number to extract. A proof of
+    /// address goes down the append-only document path with its own review decision and its own
+    /// SHA-256, and never enters the OCR or face-match chain.
+    /// </para>
+    /// </summary>
+    ProofOfAddress,
 }
 
 /// <summary>

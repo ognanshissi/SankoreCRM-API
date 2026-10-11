@@ -77,10 +77,15 @@ public sealed class FourEyesOnEveryLevelTests : IDisposable
         return file;
     }
 
-    private DecideKycApprovalHandler Handler(Guid approver) =>
-        new(_factory.CreateContext(), User(approver),
-            Substitute.For<IEventPublisher>(), Substitute.For<IWorkflowModule>(), TimeProvider.System,
+    private DecideKycApprovalHandler Handler(Guid approver)
+    {
+        var db = _factory.CreateContext();
+
+        return new(db, User(approver),
+            Substitute.For<IEventPublisher>(), Substitute.For<IWorkflowModule>(),
+            TestSupport.TestRemoteSaleEvidence.For(db, TimeProvider.System), TimeProvider.System,
             NullLogger<DecideKycApprovalHandler>.Instance);
+    }
 
     [Fact]
     public async Task The_submitter_cannot_sign_the_first_rung_of_their_own_file()
