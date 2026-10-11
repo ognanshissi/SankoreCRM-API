@@ -517,6 +517,22 @@ Also worth knowing, though not blocking:
   anyone with access to the panel. That is the same exposure as any PaaS; the per-tenant
   credentials are not exposed this way — they live encrypted in the vault.
 
+### Optional hardening: revoke write access to the audit table
+
+`audit.entries` is **already append-only at the database level** — the `ImmutableEntries`
+migration installs triggers that raise on `UPDATE`, `DELETE` and `TRUNCATE`, so the protection is
+in place whatever the application does and whichever role is connected. Nothing is required of you.
+
+As defence in depth, a DBA may additionally remove the privilege itself, so a mutation is refused
+before it ever reaches a trigger:
+
+```sql
+REVOKE UPDATE, DELETE ON audit.entries FROM sankore_app;
+```
+
+Do not revoke `INSERT`: the application writes audit rows on every mutation, and a pipeline that
+cannot record one fails the request it was recording.
+
 ---
 
 ## 10. Troubleshooting

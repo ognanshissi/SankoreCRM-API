@@ -26,12 +26,17 @@ internal sealed class AuditEntryConfiguration : IEntityTypeConfiguration<AuditLo
         builder.HasIndex(e => new { e.TenantId, e.Action });
         builder.HasIndex(e => new { e.TenantId, e.ResourceType, e.ResourceId });
 
-        // ── Immutability note ─────────────────────────────────────────────
-        // After running this migration, execute the following as a DBA:
+        // ── Immutability ──────────────────────────────────────────────────
+        // ENFORCED, and not by this file: the `ImmutableEntries` migration installs three
+        // PostgreSQL triggers over audit.entries that raise on UPDATE, DELETE and TRUNCATE,
+        // whatever the application does and whatever role is connected. The init-only setters on
+        // AuditLogEntry are the second layer, not the guarantee.
         //
-        //   REVOKE UPDATE, DELETE ON audit.entries FROM sankore_app;
-        //
-        // This revokes the ability to mutate rows at the DB level,
-        // complementing the application-level init-only setters on AuditLogEntry.
+        // This comment used to read as an instruction — "execute the following as a DBA:
+        // REVOKE UPDATE, DELETE ON audit.entries FROM sankore_app" — written before the
+        // triggers existed. It outlived them, and anybody auditing the repository read it as
+        // meaning the only protection was a manual step nobody had taken. A REVOKE is still a
+        // reasonable defence in depth, so it lives in docs/deployment-dokploy.md as an optional
+        // hardening step rather than here as a prerequisite.
     }
 }

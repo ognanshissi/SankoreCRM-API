@@ -61,19 +61,24 @@ public sealed class ShippedSdkBuildsTests
     /// Builds known NOT to carry the required file, each with a reason.
     ///
     /// <para>
-    /// <b>1.1.0</b> — its <c>forms.min.js</c> was renamed to <c>forms.js</c> by an uncommitted
-    /// change that predates BNF-B-18, so the seeder never registers it and
-    /// <c>/sdk/1.1.0/forms.min.js</c> answers 404. That is a real defect: the build is in the tree
-    /// and cannot be served or pinned. It is listed here rather than fixed because reverting
-    /// somebody's in-flight rename is their decision, not this story's — and listed rather than
-    /// ignored because an entry here is impossible to read without asking why it is there.
+    /// <b>Empty, and that is the target state.</b> It held <c>1.1.0</c>, whose
+    /// <c>forms.min.js</c> had been renamed to <c>forms.js</c>: the seeder never registered it and
+    /// <c>/sdk/1.1.0/forms.min.js</c> answered 404, so the build sat in the tree unservable and
+    /// unpinnable. It has been renamed back.
     /// </para>
     ///
     /// <para>
-    /// <b>This list is meant to shrink.</b> An entry is a known-broken build, not a dispensation.
+    /// Renaming it was safe precisely BECAUSE it was never servable. The rule that a shipped
+    /// build is immutable exists so a site pinning a version with <c>integrity</c> does not break
+    /// under it — and no site can be pinning bytes that were never served.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>This list is meant to stay empty.</b> An entry is a known-broken build, not a
+    /// dispensation.
     /// </para>
     /// </summary>
-    private static readonly string[] KnownUnservable = ["1.1.0"];
+    private static readonly string[] KnownUnservable = [];
 
     [Fact]
     public void Every_shipped_build_carries_the_file_the_seeder_reads()
@@ -83,6 +88,12 @@ public sealed class ShippedSdkBuildsTests
         // is worse than one that was never shipped.
         var root = SdkRoot();
         root.Exists.Should().BeTrue();
+
+        // The selector must still match something. A rule over an empty set passes while checking
+        // nothing, which is the same trap the architecture tests guard against — and a moved
+        // wwwroot would produce exactly that.
+        root.EnumerateDirectories().Should().NotBeEmpty(
+            "there are shipped SDK builds to check");
 
         var missing = root.EnumerateDirectories()
             .Where(d => !File.Exists(Path.Combine(d.FullName, RequiredFileName)))
@@ -99,8 +110,8 @@ public sealed class ShippedSdkBuildsTests
     public void The_known_unservable_list_still_describes_reality()
     {
         // A stale exception is worse than none: it would keep a rule switched off for a build
-        // somebody has since fixed. This fails the day 1.1.0 is repaired, which is the day the
-        // entry must come out.
+        // somebody has since fixed. It fails the day a listed build is repaired, which is the day
+        // the entry must come out. The list is empty today, so this guards the next entry.
         var root = SdkRoot();
 
         foreach (var version in KnownUnservable)

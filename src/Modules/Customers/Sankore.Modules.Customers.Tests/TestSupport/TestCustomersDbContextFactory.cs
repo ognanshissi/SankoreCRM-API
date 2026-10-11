@@ -35,6 +35,23 @@ public sealed class TestCustomersDbContextFactory(Guid tenantId) : IDisposable
         return new CustomersDbContext(options, tenantContext);
     }
 
+    /// <summary>
+    /// A context bound to <paramref name="otherTenantId"/> over the SAME database. The database
+    /// name is deliberately shared: a second factory would be a second store, and a cross-tenant
+    /// test over two stores proves nothing. Mirrors the Integration module's factory, which
+    /// needed this first.
+    /// </summary>
+    public CustomersDbContext ContextFor(Guid otherTenantId)
+    {
+        var options = new DbContextOptionsBuilder<CustomersDbContext>()
+            .UseInMemoryDatabase(_databaseName)
+            .Options;
+
+        ITenantContext tenantContext = new FixedTenantContext(otherTenantId);
+
+        return new CustomersDbContext(options, tenantContext);
+    }
+
     public void Dispose()
     {
         // InMemory databases are garbage-collected with the last context that used

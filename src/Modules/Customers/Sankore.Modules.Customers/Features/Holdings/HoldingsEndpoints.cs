@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Customers.Features.Holdings.Designate;
 using Sankore.Modules.Customers.Features.Holdings.GetHolding;
 using Sankore.Modules.Customers.Features.Holdings.ListHoldings;
+using Sankore.Modules.Customers.Features.Holdings.ListStalledHoldings;
 using Sankore.Modules.Customers.Features.Holdings.Shared;
 using Sankore.Modules.Customers.Features.Holdings.Subscribe;
 using Sankore.Modules.Customers.Features.Holdings.Transitions;
@@ -55,6 +56,24 @@ public static class HoldingsEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi()
+            .WithTenantHeader();
+
+        // Tenant-wide, so it cannot live under either group: an operations list of what is
+        // stuck has no client and no holding in its route.
+        app.MapGet("holdings/stalled", ListStalled)
+            .WithName("ListStalledHoldings")
+            .WithSummary("Signed holdings queued for a back office for too long")
+            .WithDescription(
+                "Holdings in PendingSync for at least `minAgeHours` (default 24), oldest first, "
+                + "across the whole tenant. A subscription whose insurer cannot be determined is "
+                + "refused inside the Integration consumer, which logs one warning and leaves "
+                + "the holding here for ever — the reconciliation run cannot see it, because a "
+                + "holding that was never queued has no integration reference. Pair it with "
+                + "GET integration/insurance/products/product-routing, which says which product "
+                + "lines will fail BEFORE a client signs. Carries no client identity.")
+            .RequireAuthorization(Permissions.CanManageCustomerHolding.Code)
+            .Produces<PagedResult<StalledHoldingDto>>(StatusCodes.Status200OK)
             .WithOpenApi()
             .WithTenantHeader();
 
@@ -164,6 +183,17 @@ public static class HoldingsEndpoints
     {
         var result = await sender.Send(
             new ListHoldingsQuery(clientId, category, status, page ?? 1, pageSize ?? 20), ct);
+
+        return result.IsSuccess ? Results.Ok(result.Value) : HoldingHttp.ToProblem(result.Error);
+    }
+
+    private static async Task<IResult> ListStalled(
+        int? minAgeHours, int? page, int? pageSize, ISender sender, CancellationToken ct)
+    {
+        // 24 hours by default: a few minutes in PendingSync is the healthy state of a queued
+        // command, so a lower default would report every subscription in flight as a fault.
+        var result = await sender.Send(
+            new ListStalledHoldingsQuery(minAgeHours ?? 24, page ?? 1, pageSize ?? 50), ct);
 
         return result.IsSuccess ? Results.Ok(result.Value) : HoldingHttp.ToProblem(result.Error);
     }

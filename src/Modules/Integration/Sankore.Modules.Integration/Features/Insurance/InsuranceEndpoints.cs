@@ -8,6 +8,7 @@ using Sankore.Modules.Integration.Features.Insurance.CreateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.DeactivateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.GetInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.ListInsuranceProducts;
+using Sankore.Modules.Integration.Features.Insurance.ProductRouting;
 using Sankore.Modules.Integration.Features.Insurance.QuoteInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.UpdateInsuranceProduct;
 
@@ -52,6 +53,11 @@ internal static class InsuranceEndpoints
 
         // ASS-03 criterion 2, demonstrable rather than theoretical.
         products.MapQuoteInsuranceProduct();
+
+        // BNF-B-16's preflight: where each line's subscription would actually go. A missing
+        // product mapping is otherwise invisible — one warning line, and a holding stuck in
+        // PendingSync for ever.
+        products.MapProductRouting();
 
         return app;
     }
