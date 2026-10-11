@@ -282,6 +282,25 @@ public static class Permissions
     public static readonly PermissionItem CanManageLeadSourceCredentials =
         new("lead:source:credentials", "Manage Lead Source Secrets", ApplicationModules.Leads, "source:credentials");
 
+    /// <summary>
+    /// Change the tenant M13 parameters — the health-response retention, the product-line
+    /// conversion gate, and the lead retention period (BNF-B-09, BNF-B-04, BNF-B-19).
+    ///
+    /// <para>
+    /// Separate from <c>lead:read</c>, which is what LISTING them needs: the same arrangement M02
+    /// made for its ceilings, because a screen explaining a retention period to an agent must not
+    /// require the right to change it.
+    /// </para>
+    ///
+    /// <para>
+    /// It also gates the retention PREVIEW. That read answers "how many leads would tonight's run
+    /// destroy", which is an administrator's question about an irreversible operation, not a figure
+    /// an agent needs.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanManageLeadSettings =
+        new("lead:settings:manage", "Change the tenant Leads parameters", ApplicationModules.Leads, "settings:manage");
+
     public static readonly PermissionItem CanManageScoringConfigs =
         new("lead:scoring-config:manage", "Create and Activate Scoring Configurations", ApplicationModules.Leads, "scoring-config:manage");
 
@@ -686,6 +705,7 @@ public static class Permissions
         CanManageTaskGenerationRules,
         CanManageLeadSources,
         CanReadLeadSources,
+        CanManageLeadSettings,
         CanManageScoringConfigs,
         CanReadScoringConfigs,
         CanManageTaskTypes,

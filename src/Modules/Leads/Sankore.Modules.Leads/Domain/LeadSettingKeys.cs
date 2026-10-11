@@ -88,4 +88,24 @@ public static class LeadSettingKeys
     /// </summary>
     public static readonly IReadOnlyDictionary<string, LeadSettingDefault> DefaultsByKey =
         Defaults.ToDictionary(d => d.Key, StringComparer.Ordinal);
+
+    private static readonly Dictionary<string, LeadSettingDefault> ByKeyIgnoringCase =
+        Defaults.ToDictionary(d => d.Key, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The declared setting for <paramref name="key"/>, or <c>null</c> when the key is not part of
+    /// the closed list.
+    ///
+    /// <para>
+    /// Case-INsensitive, unlike <see cref="DefaultsByKey"/>, because this is the lookup a route
+    /// segment goes through and a caller typing <c>Lead-Retention-Months</c> means the same
+    /// setting. The canonical <c>Key</c> of the returned record is then what the column is
+    /// compared against — string equality in PostgreSQL is case-sensitive, so looking the
+    /// catalogue up loosely and the row up strictly is the only combination that behaves.
+    /// </para>
+    /// </summary>
+    public static LeadSettingDefault? Find(string? key)
+        => string.IsNullOrWhiteSpace(key)
+            ? null
+            : ByKeyIgnoringCase.GetValueOrDefault(key.Trim());
 }

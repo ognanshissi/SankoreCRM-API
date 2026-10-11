@@ -52,6 +52,13 @@ public sealed class AnonymizeClosedLeadsJob(
     private const int MaxBatchesPerRun = 100;
 
     /// <summary>
+    /// Leads one run can anonymise at most. Public because the retention PREVIEW reports it: a
+    /// backlog larger than this is worked through over several nights, and an administrator
+    /// watching the due count fall in steps needs to know that is the ceiling and not a fault.
+    /// </summary>
+    public const int MaxLeadsPerRun = BatchSize * MaxBatchesPerRun;
+
+    /// <summary>
     /// Runs the anonymisation for one tenant.
     /// </summary>
     /// <remarks>
@@ -84,7 +91,7 @@ public sealed class AnonymizeClosedLeadsJob(
             return;
         }
 
-        var cutoff = clock.GetUtcNow().AddMonths(-months);
+        var cutoff = RetentionSelection.CutoffFor(clock.GetUtcNow(), months);
         var total = 0;
 
         for (var batch = 0; batch < MaxBatchesPerRun; batch++)
@@ -117,20 +124,14 @@ public sealed class AnonymizeClosedLeadsJob(
     {
         // IgnoreQueryFilters plus an explicit tenant predicate: a Hangfire job runs outside any
         // HTTP context, so the ambient tenant cannot be trusted to be the one being processed.
-        //
-        // The terminal statuses are listed rather than expressed as "not live": a status added
-        // later must not start being anonymised because somebody forgot this query exists.
+        // The predicate itself lives in RetentionSelection, shared with the preview endpoint —
+        // a preview that selected different rows would have an administrator approve one number
+        // and the run destroy another.
         var leads = await db.Leads
             .IgnoreQueryFilters()
             .AsTracking()
             .Include(l => l.HouseholdMembers)
-            .Where(l => l.TenantId == tenantId
-                     && !l.IsAnonymized
-                     && (l.Status == LeadStatus.Converted
-                      || l.Status == LeadStatus.Lost
-                      || l.Status == LeadStatus.Disqualified
-                      || l.Status == LeadStatus.Archived)
-                     && l.UpdatedAt < cutoff)
+            .Where(RetentionSelection.Due(tenantId, cutoff))
             .OrderBy(l => l.UpdatedAt)
             .Take(BatchSize)
             .ToListAsync(ct);

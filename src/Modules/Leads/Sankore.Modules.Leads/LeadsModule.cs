@@ -43,6 +43,7 @@ using Sankore.Modules.Leads.Features.GetAgentPerformance;
 using Sankore.Modules.Leads.Features.GetFunnelMetrics;
 using Sankore.Modules.Leads.Features.DispatchingRules;
 using Sankore.Modules.Leads.Features.GetAssignmentHistory;
+using Sankore.Modules.Leads.Features.Settings;
 using Sankore.Modules.Leads.Features.RecordFirstContact;
 using Sankore.Modules.Leads.Features.Reminders;
 using Sankore.Modules.Leads.Features.Tags;
@@ -398,6 +399,11 @@ public static class LeadsModule
 
         // SDK admin (F13.37-BE-15)
         group.MapSdkAdminEndpoints();
+
+        // On `app`, not on `group`: the tenant parameters are their own resource, at
+        // `lead-settings`, matching M01's `customer-settings` and M02's `kyc-settings`. Mapping
+        // them inside the group would bury them at `leads/lead-settings`.
+        app.MapLeadSettingsEndpoints();
 
         return app;
     }
