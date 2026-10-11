@@ -44,12 +44,40 @@ public sealed class ProfileChangeNoticeTests : IDisposable
         return user;
     }
 
-    private IAgencyScopeProvider Unrestricted()
+    /// <summary>
+    /// A super-user: every agency, and <c>null</c> from the set-returning method — which the
+    /// contract defines as UNRESTRICTED and which a caller must treat as "apply no filter", never
+    /// as "no access".
+    /// </summary>
+    private static IAgencyScopeProvider Unrestricted()
     {
         var scope = Substitute.For<IAgencyScopeProvider>();
+
         scope.CanAccessAgencyAsync(
                 Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(true);
+
+        scope.GetAccessibleAgencyIdsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlySet<Guid>?)null);
+
+        return scope;
+    }
+
+    /// <summary>A user who can see exactly <paramref name="agencyIds"/> and nothing else.</summary>
+    private static IAgencyScopeProvider ScopedTo(params Guid[] agencyIds)
+    {
+        var scope = Substitute.For<IAgencyScopeProvider>();
+        var set = agencyIds.ToHashSet();
+
+        scope.CanAccessAgencyAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => set.Contains(call.ArgAt<Guid>(2)));
+
+        scope.GetAccessibleAgencyIdsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlySet<Guid>)set);
+
         return scope;
     }
 
@@ -93,7 +121,8 @@ public sealed class ProfileChangeNoticeTests : IDisposable
         await using var db = _factory.CreateContext();
 
         var result = await new OverdueProfileNoticesHandler(
-                db, SettingsAllowing(allowedDays), User(), new FixedTimeProvider(Now))
+                db, SettingsAllowing(allowedDays), User(), Unrestricted(),
+                new FixedTimeProvider(Now))
             .Handle(new OverdueProfileNoticesQuery(1, 50), CancellationToken.None);
 
         return result.Value!;
@@ -247,7 +276,7 @@ public sealed class ProfileChangeNoticeTests : IDisposable
         await using (var db = _factory.CreateContext())
         {
             var closed = await new IntegrateProfileNoticeHandler(
-                    db, User(), new FixedTimeProvider(Now))
+                    db, User(), Unrestricted(), new FixedTimeProvider(Now))
                 .Handle(new IntegrateProfileNoticeCommand(noticeId), CancellationToken.None);
 
             closed.IsSuccess.Should().BeTrue(closed.Error);
@@ -273,13 +302,14 @@ public sealed class ProfileChangeNoticeTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            await new IntegrateProfileNoticeHandler(db, User(), new FixedTimeProvider(Now))
+            await new IntegrateProfileNoticeHandler(
+                    db, User(), Unrestricted(), new FixedTimeProvider(Now))
                 .Handle(new IntegrateProfileNoticeCommand(noticeId), CancellationToken.None);
         }
 
         await using var second = _factory.CreateContext();
         var again = await new IntegrateProfileNoticeHandler(
-                second, User(), new FixedTimeProvider(Now))
+                second, User(), Unrestricted(), new FixedTimeProvider(Now))
             .Handle(new IntegrateProfileNoticeCommand(noticeId), CancellationToken.None);
 
         again.IsFailure.Should().BeTrue();
@@ -297,7 +327,7 @@ public sealed class ProfileChangeNoticeTests : IDisposable
         await using (var db = _factory.CreateContext())
         {
             var dismissed = await new DismissProfileNoticeHandler(
-                    db, User(), new FixedTimeProvider(Now))
+                    db, User(), Unrestricted(), new FixedTimeProvider(Now))
                 .Handle(
                     new DismissProfileNoticeCommand(noticeId, "Le client s'était trompé de dossier"),
                     CancellationToken.None);
@@ -320,7 +350,8 @@ public sealed class ProfileChangeNoticeTests : IDisposable
         var noticeId = await RecordAsync(client.Id);
 
         await using var db = _factory.CreateContext();
-        var result = await new DismissProfileNoticeHandler(db, User(), new FixedTimeProvider(Now))
+        var result = await new DismissProfileNoticeHandler(
+                db, User(), Unrestricted(), new FixedTimeProvider(Now))
             .Handle(new DismissProfileNoticeCommand(noticeId, "   "), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -341,6 +372,142 @@ public sealed class ProfileChangeNoticeTests : IDisposable
         result.Error.Should().Be(CustomerErrors.ProfileNoticeIntegratedBeforeNoticed);
     }
 
+    // ── the agency perimeter ────────────────────────────────────────────────
+    //
+    // Found by review after this area first shipped: the write that CREATES a notice checked the
+    // perimeter and the two that CLOSE it did not. The ids are Guid v4 so blind guessing is
+    // unrealistic — and an unguessable id is not an access control, the rule this repository
+    // already applied to BirthDatesAsync. The effect was worse than a read: closing a notice
+    // removes an overdue obligation from the compliance report, so an agent of one branch could
+    // hide another branch's breach.
+
+    [Fact]
+    public async Task A_notice_outside_the_perimeter_cannot_be_INTEGRATED()
+    {
+        var client = await SeedClientAsync();
+        var noticeId = await RecordAsync(client.Id, noticedOn: Today.AddDays(-40));
+
+        await using var db = _factory.CreateContext();
+        var result = await new IntegrateProfileNoticeHandler(
+                db, User(), ScopedTo(Guid.NewGuid()), new FixedTimeProvider(Now))
+            .Handle(new IntegrateProfileNoticeCommand(noticeId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+
+        // NOT_FOUND and never forbidden: a 403 would confirm the notice exists somewhere.
+        result.Error.Should().Be(CustomerErrors.ProfileNoticeNotFound);
+
+        // And it is still open, so the breach is still on the report.
+        (await ReloadAsync(noticeId)).IsOpen.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_notice_outside_the_perimeter_cannot_be_DISMISSED()
+    {
+        // The half that matters most: dismissing is how an overdue obligation disappears without
+        // anything being done about it.
+        var client = await SeedClientAsync();
+        var noticeId = await RecordAsync(client.Id, noticedOn: Today.AddDays(-40));
+
+        await using var db = _factory.CreateContext();
+        var result = await new DismissProfileNoticeHandler(
+                db, User(), ScopedTo(Guid.NewGuid()), new FixedTimeProvider(Now))
+            .Handle(
+                new DismissProfileNoticeCommand(noticeId, "Pas mon client"),
+                CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(CustomerErrors.ProfileNoticeNotFound);
+        (await ReloadAsync(noticeId)).IsOpen.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_notice_INSIDE_the_perimeter_can_still_be_closed()
+    {
+        // The counterpart, and it is not decoration: without it the two cases above would pass
+        // just as well against a handler that refused everybody.
+        var client = await SeedClientAsync();
+        var noticeId = await RecordAsync(client.Id);
+
+        await using var db = _factory.CreateContext();
+        var result = await new IntegrateProfileNoticeHandler(
+                db, User(), ScopedTo(_agencyId), new FixedTimeProvider(Now))
+            .Handle(new IntegrateProfileNoticeCommand(noticeId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+    }
+
+    [Fact]
+    public async Task The_overdue_report_does_not_leak_another_branchs_client_numbers()
+    {
+        // Each row carries a CLIENT NUMBER, so an unscoped report let an agent of one branch
+        // enumerate the clients of another — and M01's rule is that the existence of a client
+        // must not leak across the perimeter.
+        var mine = await SeedClientAsync();
+        await RecordAsync(mine.Id, noticedOn: Today.AddDays(-40));
+
+        var otherAgency = Guid.NewGuid();
+        Client theirs;
+        await using (var seed = _factory.CreateContext())
+        {
+            theirs = await TestClientFactory.SeedAsync(
+                seed,
+                TestClientFactory.Individual(
+                    _tenant, otherAgency, clientNumber: "XXX-2026-000999"));
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.ClientProfileChangeNotices.Add(ClientProfileChangeNotice.Record(
+                _tenant, theirs.Id, ProfileChangeKind.Address,
+                Today.AddDays(-50), Guid.NewGuid(), Now));
+
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = _factory.CreateContext();
+        var report = await new OverdueProfileNoticesHandler(
+                read, SettingsAllowing(15), User(), ScopedTo(_agencyId),
+                new FixedTimeProvider(Now))
+            .Handle(new OverdueProfileNoticesQuery(1, 50), CancellationToken.None);
+
+        report.Value!.Items.Should().ContainSingle()
+            .Which.ClientId.Should().Be(mine.Id);
+
+        report.Value.Items.Select(i => i.ClientNumber)
+            .Should().NotContain("XXX-2026-000999");
+
+        // The total must agree with the filtered set: a count taken before the perimeter was
+        // applied would tell the caller how many rows they are not allowed to see.
+        report.Value.TotalCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_super_user_sees_every_branch()
+    {
+        // GetAccessibleAgencyIdsAsync answers null for an unrestricted caller, and the contract
+        // says that means "apply no filter". Reading it as "no access" is the one way to get this
+        // wrong, and it would hide every breach from the person most likely to be chasing them.
+        var mine = await SeedClientAsync();
+        await RecordAsync(mine.Id, noticedOn: Today.AddDays(-40));
+
+        await using (var seed = _factory.CreateContext())
+        {
+            var theirs = await TestClientFactory.SeedAsync(
+                seed,
+                TestClientFactory.Individual(
+                    _tenant, Guid.NewGuid(), clientNumber: "YYY-2026-000111"));
+
+            seed.ClientProfileChangeNotices.Add(ClientProfileChangeNotice.Record(
+                _tenant, theirs.Id, ProfileChangeKind.Phone,
+                Today.AddDays(-50), Guid.NewGuid(), Now));
+
+            await seed.SaveChangesAsync();
+        }
+
+        (await OverdueAsync()).Items.Should().HaveCount(2);
+    }
+
     [Fact]
     public async Task Another_tenants_overdue_notice_is_not_listed()
     {
@@ -349,7 +516,7 @@ public sealed class ProfileChangeNoticeTests : IDisposable
 
         await using var other = _factory.ContextFor(Guid.NewGuid());
         var otherResult = await new OverdueProfileNoticesHandler(
-                other, SettingsAllowing(15), User(), new FixedTimeProvider(Now))
+                other, SettingsAllowing(15), User(), Unrestricted(), new FixedTimeProvider(Now))
             .Handle(new OverdueProfileNoticesQuery(1, 50), CancellationToken.None);
 
         // The handler reads the CALLER's tenant from ICurrentUser while the context is bound to
