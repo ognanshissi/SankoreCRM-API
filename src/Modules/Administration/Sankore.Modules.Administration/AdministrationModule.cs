@@ -20,6 +20,8 @@ using Sankore.Modules.Administration.Features.Authentication.RefreshToken;
 using Sankore.Modules.Administration.Features.Authentication.VerifyToken;
 using Sankore.Modules.Administration.Features.NotificationSettings;
 using Sankore.Modules.Administration.Features.ComplianceSettings;
+using Sankore.Modules.Administration.Features.Credentials;
+using Sankore.Modules.Administration.Infrastructure.Crypto;
 using Sankore.Modules.Administration.Features.Products;
 using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;
@@ -37,6 +39,8 @@ using Sankore.Shared.Infrastructure.FileStore;
 using Sankore.Shared.Infrastructure.Google;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.Authorization;
+using Sankore.Shared.Infrastructure.Compliance;
+using Sankore.Shared.Kernel.Compliance;
 
 namespace Sankore.Modules.Administration;
 
@@ -54,6 +58,11 @@ public static class AdministrationModule
                     config.GetConnectionString("Database"),
                     o => o.MigrationsHistoryTable("__EFMigrationsHistory", "administration"))
                 .UseSnakeCaseNamingConvention());
+
+        // Field protection, KEYED to this module. Never AddFieldProtection(config, "Administration")
+        // — see AdministrationFieldProtection for why that would hand M01's data to M12's key.
+        // Its only subject today is the professional card number of a distribution credential.
+        services.AddAdministrationFieldProtection(config);
 
         // AddIdentityCore does NOT register cookie auth schemes, so the JWT bearer
         // default set in Program.cs remains the single authentication scheme.
@@ -81,6 +90,17 @@ public static class AdministrationModule
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
         // Agency perimeter (Kernel contract) — Administration owns the agency tree.
         services.AddScoped<IAgencyScopeProvider, AgencyScopeProvider>();
+
+        // The CIMA professional-card questions, answered by the same facade. Resolved from the
+        // SAME scoped instance as IAdministrationModule so one request shares one catalogue
+        // cache read, rather than two instances each warming it.
+        services.AddScoped<IDistributionComplianceProvider>(sp =>
+            (AdministrationModuleFacade)sp.GetRequiredService<IAdministrationModule>());
+
+        // The guard that reads them, registered HERE rather than in M13 and M01: it is useless
+        // without the provider above, and two modules each registering it would put two
+        // registrations in the container for one stateless service. Both consumers resolve it.
+        services.AddScoped<InsuranceDistributionGuard>();
         services.AddScoped<Features.Agencies.CreateAgency.IAgencyCodeGenerator,
                            Features.Agencies.CreateAgency.PostgresAgencyCodeGenerator>();
         services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerRoleCoordinator>();
@@ -174,6 +194,11 @@ public static class AdministrationModule
         app.MapProductsEndpoints();
         app.MapNotificationSettingsEndpoints();
         app.MapComplianceSettingsEndpoints();
+
+        // Professional cards (CIMA 503, 510, 732). Alongside the compliance settings rather than
+        // inside the users area: a licence is a compliance record about a person, not a profile
+        // field, and it carries its own permission for that reason.
+        app.MapCredentialsEndpoints();
         app.MapCompanyInfoEndpoints();
         app.MapImportUsersEndpoints();
         app.MapValidateImport();

@@ -216,6 +216,7 @@ public sealed class DispatchLeadHandlerTests : IDisposable
         return new DispatchLeadHandler(
             db, usersModule, scorer, factory, new DispatchingRuleResolver(db), capacityService,
             TestSupport.TestClientAdvisorResolver.None(),
+            TestSupport.TestDistributionGuard.AllowAll(),
             publisher, NullLogger<DispatchLeadHandler>.Instance, TimeProvider.System);
     }
 }

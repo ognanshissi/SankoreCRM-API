@@ -112,6 +112,11 @@ public sealed class ImportAutoDispatchEndToEndTests : IDisposable
         // without a call, so dispatching runs the configured strategy exactly as before.
         services.AddSingleton(TestSupport.TestClientAdvisorResolver.None());
 
+        // The CIMA professional-card guard, registered by M12 in production. AllowAll: these
+        // imported leads carry no resolved product line, which is the state that makes the guard
+        // a no-op anyway.
+        services.AddSingleton(TestSupport.TestDistributionGuard.AllowAll());
+
         services.AddSingleton(Options.Create(new LeadModuleSettings
         {
             AutoDispatchOnCapture  = true,

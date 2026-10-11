@@ -27,5 +27,15 @@ public enum BlindIndexPurpose
     IdentityDocument,
     DateOfBirth,
     RegistrationNumber,
-    PostalAddress
+    PostalAddress,
+
+    /// <summary>
+    /// A professional card number — the <i>carte professionnelle</i> of CIMA article 510. Its own
+    /// purpose rather than reusing <see cref="IdentityDocument"/>: the purpose string is part of
+    /// the hashed input, so a card number and an identity document number that happened to match
+    /// would otherwise share an index, and "is this licence already recorded" would answer yes
+    /// for the wrong reason. Normalised like a document number — letters and digits, upper-cased,
+    /// accents removed — because that is what the printed formats differ by.
+    /// </summary>
+    ProfessionalCard
 }

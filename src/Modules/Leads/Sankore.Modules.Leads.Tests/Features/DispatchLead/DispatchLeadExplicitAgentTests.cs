@@ -55,6 +55,7 @@ public sealed class DispatchLeadExplicitAgentTests : IDisposable
             db, usersModule, new CompatibilityScorer(), factory,
             new DispatchingRuleResolver(db), new AgentCapacityService(db, null),
             TestSupport.TestClientAdvisorResolver.None(),
+            TestSupport.TestDistributionGuard.AllowAll(),
             publisher, NullLogger<DispatchLeadHandler>.Instance, TimeProvider.System);
     }
 

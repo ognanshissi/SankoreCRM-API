@@ -39,6 +39,7 @@ public sealed class HmacBlindIndexer : IBlindIndexer
         BlindIndexPurpose.Email => SensitiveValueNormalizer.NormalizeEmail(value),
         BlindIndexPurpose.IdentityDocument => SensitiveValueNormalizer.NormalizeDocumentNumber(value),
         BlindIndexPurpose.RegistrationNumber => SensitiveValueNormalizer.NormalizeDocumentNumber(value),
+        BlindIndexPurpose.ProfessionalCard => SensitiveValueNormalizer.NormalizeDocumentNumber(value),
         BlindIndexPurpose.PostalAddress => SensitiveValueNormalizer.NormalizeAddress(value),
         BlindIndexPurpose.DateOfBirth => NormalizeDate(value),
         _ => value.Trim()

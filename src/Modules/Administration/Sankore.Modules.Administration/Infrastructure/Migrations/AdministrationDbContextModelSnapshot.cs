@@ -669,6 +669,128 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.ToTable("compliance_settings", "administration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.DistributionCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CardNumberBlindIndex")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("card_number_blind_index");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("category");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<string>("ClosedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("closed_reason");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("EncryptedCardNumber")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_card_number");
+
+                    b.Property<DateOnly>("ExpiresOn")
+                        .HasColumnType("date")
+                        .HasColumnName("expires_on");
+
+                    b.Property<DateOnly?>("IndemnityExpiresOn")
+                        .HasColumnType("date")
+                        .HasColumnName("indemnity_expires_on");
+
+                    b.Property<string>("IndemnityInsurer")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("indemnity_insurer");
+
+                    b.Property<string>("IndemnityPolicyReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("indemnity_policy_reference");
+
+                    b.Property<DateOnly>("IssuedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("issued_on");
+
+                    b.Property<string>("IssuingAuthority")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("issuing_authority");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateOnly?>("TrainingCompletedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("training_completed_on");
+
+                    b.Property<int?>("TrainingHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("training_hours");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTimeOffset>("ValidFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateTimeOffset?>("ValidTo")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_to");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_distribution_credentials");
+
+                    b.HasIndex("TenantId", "CardNumberBlindIndex")
+                        .IsUnique()
+                        .HasDatabaseName("ux_distribution_credentials_card_number")
+                        .HasFilter("valid_to IS NULL");
+
+                    b.HasIndex("TenantId", "ExpiresOn")
+                        .HasDatabaseName("ix_distribution_credentials_expiry");
+
+                    b.HasIndex("TenantId", "UserId")
+                        .HasDatabaseName("ix_distribution_credentials_current")
+                        .HasFilter("valid_to IS NULL");
+
+                    b.HasIndex(new[] { "TenantId", "UserId" }, "ux_distribution_credentials_one_current")
+                        .IsUnique()
+                        .HasDatabaseName("ux_distribution_credentials_one_current")
+                        .HasFilter("valid_to IS NULL");
+
+                    b.ToTable("distribution_credentials", "administration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.PasswordHistory", b =>
                 {
                     b.Property<Guid>("Id")

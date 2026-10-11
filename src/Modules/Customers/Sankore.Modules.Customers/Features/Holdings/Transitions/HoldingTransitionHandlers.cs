@@ -7,6 +7,7 @@ using Sankore.Modules.Customers.Features.Holdings.Shared;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.PublicApi.Events;
 using Sankore.Shared.Infrastructure.Messaging;
+using Sankore.Shared.Infrastructure.Compliance;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -54,7 +55,9 @@ internal sealed class RequestSignatureHandler(HoldingWriteContext context)
     }
 }
 
-internal sealed class SignHoldingHandler(HoldingWriteContext context)
+internal sealed class SignHoldingHandler(
+    HoldingWriteContext context,
+    InsuranceDistributionGuard distributionGuard)
     : IRequestHandler<SignHoldingCommand, Result>
 {
     public async Task<Result> Handle(SignHoldingCommand cmd, CancellationToken ct)
@@ -62,6 +65,20 @@ internal sealed class SignHoldingHandler(HoldingWriteContext context)
         var loaded = await context.LoadAsync(cmd.HoldingId, ct);
         if (loaded.IsFailure)
             return Result.Fail(loaded.Error!);
+
+        // CIMA articles 503 and 510: on an insurance line, the person recording the client's
+        // signature must hold a professional card. Checked HERE, at the signature, and not only
+        // at the submission: the signature is the act of presenting the operation, which is what
+        // the licence governs — a card that lapses between the two does not retroactively
+        // un-present the contract. The submission re-checks anyway, for the reason BNF-B-16
+        // re-checks the signature in the Integration consumer.
+        //
+        // Fails closed on an outage; see InsuranceDistributionGuard.
+        var licensed = await distributionGuard.EnsureMayDistributeAsync(
+            loaded.Value.TenantId, context.Actor, loaded.Value.ProductLineId, ct);
+
+        if (licensed.IsFailure)
+            return licensed;
 
         var now = context.Clock.GetUtcNow();
 
@@ -76,6 +93,7 @@ internal sealed class SignHoldingHandler(HoldingWriteContext context)
 
 internal sealed class SubmitHoldingHandler(
     HoldingWriteContext context,
+    InsuranceDistributionGuard distributionGuard,
     [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher)
     : IRequestHandler<SubmitHoldingCommand, Result>
 {
@@ -86,6 +104,16 @@ internal sealed class SubmitHoldingHandler(
             return Result.Fail(loaded.Error!);
 
         var holding = loaded.Value;
+
+        // Re-checked, although SignHoldingHandler already required it. This is the transition that
+        // hands a contract to an insurer, and the two are separate acts that can be days apart —
+        // a card withdrawn in between must stop the submission. Same argument the signature check
+        // in Integration's consumer makes one step further down the chain.
+        var licensed = await distributionGuard.EnsureMayDistributeAsync(
+            holding.TenantId, context.Actor, holding.ProductLineId, ct);
+
+        if (licensed.IsFailure)
+            return licensed;
 
         var submitted = holding.SubmitForSync(context.Clock.GetUtcNow());
         if (submitted.IsFailure)

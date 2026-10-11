@@ -11,6 +11,7 @@ using Sankore.Modules.Leads.Features.DispatchLead.Strategies;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
+using Sankore.Shared.Infrastructure.Compliance;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -29,6 +30,7 @@ internal sealed class DispatchLeadHandler(
     DispatchingRuleResolver ruleResolver,
     AgentCapacityService capacityService,
     ClientAdvisorResolver clientAdvisorResolver,
+    InsuranceDistributionGuard distributionGuard,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     ILogger<DispatchLeadHandler> logger,
     TimeProvider clock)
@@ -172,6 +174,45 @@ internal sealed class DispatchLeadHandler(
             await publisher.PublishAsync(
                 new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS"), ct);
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
+        }
+
+        // 4a. CIMA article 503: an insurance operation may be presented at an IMF's counters only
+        //     by somebody holding the professional card of article 510. On an INSURANCE product
+        //     line, agents without a valid card leave the pool.
+        //
+        //     Placed here — after the administrator's exclusion list, before every heuristic —
+        //     because it is not a preference being weighed. An unlicensed agent is not a worse
+        //     candidate, they are not a candidate: the dispatch would park a lead on somebody who
+        //     cannot lawfully work it, and the saturation and compatibility stages below would
+        //     spend their effort ranking them.
+        //
+        //     Costs nothing on a non-insurance line (one cached catalogue read) and nothing at all
+        //     on a lead whose product line is unresolved, which is most of them at capture. On an
+        //     M12 outage the pool is left unchanged — see the guard, which explains why this side
+        //     of the asymmetry is the permissive one.
+        var licensed = await distributionGuard.FilterEligibleAsync(
+            cmd.TenantId,
+            [.. eligible_candidates.Select(a => a.Id)],
+            lead.ProductLineId,
+            ct);
+
+        if (licensed.Count != eligible_candidates.Count)
+        {
+            var licensedIds = licensed.ToHashSet();
+            eligible_candidates = eligible_candidates.Where(a => licensedIds.Contains(a.Id)).ToList();
+
+            if (eligible_candidates.Count == 0)
+            {
+                // Its own reason code. "No agent available" on an insurance lead whose whole
+                // agency happens to hold no card is not a capacity problem, and telling an
+                // operator it is would send them to the wrong screen entirely — the one they
+                // need is the credential register.
+                await publisher.PublishAsync(
+                    new LeadDispatchingFailedEvent(
+                        lead.Id, cmd.TenantId, "NO_LICENSED_AGENT_AVAILABLE"), ct);
+
+                return Result.Fail<DispatchLeadResult>("NO_LICENSED_AGENT_AVAILABLE");
+            }
         }
 
         // 4b. Client history (F13.10 / BNF-B-22): a request from a customer already on file goes

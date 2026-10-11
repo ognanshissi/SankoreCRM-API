@@ -14,6 +14,7 @@ using Sankore.Modules.Customers.Features.Holdings.Transitions;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.PublicApi.Events;
 using Sankore.Modules.Customers.Tests.TestSupport;
+using Sankore.Shared.Infrastructure.Compliance;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 using Xunit;
@@ -295,6 +296,77 @@ public sealed class ProductHoldingHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task An_agent_with_no_professional_card_cannot_sign_an_insurance_subscription()
+    {
+        // CIMA articles 503 and 510. Checked at the SIGNATURE, which is the act of presenting the
+        // operation — not only at the submission, because that is a separate act days later.
+        var holdingId = (await SubscribeAsync([Beneficiary(100m)])).Value;
+
+        await using (var db = _factory.CreateContext())
+        {
+            await new RequestSignatureHandler(Context(db))
+                .Handle(new RequestSignatureCommand(holdingId), CancellationToken.None);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var result = await new SignHoldingHandler(
+                    Context(db), TestDistributionGuard.InsuranceWithoutLicence())
+                .Handle(new SignHoldingCommand(holdingId, "doc://signature/1"), CancellationToken.None);
+
+            result.IsFailure.Should().BeTrue();
+            result.Error.Should().Be(InsuranceDistributionGuard.CredentialRequired);
+        }
+
+        // And nothing was recorded: a refused signature must not leave a signature reference
+        // behind for the submission to find.
+        await using (var db = _factory.CreateContext())
+        {
+            var holding = await db.ProductHoldings.FirstAsync(h => h.Id == holdingId);
+            holding.SignedAt.Should().BeNull();
+            holding.SignatureReference.Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public async Task A_card_withdrawn_between_the_signature_and_the_submission_stops_the_send()
+    {
+        // The reason the submission re-checks although the signature already required it: the two
+        // are separate acts, and this is the last transition before a contract leaves the
+        // institution. Same argument BNF-B-16 makes one step further down the chain.
+        var holdingId = (await SubscribeAsync([Beneficiary(100m)])).Value;
+
+        await using (var db = _factory.CreateContext())
+        {
+            await new RequestSignatureHandler(Context(db))
+                .Handle(new RequestSignatureCommand(holdingId), CancellationToken.None);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            // Licensed at the time of signing.
+            await new SignHoldingHandler(Context(db), TestDistributionGuard.InsuranceWithLicence())
+                .Handle(new SignHoldingCommand(holdingId, "doc://signature/1"), CancellationToken.None);
+        }
+
+        _publisher.ClearReceivedCalls();
+
+        await using (var db = _factory.CreateContext())
+        {
+            // The card is gone by the time the file is submitted.
+            var result = await new SubmitHoldingHandler(
+                    Context(db), TestDistributionGuard.InsuranceWithoutLicence(), _publisher)
+                .Handle(new SubmitHoldingCommand(holdingId), CancellationToken.None);
+
+            result.IsFailure.Should().BeTrue();
+            result.Error.Should().Be(InsuranceDistributionGuard.CredentialRequired);
+        }
+
+        await _publisher.DidNotReceiveWithAnyArgs()
+            .PublishAsync(Arg.Any<ProductSubscriptionRequestedEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Submitting_a_signed_holding_announces_the_subscription()
     {
         var holdingId = (await SubscribeAsync([Beneficiary(100m)])).Value;
@@ -307,7 +379,7 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            await new SignHoldingHandler(Context(db))
+            await new SignHoldingHandler(Context(db), TestDistributionGuard.AllowAll())
                 .Handle(new SignHoldingCommand(holdingId, "doc://signature/1"), CancellationToken.None);
         }
 
@@ -315,7 +387,7 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            var result = await new SubmitHoldingHandler(Context(db), _publisher)
+            var result = await new SubmitHoldingHandler(Context(db), TestDistributionGuard.AllowAll(), _publisher)
                 .Handle(new SubmitHoldingCommand(holdingId), CancellationToken.None);
 
             result.IsSuccess.Should().BeTrue(result.Error);
@@ -343,7 +415,7 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            var result = await new SubmitHoldingHandler(Context(db), _publisher)
+            var result = await new SubmitHoldingHandler(Context(db), TestDistributionGuard.AllowAll(), _publisher)
                 .Handle(new SubmitHoldingCommand(holdingId), CancellationToken.None);
 
             result.Error.Should().Be(CustomerErrors.SignatureRequired);
@@ -481,13 +553,13 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            await new SignHoldingHandler(Context(db))
+            await new SignHoldingHandler(Context(db), TestDistributionGuard.AllowAll())
                 .Handle(new SignHoldingCommand(holdingId, "doc://signature/1"), CancellationToken.None);
         }
 
         await using (var db = _factory.CreateContext())
         {
-            await new SubmitHoldingHandler(Context(db), _publisher)
+            await new SubmitHoldingHandler(Context(db), TestDistributionGuard.AllowAll(), _publisher)
                 .Handle(new SubmitHoldingCommand(holdingId), CancellationToken.None);
         }
 

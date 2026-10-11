@@ -93,6 +93,26 @@ public static class Permissions
     public static readonly PermissionItem CanRevokePermission =
         new("user:revoke-permission", "Revoke Scoped Permission from User", ApplicationModules.Administration, "revoke-permission");
 
+    /// <summary>
+    /// Record, renew or withdraw a user's <i>carte professionnelle</i> and its professional
+    /// indemnity cover (CIMA articles 503, 510, 732).
+    ///
+    /// <para>
+    /// Its own permission rather than <c>user:update</c>: a licence is what allows a named person
+    /// to present insurance operations at a counter, and recording one is a compliance act, not a
+    /// profile edit. Whoever maintains the register is rarely whoever maintains the directory.
+    /// </para>
+    ///
+    /// <para>
+    /// READING a credential needs only <c>user:read</c> — a screen must be able to show an agent
+    /// that their card expires next month without granting the right to issue one. The card NUMBER
+    /// is returned by neither: it identifies a person on a regulator's register.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanManageDistributionCredentials =
+        new("user:credential:manage", "Record or Withdraw a Professional Card",
+            ApplicationModules.Administration, "credential:manage");
+
     // ── Role management (F12.2 RBAC) ──────────────────────────────────────
 
     public static readonly PermissionItem CanCreateRole =
@@ -639,6 +659,7 @@ public static class Permissions
         CanRevokeRole,
         CanAssignPermission,
         CanRevokePermission,
+        CanManageDistributionCredentials,
         CanCreateRole,
         CanReadRole,
         CanUpdateRole,

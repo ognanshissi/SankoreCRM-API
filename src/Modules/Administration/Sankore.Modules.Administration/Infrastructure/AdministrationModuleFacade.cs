@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Kernel.Compliance;
 
 /// <summary>
 /// The single door into the Users module for the rest of the system.
@@ -23,7 +24,7 @@ internal sealed class AdministrationModuleFacade(
     AdministrationDbContext db,
     ProductCatalogCache catalogCache,
     ModuleEmailSender? emailSender = null)
-    : IAdministrationModule
+    : IAdministrationModule, IDistributionComplianceProvider
 {
     /// <summary>
     /// Roles that put a user in the lead-dispatch pool.
@@ -197,6 +198,113 @@ internal sealed class AdministrationModuleFacade(
             request.TemplateData,
             ct);
     }
+
+    /// <summary>
+    /// The holder's current credential, read as an eligibility. One indexed read on
+    /// <c>(tenant_id, user_id) WHERE valid_to IS NULL</c>.
+    /// </summary>
+    /// <summary>
+    /// Whether a product line is an insurance line. Through the SAME cached catalogue read the
+    /// beneficiary policy goes through — five minutes, per line — so the professional-card guard
+    /// costs no extra query on the overwhelming majority of dispatches, which are not insurance.
+    /// </summary>
+    public async Task<bool> IsInsuranceProductLineAsync(
+        Guid tenantId, Guid productLineId, CancellationToken ct)
+    {
+        var policy = await GetBeneficiaryPolicyAsync(tenantId, productLineId, ct);
+
+        // ProductCategories.IsInsurance answers false for a dangling line, which is the
+        // convention every opaque reference in this solution follows: a product somebody removed
+        // must not make a lead unworkable.
+        return ProductCategories.IsInsurance(policy?.Category);
+    }
+
+    public async Task<DistributionEligibilitySnapshot> GetDistributionEligibilityAsync(
+        Guid tenantId, Guid userId, DateOnly asOf, CancellationToken ct)
+    {
+        // IgnoreQueryFilters paired with an explicit tenant predicate, the rule this file follows
+        // throughout: the callers are a dispatching handler, a subscription gate and a consumer,
+        // and the last of those has no ambient tenant of its own.
+        var current = await db.DistributionCredentials
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId && c.UserId == userId && c.ValidTo == null)
+            .FirstOrDefaultAsync(ct);
+
+        if (current is not null)
+            return Describe(current, asOf);
+
+        // No current row. Distinguishing "never recorded" from "withdrawn" costs one more read
+        // and is what lets a screen tell a tenant that has not started recording cards from an
+        // agent whose licence was taken away.
+        var hadOne = await db.DistributionCredentials
+            .IgnoreQueryFilters()
+            .AnyAsync(c => c.TenantId == tenantId && c.UserId == userId, ct);
+
+        return hadOne
+            ? new DistributionEligibilitySnapshot(DistributionEligibility.Withdrawn, null, false, null)
+            : DistributionEligibilitySnapshot.NotRecorded;
+    }
+
+    /// <summary>
+    /// The batched form, for a dispatching pool. Two queries whatever the pool size, and every
+    /// id asked about is present in the answer.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, DistributionEligibilitySnapshot>>
+        GetDistributionEligibilitiesAsync(
+            Guid tenantId, IReadOnlyCollection<Guid> userIds, DateOnly asOf, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(userIds);
+
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, DistributionEligibilitySnapshot>();
+
+        // A List and not the collection as given: on .NET 10 an array's Contains binds to the
+        // ReadOnlySpan<T> extension and no longer translates to SQL.
+        var ids = userIds.Distinct().ToList();
+
+        var current = await db.DistributionCredentials
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId && ids.Contains(c.UserId) && c.ValidTo == null)
+            .ToListAsync(ct);
+
+        var currentByUser = current.ToDictionary(c => c.UserId);
+
+        // Which of the remaining ids have a CLOSED credential, so a withdrawal is not reported as
+        // "never recorded". One query for the whole remainder rather than one per user.
+        var withoutCurrent = ids.Where(id => !currentByUser.ContainsKey(id)).ToList();
+
+        var everHad = withoutCurrent.Count == 0
+            ? []
+            : await db.DistributionCredentials
+                .IgnoreQueryFilters()
+                .Where(c => c.TenantId == tenantId && withoutCurrent.Contains(c.UserId))
+                .Select(c => c.UserId)
+                .Distinct()
+                .ToListAsync(ct);
+
+        var withdrawn = everHad.ToHashSet();
+
+        return ids.ToDictionary(
+            id => id,
+            id => currentByUser.TryGetValue(id, out var credential)
+                ? Describe(credential, asOf)
+                : withdrawn.Contains(id)
+                    ? new DistributionEligibilitySnapshot(DistributionEligibility.Withdrawn, null, false, null)
+                    : DistributionEligibilitySnapshot.NotRecorded);
+    }
+
+    /// <summary>
+    /// Projects a current credential. The validity question goes through
+    /// <c>DistributionCredential.IsValidAt</c> rather than being re-derived here — it is the
+    /// single definition, shared with the expiry report, and a second comparison in this file is
+    /// how the two would come to disagree about a lapsed indemnity cover.
+    /// </summary>
+    private static DistributionEligibilitySnapshot Describe(DistributionCredential credential, DateOnly asOf)
+        => new(
+            credential.IsValidAt(asOf) ? DistributionEligibility.Valid : DistributionEligibility.Expired,
+            credential.ExpiresOn,
+            credential.HasIndemnityCover,
+            credential.TrainingHours);
 
     public async Task<TenantNotificationConfigDto?> GetNotificationConfigAsync(
         Guid tenantId, CancellationToken ct)

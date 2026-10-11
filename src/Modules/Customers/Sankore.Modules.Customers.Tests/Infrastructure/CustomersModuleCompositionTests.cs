@@ -16,6 +16,7 @@ using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.Authorization;
+using Sankore.Modules.Customers.Tests.TestSupport;
 using Xunit;
 
 /// <summary>
@@ -53,6 +54,11 @@ public sealed class CustomersModuleCompositionTests
         services.AddScoped<ITenantContext>(_ => new FixedTenantContext(Guid.NewGuid()));
         services.AddScoped(_ => Substitute.For<IAgencyScopeProvider>());
         services.AddScoped(_ => Substitute.For<IAdministrationModule>());
+
+        // The CIMA professional-card guard. Registered by M12 in production, so from this
+        // module's point of view it is a host-owned dependency like the contracts above — and
+        // the subscription handlers now depend on it.
+        services.AddScoped(_ => TestDistributionGuard.AllowAll());
         services.AddScoped(_ => Substitute.For<INotificationsModule>());
         services.AddScoped(_ => Substitute.For<IWorkflowModule>());
         services.AddScoped(_ => Substitute.For<IKycModule>());

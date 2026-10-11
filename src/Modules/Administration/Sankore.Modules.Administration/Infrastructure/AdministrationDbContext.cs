@@ -36,6 +36,9 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<CompanyInfo> CompanyInfos => Set<CompanyInfo>();
     public DbSet<UserImportJob> UserImportJobs => Set<UserImportJob>();
 
+    /// <summary>Professional cards and their indemnity cover (CIMA articles 503, 510, 732).</summary>
+    public DbSet<DistributionCredential> DistributionCredentials => Set<DistributionCredential>();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
@@ -117,6 +120,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<ComplianceSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<DistributionCredential>().HasQueryFilter(c => c.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<UserImportJob>(b =>
         {
