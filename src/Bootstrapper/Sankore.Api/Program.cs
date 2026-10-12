@@ -596,6 +596,15 @@ if (emitOpenApiTo is null) {
             $"kyc-contract-anniversary-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "15 2 * * *");
+
+        // ASS-07: the insurers' own view of their policies, into the read model the
+        // reconciliation run and the monthly statement both read. At 03:30, BEFORE INT-34's
+        // reconciliation at 06:00 — deliberately: reconciling against a read model a day stale
+        // would report every overnight change at the insurer as a gap to arbitrate.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.PolicySync.SyncPoliciesJob>(
+            $"insurance-policy-sync-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "30 3 * * *");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)
