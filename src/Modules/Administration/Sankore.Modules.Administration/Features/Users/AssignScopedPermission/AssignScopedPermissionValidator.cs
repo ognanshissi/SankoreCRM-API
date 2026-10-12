@@ -16,11 +16,7 @@ public sealed class AssignScopedPermissionValidator : AbstractValidator<AssignSc
             .GreaterThan(x => x.StartDate)
             .WithMessage(_ => localizer["Permission.EndDate.AfterStartDate"]);
         RuleFor(x => x.ScopeType)
-            .Must(t => t is null || t is "Agency" or "Territory" or "Tenant")
+            .Must(t => t is null || t is "Agency" or "Territory" or "Tenant" or "Kyc")
             .WithMessage(_ => localizer["Permission.ScopeType.Invalid"]);
-        RuleFor(x => x.ScopeId)
-            .NotEmpty()
-            .When(x => x.ScopeType is not null)
-            .WithMessage(_ => localizer["Permission.ScopeId.Required"]);
     }
 }
