@@ -633,6 +633,15 @@ if (emitOpenApiTo is null) {
             $"insurance-claim-sync-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "0 4 * * *");
+
+        // ASS-10: the previous month's bordereau per insurer. MONTHLY, on the 1st at 05:00 —
+        // after that night's policy sync and premium collection, so the last day of the month is
+        // in the figures, and before INT-34's 06:00 reconciliation. It rebuilds its own draft, so
+        // running it again on the 2nd is harmless; a month already finalised is refused.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.Statements.GenerateStatementsJob>(
+            $"insurance-statement-generation-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "0 5 1 * *");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)

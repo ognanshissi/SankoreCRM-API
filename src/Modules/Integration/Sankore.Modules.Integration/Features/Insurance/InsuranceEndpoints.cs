@@ -11,6 +11,7 @@ using Sankore.Modules.Integration.Features.Insurance.GetInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.ListInsuranceProducts;
 using Sankore.Modules.Integration.Features.Insurance.ProductRouting;
 using Sankore.Modules.Integration.Features.Insurance.QuoteInsuranceProduct;
+using Sankore.Modules.Integration.Features.Insurance.Statements;
 using Sankore.Modules.Integration.Features.Insurance.SubscribePolicy;
 using Sankore.Modules.Integration.Features.Insurance.UpdateInsuranceProduct;
 
@@ -67,6 +68,9 @@ internal static class InsuranceEndpoints
 
         // ASS-09, same reasoning: a dossier is acted on by its own id.
         app.MapClaims();
+
+        // ASS-10: one bordereau per insurer per month, read and closed by its own id.
+        app.MapStatements();
 
         return app;
     }
