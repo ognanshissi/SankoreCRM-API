@@ -20,7 +20,7 @@ internal static class CorsSetup
     {
         var origins = config.GetSection(OriginsKey).Get<string[]>() ?? [];
 
-        origins = [.. origins
+        origins = [..origins
             .Where(o => !string.IsNullOrWhiteSpace(o))
             .Select(o => o.Trim().TrimEnd('/'))
             .Distinct(StringComparer.OrdinalIgnoreCase)];

@@ -134,10 +134,11 @@ public static class TasksEndpoints
     }
 
     private static async Task<IResult> CreateTask(
-        CreateTaskRequest req, ISender sender, CancellationToken ct)
+        CreateTaskRequest req,
+        ISender sender,
+        CancellationToken ct)
     {
-        var result = await sender.Send(new CreateTaskCommand(
-            req.TenantId, req.Type, req.Priority, req.Title, req.DueAt,
+        var result = await sender.Send(new CreateTaskCommand(req.Type, req.Priority, req.Title, req.DueAt,
             req.LeadId, req.AssignedAgentId, req.SlaDeadline, req.Description), ct);
 
         return result.IsSuccess
@@ -231,7 +232,6 @@ public static class TasksEndpoints
 }
 
 public sealed record CreateTaskRequest(
-    Guid TenantId,
     CrmTaskType Type,
     CrmTaskPriority Priority,
     string Title,

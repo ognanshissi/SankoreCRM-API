@@ -6,7 +6,6 @@ using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
 internal sealed record CreateTaskCommand(
-    Guid TenantId,
     CrmTaskType Type,
     CrmTaskPriority Priority,
     string Title,
