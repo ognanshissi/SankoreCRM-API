@@ -66,7 +66,14 @@ internal static class TestCompleteness
     internal static ComplianceSettingsDto FatcaOff { get; } = new(
         FatcaEnabled: false, FatcaRegime: null, FatcaGiin: null,
         FatcaRequiredAt: "Conversion", FatcaForCoHolders: false,
+        PepEnabled: true,
         PepPostMandateMonths: 12);
+
+    /// <summary>
+    /// The same, with PEP vigilance switched off — what a tenant that has used the toggle looks
+    /// like to this calculator.
+    /// </summary>
+    internal static ComplianceSettingsDto PepOff { get; } = FatcaOff with { PepEnabled = false };
 
     /// <summary>
     /// A settings double rather than the real <c>LeadSettingsService</c>: that one caches in a

@@ -635,6 +635,12 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("fatca_required_at");
 
+                    b.Property<bool>("PepEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("pep_enabled");
+
                     b.Property<int>("PepPostMandateMonths")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")

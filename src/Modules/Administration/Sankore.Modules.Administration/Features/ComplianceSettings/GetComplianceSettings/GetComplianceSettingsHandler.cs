@@ -28,6 +28,9 @@ internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
                 FatcaGiin:            null,
                 FatcaRequiredAt:      nameof(Domain.FatcaRequiredAt.Conversion),
                 FatcaForCoHolders:    true,
+                // ON for a tenant with no row. The screen must not read "vigilance désactivée"
+                // for an institution that has simply never opened it.
+                PepEnabled:           true,
                 PepPostMandateMonths: Domain.ComplianceSettings.DefaultPepPostMandateMonths,
                 UpdatedAt:            DateTimeOffset.UtcNow,
                 AllowedRegimes:       Regimes,
@@ -40,6 +43,7 @@ internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
             settings.FatcaGiin,
             settings.FatcaRequiredAt.ToString(),
             settings.FatcaForCoHolders,
+            settings.PepEnabled,
             settings.PepPostMandateMonths,
             settings.UpdatedAt,
             Regimes,

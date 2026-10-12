@@ -17,6 +17,12 @@ public sealed record ComplianceSettingsResponse(
     string? FatcaGiin,
     string FatcaRequiredAt,
     bool FatcaForCoHolders,
+    /// <summary>
+    /// Whether PEP vigilance is active for this tenant. TRUE for a tenant that has never touched
+    /// the screen — see <c>Domain.ComplianceSettings.PepEnabled</c> for why the default cannot be
+    /// false, and for what the switch does not do.
+    /// </summary>
+    bool PepEnabled,
     int PepPostMandateMonths,
     DateTimeOffset UpdatedAt,
     /// <summary>Accepted values for <c>FatcaRegime</c>, so the client does not hard-code the enum.</summary>

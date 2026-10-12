@@ -24,11 +24,22 @@ using Sankore.Shared.Kernel;
 /// </para>
 ///
 /// <para>
-/// <b>PEP is not here as a switch.</b> <see cref="PepPostMandateMonths"/> tunes how long exposure
-/// outlives a mandate; nothing turns PEP vigilance off. It follows the LBC/FT rules that bind
-/// every UEMOA institution, whereas FATCA depends on the country's intergovernmental agreement or
-/// on the institution's own IRS registration — which is exactly why one is a setting and the other
-/// is not.
+/// <b>PEP IS a switch, and it was not always.</b> This class used to say in as many words that
+/// nothing turns PEP vigilance off — it follows the LBC/FT rules binding every UEMOA institution,
+/// whereas FATCA depends on an intergovernmental agreement or on the institution's own IRS
+/// registration. <see cref="PepEnabled"/> was added on the product owner's explicit decision,
+/// against that reasoning and knowing it: the front end had shipped a per-tenant toggle and the
+/// screen is the one the institution operates. The argument is recorded here rather than removed,
+/// because whoever reads this next deserves to know the trade was made deliberately and not by
+/// drift.
+/// </para>
+///
+/// <para>
+/// <b>What the switch does and does not do.</b> It governs COLLECTION: with PEP off, a lead is no
+/// longer blocked for an undeclared exposure, and the front offers no PEP block. It does NOT erase
+/// exposure already recorded, and it does NOT stop M01 or M02 recalculating exposure from data
+/// already captured — a client whose spouse was declared politically exposed last year stays
+/// flagged. Switching it off narrows what is asked of new files; it is not an undo.
 /// </para>
 /// </summary>
 public sealed class ComplianceSettings : ITenant
@@ -76,8 +87,29 @@ public sealed class ComplianceSettings : ITenant
     public bool FatcaForCoHolders { get; private set; } = true;
 
     /// <summary>
+    /// Whether politically-exposed-person vigilance is active for this tenant.
+    ///
+    /// <para>
+    /// <b>TRUE by default, and that default is the load-bearing half.</b> A tenant with no row and
+    /// a tenant that has never touched the screen must both keep vigilance ON: defaulting to false
+    /// would switch off an LBC/FT obligation for every institution already in the database, as a
+    /// side effect of a deployment. The migration adds the column with the same default for the
+    /// same reason.
+    /// </para>
+    /// </summary>
+    public bool PepEnabled { get; private set; } = true;
+
+    /// <summary>
     /// Months a person stays politically exposed after the function ends (BNF-B-05). Read by
     /// <c>PepStatus.IsExposedAt</c>, which is the single definition of the window.
+    ///
+    /// <para>
+    /// Kept when <see cref="PepEnabled"/> is false rather than cleared — unlike the FATCA identity,
+    /// which is cleared on disable. The asymmetry is deliberate: a GIIN is an identifier whose
+    /// value may have changed by the time somebody re-enables, while a window is a policy choice
+    /// that is still the institution's own when it comes back. Clearing it would make a re-enable
+    /// silently adopt the platform default.
+    /// </para>
     /// </summary>
     public int PepPostMandateMonths { get; private set; } = DefaultPepPostMandateMonths;
 
@@ -94,7 +126,8 @@ public sealed class ComplianceSettings : ITenant
     private ComplianceSettings() { } // EF Core
 
     /// <summary>
-    /// The row a tenant gets on first access: FATCA off, PEP window at the platform default.
+    /// The row a tenant gets on first access: FATCA off, PEP vigilance ON, window at the platform
+    /// default.
     /// Materialised lazily rather than seeded, for the same reason as
     /// <see cref="TenantNotificationSettings"/> — the defaults ARE the behaviour, so a missing row
     /// is correct rather than incomplete.
@@ -108,6 +141,7 @@ public sealed class ComplianceSettings : ITenant
         FatcaGiin            = null,
         FatcaRequiredAt      = Domain.FatcaRequiredAt.Conversion,
         FatcaForCoHolders    = true,
+        PepEnabled           = true,
         PepPostMandateMonths = DefaultPepPostMandateMonths,
         CreatedAt            = now,
         UpdatedAt            = now,
@@ -164,6 +198,28 @@ public sealed class ComplianceSettings : ITenant
         FatcaForCoHolders = forCoHolders;
 
         Stamp(actor, now);
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Applies the PEP configuration: whether vigilance is active, and the post-mandate window.
+    ///
+    /// <para>
+    /// One method for the pair, like <see cref="ConfigureFatca"/>, so a caller cannot turn
+    /// vigilance off in one request and set a window in another. The window is still validated
+    /// when vigilance is off: a value stored now is the one a re-enable will use, and accepting
+    /// nonsense on the way down only defers the refusal to the moment somebody turns it back on.
+    /// </para>
+    /// </summary>
+    /// <returns><c>PEP_POST_MANDATE_MONTHS_INVALID</c> outside 0..600 (fifty years).</returns>
+    public Result ConfigurePep(bool enabled, int months, Guid actor, DateTimeOffset now)
+    {
+        var window = SetPepPostMandateMonths(months, actor, now);
+        if (window.IsFailure) return window;
+
+        PepEnabled = enabled;
+        Stamp(actor, now);
+
         return Result.Ok();
     }
 

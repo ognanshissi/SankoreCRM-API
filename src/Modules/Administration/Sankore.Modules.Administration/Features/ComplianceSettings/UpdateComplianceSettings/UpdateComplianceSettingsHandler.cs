@@ -42,7 +42,8 @@ internal sealed class UpdateComplianceSettingsHandler(
         if (fatca.IsFailure)
             return fatca;
 
-        var pep = settings.SetPepPostMandateMonths(cmd.PepPostMandateMonths, currentUser.Id, now);
+        var pep = settings.ConfigurePep(
+            cmd.PepEnabled, cmd.PepPostMandateMonths, currentUser.Id, now);
         if (pep.IsFailure)
             return pep;
 

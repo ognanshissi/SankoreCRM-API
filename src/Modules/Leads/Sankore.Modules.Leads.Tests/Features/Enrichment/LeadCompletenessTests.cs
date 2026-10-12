@@ -228,6 +228,43 @@ public sealed class LeadCompletenessTests : IDisposable
         report.Gaps.Should().BeEmpty("asking and being told no IS an answer");
     }
 
+    [Fact]
+    public async Task A_tenant_with_PEP_vigilance_OFF_is_not_asked_for_a_declaration()
+    {
+        // The case the switch exists for, and the one that would otherwise contradict the screen:
+        // the front offers no PEP block, so being refused the conversion for not declaring one
+        // would leave the agent with a gap they cannot close.
+        _admin.GetComplianceSettingsAsync(_tenant, Arg.Any<CancellationToken>())
+              .Returns(TestCompleteness.PepOff);
+
+        PolicyRequires(PersonFieldCode.PepStatus);
+
+        var report = await ComputeAsync(Capture(_line));
+
+        report.Gaps.Should().BeEmpty();
+        report.CanConvert.Should().BeTrue();
+
+        // Not counted either, not merely unblocked: a lead whose tenant collects no PEP reads
+        // 100%, because a percentage must not depend on a question nobody is asked.
+        report.Percentage.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task An_outage_reading_the_PEP_switch_keeps_vigilance_ON()
+    {
+        // The opposite direction from the product-line switch, deliberately: there, failing closed
+        // means not blocking on a setting nobody could read; here it means keeping an obligation
+        // we could not confirm had been waived. Both are "an outage never relaxes a rule".
+        _admin.GetComplianceSettingsAsync(_tenant, Arg.Any<CancellationToken>())
+              .Returns<ComplianceSettingsDto>(_ => throw new InvalidOperationException("M12 down"));
+
+        PolicyRequires(PersonFieldCode.PepStatus);
+
+        var report = await ComputeAsync(Capture(_line));
+
+        report.Gaps.Should().Contain(g => g.Code == CompletenessCodes.PepNotDeclared);
+    }
+
     // ── arithmetic ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -276,7 +313,7 @@ public sealed class LeadCompletenessTests : IDisposable
     {
         _admin.GetComplianceSettingsAsync(_tenant, Arg.Any<CancellationToken>())
               .Returns(new ComplianceSettingsDto(
-                  true, "IgaModel1", "ABCDEF.12345.LE.225", "Conversion", false, 12));
+                  true, "IgaModel1", "ABCDEF.12345.LE.225", "Conversion", false, true, 12));
         PolicyRequires();
 
         var report = await ComputeAsync(Capture(_line));
@@ -296,7 +333,7 @@ public sealed class LeadCompletenessTests : IDisposable
         // a compliance queue item, not a reason to stop a subscription.
         _admin.GetComplianceSettingsAsync(_tenant, Arg.Any<CancellationToken>())
               .Returns(new ComplianceSettingsDto(
-                  true, "IgaModel1", "ABCDEF.12345.LE.225", "Conversion", false, 12));
+                  true, "IgaModel1", "ABCDEF.12345.LE.225", "Conversion", false, true, 12));
         PolicyRequires();
 
         var lead = Capture(_line);

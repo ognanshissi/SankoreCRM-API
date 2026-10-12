@@ -574,6 +574,7 @@ internal sealed class AdministrationModuleFacade(
                 s.FatcaGiin,
                 s.FatcaRequiredAt.ToString(),
                 s.FatcaForCoHolders,
+                s.PepEnabled,
                 s.PepPostMandateMonths))
             .FirstOrDefaultAsync(ct);
 
@@ -595,6 +596,9 @@ internal sealed class AdministrationModuleFacade(
         FatcaGiin:            null,
         FatcaRequiredAt:      nameof(Domain.FatcaRequiredAt.Conversion),
         FatcaForCoHolders:    true,
+        // TRUE, matching CreateDefault: a tenant with no row keeps PEP vigilance, because the
+        // alternative is switching off an LBC/FT obligation as a side effect of a deployment.
+        PepEnabled:           true,
         PepPostMandateMonths: Domain.ComplianceSettings.DefaultPepPostMandateMonths);
 
     public async Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct)

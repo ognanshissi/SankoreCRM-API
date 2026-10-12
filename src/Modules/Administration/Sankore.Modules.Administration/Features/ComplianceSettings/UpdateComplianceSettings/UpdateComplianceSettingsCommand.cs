@@ -24,9 +24,15 @@ using Sankore.Shared.Kernel;
 /// <param name="FatcaGiin">Format <c>XXXXXX.XXXXX.XX.XXX</c>. Ignored when disabling.</param>
 /// <param name="FatcaRequiredAt">"Conversion" (default) | "Enrichment".</param>
 /// <param name="FatcaForCoHolders">Collect indicia from co-holders too.</param>
+/// <param name="PepEnabled">
+/// Whether PEP vigilance is active. Switching it off stops a lead being blocked for an undeclared
+/// exposure and removes the PEP block from the screens; it does NOT erase exposure already
+/// recorded. See <c>Domain.ComplianceSettings.PepEnabled</c>, which records why this switch exists
+/// at all given that LBC/FT binds every UEMOA institution.
+/// </param>
 /// <param name="PepPostMandateMonths">
-/// Months a person stays politically exposed after their function ends. Not a FATCA field and not
-/// disablable — PEP vigilance is required of every UEMOA institution.
+/// Months a person stays politically exposed after their function ends. Validated even when
+/// <paramref name="PepEnabled"/> is false: the value stored now is the one a re-enable will use.
 /// </param>
 public sealed record UpdateComplianceSettingsCommand(
     bool FatcaEnabled,
@@ -34,6 +40,7 @@ public sealed record UpdateComplianceSettingsCommand(
     string? FatcaGiin,
     string FatcaRequiredAt,
     bool FatcaForCoHolders,
+    bool PepEnabled,
     int PepPostMandateMonths) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "ComplianceSettings";

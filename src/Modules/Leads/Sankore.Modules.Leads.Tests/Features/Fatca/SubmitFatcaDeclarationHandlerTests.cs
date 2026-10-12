@@ -52,6 +52,7 @@ public sealed class SubmitFatcaDeclarationHandlerTests : IDisposable
                 FatcaGiin: enabled ? "98Q96B.00000.LE.384" : null,
                 FatcaRequiredAt: requiredAt,
                 FatcaForCoHolders: forCoHolders,
+                PepEnabled: true,
                 PepPostMandateMonths: 12));
 
     private SubmitFatcaDeclarationHandler Handler(

@@ -254,6 +254,11 @@ public sealed record ComplianceSettingsDto(
     string? FatcaGiin,
     string FatcaRequiredAt,
     bool FatcaForCoHolders,
+    /// <summary>
+    /// Whether PEP vigilance is active for this tenant. Carried across the module boundary because
+    /// M13 stops requiring a PEP declaration when it is off; TRUE for a tenant with no row.
+    /// </summary>
+    bool PepEnabled,
     int PepPostMandateMonths);
 
 /// <summary>

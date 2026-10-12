@@ -197,4 +197,60 @@ public sealed class ComplianceSettingsTests
 
         s.PepPostMandateMonths.Should().Be(24);
     }
+    // ── PEP as a switch (product owner's decision, see the domain property) ──
+
+    [Fact]
+    public void A_new_row_has_PEP_vigilance_ON()
+    {
+        // The load-bearing default. False here would switch off an LBC/FT obligation for every
+        // institution that has never opened the compliance screen.
+        var s = ComplianceSettings.CreateDefault(Tenant, Actor, Now);
+
+        s.PepEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void PEP_can_be_switched_off_and_back_on()
+    {
+        var s = ComplianceSettings.CreateDefault(Tenant, Actor, Now);
+
+        s.ConfigurePep(enabled: false, months: 12, Actor, Now).IsSuccess.Should().BeTrue();
+        s.PepEnabled.Should().BeFalse();
+
+        s.ConfigurePep(enabled: true, months: 12, Actor, Now).IsSuccess.Should().BeTrue();
+        s.PepEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Switching_PEP_off_KEEPS_the_window()
+    {
+        // Unlike the FATCA identity, which is cleared on disable. A GIIN may have changed by the
+        // time somebody re-enables; a window is still the institution's own choice, and clearing
+        // it would make a re-enable silently adopt the platform default.
+        var s = ComplianceSettings.CreateDefault(Tenant, Actor, Now);
+
+        s.ConfigurePep(enabled: true, months: 36, Actor, Now);
+        s.ConfigurePep(enabled: false, months: 36, Actor, Now);
+
+        s.PepPostMandateMonths.Should().Be(36);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(601)]
+    public void The_window_is_validated_even_while_PEP_is_OFF(int months)
+    {
+        // The value stored now is the one a re-enable will use, so accepting nonsense on the way
+        // down only defers the refusal to the moment somebody turns it back on.
+        var s = ComplianceSettings.CreateDefault(Tenant, Actor, Now);
+
+        var result = s.ConfigurePep(enabled: false, months: months, Actor, Now);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("PEP_POST_MANDATE_MONTHS_INVALID");
+
+        // And nothing moved — not the window, and not the flag.
+        s.PepPostMandateMonths.Should().Be(12);
+        s.PepEnabled.Should().BeTrue("a refused change leaves the pair alone");
+    }
 }

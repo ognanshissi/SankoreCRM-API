@@ -102,6 +102,12 @@ internal sealed class LeadCompletenessCalculator(
 
         var requiredFields = policy.Value?.RequiredFieldsBeforeConversion ?? [];
 
+        // Whether the tenant collects PEP at all. A product line may require PEP_STATUS while the
+        // institution has switched vigilance off, and without this the agent would see no PEP
+        // block on the screen and then be refused the conversion for not having declared one —
+        // the single worst shape for a gate, and the same reason this class exists at all.
+        var pepEnabled = await PepEnabledAsync(lead.TenantId, ct);
+
         // ── 2. Required fields, per person ───────────────────────────────────
         var subjects = BuildSubjects(lead);
 
@@ -114,6 +120,11 @@ internal sealed class LeadCompletenessCalculator(
                 if (!subject.IsPrincipal
                     && PersonFieldCode.ScopeOf(code) == PersonFieldScope.PrincipalOnly)
                     continue;
+
+                // Not COUNTED either, not merely unblocked: a lead whose tenant collects no PEP
+                // must read 100%, and leaving the field applicable-but-satisfied would make the
+                // percentage depend on a question nobody is asked.
+                if (code == PersonFieldCode.PepStatus && !pepEnabled) continue;
 
                 var ok = RequiredFieldEvaluator.IsSatisfied(code, subject, lead);
 
@@ -184,6 +195,40 @@ internal sealed class LeadCompletenessCalculator(
     /// product line nobody resolved. The restrictive default belongs where a compliance rule is at
     /// stake (the PEP window, the FATCA toggle); this switch is a rollout control.
     /// </remarks>
+    /// <summary>
+    /// Whether PEP vigilance is on for the tenant.
+    ///
+    /// <para>
+    /// <b>An outage answers TRUE</b>, which is the opposite of
+    /// <see cref="RequireProductLineAsync"/> below and deliberately so. There, failing closed
+    /// means not blocking a conversion on a setting nobody could read; here, failing closed means
+    /// keeping an LBC/FT obligation we could not confirm had been waived. Both directions are "do
+    /// not let an outage relax a rule", and for this flag that is TRUE.
+    /// </para>
+    /// </summary>
+    private async Task<bool> PepEnabledAsync(Guid tenantId, CancellationToken ct)
+    {
+        try
+        {
+            // Suppressed: TransactionBehavior holds an ambient scope and M12 reads through its own
+            // DbContext — a second connection enlisting would promote it to a distributed
+            // transaction, which Npgsql does not support. The rule this repository already
+            // carries for every cross-module read inside a command.
+            using var suppressed = new System.Transactions.TransactionScope(
+                System.Transactions.TransactionScopeOption.Suppress,
+                System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+
+            var compliance = await administration.GetComplianceSettingsAsync(tenantId, ct);
+            suppressed.Complete();
+
+            return compliance.PepEnabled;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return true;
+        }
+    }
+
     private async Task<bool> RequireProductLineAsync(Guid tenantId, CancellationToken ct)
     {
         try

@@ -28,6 +28,12 @@ internal sealed class UpdateComplianceSettingsValidator
             .WithMessage("'{PropertyName}' must match the GIIN format XXXXXX.XXXXX.XX.XXX.")
             .When(c => !string.IsNullOrWhiteSpace(c.FatcaGiin));
 
+        // The window is validated whether or not vigilance is on, matching ConfigurePep: the
+        // value stored while it is off is the one a re-enable will use, so accepting nonsense here
+        // only defers the refusal to the moment somebody turns it back on.
+        //
+        // PepEnabled itself gets no rule — a bool has no invalid value, and the question of
+        // whether it SHOULD be switchable is recorded on the domain property, not here.
         RuleFor(c => c.PepPostMandateMonths)
             .InclusiveBetween(0, 600)
             .WithMessage("'{PropertyName}' must be between 0 and 600 months.");

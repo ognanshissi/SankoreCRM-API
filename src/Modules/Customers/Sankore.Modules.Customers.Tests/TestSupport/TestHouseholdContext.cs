@@ -26,6 +26,7 @@ internal static class TestHouseholdContext
     public static ComplianceSettingsDto Compliance { get; } = new(
         FatcaEnabled: false, FatcaRegime: null, FatcaGiin: null,
         FatcaRequiredAt: "Conversion", FatcaForCoHolders: false,
+        PepEnabled: true,
         PepPostMandateMonths: 12);
 
     /// <summary>

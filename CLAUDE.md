@@ -961,10 +961,20 @@ runs on the platform defaults, and returning null would hand every caller the sa
 answer. `AdministrationModuleFacade.PlatformDefaultCompliance` duplicates
 `ComplianceSettings.CreateDefault`, and `ComplianceSettingsDefaultsTests` pins the two together.
 
-**FATCA is a tenant switch; PEP vigilance is not.** FATCA depends on the country's
-intergovernmental agreement or on the institution's own IRS registration. PEP vigilance follows the
-LBC/FT rules binding every UEMOA institution — `PepPostMandateMonths` tunes the window, nothing
-turns it off.
+**FATCA and PEP are both tenant switches, and the second one should not have been.** FATCA depends
+on the country's intergovernmental agreement or on the institution's own IRS registration, so it is
+a setting by nature. PEP vigilance follows the LBC/FT rules binding every UEMOA institution, and
+this file used to say that nothing turns it off. `ComplianceSettings.PepEnabled` was added on the
+product owner's explicit decision, against that reasoning and knowing it — the front end had
+shipped a per-tenant toggle. The argument is kept on the domain property rather than deleted.
+
+What the switch governs is **collection**: with PEP off, a lead is no longer blocked for an
+undeclared exposure (`LeadCompletenessCalculator` skips `PEP_STATUS` entirely, so the percentage
+does not count a question nobody is asked) and the front offers no PEP block. It does **not** erase
+exposure already recorded, and it does **not** stop M01 or M02 recalculating exposure from data
+already captured. Default **true** everywhere — factory, platform defaults and column — because a
+default of false would switch off an LBC/FT obligation for every existing tenant as a side effect
+of a deployment. An outage reading the flag also answers true: an outage must never relax a rule.
 
 **The key/value services cache in a `static` dictionary** (60 s TTL, process-local, by design).
 In tests that means a fresh tenant id **per test** — two tests sharing one see each other's writes

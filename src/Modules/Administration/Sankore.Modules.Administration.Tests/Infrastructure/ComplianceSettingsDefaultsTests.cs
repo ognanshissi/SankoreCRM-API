@@ -39,7 +39,13 @@ public sealed class ComplianceSettingsDefaultsTests
         fromFacade.FatcaGiin.Should().Be(fromEntity.FatcaGiin);
         fromFacade.FatcaRequiredAt.Should().Be(fromEntity.FatcaRequiredAt.ToString());
         fromFacade.FatcaForCoHolders.Should().Be(fromEntity.FatcaForCoHolders);
+        fromFacade.PepEnabled.Should().Be(fromEntity.PepEnabled);
         fromFacade.PepPostMandateMonths.Should().Be(fromEntity.PepPostMandateMonths);
+
+        // Spelled out as well as compared, because this is the one default whose wrong value is a
+        // regulatory failure rather than a behavioural difference: a tenant with no row must keep
+        // PEP vigilance, and the comparison above would pass just as well with both sides false.
+        fromFacade.PepEnabled.Should().BeTrue();
     }
 
     [Fact]
