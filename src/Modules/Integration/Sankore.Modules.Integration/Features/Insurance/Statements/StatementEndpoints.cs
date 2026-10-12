@@ -86,8 +86,9 @@ internal static class StatementEndpoints
                 + "generation can no longer rebuild this month, which is what stops a "
                 + "regeneration from silently restating a month already justified to the insurer. "
                 + "A statement already closed is a 409. "
-                + "Requires permission: Ins.Statement.View.")
-            .RequireAuthorization(Permissions.CanViewInsuranceStatement.Code)
+                + "Requires permission: Ins.Statement.Finalise — deliberately NOT the read "
+                + "permission: anybody who may look at a bordereau must not be able to close one.")
+            .RequireAuthorization(Permissions.CanFinaliseInsuranceStatement.Code)
             .Produces<StatementDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)

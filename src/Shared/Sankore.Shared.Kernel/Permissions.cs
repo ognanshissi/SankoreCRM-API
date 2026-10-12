@@ -619,6 +619,31 @@ public static class Permissions
         new("Ins.Statement.View", "Read the monthly insurer statements and commissions",
             ApplicationModules.Integration, "Statement.View");
 
+    /// <summary>
+    /// Close a month's bordereau. <b>A NINTH insurance permission</b>, for the reason the eighth
+    /// is recorded above: the departure from ASS-11's table of seven belongs in this file rather
+    /// than left to be discovered.
+    ///
+    /// <para>
+    /// Finalising is not a read. It freezes the figures the institution stands behind and takes
+    /// the month permanently out of reach of the nightly generation — so a late premium can never
+    /// be added to it again. Gating it on <see cref="CanViewInsuranceStatement"/> would let
+    /// anybody who may LOOK at a bordereau close one, which is the same mistake as letting a
+    /// reader of the policy list subscribe a policy. The module already draws that line twice,
+    /// between <c>Ins.Policy.View</c> and <c>Ins.Policy.Subscribe</c>, and between
+    /// <c>Ins.Claim.View</c> and <c>Ins.Claim.Declare</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// There is no matching "generate" permission: the generation is a nightly job, and the only
+    /// way to rebuild a draft is to let that job run again — deliberately, so an operator cannot
+    /// rebuild a month a colleague is halfway through reconciling.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanFinaliseInsuranceStatement =
+        new("Ins.Statement.Finalise", "Close a month's insurer statement, freezing its figures",
+            ApplicationModules.Integration, "Statement.Finalise");
+
     public static readonly PermissionItem CanResolveInsuranceReconciliation =
         new("Ins.Reconciliation.Resolve", "Mark an insurance reconciliation gap as resolved",
             ApplicationModules.Integration, "Reconciliation.Resolve");
@@ -764,8 +789,8 @@ public static class Permissions
         CanResolveIntegrationReconciliation,
         CanViewLiveBalance,
 
-        // Insurance family (ASS-11), plus Ins.Product.View — see its own remarks for why the
-        // specification's table of seven became eight.
+        // Insurance family (ASS-11), plus Ins.Product.View and Ins.Statement.Finalise — see their
+        // own remarks for why the specification's table of seven became nine.
         CanManageInsuranceProduct,
         CanViewInsuranceProduct,
         CanSubscribeInsurancePolicy,
@@ -773,6 +798,7 @@ public static class Permissions
         CanDeclareInsuranceClaim,
         CanViewInsuranceClaim,
         CanViewInsuranceStatement,
+        CanFinaliseInsuranceStatement,
         CanResolveInsuranceReconciliation,
     ];
 }

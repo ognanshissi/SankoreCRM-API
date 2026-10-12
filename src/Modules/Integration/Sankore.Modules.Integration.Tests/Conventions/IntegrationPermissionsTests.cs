@@ -31,7 +31,7 @@ public sealed class IntegrationPermissionsTests
         "CoreBanking.Balance.ViewLive",
     ];
 
-    /// <summary>The seven codes of ASS-11's table, verbatim.</summary>
+    /// <summary>The seven codes of ASS-11's table, verbatim, plus the two departures.</summary>
     private static readonly string[] InsuranceCodes =
     [
         "Ins.Product.Manage",
@@ -49,6 +49,16 @@ public sealed class IntegrationPermissionsTests
         "Ins.Claim.Declare",
         "Ins.Claim.View",
         "Ins.Statement.View",
+
+        // The NINTH, and the second departure. Finalising a bordereau is not a read: it freezes
+        // the figures the institution stands behind and takes the month permanently out of reach
+        // of the nightly generation, so a late premium can never be added to it again. Gating it
+        // on Ins.Statement.View would let anybody who may LOOK at a bordereau close one — the
+        // same mistake as letting a reader of the policy list subscribe a policy, which this
+        // module already refuses twice over (Policy.View/Subscribe, Claim.View/Declare).
+        // See Permissions.CanFinaliseInsuranceStatement.
+        "Ins.Statement.Finalise",
+
         "Ins.Reconciliation.Resolve",
     ];
 
@@ -62,7 +72,7 @@ public sealed class IntegrationPermissionsTests
     }
 
     [Fact]
-    public void The_eight_insurance_permissions_are_registered_in_Permissions_All()
+    public void The_nine_insurance_permissions_are_registered_in_Permissions_All()
     {
         var registered = Permissions.All.Select(p => p.Code).ToList();
 
