@@ -125,7 +125,14 @@ public sealed class SubscribeInsurancePolicyTests : IDisposable
         await using var db = _factory.CreateContext();
 
         return await new SubscribeInsurancePolicyHandler(
-                db, _integration, Catalogue(), Sankore.Modules.Integration.Tests.Features.Commands.CommandsTestHarness.Encryptor(), User(),
+                db, _integration, Catalogue(),
+                Sankore.Modules.Integration.Tests.Features.Commands.CommandsTestHarness.Encryptor(),
+                User(),
+                // ASS-12's retention, at its default of ten years: these cases are about the
+                // subscription, and a shorter period here would only make the asserted
+                // RetainUntil arbitrary.
+                Microsoft.Extensions.Options.Options.Create(
+                    new Sankore.Modules.Integration.Features.Insurance.Retention.InsuranceRetentionOptions()),
                 new FixedSagaClock(Now), NullLogger<SubscribeInsurancePolicyHandler>.Instance)
             .Handle(
                 new SubscribeInsurancePolicyCommand(

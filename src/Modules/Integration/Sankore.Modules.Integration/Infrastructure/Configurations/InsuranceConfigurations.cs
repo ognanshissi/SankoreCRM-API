@@ -230,6 +230,12 @@ internal sealed class ConsentProofConfiguration : IEntityTypeConfiguration<Conse
         // The evidence, when it is held inline rather than as an object.
         b.Property(c => c.EvidenceEncrypted).HasColumnType("text");
 
+        // ASS-12's trace. Indexed with the retention date so the purge's own worklist — a decided
+        // date, in the past, not yet purged — is one index seek rather than a table scan over a
+        // decade of evidence.
+        b.HasIndex(c => new { c.TenantId, c.RetainUntil, c.PurgedAt })
+            .HasDatabaseName("ix_ins_consent_proof_retention");
+
         // NO xmin. Evidence is written once and never edited, so there is no second writer to lose
         // a race with — see the entity's remarks.
 

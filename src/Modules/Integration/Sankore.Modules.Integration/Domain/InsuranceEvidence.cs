@@ -88,6 +88,18 @@ public sealed class ConsentProof : AggregateRoot
     /// </summary>
     public DateTimeOffset? RetainUntil { get; private set; }
 
+    /// <summary>
+    /// When the evidence was destroyed (ASS-12). Null on every row that still holds its proof.
+    ///
+    /// <para>
+    /// The column exists so a purge is TRACEABLE rather than silent. Without it a purged row is
+    /// indistinguishable from one that never held evidence — and since <see cref="Create"/>
+    /// refuses a proof with nothing to show, "every evidence column is null" would be a state the
+    /// factory cannot produce and nobody can date.
+    /// </para>
+    /// </summary>
+    public DateTimeOffset? PurgedAt { get; private set; }
+
     private ConsentProof() { }
 
     public static ConsentProof Create(
@@ -162,6 +174,83 @@ public sealed class ConsentProof : AggregateRoot
 
         CommandId = commandId;
     }
+
+    /// <summary>
+    /// Records when this proof becomes purgeable (ASS-12). <c>true</c> when the date moved.
+    ///
+    /// <para>
+    /// <b>It never comes FORWARD.</b> A retention date already on the row may be extended — a
+    /// longer national period, a dispute that freezes a file — and never shortened, because
+    /// shortening one is how a purge would be made to happen early by editing a configuration
+    /// file. That asymmetry is the whole guard: the setting decides the period for rows that have
+    /// none, not for rows that already have one.
+    /// </para>
+    ///
+    /// <para>
+    /// This is the one mutation of an otherwise append-only row, and it does not touch the
+    /// evidence — it records a deadline about it. The second is <see cref="PurgeEvidence"/>, which
+    /// is not an edit either: it is the destruction ASS-12 asks for.
+    /// </para>
+    /// </summary>
+    public bool DecideRetention(DateTimeOffset until)
+    {
+        if (RetainUntil is { } already && already >= until) return false;
+
+        RetainUntil = until;
+        return true;
+    }
+
+    /// <summary>
+    /// Destroys the evidence and keeps the compliance skeleton (ASS-12).
+    ///
+    /// <para>
+    /// <b>Blanked, not deleted, and the asymmetry with the medical questionnaire is deliberate.</b>
+    /// What survives here — that consent was taken, under which version of the notice, on which
+    /// day, by which agent — is a compliance record with no personal content, and destroying it
+    /// would turn a retention rule into a hole in the institution's own history. What the
+    /// regulation stops requiring is the ARTEFACT: the signature image, the one-time-code
+    /// transcript. So the artefact goes and the fact stays, the same division M13's lead
+    /// anonymisation makes when it keeps the funnel and destroys the identity.
+    /// </para>
+    ///
+    /// <para>
+    /// Refuses while no date has been decided or the date has not passed, so the guard is on the
+    /// aggregate and not only in the job that calls it. <c>false</c> when there was nothing left
+    /// to destroy, which makes a second sweep a no-op rather than a second purge.
+    /// </para>
+    /// </summary>
+    public bool PurgeEvidence(TimeProvider clock)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+
+        var now = clock.GetUtcNow();
+
+        if (RetainUntil is not { } until)
+            throw new DomainException(
+                "This consent proof has no decided retention date, and the absence of one is not "
+                + "permission to purge it.");
+
+        if (until > now)
+            throw new DomainException(
+                $"This consent proof is retained until {until:yyyy-MM-dd} and must not be purged "
+                + "before then.");
+
+        if (PurgedAt is not null) return false;
+
+        EvidenceEncrypted = null;
+        EvidenceStorageRef = null;
+        EvidenceSha256 = null;
+        ContentType = null;
+
+        // The digest of the NOTICE stays: it names the text the customer accepted, which is the
+        // skeleton's whole value, and it is not personal data.
+        PurgedAt = now;
+
+        return true;
+    }
+
+    /// <summary>True once the evidence has been destroyed; the skeleton is still readable.</summary>
+    public bool IsPurged => PurgedAt is not null;
 }
 
 /// <summary>
@@ -261,4 +350,34 @@ public sealed class MedicalQuestionnaire : AggregateRoot
             RetainUntil = retainUntil,
         };
     }
+
+    /// <summary>
+    /// Records when this questionnaire becomes purgeable (ASS-12). Same contract as
+    /// <see cref="ConsentProof.DecideRetention"/>, including the refusal to bring a date forward.
+    /// </summary>
+    public bool DecideRetention(DateTimeOffset until)
+    {
+        if (RetainUntil is { } already && already >= until) return false;
+
+        RetainUntil = until;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the retention period has run out. There is deliberately no <c>PurgeAnswers</c>
+    /// counterpart to <see cref="ConsentProof.PurgeEvidence"/>: a medical questionnaire past its
+    /// retention is DELETED, row and all, which is what the purge job does with it.
+    ///
+    /// <para>
+    /// That asymmetry is the judgement that matters in this file. A consent proof's skeleton
+    /// carries no personal content, so it survives. This row has no such skeleton: the form code
+    /// is a label, but <see cref="RequiresMedicalUnderwriting"/> IS health data about a named
+    /// person — "this customer's answers flagged a condition" — and keeping it would preserve the
+    /// single most sensitive bit of the record under the name of a purge. That column exists so a
+    /// subscription screen knows an underwriting delay applies, which is a reason that expires
+    /// with the subscription, not one that justifies a decade.
+    /// </para>
+    /// </summary>
+    public bool MayBePurgedAt(DateTimeOffset now)
+        => RetainUntil is { } until && until <= now;
 }

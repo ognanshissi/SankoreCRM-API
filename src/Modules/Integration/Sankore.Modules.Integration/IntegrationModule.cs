@@ -98,7 +98,7 @@ public static class IntegrationModule
 
         // The insurance family (ASS-03 →). On the SAME socle: no second DbContext, no second
         // outbox, no second dispatcher — which is the whole claim of ASS-01.
-        services.AddInsuranceServices();
+        services.AddInsuranceServices(config);
 
         return services;
     }

@@ -3,7 +3,9 @@ namespace Sankore.Modules.Integration.Features.Insurance.SubscribePolicy;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Integration.Domain;
+using Sankore.Modules.Integration.Features.Insurance.Retention;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
@@ -22,6 +24,7 @@ internal sealed class SubscribeInsurancePolicyHandler(
     CrmProductCatalogue crmProducts,
     IFieldEncryptor encryptor,
     ICurrentUser currentUser,
+    IOptions<InsuranceRetentionOptions> retention,
     TimeProvider clock,
     ILogger<SubscribeInsurancePolicyHandler> logger)
     : IRequestHandler<SubscribeInsurancePolicyCommand, Result<SubscribeInsurancePolicyResult>>
@@ -140,6 +143,13 @@ internal sealed class SubscribeInsurancePolicyHandler(
         // The aggregate refuses a proof with no evidence at all, which is the guard that matters:
         // a row claiming consent was collected with nothing to show a controller is worse than no
         // row. The validator refuses it earlier so the caller gets a 400 naming the field.
+
+        // ASS-12's retention, decided at write time. The nightly job would stamp it anyway — it
+        // exists for the rows written before the period was configured — but a row born with its
+        // own deadline is one no job has to visit, and `RetainUntil` null means "nobody has
+        // decided", which is not a state a new row should be in.
+        var retainUntil = clock.GetUtcNow().AddYears(retention.Value.ResolvedYears);
+
         db.ConsentProofs.Add(ConsentProof.Create(
             tenantId: tenantId,
             subscriptionId: subscription.Id,
@@ -153,7 +163,8 @@ internal sealed class SubscribeInsurancePolicyHandler(
             evidenceEncrypted: Encrypt(cmd.ConsentEvidence),
             evidenceStorageRef: cmd.ConsentEvidenceStorageRef,
             evidenceSha256: cmd.ConsentEvidenceSha256,
-            contentType: cmd.ConsentEvidenceContentType));
+            contentType: cmd.ConsentEvidenceContentType,
+            retainUntil: retainUntil));
 
         if (cmd.MedicalQuestionnaireCode is { Length: > 0 } code && cmd.MedicalAnswers is { Length: > 0 })
         {
@@ -165,7 +176,8 @@ internal sealed class SubscribeInsurancePolicyHandler(
                 answersEncrypted: encryptor.Encrypt(cmd.MedicalAnswers)!,
                 capturedBy: currentUser.Id,
                 clock: clock,
-                requiresMedicalUnderwriting: cmd.RequiresMedicalUnderwriting));
+                requiresMedicalUnderwriting: cmd.RequiresMedicalUnderwriting,
+                retainUntil: retainUntil));
         }
 
         // ── Step one of the chain ───────────────────────────────────────────

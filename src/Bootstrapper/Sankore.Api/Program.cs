@@ -642,6 +642,16 @@ if (emitOpenApiTo is null) {
             $"insurance-statement-generation-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "0 5 1 * *");
+
+        // ASS-12: dates the insurance evidence, then destroys what has outlived its retention.
+        // WEEKLY and not nightly, on purpose — a ten-year deadline does not need a daily sweep,
+        // and the one job in the module whose mistake cannot be undone by running it again should
+        // run as seldom as its job allows. Its destructive half is off unless
+        // Integration:Insurance:Retention:PurgeEnabled says otherwise.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.Retention.PurgeInsuranceEvidenceJob>(
+            $"insurance-evidence-retention-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "30 2 * * 0");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)

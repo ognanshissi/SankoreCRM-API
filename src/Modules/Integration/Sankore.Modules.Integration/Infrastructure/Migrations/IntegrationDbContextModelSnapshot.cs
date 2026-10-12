@@ -394,6 +394,10 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("evidence_storage_ref");
 
+                    b.Property<DateTimeOffset?>("PurgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("purged_at");
+
                     b.Property<DateTimeOffset?>("RetainUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("retain_until");
@@ -422,6 +426,9 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "CrmCustomerId", "ConsentedAt")
                         .HasDatabaseName("ix_ins_consent_proof_customer");
+
+                    b.HasIndex("TenantId", "RetainUntil", "PurgedAt")
+                        .HasDatabaseName("ix_ins_consent_proof_retention");
 
                     b.ToTable("ins_consent_proof", "integration");
                 });
