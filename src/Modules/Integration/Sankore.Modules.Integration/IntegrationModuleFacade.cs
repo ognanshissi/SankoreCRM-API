@@ -363,6 +363,42 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
                 ct);
         }
 
+        /// <summary>
+        /// One attempt at one premium instalment. The attempt is in the key — see the contract.
+        /// </summary>
+        public async Task<IntegrationCommandId> RequestInstalmentDebitAsync(
+            InstalmentDebitRequest request, CancellationToken ct)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.AccountRef);
+
+            if (request.Amount <= 0m)
+            {
+                throw new DomainException(
+                    $"{IntegrationErrors.PayloadInvalid}: an instalment debit needs a positive amount.");
+            }
+
+            var tenantId = facade.TenantId;
+            var connection = await facade.RequireCoreBankingAsync(tenantId, ct);
+
+            return await facade.EnqueueAsync(
+                tenantId,
+                connection,
+                CommandType.DebitAccount,
+                IntegrationEntityTypes.Account,
+                // The INSTALMENT is the CRM id, so a command in the rejection queue says which
+                // instalment of which policy it was for.
+                request.InstalmentId,
+                IdempotencyKeyFactory.ForInstalmentDebit(
+                    tenantId, connection.Id, request.InstalmentId, request.Attempt),
+                facade._protector.Protect(new DebitAccountPayload(
+                    request.AccountRef.Trim(),
+                    request.Amount,
+                    request.Currency.Trim().ToUpperInvariant(),
+                    request.Label)),
+                ct);
+        }
+
         public async Task<IntegrationCommandId> RequestDebitReversalAsync(
             DebitReversalRequest request, CancellationToken ct)
         {

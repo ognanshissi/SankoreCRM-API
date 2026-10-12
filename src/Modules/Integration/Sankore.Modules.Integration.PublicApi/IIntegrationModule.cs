@@ -74,6 +74,19 @@ public interface ICoreBankingGateway
     Task<IntegrationCommandId> RequestDebitReversalAsync(
         DebitReversalRequest request, CancellationToken ct);
 
+    /// <summary>
+    /// Queues one attempt at collecting one premium INSTALMENT (ASS-08).
+    ///
+    /// <para>
+    /// Separate from <see cref="RequestPremiumDebitAsync"/>, which collects the premium of a
+    /// SUBSCRIPTION and is idempotent on it so a retried request cannot debit twice. An instalment
+    /// is retried on purpose, on the product's own schedule, so its key carries the attempt — each
+    /// one is a genuine second ask of the core banking system.
+    /// </para>
+    /// </summary>
+    Task<IntegrationCommandId> RequestInstalmentDebitAsync(
+        InstalmentDebitRequest request, CancellationToken ct);
+
     Task<CbsCustomerSnapshot?> GetCustomerSnapshotAsync(Guid crmCustomerId, CancellationToken ct);
 
     Task<CbsBalance?> GetLiveBalanceAsync(Guid crmCustomerId, string accountRef, CancellationToken ct);
@@ -137,3 +150,19 @@ public sealed record DebitReversalRequest(
     string AccountRef,
     string OriginalReference,
     int Attempt);
+
+/// <param name="Attempt">
+/// Which attempt this is, starting at 1. Part of the idempotency key — see
+/// <see cref="ICoreBankingGateway.RequestInstalmentDebitAsync"/>.
+/// </param>
+/// <param name="Label">
+/// What appears on the customer's statement. Operator-facing, never personal data: it reaches a
+/// core banking system this platform does not control.
+/// </param>
+public sealed record InstalmentDebitRequest(
+    Guid InstalmentId,
+    string AccountRef,
+    decimal Amount,
+    string Currency,
+    int Attempt,
+    string Label);

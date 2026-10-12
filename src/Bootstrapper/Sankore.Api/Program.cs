@@ -298,6 +298,11 @@ builder.Services.AddMassTransit(x =>
     // move it — which is the defect lot 7 shipped for holdings and lot 8 had to close.
     x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.SubscribePolicy.InsuranceSagaSucceededConsumer>();
     x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.SubscribePolicy.InsuranceSagaRejectedConsumer>();
+
+    // ASS-08's premium cycle, the same pair-or-nothing rule: an instalment left in Debiting is one
+    // no job picks up again.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.Premiums.PremiumPaidConsumer>();
+    x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.Premiums.PremiumFailedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncConfirmedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRejectedConsumer>();
@@ -605,6 +610,15 @@ if (emitOpenApiTo is null) {
             $"insurance-policy-sync-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "30 3 * * *");
+
+        // ASS-08: the premium schedule, then the debits that have fallen due. AFTER the policy
+        // sync of the same night, deliberately — a policy discovered at 03:30 gets its schedule
+        // at 03:45 rather than waiting a day, and a periodicity corrected at the insurer is
+        // honoured by the same run that learned about it.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.Premiums.CollectPremiumsJob>(
+            $"insurance-premium-collection-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "45 3 * * *");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)

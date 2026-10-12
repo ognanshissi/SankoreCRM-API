@@ -151,6 +151,22 @@ internal static class IdempotencyKeyFactory
             IntegrationEntityTypes.Account, subscriptionId);
 
     /// <summary>
+    /// One attempt at collecting one premium instalment (ASS-08).
+    ///
+    /// <para>
+    /// The ATTEMPT is in the key, unlike <see cref="ForPremiumDebit"/>'s. A subscription debits
+    /// once and a retried request must attach to it; an INSTALMENT is retried deliberately, on
+    /// the product's own schedule, and each attempt is a genuine second ask of the core banking
+    /// system. Without the attempt in the key the second one would be swallowed as a replay and
+    /// the instalment would sit in Failed for ever while the platform believed it had retried.
+    /// </para>
+    /// </summary>
+    internal static IdempotencyKey ForInstalmentDebit(
+        Guid tenantId, Guid connectionId, Guid instalmentId, int attempt)
+        => For(tenantId, connectionId, CommandType.DebitAccount,
+            IntegrationEntityTypes.Account, instalmentId, attempt);
+
+    /// <summary>
     /// The reversal of a premium debit (ASS-05, compensating step).
     ///
     /// <para>
