@@ -18,6 +18,11 @@ internal sealed class WorkflowStepDefinitionConfiguration : IEntityTypeConfigura
         b.Property(s => s.Name).HasMaxLength(200).IsRequired();
         b.Property(s => s.Description).HasMaxLength(1000);
         b.Property(s => s.ApproverRoleCode).HasMaxLength(100);
+        // Les étapes existantes sont des validations : c'est ce que le moteur en a toujours fait.
+        b.Property(s => s.Kind).HasConversion<string>().HasMaxLength(50)
+         .HasDefaultValue(StepKind.Validation).ValueGeneratedNever();
+        b.Property(s => s.ConfigJson).HasColumnType("text");
+        b.Property(s => s.IsBlocking).HasDefaultValue(false).ValueGeneratedNever();
 
         b.HasIndex(s => new { s.TemplateId, s.Order }).IsUnique();
 

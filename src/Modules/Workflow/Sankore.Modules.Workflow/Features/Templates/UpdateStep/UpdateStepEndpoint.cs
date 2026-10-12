@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Workflow.Domain;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Workflow.Features.Templates.UpdateStep;
@@ -29,7 +30,8 @@ internal static class UpdateStepEndpoint
     {
         var result = await sender.Send(
             new UpdateStepCommand(id, stepId, req.Name, req.Description,
-                                  req.ApproverRoleCode, req.TimeoutHours), ct);
+                                  req.ApproverRoleCode, req.TimeoutHours,
+                                  req.Kind, req.ConfigJson, req.IsBlocking), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -41,4 +43,8 @@ internal sealed record UpdateStepRequest(
     string Name,
     string? Description,
     string? ApproverRoleCode,
-    int? TimeoutHours);
+    int? TimeoutHours,
+    StepKind? Kind = null,
+    // Absent : inchangé. Chaîne vide : effacé.
+    string? ConfigJson = null,
+    bool? IsBlocking = null);

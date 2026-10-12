@@ -128,15 +128,41 @@ public sealed class WorkflowTemplate : AggregateRoot
         string name,
         string? description = null,
         string? approverRoleCode = null,
-        int? timeoutHours = null)
+        int? timeoutHours = null,
+        StepKind kind = StepKind.Validation,
+        string? configJson = null,
+        bool isBlocking = false)
     {
         if (_steps.Any(s => s.Order == order))
             throw new DomainException($"A step with order {order} already exists.");
 
-        var step = WorkflowStepDefinition.Create(Id, order, name, description, approverRoleCode, timeoutHours);
+        var step = WorkflowStepDefinition.Create(
+            Id, order, name, description, approverRoleCode, timeoutHours, kind, configJson, isBlocking);
         _steps.Add(step);
         UpdatedAt = DateTimeOffset.UtcNow;
         return step;
+    }
+
+    /// <summary>
+    /// Libère la position <paramref name="order"/> en décalant d'un rang toutes les étapes qui
+    /// l'occupent ou la suivent, pour y insérer une étape au milieu du parcours.
+    ///
+    /// Le décalage passe par une plage temporaire (<paramref name="parkingOffset"/>) : l'index
+    /// unique (TemplateId, Order) est vérifié à chaque UPDATE par PostgreSQL, et passer 3→4 alors que
+    /// 4 existe encore le violerait. L'appelant enregistre une première fois après
+    /// <see cref="ParkStepsFrom"/>, puis appelle <see cref="UnparkSteps"/>.
+    /// </summary>
+    public IReadOnlyList<WorkflowStepDefinition> ParkStepsFrom(int order, int parkingOffset = 10_000)
+    {
+        var moved = _steps.Where(s => s.Order >= order).ToList();
+        foreach (var step in moved) step.MoveTo(step.Order + parkingOffset);
+        return moved;
+    }
+
+    public void UnparkSteps(IEnumerable<WorkflowStepDefinition> parked, int parkingOffset = 10_000)
+    {
+        foreach (var step in parked) step.MoveTo(step.Order - parkingOffset + 1);
+        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     /// <summary>
@@ -210,7 +236,8 @@ public sealed class WorkflowTemplate : AggregateRoot
         {
             var newStep = WorkflowStepDefinition.Create(
                 draft.Id, step.Order, step.Name, step.Description,
-                step.ApproverRoleCode, step.TimeoutHours);
+                step.ApproverRoleCode, step.TimeoutHours,
+                step.Kind, step.ConfigJson, step.IsBlocking);
 
             stepIdMap[step.Id] = newStep.Id;
 

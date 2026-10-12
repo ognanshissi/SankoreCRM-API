@@ -18,7 +18,7 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("workflow")
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -355,10 +355,26 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasDefaultValue("STEP_0")
                         .HasColumnName("code");
 
+                    b.Property<string>("ConfigJson")
+                        .HasColumnType("text")
+                        .HasColumnName("config_json");
+
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("description");
+
+                    b.Property<bool>("IsBlocking")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_blocking");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Validation")
+                        .HasColumnName("kind");
 
                     b.Property<string>("Name")
                         .IsRequired()

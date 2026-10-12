@@ -27,7 +27,8 @@ internal sealed class UpdateStepHandler(WorkflowDbContext db)
 
         try
         {
-            step.Update(request.Name, request.Description, request.ApproverRoleCode, request.TimeoutHours);
+            step.Update(request.Name, request.Description, request.ApproverRoleCode, request.TimeoutHours,
+                        request.Kind, request.ConfigJson, request.IsBlocking);
         }
         catch (DomainException ex)
         {

@@ -23,6 +23,9 @@ internal static class TemplateMapper
                     Name: s.Name,
                     Description: s.Description,
                     ApproverRoleCode: s.ApproverRoleCode,
-                    TimeoutHours: s.TimeoutHours))
+                    TimeoutHours: s.TimeoutHours,
+                    Kind: s.Kind.ToString(),
+                    ConfigJson: s.ConfigJson,
+                    IsBlocking: s.IsBlocking))
                 .ToList());
 }

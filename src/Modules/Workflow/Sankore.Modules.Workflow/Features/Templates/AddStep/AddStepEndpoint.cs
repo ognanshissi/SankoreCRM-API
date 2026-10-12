@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Workflow.Domain;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Workflow.Features.Templates.AddStep;
@@ -29,7 +30,9 @@ internal static class AddStepEndpoint
     {
         var result = await sender.Send(
             new AddStepCommand(id, req.Order, req.Name, req.Description,
-                               req.ApproverRoleCode, req.TimeoutHours), ct);
+                               req.ApproverRoleCode, req.TimeoutHours,
+                               req.Kind ?? StepKind.Validation, req.ConfigJson,
+                               req.IsBlocking ?? false, req.InsertAt ?? false), ct);
 
         return result.IsSuccess
             ? Results.Created($"/api/v1/workflow/templates/{id}/steps/{result.Value}", result.Value)
@@ -42,4 +45,10 @@ public sealed record AddStepRequest(
     string Name,
     string? Description,
     string? ApproverRoleCode,
-    int? TimeoutHours);
+    int? TimeoutHours,
+    StepKind? Kind = null,
+    string? ConfigJson = null,
+    bool? IsBlocking = null,
+    // Vrai : la position `Order` est libérée en décalant les étapes suivantes. Faux (défaut) : une
+    // position déjà prise est refusée, comme avant.
+    bool? InsertAt = null);

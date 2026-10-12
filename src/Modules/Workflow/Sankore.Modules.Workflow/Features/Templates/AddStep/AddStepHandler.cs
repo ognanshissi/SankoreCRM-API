@@ -23,17 +23,36 @@ internal sealed class AddStepHandler(WorkflowDbContext db)
 
         try
         {
+            var needsShift = request.InsertAt && template.Steps.Any(s => s.Order == request.Order);
+
+            // Insertion au milieu : deux enregistrements dans une même transaction, l'index unique
+            // (TemplateId, Order) interdisant un décalage en une passe (voir ParkStepsFrom).
+            await using var tx = needsShift && db.Database.IsRelational()
+                ? await db.Database.BeginTransactionAsync(ct)
+                : null;
+
+            if (needsShift)
+            {
+                var parked = template.ParkStepsFrom(request.Order);
+                await db.SaveChangesAsync(ct);
+                template.UnparkSteps(parked);
+            }
+
             var step = template.AddStep(
                 request.Order,
                 request.Name,
                 request.Description,
                 request.ApproverRoleCode,
-                request.TimeoutHours);
+                request.TimeoutHours,
+                request.Kind,
+                request.ConfigJson,
+                request.IsBlocking);
 
             // Explicitly register the new step entity so EF change tracker picks it
             // up regardless of backing-field access mode (required for InMemory tests).
             db.WorkflowStepDefinitions.Add(step);
             await db.SaveChangesAsync(ct);
+            if (tx is not null) await tx.CommitAsync(ct);
             return Result.Ok(step.Id);
         }
         catch (DomainException ex)

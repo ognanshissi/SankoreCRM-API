@@ -87,6 +87,52 @@ public sealed class AddStepHandlerTests : IDisposable
         result.Error.Should().Contain("order 1");
     }
 
+    // ── S3b: Insertion at an occupied position shifts the following steps ─
+
+    [Fact]
+    public async Task Inserting_at_an_occupied_order_shifts_following_steps()
+    {
+        var t = await SeedDraftTemplate();
+        await BuildHandler().Handle(new AddStepCommand(t.Id, 1, "A", null, null, null), CancellationToken.None);
+        await BuildHandler().Handle(new AddStepCommand(t.Id, 2, "B", null, null, null), CancellationToken.None);
+
+        var result = await BuildHandler().Handle(
+            new AddStepCommand(t.Id, 2, "Inserted", null, null, null, InsertAt: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await using var verify = _factory.CreateContext();
+        verify.WorkflowStepDefinitions
+            .Where(s => s.TemplateId == t.Id)
+            .OrderBy(s => s.Order)
+            .Select(s => new { s.Order, s.Name, s.Code })
+            .Should().Equal(
+                new { Order = 1, Name = "A", Code = "STEP_1" },
+                new { Order = 2, Name = "Inserted", Code = "STEP_2" },
+                new { Order = 3, Name = "B", Code = "STEP_3" });
+    }
+
+    // ── S3c: Kind, config and blocking flag are persisted ─────────────────
+
+    [Fact]
+    public async Task Persists_kind_config_and_blocking_flag()
+    {
+        var t = await SeedDraftTemplate();
+
+        var result = await BuildHandler().Handle(
+            new AddStepCommand(t.Id, 1, "KYC complet", null, "KYC_AGENT", 72,
+                StepKind.KycCheck, """{"kycLevel":"Full"}""", IsBlocking: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await using var verify = _factory.CreateContext();
+        verify.WorkflowStepDefinitions
+            .Should().ContainSingle(s => s.Id == result.Value
+                && s.Kind == StepKind.KycCheck
+                && s.ConfigJson == """{"kycLevel":"Full"}"""
+                && s.IsBlocking);
+    }
+
     // ── S4: Template not found ────────────────────────────────────────────
 
     [Fact]

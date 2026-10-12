@@ -1,4 +1,5 @@
 using MediatR;
+using Sankore.Modules.Workflow.Domain;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
@@ -10,7 +11,11 @@ public sealed record AddStepCommand(
     string Name,
     string? Description,
     string? ApproverRoleCode,
-    int? TimeoutHours) : IRequest<Result<Guid>>, ICommand, IResourceCommand
+    int? TimeoutHours,
+    StepKind Kind = StepKind.Validation,
+    string? ConfigJson = null,
+    bool IsBlocking = false,
+    bool InsertAt = false) : IRequest<Result<Guid>>, ICommand, IResourceCommand
 {
     public string ResourceType => "WorkflowTemplate";
     public string? ResourceId => TemplateId.ToString();

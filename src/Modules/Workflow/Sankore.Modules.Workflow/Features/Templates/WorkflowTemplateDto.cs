@@ -18,4 +18,7 @@ public sealed record WorkflowStepDto(
     string Name,
     string? Description,
     string? ApproverRoleCode,
-    int? TimeoutHours);
+    int? TimeoutHours,
+    string Kind,
+    string? ConfigJson,
+    bool IsBlocking);
