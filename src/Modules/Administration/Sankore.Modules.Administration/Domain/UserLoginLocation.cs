@@ -32,6 +32,18 @@ public class UserLoginLocation
     public LoginPlatform Platform { get; private set; } = LoginPlatform.Unknown;
     public LoginClientKind ClientKind { get; private set; } = LoginClientKind.Unknown;
 
+    /// <summary>
+    /// Réussie ou non. Les échecs sont journalisés aussi : un mot de passe tenté depuis Lagos est
+    /// précisément ce que l'utilisateur doit pouvoir repérer dans son historique.
+    /// </summary>
+    public LoginOutcome Outcome { get; private set; } = LoginOutcome.Succeeded;
+
+    /// <summary>La session ouverte par cette connexion, quand elle a réussi.</summary>
+    public Guid? SessionId { get; private set; }
+
+    /// <summary>Quand l'utilisateur a signalé cette connexion comme n'étant pas la sienne.</summary>
+    public DateTimeOffset? ReportedAt { get; private set; }
+
     private UserLoginLocation() { }
 
     public static UserLoginLocation Create(
@@ -39,10 +51,14 @@ public class UserLoginLocation
         Guid userId,
         GeoPoint? location,
         string? ipAddress,
-        UserAgentInfo? userAgent)
+        UserAgentInfo? userAgent,
+        LoginOutcome outcome = LoginOutcome.Succeeded,
+        Guid? sessionId = null)
     {
         return new UserLoginLocation
         {
+            Outcome = outcome,
+            SessionId = sessionId,
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             UserId = userId,
@@ -57,6 +73,11 @@ public class UserLoginLocation
         };
     }
 
+    public void MarkReported()
+    {
+        ReportedAt ??= DateTimeOffset.UtcNow;
+    }
+
     // Both values come straight from the network and are attacker-controlled; the column widths
     // are the guard, and truncating here keeps a malformed header from failing the login itself.
     internal const int MaxIpLength = 45;            // an IPv6 address with an IPv4 tail
@@ -69,4 +90,14 @@ public class UserLoginLocation
         var trimmed = value.Trim();
         return trimmed.Length <= max ? trimmed : trimmed[..max];
     }
+}
+
+public enum LoginOutcome
+{
+    Succeeded,
+    InvalidPassword,
+    AccountLocked,
+
+    /// <summary>Compte désactivé ou pas encore activé.</summary>
+    AccountInactive,
 }

@@ -9,5 +9,6 @@ internal interface IJwtTokenService
         AppUser user,
         IList<string> roles,
         IList<string> permissionCodes,
-        string language);
+        string language,
+        Guid? sessionId = null);
 }

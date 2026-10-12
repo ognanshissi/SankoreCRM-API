@@ -16,11 +16,14 @@ public sealed class RefreshToken
     public DateTimeOffset ExpiresAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
 
+    /// <summary>La session que ce jeton prolonge. Null pour les jetons émis avant les sessions.</summary>
+    public Guid? SessionId { get; private set; }
+
     public bool IsActive => RevokedAt is null && DateTimeOffset.UtcNow < ExpiresAt;
 
     private RefreshToken() { } // EF Core
 
-    public static RefreshToken Create(Guid tenantId, Guid userId, TimeSpan ttl)
+    public static RefreshToken Create(Guid tenantId, Guid userId, TimeSpan ttl, Guid? sessionId = null)
     {
         return new RefreshToken
         {
@@ -30,6 +33,7 @@ public sealed class RefreshToken
             Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.Add(ttl),
+            SessionId = sessionId,
         };
     }
 

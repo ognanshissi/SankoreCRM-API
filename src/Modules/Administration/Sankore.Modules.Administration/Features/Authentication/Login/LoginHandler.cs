@@ -33,12 +33,15 @@ internal sealed class LoginHandler(
         {
             return Result.Fail<LoginResult>("Invalid login attempt.");
         }
-        
+
+        var agent = UserAgentParser.Parse(request.UserAgent);
+
         // Only activated user can login
         if (user.Status != UserStatus.Active)
         {
             user.IncrementFailedLogin();
             db.Users.Update(user);
+            RecordFailure(user, request.IpAddress, agent, LoginOutcome.AccountInactive);
             await db.SaveChangesAsync(ct);
             return Result.Fail<LoginResult>("Invalid login attempt.");
         }
@@ -51,15 +54,23 @@ internal sealed class LoginHandler(
         {
             user.IncrementFailedLogin();
             db.Users.Update(user);
+            RecordFailure(user, request.IpAddress, agent, LoginOutcome.InvalidPassword);
             await db.SaveChangesAsync(ct);
             return Result.Fail<LoginResult>("Invalid login attempt.");
         }
         
         if (await userManager.IsLockedOutAsync(user))
+        {
+            RecordFailure(user, request.IpAddress, agent, LoginOutcome.AccountLocked);
+            await db.SaveChangesAsync(ct);
             return Result.Fail<LoginResult>("Account is locked. Try again later.");
+        }
 
         user.RecordSuccessfulLogin();
         db.Users.Update(user);
+
+        var session = UserSession.Open(tenant.CurrentTenantId, user.Id, request.IpAddress, agent);
+        db.UserSessions.Add(session);
 
         // LoginHistory: address, raw User-Agent, and what could be read from it.
         var userLogin = UserLoginLocation.Create(
@@ -67,12 +78,14 @@ internal sealed class LoginHandler(
             user.Id,
             location: null,
             ipAddress: request.IpAddress,
-            userAgent: UserAgentParser.Parse(request.UserAgent));
+            userAgent: agent,
+            sessionId: session.Id);
         db.UserLoginLocations.Add(userLogin);
 
         var refreshToken = Domain.RefreshToken.Create(
             user.TenantId, user.Id,
-            TimeSpan.FromDays(jwtOptions.Value.RefreshTokenTtlDays));
+            TimeSpan.FromDays(jwtOptions.Value.RefreshTokenTtlDays),
+            session.Id);
         db.RefreshTokens.Add(refreshToken);
 
         await db.SaveChangesAsync(ct);
@@ -106,7 +119,7 @@ internal sealed class LoginHandler(
         var tenantInfo = await tenantStore.GetAsync(tenant.CurrentTenantId, ct);
         var language = user.PreferredLanguage ?? tenantInfo?.DefaultLanguage ?? "fr";
 
-        var jwtTokenResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray(), language);
+        var jwtTokenResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray(), language, session.Id);
 
         return Result.Ok(new LoginResult(
             jwtTokenResult.Token,
@@ -115,4 +128,12 @@ internal sealed class LoginHandler(
             refreshToken.ExpiresAt,
             user.Id));
     }
+
+    /// <summary>
+    /// Un échec n'est journalisé que pour un compte existant : tracer les e-mails inconnus remplirait
+    /// l'historique de personne, et l'utilisateur n'a rien à y voir.
+    /// </summary>
+    private void RecordFailure(AppUser user, string? ipAddress, UserAgentInfo? agent, LoginOutcome outcome)
+        => db.UserLoginLocations.Add(UserLoginLocation.Create(
+            user.TenantId, user.Id, location: null, ipAddress: ipAddress, userAgent: agent, outcome: outcome));
 }

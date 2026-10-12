@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Shared.Infrastructure.Auth;
 
 namespace Sankore.Modules.Administration.Infrastructure.JwtToken;
 
@@ -18,7 +19,8 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> option): IJwtTokenSer
         AppUser user,
         IList<string> roles,
         IList<string> permissionCodes,
-        string language)
+        string language,
+        Guid? sessionId = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(option.Value.SigningKey!));
         var expiresAt = DateTimeOffset.UtcNow.AddHours(8);
@@ -33,6 +35,10 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> option): IJwtTokenSer
             new("lang", language),
             new("mfa_verified", "false"),
         };
+
+        // La session de l'appareil : révoquée, elle invalide ce jeton avant son expiration.
+        if (sessionId is { } sid)
+            claims.Add(new Claim(SessionClaim.Type, sid.ToString()));
 
         // Role claims — consumed by RequireRole() policies (e.g. Leads.Reassign)
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));

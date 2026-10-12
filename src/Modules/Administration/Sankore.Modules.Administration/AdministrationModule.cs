@@ -107,6 +107,8 @@ public static class AdministrationModule
         services.AddScoped<Infrastructure.ModuleEmailSender>();
         services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerNotifier>();
         services.AddScoped<Features.Users.AgentSettings.AgentAbsenceNotifier>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Auth.ISessionValidator, Infrastructure.Sessions.SessionValidator>();
+        services.AddScoped<Features.Users.Security.SuspiciousLoginNotifier>();
         services.AddScoped<Features.Users.BulkAssign.BulkAssignNotifier>();
         services.AddScoped<Features.Users.AssignManager.ReportingLine>();
         services.Configure<JwtOptions>(config.GetSection("Jwt"));

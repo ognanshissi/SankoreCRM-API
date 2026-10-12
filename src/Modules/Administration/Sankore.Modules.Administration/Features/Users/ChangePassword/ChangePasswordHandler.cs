@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.Infrastructure.Sessions;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
@@ -67,6 +68,10 @@ internal sealed class ChangePasswordHandler(
         db.PasswordHistories.Add(PasswordHistory.Create(user.TenantId, user.Id, user.PasswordHash!));
         user.ExtendPasswordExpiry();
         db.Users.Update(user);
+
+        // Un nouveau mot de passe ferme toutes les sessions : c'est souvent la réponse à un doute,
+        // et un appareil resté connecté avec l'ancien serait le doute qui reste.
+        await SessionTerminator.EndAsync(db, user.Id, SessionEndReason.PasswordChanged, ct: ct);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

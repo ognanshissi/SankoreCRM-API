@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using System.Security.Claims;
+using Sankore.Shared.Infrastructure.Auth;
 
 namespace Sankore.Modules.Administration.Features.Authentication.Logout;
 
@@ -21,7 +22,7 @@ public static class LogoutEndpoint
     public static async Task<IResult> Handle(ClaimsPrincipal user, ISender sender, CancellationToken ct)
     {
         var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var result = await sender.Send(new LogoutCommand(userId), ct);
+        var result = await sender.Send(new LogoutCommand(userId, SessionClaim.Read(user)), ct);
 
         return result.IsSuccess
             ? Results.NoContent()

@@ -20,6 +20,7 @@ using Sankore.Modules.Administration.Features.Users.ReactivateUser;
 using Sankore.Modules.Administration.Features.Users.Register;
 using Sankore.Modules.Administration.Features.Users.RevokeRole;
 using Sankore.Modules.Administration.Features.Users.RevokeScopedPermission;
+using Sankore.Modules.Administration.Features.Users.Security;
 using Sankore.Modules.Administration.Features.Users.UpdateUser;
 
 namespace Sankore.Modules.Administration.Features.Users;
@@ -54,6 +55,7 @@ public static class UsersEndpoints
             .MapSetAgentCapacityCeiling()
             .MapGetMyProfile()
             .MapUpdateMyProfile()
-            .MapMyAvatar();
+            .MapMyAvatar()
+            .MapMySecurity();
     }
 }

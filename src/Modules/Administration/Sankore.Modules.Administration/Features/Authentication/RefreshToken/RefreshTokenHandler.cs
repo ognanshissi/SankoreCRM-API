@@ -38,12 +38,28 @@ internal sealed class RefreshTokenHandler(
         if (user.AccountType == UserAccountType.Service)
             return Result.Fail<LoginResult>("Invalid or expired refresh token.");
 
+        // Un jeton dont la session a été coupée ne la rouvre pas.
+        UserSession? session = null;
+        if (existing.SessionId is { } sessionId)
+        {
+            session = await db.UserSessions.IgnoreQueryFilters().AsTracking()
+                .FirstOrDefaultAsync(s => s.Id == sessionId && s.TenantId == existing.TenantId, ct);
+            if (session is null || session.IsRevoked)
+            {
+                existing.Revoke();
+                await db.SaveChangesAsync(ct);
+                return Result.Fail<LoginResult>("Invalid or expired refresh token.");
+            }
+            session.Touch(DateTimeOffset.UtcNow);
+        }
+
         // Rotate: revoke old token, issue new one.
         existing.Revoke();
 
         var newRefreshToken = Domain.RefreshToken.Create(
             user.TenantId, user.Id,
-            TimeSpan.FromDays(jwtOptions.Value.RefreshTokenTtlDays));
+            TimeSpan.FromDays(jwtOptions.Value.RefreshTokenTtlDays),
+            session?.Id);
         db.RefreshTokens.Add(newRefreshToken);
 
         await db.SaveChangesAsync(ct);
@@ -74,7 +90,7 @@ internal sealed class RefreshTokenHandler(
         var tenantInfo = await tenantStore.GetAsync(user.TenantId, ct);
         var language = user.PreferredLanguage ?? tenantInfo?.DefaultLanguage ?? "fr";
 
-        var jwtResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray(), language);
+        var jwtResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray(), language, session?.Id);
 
         return Result.Ok(new LoginResult(
             jwtResult.Token,

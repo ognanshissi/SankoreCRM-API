@@ -136,6 +136,25 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(jwtConfig["SigningKey"]!))
         };
+        // Une session coupée depuis « Sessions actives » refuse aussi les jetons d'accès qu'elle
+        // avait déjà reçus. Sans claim sid (jeton antérieur), rien ne change.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async ctx =>
+            {
+                if (SessionClaim.Read(ctx.Principal) is not { } sessionId) return;
+                // Lu sur le jeton : HttpContext.User n'est pas encore renseigné à ce stade, donc
+                // ITenantContext non plus.
+                if (!Guid.TryParse(ctx.Principal!.FindFirst("tenant_id")?.Value, out var tenantId))
+                {
+                    ctx.Fail("Missing tenant.");
+                    return;
+                }
+                var validator = ctx.HttpContext.RequestServices.GetRequiredService<ISessionValidator>();
+                if (!await validator.IsActiveAsync(tenantId, sessionId, ctx.HttpContext.RequestAborted))
+                    ctx.Fail("Session ended.");
+            },
+        };
     });
 
 builder.Services.AddAuthorization();

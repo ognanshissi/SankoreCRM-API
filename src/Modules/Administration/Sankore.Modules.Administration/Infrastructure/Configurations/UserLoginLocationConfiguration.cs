@@ -17,6 +17,8 @@ public class UserLoginLocationConfiguration: IEntityTypeConfiguration<UserLoginL
         // enum definition to know what "Android" means.
         builder.Property(l => l.Platform).HasConversion<string>().HasMaxLength(20);
         builder.Property(l => l.ClientKind).HasConversion<string>().HasMaxLength(20);
+        builder.Property(l => l.Outcome).HasConversion<string>().HasMaxLength(20)
+            .HasDefaultValue(LoginOutcome.Succeeded).ValueGeneratedNever();
 
         // "Where else has this address signed in?" is the first question of any incident.
         builder.HasIndex(l => new { l.TenantId, l.IpAddress }).HasFilter("ip_address IS NOT NULL");

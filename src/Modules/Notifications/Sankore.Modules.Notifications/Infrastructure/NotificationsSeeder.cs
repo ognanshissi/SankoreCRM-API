@@ -21,6 +21,7 @@ internal static class NotificationsSeeder
         await SeedAgencyManagerAssignedAsync(db, logger, ct);
         await SeedAgencyManagerUnassignedAsync(db, logger, ct);
         await SeedAgentAbsenceDeclaredAsync(db, logger, ct);
+        await SeedSuspiciousLoginReportedAsync(db, logger, ct);
         await SeedUserAgencyChangedAsync(db, logger, ct);
         await SeedUserRoleGrantedAsync(db, logger, ct);
         await SeedClientWelcomeAsync(db, logger, ct);
@@ -1199,6 +1200,92 @@ internal static class NotificationsSeeder
                       <p style="color:#999;font-size:12px">
                         Automatic message from {{ company_name }}.
                       </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    private static async Task SeedSuspiciousLoginReportedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "security.suspicious-login-reported";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "{{ user_name }} a signalé une connexion suspecte",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        <strong>{{ user_name }}</strong> ({{ user_email }}) indique qu'une connexion à son
+                        compte ne vient pas de lui ou d'elle.
+                      </p>
+                      <ul>
+                        <li>Connexion signalée&nbsp;: {{ login_at }}</li>
+                        <li>Appareil&nbsp;: {{ login_device }}</li>
+                        <li>Adresse IP&nbsp;: {{ login_ip }}</li>
+                        <li>Commentaire&nbsp;: {{ comment }}</li>
+                      </ul>
+                      <p>
+                        {{ ended_sessions }} autre(s) session(s) ont été fermées automatiquement.
+                        Vérifiez avec la personne qu'elle a changé son mot de passe.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "{{ user_name }} reported a suspicious login",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        <strong>{{ user_name }}</strong> ({{ user_email }}) reports that a login to their
+                        account was not theirs.
+                      </p>
+                      <ul>
+                        <li>Reported login: {{ login_at }}</li>
+                        <li>Device: {{ login_device }}</li>
+                        <li>IP address: {{ login_ip }}</li>
+                        <li>Comment: {{ comment }}</li>
+                      </ul>
+                      <p>
+                        {{ ended_sessions }} other session(s) were signed out automatically.
+                        Please make sure they change their password.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name }}</p>
                     </body>
                     </html>
                     """));

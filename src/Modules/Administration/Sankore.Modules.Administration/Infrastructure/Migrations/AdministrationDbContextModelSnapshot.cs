@@ -1125,6 +1125,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -1141,6 +1145,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_refresh_tokens_session_id")
+                        .HasFilter("session_id IS NOT NULL");
 
                     b.HasIndex("Token")
                         .IsUnique()
@@ -1501,11 +1509,26 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("occured_at");
 
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Succeeded")
+                        .HasColumnName("outcome");
+
                     b.Property<string>("Platform")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("platform");
+
+                    b.Property<DateTimeOffset?>("ReportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reported_at");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -1657,6 +1680,71 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasFilter("\"IsActive\" = true");
 
                     b.ToTable("user_roles", "administration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Browser")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("browser");
+
+                    b.Property<string>("ClientKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("client_kind");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EndReason")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("end_reason");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("platform");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_sessions");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_user_sessions_user_id");
+
+                    b.HasIndex("TenantId", "UserId", "RevokedAt")
+                        .HasDatabaseName("ix_user_sessions_tenant_id_user_id_revoked_at");
+
+                    b.ToTable("user_sessions", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Shared.Infrastructure.Outbox.OutboxMessage", b =>
@@ -2171,6 +2259,16 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Navigation("Role");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserSession", b =>
+                {
+                    b.HasOne("Sankore.Modules.Administration.Domain.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_sessions_app_users_user_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.Agency", b =>

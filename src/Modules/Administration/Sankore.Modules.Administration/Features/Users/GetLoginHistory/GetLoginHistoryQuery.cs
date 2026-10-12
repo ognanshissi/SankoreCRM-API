@@ -22,4 +22,8 @@ public sealed record LoginHistoryDto(
     /// <summary>Windows, MacOs, Linux, Android, Ios, ChromeOs — or Unknown, never guessed.</summary>
     string Platform,
     /// <summary>Web or Mobile — or Unknown when the User-Agent could not be read.</summary>
-    string ClientKind);
+    string ClientKind,
+    /// <summary>Succeeded, InvalidPassword, AccountLocked or AccountInactive.</summary>
+    string Outcome = "Succeeded",
+    /// <summary>When the user flagged this login as not theirs.</summary>
+    DateTimeOffset? ReportedAt = null);

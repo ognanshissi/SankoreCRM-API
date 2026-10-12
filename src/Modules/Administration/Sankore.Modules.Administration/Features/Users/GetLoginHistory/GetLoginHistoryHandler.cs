@@ -33,7 +33,9 @@ internal sealed class GetLoginHistoryHandler(AdministrationDbContext db)
                 l.Browser,
                 l.BrowserVersion,
                 l.Platform.ToString(),
-                l.ClientKind.ToString()))
+                l.ClientKind.ToString(),
+                l.Outcome.ToString(),
+                l.ReportedAt))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<LoginHistoryDto>>(items);

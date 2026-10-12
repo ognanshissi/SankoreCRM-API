@@ -13,5 +13,6 @@ public class RefreshTokenConfiguration: IEntityTypeConfiguration<RefreshToken>
         b.Property(r => r.Token).HasMaxLength(128).IsRequired();
         b.HasIndex(r => r.Token).IsUnique();
         b.HasIndex(r => new { r.UserId, r.RevokedAt });
+        b.HasIndex(r => r.SessionId).HasFilter("session_id IS NOT NULL");
     }
 }

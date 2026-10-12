@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.Infrastructure.Sessions;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Authentication.Logout;
@@ -16,13 +18,7 @@ internal sealed class LogoutHandler(AdministrationDbContext db)
 
         user.RecordLogout();
 
-        var activeTokens = await db.RefreshTokens
-            .AsTracking()
-            .Where(r => r.UserId == request.UserId && r.RevokedAt == null)
-            .ToListAsync(ct);
-
-        foreach (var token in activeTokens)
-            token.Revoke();
+        await SessionTerminator.EndAsync(db, request.UserId, SessionEndReason.Logout, onlySessionId: request.SessionId, ct: ct);
 
         await db.SaveChangesAsync(ct);
 
