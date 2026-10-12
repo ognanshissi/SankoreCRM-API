@@ -44,7 +44,27 @@ public interface IWorkflowModule
     /// </summary>
     Task<Result> RecordDecisionAsync(
         RecordWorkflowDecisionRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Respect des délais des étapes chronométrées qu'un utilisateur a traitées, par nom d'étape.
+    ///
+    /// <para>
+    /// Compte les étapes dotées d'un SLA et closes dans <c>[from, to)</c> : décidées par
+    /// l'utilisateur (approuvées ou rejetées), ou expirées alors qu'elles lui étaient assignées.
+    /// Une étape décidée avant son échéance est dans les délais ; une étape expirée ne l'est jamais.
+    /// Les étapes sans SLA, sautées ou approuvées automatiquement ne disent rien de l'utilisateur
+    /// et ne comptent pas. Regroupées par nom parce que c'est ce que l'écran affiche : deux
+    /// parcours qui nomment pareil une étape la mesurent ensemble.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<StepSlaStat>> GetStepSlaStatsAsync(
+        Guid tenantId, Guid userId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default);
 }
+
+/// <param name="StepName">Le nom de l'étape tel que le parcours le définit.</param>
+/// <param name="Total">Étapes closes sur la période.</param>
+/// <param name="OnTime">Dont décidées avant leur échéance.</param>
+public sealed record StepSlaStat(string StepName, int Total, int OnTime);
 
 /// <param name="RequiredStepOrders">
 /// The orders of the template steps that actually apply to this entity; every other step is marked

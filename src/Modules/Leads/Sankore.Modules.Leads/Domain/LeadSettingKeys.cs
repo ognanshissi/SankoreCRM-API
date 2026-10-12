@@ -60,6 +60,12 @@ public static class LeadSettingKeys
     /// </summary>
     public const string LeadRetentionMonths = "lead-retention-months";
 
+    /// <summary>
+    /// Part des étapes que l'institution attend dans les délais, en pourcentage. Affichée comme
+    /// objectif sur l'onglet Performance de l'agent ; elle ne bloque ni n'escalade rien.
+    /// </summary>
+    public const string SlaComplianceTargetPercent = "sla-compliance-target-percent";
+
     // ── Value types ─────────────────────────────────────────────────────────
     public const string TypeString  = "string";
     public const string TypeInt     = "int";
@@ -78,6 +84,9 @@ public static class LeadSettingKeys
         new(LeadRetentionMonths, "24", TypeInt,
             "Months a closed lead's personal data is kept before it is anonymised. The clock "
             + "starts at closure; a live lead is never anonymised."),
+        new(SlaComplianceTargetPercent, "90", TypeInt,
+            "Share of steps the institution expects within their deadline, in percent. Shown as "
+            + "the target on each agent's performance tab."),
     ];
 
     /// <summary>

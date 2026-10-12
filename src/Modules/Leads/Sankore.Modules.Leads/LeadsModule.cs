@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sankore.Modules.Leads.Features.CaptureLead;
 using Sankore.Modules.Leads.Features.CloseLead;
@@ -40,6 +41,7 @@ using Sankore.Modules.Leads.Features.GetLeadTimeline;
 using Sankore.Modules.Leads.Features.ExportLeads;
 using Sankore.Modules.Leads.Features.GetSlaBreaches;
 using Sankore.Modules.Leads.Features.GetAgentPerformance;
+using Sankore.Modules.Leads.Features.GetMyPerformance;
 using Sankore.Modules.Leads.Features.GetFunnelMetrics;
 using Sankore.Modules.Leads.Features.DispatchingRules;
 using Sankore.Modules.Leads.Features.GetAssignmentHistory;
@@ -174,6 +176,9 @@ public static class LeadsModule
         // Per-tenant M13 parameters (leads.lead_settings). Distinct from the `Leads`
         // configuration section, which is per deployment — see LeadSetting for why both exist.
         services.AddScoped<ILeadSettings, LeadSettingsService>();
+        // GetMyPerformance borne ses périodes sur l'horloge injectée. TryAdd : d'autres modules
+        // l'enregistrent aussi, et l'ordre de chargement ne doit rien changer.
+        services.TryAddSingleton(TimeProvider.System);
 
         services.AddScoped<IContextProvider, LeadContextProvider>();
         // Public contract of M13. Consumed by the Customers module (M01) to import a
@@ -367,6 +372,7 @@ public static class LeadsModule
         // Phase 12 — SLA Monitoring & Agent Performance
         group.MapGetSlaBreaches();
         group.MapGetAgentPerformance();
+        group.MapGetMyPerformance();
         group.MapGetFunnelMetrics();
 
         // Phase 13 — CRM Tasks & Task Generation Rules (US-M13-080)

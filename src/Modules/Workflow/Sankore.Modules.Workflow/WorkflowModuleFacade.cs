@@ -185,4 +185,26 @@ internal sealed class WorkflowModuleFacade(WorkflowDbContext db) : IWorkflowModu
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }
+
+    public async Task<IReadOnlyList<StepSlaStat>> GetStepSlaStatsAsync(
+        Guid tenantId, Guid userId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default)
+    {
+        var rows = await db.WorkflowInstanceSteps
+            .IgnoreQueryFilters()
+            .Where(s => s.TenantId == tenantId
+                     && s.DueAt != null
+                     && s.CompletedAt >= from && s.CompletedAt < to
+                     && (((s.Status == StepStatus.Approved || s.Status == StepStatus.Rejected) && s.ActedByUserId == userId)
+                         || (s.Status == StepStatus.TimedOut && s.AssignedToUserId == userId)))
+            .GroupBy(s => s.Name)
+            .Select(g => new
+            {
+                Name = g.Key,
+                Total = g.Count(),
+                OnTime = g.Count(s => s.Status != StepStatus.TimedOut && s.CompletedAt <= s.DueAt),
+            })
+            .ToListAsync(ct);
+
+        return rows.Select(r => new StepSlaStat(r.Name, r.Total, r.OnTime)).ToList();
+    }
 }

@@ -39,6 +39,7 @@
     <ProjectReference Include="..\..\Customers\Sankore.Modules.Customers.PublicApi\Sankore.Modules.Customers.PublicApi.csproj" />
     <!-- Cross-module dependency: KYC PublicApi for KycRequested event (US-M13-172) -->
     <ProjectReference Include="..\..\Kyc\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Workflow\Sankore.Modules.Workflow.PublicApi\Sankore.Modules.Workflow.PublicApi.csproj" />
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />
   </ItemGroup>
 
