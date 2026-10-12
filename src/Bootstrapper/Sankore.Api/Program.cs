@@ -303,6 +303,12 @@ builder.Services.AddMassTransit(x =>
     // no job picks up again.
     x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.Premiums.PremiumPaidConsumer>();
     x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.Premiums.PremiumFailedConsumer>();
+
+    // ASS-09: the insurer's acknowledgement of a declaration. Alone and NOT as a pair — there is
+    // deliberately no "declaration rejected" consumer, because a rejected DeclareClaim command
+    // means our transmission failed, not that the insurer refused the claim; INT-06's retry and
+    // INT-07's rejection queue already own that. See the consumer's own remarks.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Insurance.Claims.ClaimDeclarationAcknowledgedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncConfirmedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRejectedConsumer>();
@@ -619,6 +625,14 @@ if (emitOpenApiTo is null) {
             $"insurance-premium-collection-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "45 3 * * *");
+
+        // ASS-09: the open dossiers at each insurer. At 04:00, after the policy sync — a claim
+        // discovered on a policy the same night is then placed on a contract this platform
+        // already knows, instead of being dropped for want of one.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.Claims.ClaimSync.SyncClaimsJob>(
+            $"insurance-claim-sync-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "0 4 * * *");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)

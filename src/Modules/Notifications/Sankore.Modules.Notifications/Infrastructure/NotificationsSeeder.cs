@@ -24,6 +24,7 @@ internal static class NotificationsSeeder
         await SeedUserRoleGrantedAsync(db, logger, ct);
         await SeedClientWelcomeAsync(db, logger, ct);
         await SeedHouseholdDesignationsToReviewAsync(db, logger, ct);
+        await SeedClaimDocumentsRequiredAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -921,6 +922,104 @@ internal static class NotificationsSeeder
                         only discovered at claim time.
                       </p>
                       <p>Open the client record to rework the clause.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+    // ── integration.claims.documents_required ───────────────────────────────
+
+    /// <summary>
+    /// ASS-09, fourth criterion: the insurer is waiting on pièces, and the agent who declared the
+    /// loss is the one who can produce them.
+    ///
+    /// <para>
+    /// Carries the insurer's dossier number, the date of the loss and the insurer's own list of
+    /// documents — and deliberately NO customer name and no account of the loss. A rendered body
+    /// travels to a mail provider and sits in its delivery log; what a death or an illness was is
+    /// not something to put there to save an agent one click.
+    /// </para>
+    /// </summary>
+    private static async Task SeedClaimDocumentsRequiredAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "integration.claims.documents_required";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Pièces attendues — sinistre {{ claim_number }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        L'assureur attend des pièces complémentaires pour le dossier
+                        <strong>{{ claim_number }}</strong>, sinistre survenu le
+                        {{ occurred_on }}.
+                      </p>
+                      <p style="background:#fff8e1;border-left:3px solid #f59e0b;padding:12px 16px">
+                        <strong>Pièces demandées :</strong><br>
+                        {{ missing_documents }}
+                      </p>
+                      <p>
+                        Le dossier n'avance pas tant qu'elles ne sont pas transmises. Ouvrez-le
+                        pour déposer les pièces.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Documents required — claim {{ claim_number }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        The insurer is waiting on further documents for claim
+                        <strong>{{ claim_number }}</strong>, for the loss of {{ occurred_on }}.
+                      </p>
+                      <p style="background:#fff8e1;border-left:3px solid #f59e0b;padding:12px 16px">
+                        <strong>Documents requested:</strong><br>
+                        {{ missing_documents }}
+                      </p>
+                      <p>
+                        The claim does not progress until they are sent. Open it to upload them.
+                      </p>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">
                         Automatic message from {{ company_name }}.

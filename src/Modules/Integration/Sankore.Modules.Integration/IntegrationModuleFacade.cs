@@ -981,15 +981,33 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     }
 
     /// <summary>
-    /// The connection and the customer behind one insurer-side policy id, through the reference
-    /// table. <c>null</c> when no connection of the tenant knows that policy.
+    /// The connection and the CRM entity behind one insurer-side policy id. <c>null</c> when no
+    /// connection of the tenant knows that policy.
+    ///
+    /// <para>
+    /// <b>Two sources, in this order, and the order is the whole point.</b> The reference table
+    /// first: a policy this platform SOLD has one, its <c>CrmId</c> is the holding
+    /// (BNF-B-16) and naming the holding is what lets the return path say which contract the
+    /// insurer answered about. Then <c>ins_policy</c>: a policy sold at the insurer's own counter
+    /// and discovered by ASS-07's sync has no reference row at all, and before this fallback
+    /// existed a claim could not be declared on one — which is the ENTIRE population that
+    /// synchronisation exists to bring in. Its <c>CrmId</c> is then the customer, which is what
+    /// the read model carries.
+    /// </para>
+    ///
+    /// <para>
+    /// The connection comes from <c>ins_policy.connection_id</c> in that second case rather than
+    /// from a sweep, so it is the row's own insurer and not the first one that happens to answer.
+    /// </para>
     /// </summary>
     private async Task<PolicyOwner?> ResolvePolicyOwnerAsync(
         Guid tenantId, string externalPolicyId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(externalPolicyId)) return null;
 
-        foreach (var connection in await ActiveInsuranceConnectionsAsync(tenantId, ct))
+        var connections = await ActiveInsuranceConnectionsAsync(tenantId, ct);
+
+        foreach (var connection in connections)
         {
             var crmId = await _references.GetCrmIdAsync(
                 tenantId, connection.Id, IntegrationEntityTypes.Policy, externalPolicyId, ct);
@@ -997,7 +1015,21 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             if (crmId is { } found) return new PolicyOwner(connection, found);
         }
 
-        return null;
+        // IgnoreQueryFilters with an explicit tenant predicate: this runs from background work as
+        // well as from a request, so the ambient tenant is not trusted to be the one asked about.
+        var synced = await _db.Policies
+            .IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId && p.ExternalPolicyId == externalPolicyId)
+            .Select(p => new { p.ConnectionId, p.CrmCustomerId })
+            .FirstOrDefaultAsync(ct);
+
+        if (synced is null) return null;
+
+        // Still only an ACTIVE connection: a deactivated insurer must not receive a declaration,
+        // and the read model keeps its rows after a connection is switched off.
+        var owner = connections.FirstOrDefault(c => c.Id == synced.ConnectionId);
+
+        return owner is null ? null : new PolicyOwner(owner, synced.CrmCustomerId);
     }
 
     /// <summary>

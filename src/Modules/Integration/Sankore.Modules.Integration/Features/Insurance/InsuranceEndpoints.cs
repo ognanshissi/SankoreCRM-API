@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.Insurance.ActivateInsuranceProduct;
+using Sankore.Modules.Integration.Features.Insurance.Claims;
 using Sankore.Modules.Integration.Features.Insurance.CreateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.DeactivateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.GetInsuranceProduct;
@@ -63,6 +64,9 @@ internal static class InsuranceEndpoints
         // ASS-04 and ASS-05. Its own group, not under `products`: a subscription is acted on by
         // its own id, which is what an operator working a refund holds.
         app.MapSubscribePolicy();
+
+        // ASS-09, same reasoning: a dossier is acted on by its own id.
+        app.MapClaims();
 
         return app;
     }
