@@ -202,6 +202,28 @@ internal static class IdempotencyKeyFactory
             IntegrationEntityTypes.Claim, crmCustomerId, externalPolicyId, occurredOn, nature);
 
     /// <summary>
+    /// One claim piece, keyed by the DOCUMENT and not by the dossier.
+    ///
+    /// <para>
+    /// The digest would be the obvious discriminator and is the wrong one: the same file may
+    /// legitimately be re-uploaded after a refusal, producing a second row the insurer has to
+    /// receive, and <c>ux_ins_claim_document_digest</c> already refuses a true duplicate on the
+    /// same dossier. Keying by the row means "send this piece once" — which is exactly what a
+    /// replay must not turn into two attachments on the insurer's side.
+    /// </para>
+    ///
+    /// <para>
+    /// No attempt in the key, for the same reason a premium debit has none: a retry of a
+    /// transmission whose outcome we did not learn must ATTACH to the first one rather than
+    /// becoming a second piece.
+    /// </para>
+    /// </summary>
+    internal static IdempotencyKey ForClaimDocument(
+        Guid tenantId, Guid connectionId, Guid claimDocumentId)
+        => For(tenantId, connectionId, CommandType.AddClaimDocument,
+            IntegrationEntityTypes.Claim, claimDocumentId);
+
+    /// <summary>
     /// Every discriminator is rendered with the invariant culture. A date formatted with the
     /// process culture would key the same subscription differently on a fr-FR host and on an
     /// invariant one — the exact class of bug the spreadsheet readers of this repo already carry

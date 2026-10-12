@@ -117,6 +117,18 @@ public interface IInsuranceGateway
 
     Task<IReadOnlyList<InsuranceClaim>> GetClaimsAsync(Guid crmCustomerId, CancellationToken ct);
 
+    /// <summary>
+    /// Queues one <i>pièce de sinistre</i> for the insurer (ASS-09).
+    ///
+    /// <para>
+    /// The connection is derived from the dossier's own insurer reference rather than passed, the
+    /// same way <see cref="RequestClaimDeclarationAsync"/> derives it: a caller holding a document
+    /// id has no business choosing which insurer receives it.
+    /// </para>
+    /// </summary>
+    Task<IntegrationCommandId> RequestClaimDocumentAsync(
+        ClaimDocumentPayload payload, CancellationToken ct);
+
     IntegrationCapabilities GetCapabilities(Guid connectionId);
 }
 

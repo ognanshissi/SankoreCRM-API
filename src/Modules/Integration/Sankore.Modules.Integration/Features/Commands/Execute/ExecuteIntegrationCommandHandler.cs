@@ -179,6 +179,7 @@ internal sealed class ExecuteIntegrationCommandHandler(
             CommandType.SubscribePolicy => await SubscribePolicyAsync(command, adapter, key, ct),
             CommandType.CancelPolicy => await CancelPolicyAsync(command, adapter, key, ct),
             CommandType.DeclareClaim => await DeclareClaimAsync(command, adapter, key, ct),
+            CommandType.AddClaimDocument => await AddClaimDocumentAsync(command, adapter, key, ct),
 
             _ => new CallOutcome(IntegrationResult.Technical(
                 IntegrationErrors.CapabilityNotSupported,
@@ -385,6 +386,25 @@ internal sealed class ExecuteIntegrationCommandHandler(
                 ExternalResponseRef: declared.Value.Value,
                 ReferenceEntityType: IntegrationEntityTypes.Claim,
                 ReferenceExternalId: declared.Value.Value);
+    }
+
+    private async Task<CallOutcome> AddClaimDocumentAsync(
+        IntegrationCommand command, ResolvedAdapter adapter, IdempotencyKey key, CancellationToken ct)
+    {
+        var payload = protector.Unprotect<ClaimDocumentPayload>(command.PayloadEncrypted);
+        if (payload is null) return MissingPayload(command);
+
+        // DeclareClaim and not a capability of its own — see CommandType.AddClaimDocument.
+        var port = resolver.ResolvePort<IInsuranceClaimPort>(adapter, IntegrationCapability.DeclareClaim);
+        if (port.IsFailure) return new CallOutcome(port);
+
+        var added = await port.Value.AddDocumentAsync(
+            new ExternalId(payload.ExternalClaimId), payload.StorageRef, key, ct);
+
+        // The external reference echoed back is the CLAIM's, not the piece's: an insurer
+        // acknowledges an attachment against the dossier it joins, and there is nothing else for
+        // the reconciliation to point at.
+        return new CallOutcome(added, ExternalResponseRef: payload.ExternalClaimId);
     }
 
     // ── Recording the outcome ───────────────────────────────────────────────

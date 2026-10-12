@@ -660,6 +660,16 @@ if (emitOpenApiTo is null) {
             $"insurance-complaint-deadlines-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "0 7 * * *");
+
+        // ASS-09's antivirus pass, then the transmission of the pieces the insurer asked for.
+        // EVERY TEN MINUTES and not nightly: an agent at a counter deposits a complement and the
+        // insurer is waiting on it, so a dossier must not sit a day on a scan that takes a second.
+        // Both passes are bounded per run, and a piece left unscanned by one sweep is picked up by
+        // the next.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.Claims.Documents.ScanClaimDocumentsJob>(
+            $"insurance-claim-document-scan-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "*/10 * * * *");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)

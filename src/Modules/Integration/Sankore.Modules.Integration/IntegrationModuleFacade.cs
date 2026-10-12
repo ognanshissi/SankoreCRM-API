@@ -685,6 +685,37 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
                 ct);
         }
 
+        public async Task<IntegrationCommandId> RequestClaimDocumentAsync(
+            ClaimDocumentPayload payload, CancellationToken ct)
+        {
+            ArgumentNullException.ThrowIfNull(payload);
+
+            var tenantId = facade.TenantId;
+
+            // Through the CLAIM's own insurer reference, which is the only unambiguous route: the
+            // dossier names the connection, and a piece joins a dossier.
+            var connection = await facade.ResolveClaimInsurerAsync(tenantId, payload.ExternalClaimId, ct)
+                ?? throw new DomainException(
+                    $"{IntegrationErrors.ExternalEntityNotFound}: no active insurance connection "
+                    + $"of this tenant holds a claim {payload.ExternalClaimId}.");
+
+            return await facade.EnqueueAsync(
+                tenantId,
+                connection,
+                CommandType.AddClaimDocument,
+                IntegrationEntityTypes.Claim,
+                // The DOCUMENT, so a command found in the rejection queue says which piece it was
+                // for — the dossier alone would not distinguish three attachments.
+                payload.ClaimDocumentId,
+                IdempotencyKeyFactory.ForClaimDocument(
+                    tenantId, connection.Id, payload.ClaimDocumentId),
+                // Encrypted like every payload. It carries a FILE NAME, which an agent names after
+                // the customer often enough to be personal data — the bytes themselves are never
+                // here, only the store reference.
+                facade._protector.Protect(payload),
+                ct);
+        }
+
         /// <summary>
         /// Every policy the customer holds, across every insurer the tenant distributes for.
         ///
@@ -1030,6 +1061,37 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         var owner = connections.FirstOrDefault(c => c.Id == synced.ConnectionId);
 
         return owner is null ? null : new PolicyOwner(owner, synced.CrmCustomerId);
+    }
+
+    /// <summary>
+    /// The active insurance connection holding one insurer-side claim id, read from this module's
+    /// own claim register. <c>null</c> when no connection of the tenant knows that dossier.
+    ///
+    /// <para>
+    /// From <c>ins_claim</c> and not from the reference table, unlike a policy: a dossier records
+    /// its <c>connection_id</c> at declaration, so there is no sweep and no first-one-to-answer.
+    /// Still only an ACTIVE connection — a deactivated insurer must not receive an attachment, and
+    /// the register keeps its rows after a connection is switched off.
+    /// </para>
+    /// </summary>
+    private async Task<IntegrationConnection?> ResolveClaimInsurerAsync(
+        Guid tenantId, string externalClaimId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(externalClaimId)) return null;
+
+        // IgnoreQueryFilters with an explicit tenant predicate: this is reached from a background
+        // job as well as from a request.
+        var connectionId = await _db.Claims
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId && c.ExternalClaimId == externalClaimId)
+            .Select(c => (Guid?)c.ConnectionId)
+            .FirstOrDefaultAsync(ct);
+
+        if (connectionId is not { } found) return null;
+
+        var connections = await ActiveInsuranceConnectionsAsync(tenantId, ct);
+
+        return connections.FirstOrDefault(c => c.Id == found);
     }
 
     /// <summary>

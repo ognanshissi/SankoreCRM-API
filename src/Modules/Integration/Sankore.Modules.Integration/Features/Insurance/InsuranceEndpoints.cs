@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.Insurance.ActivateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.Claims;
+using Sankore.Modules.Integration.Features.Insurance.Claims.Documents;
 using Sankore.Modules.Integration.Features.Insurance.Complaints;
 using Sankore.Modules.Integration.Features.Insurance.CreateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.DeactivateInsuranceProduct;
@@ -69,6 +70,10 @@ internal static class InsuranceEndpoints
 
         // ASS-09, same reasoning: a dossier is acted on by its own id.
         app.MapClaims();
+
+        // Its pieces, under the dossier they belong to — the one place in this area where the
+        // route is nested, because a piece has no meaning apart from its claim.
+        app.MapClaimDocuments();
 
         // ASS-10: one bordereau per insurer per month, read and closed by its own id.
         app.MapStatements();

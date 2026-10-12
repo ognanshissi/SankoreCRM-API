@@ -91,6 +91,31 @@ public sealed record InsuranceClaimPayload(
     string Description,
     IReadOnlyList<string> DocumentStorageRefs);
 
+/// <summary>
+/// One <i>pièce de sinistre</i> on its way to the insurer (ASS-09).
+/// </summary>
+/// <param name="StorageRef">
+/// The reference in THIS platform's encrypted store, which is what
+/// <c>IInsuranceClaimPort.AddDocumentAsync</c> takes. An adapter that has to push bytes reads them
+/// through the store; one that passes a reference on to an insurer's own document service passes
+/// this. Either way the bytes are never in the command payload: a <c>CommandType</c> row is
+/// replayed, logged and reconciled, and putting a photograph of a wrecked vehicle in one would put
+/// it through every one of those.
+/// </param>
+/// <param name="Sha256">
+/// Digest of the plaintext, so an insurer that computes its own can confirm it received what was
+/// sent — and so a reconciliation can tell a re-send from a different file.
+/// </param>
+public sealed record ClaimDocumentPayload(
+    string ExternalClaimId,
+    Guid ClaimDocumentId,
+    string StorageRef,
+    string DocumentKind,
+    string FileName,
+    string ContentType,
+    long SizeBytes,
+    string Sha256);
+
 public sealed record InsuranceClaim(
     ExternalId ClaimId,
     string ClaimNumber,

@@ -56,6 +56,18 @@ dotnet user-secrets set "Customers:BlindIndexKey" "$(openssl rand -base64 32)" -
 dotnet user-secrets set "Leads:FieldEncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 dotnet user-secrets set "Leads:BlindIndexKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 
+# Insurance claim pieces (ASS-09) — the encrypted store for pièces de sinistre. A FOURTH key,
+# separate from Integration:FieldEncryptionKey, Integration:Batch:Storage and Kyc:Storage: one
+# compromised key must open one concern. A dev value sits in appsettings.Development.json; the
+# store reads it on the FIRST upload, not at boot, so a missing key breaks that upload rather
+# than the start-up.
+dotnet user-secrets set "Integration:Insurance:ClaimStorage:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+
+# Antivirus for claim pieces — host:port of a clamd. UNSET by default and that is the fail-closed
+# default: with no scanner, every piece is recorded ScanFailed and NOTHING is transmitted to an
+# insurer. A deployment that distributes insurance must set it.
+dotnet user-secrets set "Integration:Insurance:Antivirus:Address" "localhost:3310" --project src/Bootstrapper/Sankore.Api
+
 # Secrets vault master key (AES-256-GCM) — protects every per-tenant credential
 # (SMTP passwords, Brevo API keys, lead-source secrets). A dev value sits in
 # appsettings.Development.json; the API REFUSES TO START without a valid one.

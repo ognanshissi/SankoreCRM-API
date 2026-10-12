@@ -236,11 +236,20 @@ public static class OrassSpecification
 /// <para>
 /// All but one match the <see cref="IntegrationCapability"/> names exactly.
 /// <see cref="AddClaimDocument"/> is the exception and it is named here rather than left implicit:
-/// <c>IInsuranceClaimPort.AddDocumentAsync</c> has no capability of its own and no
-/// <c>CommandType</c>, so it rides on <see cref="IntegrationCapability.DeclareClaim"/> — the
-/// follow-up an insurer asks for after a declaration belongs to the declaration. Worth knowing
-/// before somebody adds a capability for it: doing so would also need a command type and a
-/// dispatcher route, since the method takes an <c>IdempotencyKey</c> and is therefore a write.
+/// <c>IInsuranceClaimPort.AddDocumentAsync</c> has no capability of its own, so it rides on
+/// <see cref="IntegrationCapability.DeclareClaim"/> — the follow-up an insurer asks for after a
+/// declaration belongs to the declaration, and an insurer that takes declarations takes their
+/// complements.
+/// </para>
+///
+/// <para>
+/// <b>It DOES now have a command type.</b> This note used to say it had neither, and warned that
+/// adding a capability would also need a command type and a dispatcher route "since the method
+/// takes an <c>IdempotencyKey</c> and is therefore a write". The write half was done —
+/// <c>CommandType.AddClaimDocument</c> plus its dispatcher route — and the capability half was
+/// deliberately NOT: a second capability would be a second switch an administrator could leave
+/// off while the first was on, for an operation no insurer offers independently of the
+/// declaration.
 /// </para>
 /// </summary>
 public static class OrassOperations

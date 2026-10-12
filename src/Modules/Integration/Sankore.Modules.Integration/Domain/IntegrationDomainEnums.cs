@@ -133,7 +133,23 @@ public enum CommandType
     ReverseDebit,
     SubscribePolicy,
     CancelPolicy,
-    DeclareClaim
+    DeclareClaim,
+
+    /// <summary>
+    /// A <i>pièce de sinistre</i> the insurer asked for after the declaration (ASS-09).
+    ///
+    /// <para>
+    /// A command type of its own because <c>IInsuranceClaimPort.AddDocumentAsync</c> takes an
+    /// <c>IdempotencyKey</c> and is therefore a write — it has to be queued, retried and
+    /// reconciled like every other. It deliberately rides on
+    /// <c>IntegrationCapability.DeclareClaim</c> rather than gaining a capability of its own:
+    /// <c>OrassOperations.AddClaimDocument</c> already states the reason, which is that the
+    /// follow-up an insurer asks for after a declaration belongs to the declaration. An insurer
+    /// that takes declarations takes their complements, and a second capability would be a second
+    /// switch an administrator could leave off while the first was on.
+    /// </para>
+    /// </summary>
+    AddClaimDocument
 }
 
 /// <summary>

@@ -1,6 +1,7 @@
 namespace Sankore.Api.Features.ObjectStorage;
 
 using Sankore.Modules.Integration.Infrastructure.BatchStorage;
+using Sankore.Modules.Integration.Infrastructure.ClaimStorage;
 
 using Sankore.Modules.Kyc;
 using Sankore.Shared.Infrastructure.FileStore;
@@ -16,6 +17,12 @@ internal static class ObjectStorageConcerns
         // Outbound and inbound batch files (INT-24). Encrypted above the backend by
         // EncryptedBatchFileStore, so what lands here is ciphertext whichever medium backs it.
         new(IntegrationBatchStorage.Concern, IntegrationBatchStorage.ResolveBasePath),
+        // Pièces de sinistre (ASS-09). Its own concern and not a folder inside the batch one:
+        // a claim piece has a different retention, a different key and a different audience, and
+        // one bucket holding both would make a single leaked credential a leak of both.
+        // Encrypted above the backend by EncryptedClaimDocumentStore, so what lands here is
+        // ciphertext whichever medium backs it.
+        new(ClaimDocumentStorage.Concern, ClaimDocumentStorage.ResolveBasePath),
     ];
 
     internal static Concern? Find(string? name) =>
