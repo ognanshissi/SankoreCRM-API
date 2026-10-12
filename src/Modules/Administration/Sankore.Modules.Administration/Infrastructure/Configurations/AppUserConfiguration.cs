@@ -18,6 +18,7 @@ public class AppUserConfiguration: IEntityTypeConfiguration<AppUser>
 
         builder.Property(u => u.FirstName).HasMaxLength(200).HasDefaultValue("");
         builder.Property(u => u.LastName).HasMaxLength(200).HasDefaultValue("");
+        builder.Property(u => u.EmployeeNumber).HasMaxLength(50);
 
         // M12 lifecycle columns
         builder.Property(u => u.Status)

@@ -45,6 +45,16 @@ public sealed class AppUser: IdentityUser<Guid>
 
     public bool IsSuperUser { get; private set; }
 
+    /// <summary>
+    /// Arrivée dans l'institution. Nullable : les comptes antérieurs à la colonne ont été
+    /// rétro-datés sur leur première connexion, et ceux qui ne s'étaient jamais connectés n'ont
+    /// aucune date fiable — mieux vaut « inconnue » qu'une date de migration présentée comme vraie.
+    /// </summary>
+    public DateTimeOffset? CreatedAt { get; private set; }
+
+    /// <summary>Matricule interne, attribué par l'administrateur. L'utilisateur ne le modifie pas.</summary>
+    public string? EmployeeNumber { get; private set; }
+
     // ── Dispatching (M13) ─────────────────────────────────────────────────
     public bool IsAvailable { get; private set; } = true;
     public List<string> SpokenLanguages { get; private set; } = [];
@@ -112,6 +122,7 @@ public sealed class AppUser: IdentityUser<Guid>
             FailedLoginAttempts = 0,
             IsSuperUser = false,
             AccountType = UserAccountType.Standard,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
     }
 
@@ -144,6 +155,7 @@ public sealed class AppUser: IdentityUser<Guid>
             FailedLoginAttempts = 0,
             IsSuperUser = true,
             AccountType = UserAccountType.System,
+            CreatedAt = DateTimeOffset.UtcNow,
         };
     }
 
@@ -249,6 +261,24 @@ public sealed class AppUser: IdentityUser<Guid>
         if (specialties is not null) Specialties = specialties;
         if (enableNotifications is not null) EnableNotifications = enableNotifications.Value;
     }
+
+    /// <summary>
+    /// Ce que l'utilisateur corrige lui-même sur son identité. Le nom complet suit : c'est lui que
+    /// lisent les listes, les e-mails et les autres modules.
+    /// </summary>
+    public void RenameSelf(string firstName, string lastName)
+    {
+        if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+            throw new DomainException("Le prénom et le nom sont obligatoires.", "User.Name.Required");
+
+        FirstName = firstName.Trim();
+        LastName = lastName.Trim();
+        FullName = $"{FirstName} {LastName}";
+    }
+
+    /// <summary>Blanc efface le matricule.</summary>
+    public void SetEmployeeNumber(string? employeeNumber)
+        => EmployeeNumber = string.IsNullOrWhiteSpace(employeeNumber) ? null : employeeNumber.Trim();
 
     /// <summary>
     /// Sets who this user reports to. The caller must have checked that the manager exists, is

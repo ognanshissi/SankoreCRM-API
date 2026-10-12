@@ -13,5 +13,7 @@ internal sealed class UpdateUserValidator : AbstractValidator<UpdateUserCommand>
 
         When(x => x.SpokenLanguages is not null, () =>
             RuleFor(x => x.SpokenLanguages).NotEmpty());
+
+        RuleFor(x => x.EmployeeNumber).MaximumLength(50);
     }
 }

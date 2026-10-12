@@ -33,6 +33,8 @@ internal sealed class UpdateUserHandler(
             request.SpokenLanguages,
             request.Specialties,
             request.EnableNotifications);
+        if (request.EmployeeNumber is not null)
+            user.SetEmployeeNumber(request.EmployeeNumber);
 
         await db.SaveChangesAsync(ct);
 

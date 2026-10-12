@@ -20,6 +20,7 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
     public DbSet<PermissionAttribution> PermissionAttributions => Set<PermissionAttribution>();
     public DbSet<AgentSettings> AgentSettings => Set<AgentSettings>();
+    public DbSet<UserAvatar> UserAvatars => Set<UserAvatar>();
     public DbSet<ProductSpeciality> ProductSpecialities => Set<ProductSpeciality>();
     public DbSet<Territory> Territories => Set<Territory>();
     /// <summary>
@@ -116,6 +117,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<UserProfile>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<PermissionAttribution>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<AgentSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<UserAvatar>().HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<Territory>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ProductSpeciality>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TenantNotificationSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);

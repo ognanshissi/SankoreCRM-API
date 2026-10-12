@@ -54,6 +54,12 @@ public class UserProfileConfiguration: IEntityTypeConfiguration<UserProfile>
             w.Property(x => x.IsPrimary).HasDefaultValue(false).HasColumnName("personal_number_is_primary");
         });
         
+        builder.Property(p => p.WhatsAppNumber).HasMaxLength(30);
+        builder.Property(p => p.Signature).HasMaxLength(UserProfile.MaxSignatureLength);
+        builder.Property(p => p.TimeZone).HasMaxLength(64).HasDefaultValue(UserProfile.DefaultTimeZone);
+        builder.Property(p => p.AmountFormat).HasConversion<string>().HasMaxLength(20)
+            .HasDefaultValue(AmountFormat.SpaceGrouped).ValueGeneratedNever();
+
         builder.HasIndex(p => p.UserId).IsUnique();
     }
 }

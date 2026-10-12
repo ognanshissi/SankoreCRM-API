@@ -38,7 +38,8 @@ public static class UpdateUserEndpoint
             req.AgencyId,
             req.SpokenLanguages,
             req.Specialties,
-            req.EnableNotifications), ct);
+            req.EnableNotifications,
+            req.EmployeeNumber), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -51,4 +52,5 @@ public sealed record UpdateUserRequest(
     Guid? AgencyId,
     List<string>? SpokenLanguages,
     List<string>? Specialties,
-    bool? EnableNotifications);
+    bool? EnableNotifications,
+    string? EmployeeNumber = null);

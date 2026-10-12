@@ -10,7 +10,9 @@ public sealed record UpdateUserCommand(
     Guid? AgencyId,
     List<string>? SpokenLanguages,
     List<string>? Specialties,
-    bool? EnableNotifications
+    bool? EnableNotifications,
+    /// <summary>Null : inchangé. Chaîne vide : effacé.</summary>
+    string? EmployeeNumber = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "User";

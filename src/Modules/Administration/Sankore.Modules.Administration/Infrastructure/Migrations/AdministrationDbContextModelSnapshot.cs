@@ -414,6 +414,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("conversion_rate30d");
 
+                    b.Property<DateTimeOffset?>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
                     b.Property<DateTimeOffset?>("DeactivatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deactivated_at");
@@ -426,6 +430,11 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean")
                         .HasColumnName("email_confirmed");
+
+                    b.Property<string>("EmployeeNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("employee_number");
 
                     b.Property<bool>("EnableNotifications")
                         .HasColumnType("boolean")
@@ -1349,6 +1358,40 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.ToTable("territories", "administration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserAvatar", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("content_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_user_avatars");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_user_avatars_tenant_id");
+
+                    b.ToTable("user_avatars", "administration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserImportJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1506,6 +1549,13 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("additional_email");
 
+                    b.Property<string>("AmountFormat")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("SpaceGrouped")
+                        .HasColumnName("amount_format");
+
                     b.Property<DateTimeOffset?>("BirthDate")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("birth_date");
@@ -1520,13 +1570,35 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("job_title");
 
+                    b.Property<string>("Signature")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("signature");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("Africa/Abidjan")
+                        .HasColumnName("time_zone");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
+
+                    b.Property<string>("WhatsAppNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("whats_app_number");
 
                     b.HasKey("Id")
                         .HasName("pk_user_profile");

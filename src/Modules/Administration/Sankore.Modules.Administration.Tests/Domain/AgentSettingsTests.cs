@@ -88,6 +88,20 @@ public sealed class AgentSettingsTests
     // ── Horaires ──────────────────────────────────────────────────────────
 
     [Fact]
+    public void Working_hours_are_read_in_the_agents_time_zone()
+    {
+        var s = Fresh();
+        Update(s, AgentAvailability.Available, hours: Week());
+        var lagos = UserProfile.ResolveTimeZone("Africa/Lagos"); // UTC+1
+
+        // 16 h 30 UTC = 17 h 30 à Lagos : encore ouvert à Abidjan, déjà fermé à Lagos.
+        var lateAfternoon = new DateTimeOffset(2026, 10, 12, 16, 30, 0, TimeSpan.Zero);
+
+        s.IsWithinWorkingHours(lateAfternoon).Should().BeTrue();
+        s.IsWithinWorkingHours(lateAfternoon, lagos).Should().BeFalse();
+    }
+
+    [Fact]
     public void Outside_working_hours_the_agent_is_not_dispatchable()
     {
         var s = Fresh();

@@ -126,9 +126,20 @@ internal sealed class AdministrationModuleFacade(
             .Where(s => s.TenantId == tenantId && ids.Contains(s.UserId))
             .ToDictionaryAsync(s => s.UserId, ct);
 
+        // Le fuseau du profil situe les horaires et les dates d'absence de chaque agent.
+        var settledIds = settings.Keys.ToList();
+        var timeZones = settledIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.UserProfiles
+                .IgnoreQueryFilters()
+                .Where(p => p.TenantId == tenantId && settledIds.Contains(p.UserId))
+                .ToDictionaryAsync(p => p.UserId, p => p.TimeZone, ct);
+
         var now = DateTimeOffset.UtcNow;
         return agents
-            .Where(a => !settings.TryGetValue(a.Id, out var s) || s.IsDispatchable(now, a.ActiveLeadsCount))
+            .Where(a => !settings.TryGetValue(a.Id, out var s)
+                        || s.IsDispatchable(now, a.ActiveLeadsCount,
+                            UserProfile.ResolveTimeZone(timeZones.GetValueOrDefault(a.Id))))
             .Select(ToSummary)
             .ToList();
     }

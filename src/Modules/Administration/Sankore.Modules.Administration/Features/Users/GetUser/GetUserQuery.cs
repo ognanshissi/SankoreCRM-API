@@ -25,4 +25,5 @@ public sealed record UserDto(
     /// <summary>Who this user reports to, or null at the top of the line.</summary>
     Guid? ReportsToUserId,
     /// <summary>Resolved for display so the caller does not need a second round-trip.</summary>
-    string? ReportsToFullName);
+    string? ReportsToFullName,
+    string? EmployeeNumber = null);

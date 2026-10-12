@@ -156,11 +156,18 @@ public sealed class AgentSettings
         _ => CurrentAbsence is { } a && (day < a.From || day > a.To),
     };
 
-    /// <summary>Statut, horaires et capacité réunis : la seule question que pose le dispatching.</summary>
-    public bool IsDispatchable(DateTimeOffset now, int activeLeads)
-        => AllowsDispatchOn(DateOnly.FromDateTime(now.UtcDateTime))
-           && IsWithinWorkingHours(now)
-           && HasCapacityFor(activeLeads);
+    /// <summary>
+    /// Statut, horaires et capacité réunis : la seule question que pose le dispatching. Le jour et
+    /// l'heure sont ceux du fuseau de l'agent (UTC à défaut) : une absence « jusqu'au 23 » finit
+    /// à minuit chez lui, pas à Greenwich.
+    /// </summary>
+    public bool IsDispatchable(DateTimeOffset now, int activeLeads, TimeZoneInfo? timeZone = null)
+    {
+        var local = TimeZoneInfo.ConvertTime(now, timeZone ?? TimeZoneInfo.Utc);
+        return AllowsDispatchOn(DateOnly.FromDateTime(local.DateTime))
+               && IsWithinWorkingHours(now, timeZone)
+               && HasCapacityFor(activeLeads);
+    }
 
     /// <summary>
     /// Fixé par un supérieur. Une capacité déjà déclarée au-dessus est ramenée au plafond plutôt que
@@ -179,18 +186,17 @@ public sealed class AgentSettings
 
     /// <summary>
     /// L'instant tombe-t-il dans une plage travaillée ? Sans horaires déclarés, toujours oui.
-    /// Les heures sont lues en UTC : la plateforme ne porte pas encore de fuseau par tenant, et la
-    /// plupart des pays de l'UEMOA vivent à UTC+0.
+    /// Les heures sont lues dans le fuseau de l'agent, réglé sur son profil — UTC s'il n'en a pas.
     /// </summary>
-    public bool IsWithinWorkingHours(DateTimeOffset now)
+    public bool IsWithinWorkingHours(DateTimeOffset now, TimeZoneInfo? timeZone = null)
     {
         if (WorkingHours.Count == 0) return true;
 
-        var utc = now.ToUniversalTime();
-        var day = WorkingHours.FirstOrDefault(d => d.Day == utc.DayOfWeek);
+        var local = TimeZoneInfo.ConvertTime(now, timeZone ?? TimeZoneInfo.Utc);
+        var day = WorkingHours.FirstOrDefault(d => d.Day == local.DayOfWeek);
         if (day is null || !day.Enabled) return false;
 
-        var time = TimeOnly.FromTimeSpan(utc.TimeOfDay);
+        var time = TimeOnly.FromTimeSpan(local.TimeOfDay);
         return time >= ParseTime(day.Start) && time < ParseTime(day.End);
     }
 

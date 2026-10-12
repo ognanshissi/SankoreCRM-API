@@ -47,6 +47,7 @@ internal sealed class GetUserHandler(
                 : await db.Users
                     .Where(u => u.Id == user.ReportsToUserId)
                     .Select(u => u.FullName)
-                    .FirstOrDefaultAsync(ct)));
+                    .FirstOrDefaultAsync(ct),
+            user.EmployeeNumber));
     }
 }
