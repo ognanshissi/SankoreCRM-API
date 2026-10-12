@@ -640,3 +640,54 @@ internal sealed class InsurerStatementLineConfiguration : IEntityTypeConfigurati
         b.Ignore(l => l.DomainEvents);
     }
 }
+
+/// <summary>
+/// The complaints register of the règlement 01/CIMA/2024.
+/// </summary>
+internal sealed class InsuranceComplaintConfiguration : IEntityTypeConfiguration<InsuranceComplaint>
+{
+    public void Configure(EntityTypeBuilder<InsuranceComplaint> b)
+    {
+        b.ToTable("ins_complaint");
+        b.HasKey(c => c.Id);
+
+        b.Property(c => c.Reference).HasMaxLength(30).IsRequired();
+        b.Property(c => c.Channel).HasConversion<string>().HasMaxLength(30).IsRequired();
+        b.Property(c => c.Category).HasConversion<string>().HasMaxLength(30).IsRequired();
+        b.Property(c => c.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        b.Property(c => c.Subject).HasMaxLength(200).IsRequired();
+        b.Property(c => c.EscalatedTo).HasMaxLength(200);
+
+        // The institution's own answer, in clear and uncapped: it is written to be read back by a
+        // controller, and a cap would truncate the one text a regulator asks to see.
+        b.Property(c => c.Resolution).HasColumnType("text");
+
+        // What the customer actually said. Encrypted, text, no cap — see the aggregate.
+        b.Property(c => c.BodyEncrypted).HasColumnType("text");
+
+        b.Property(c => c.Version).IsRowVersion();
+
+        // Nullable FK: a complaint about the institution's own advice names no insurer.
+        b.HasOne<IntegrationConnection>()
+            .WithMany()
+            .HasForeignKey(c => c.ConnectionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // The reference the customer quotes back. Unique per tenant — two complaints sharing one
+        // would make "what is the status of REC-2026-000042" unanswerable.
+        b.HasIndex(c => new { c.TenantId, c.Reference })
+            .IsUnique()
+            .HasDatabaseName("ux_ins_complaint_reference");
+
+        // The register's own screen: this customer's complaints, most recent first.
+        b.HasIndex(c => new { c.TenantId, c.CrmCustomerId, c.ReceivedAt })
+            .HasDatabaseName("ix_ins_complaint_customer");
+
+        // The deadline worklist. Status FIRST because the overdue sweep reads the open ones and
+        // the open ones are the small minority of a register that keeps years of answers.
+        b.HasIndex(c => new { c.TenantId, c.Status, c.ResolutionDueAt })
+            .HasDatabaseName("ix_ins_complaint_open_due");
+
+        b.Ignore(c => c.DomainEvents);
+    }
+}

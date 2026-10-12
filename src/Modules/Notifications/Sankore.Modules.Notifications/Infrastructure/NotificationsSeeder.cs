@@ -25,6 +25,7 @@ internal static class NotificationsSeeder
         await SeedClientWelcomeAsync(db, logger, ct);
         await SeedHouseholdDesignationsToReviewAsync(db, logger, ct);
         await SeedClaimDocumentsRequiredAsync(db, logger, ct);
+        await SeedComplaintDeadlineAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -1019,6 +1020,104 @@ internal static class NotificationsSeeder
                       </p>
                       <p>
                         The claim does not progress until they are sent. Open it to upload them.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+    // ── integration.complaints.deadline_approaching ─────────────────────────
+
+    /// <summary>
+    /// The règlement 01/CIMA/2024's complaints mechanism, chased before it is breached.
+    ///
+    /// <para>
+    /// Carries the reference, the subject and the date — and deliberately NOT what the customer
+    /// said. A grievance is free text about a named person's money, health or family, and a
+    /// rendered body travels to a mail provider and sits in its delivery log.
+    /// </para>
+    /// </summary>
+    private static async Task SeedComplaintDeadlineAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "integration.complaints.deadline_approaching";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Réclamation {{ complaint_reference }} — échéance au {{ due_at }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        La réclamation <strong>{{ complaint_reference }}</strong> —
+                        « {{ complaint_subject }} » — attend une action de votre part.
+                      </p>
+                      <p style="background:#fef2f2;border-left:3px solid #dc2626;padding:12px 16px">
+                        Étape attendue : <strong>{{ stage }}</strong><br>
+                        Échéance : <strong>{{ due_at }}</strong>
+                      </p>
+                      <p>
+                        Le délai de traitement des réclamations fait partie du mécanisme exigé par
+                        la réglementation CIMA sur la distribution d'assurance. Une échéance
+                        dépassée se retrouve dans le rapport remis au superviseur.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Complaint {{ complaint_reference }} — due {{ due_at }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        Complaint <strong>{{ complaint_reference }}</strong> —
+                        "{{ complaint_subject }}" — is waiting on you.
+                      </p>
+                      <p style="background:#fef2f2;border-left:3px solid #dc2626;padding:12px 16px">
+                        Step owed: <strong>{{ stage }}</strong><br>
+                        Due: <strong>{{ due_at }}</strong>
+                      </p>
+                      <p>
+                        Complaint-handling deadlines are part of the mechanism the CIMA regulation
+                        on insurance distribution requires. A missed one appears in the report
+                        given to the supervisor.
                       </p>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">

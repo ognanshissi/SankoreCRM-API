@@ -652,6 +652,14 @@ if (emitOpenApiTo is null) {
             $"insurance-evidence-retention-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "30 2 * * 0");
+
+        // The règlement 01/CIMA/2024's complaints mechanism, chased before it is breached. Daily
+        // at 07:00, deliberately in working hours and not with the nightly sweeps: it produces a
+        // task for an agent who has until the end of the day to act on it.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.Complaints.ComplaintDeadlineJob>(
+            $"insurance-complaint-deadlines-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "0 7 * * *");
     }
 
         // Pull orchestrator — runs every minute across all tenants (F13.37-BE-21)

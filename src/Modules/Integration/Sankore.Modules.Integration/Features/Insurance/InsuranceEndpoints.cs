@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.Insurance.ActivateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.Claims;
+using Sankore.Modules.Integration.Features.Insurance.Complaints;
 using Sankore.Modules.Integration.Features.Insurance.CreateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.DeactivateInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.GetInsuranceProduct;
@@ -71,6 +72,10 @@ internal static class InsuranceEndpoints
 
         // ASS-10: one bordereau per insurer per month, read and closed by its own id.
         app.MapStatements();
+
+        // The mécanisme de traitement des réclamations of the règlement 01/CIMA/2024. Its own
+        // group: a complaint may name no policy and no claim at all.
+        app.MapComplaints();
 
         return app;
     }

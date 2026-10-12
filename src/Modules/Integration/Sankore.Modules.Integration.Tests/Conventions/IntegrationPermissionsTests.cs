@@ -59,6 +59,16 @@ public sealed class IntegrationPermissionsTests
         // See Permissions.CanFinaliseInsuranceStatement.
         "Ins.Statement.Finalise",
 
+        // The TENTH and ELEVENTH, and the third departure. The mécanisme de traitement des
+        // réclamations of the règlement 01/CIMA/2024 is its own function with its own deadlines
+        // and its own report to a supervisor, and the people who staff it at an IMF are not the
+        // people who sell — folding it into Ins.Claim.View would mean a claims handler reading
+        // every grievance about their own handling. Split read from write for the reason this
+        // module already draws twice: a reader of the register must not answer on the
+        // institution's behalf. See Permissions.CanViewInsuranceComplaint.
+        "Ins.Complaint.View",
+        "Ins.Complaint.Handle",
+
         "Ins.Reconciliation.Resolve",
     ];
 
@@ -72,7 +82,7 @@ public sealed class IntegrationPermissionsTests
     }
 
     [Fact]
-    public void The_nine_insurance_permissions_are_registered_in_Permissions_All()
+    public void The_eleven_insurance_permissions_are_registered_in_Permissions_All()
     {
         var registered = Permissions.All.Select(p => p.Code).ToList();
 

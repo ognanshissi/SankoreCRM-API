@@ -644,6 +644,35 @@ public static class Permissions
         new("Ins.Statement.Finalise", "Close a month's insurer statement, freezing its figures",
             ApplicationModules.Integration, "Statement.Finalise");
 
+    /// <summary>
+    /// Read the complaints register and its report. The TENTH insurance permission, and the second
+    /// pair this family adds beyond ASS-11's table of seven.
+    ///
+    /// <para>
+    /// A complaint is not a claim and not a policy: the <i>mécanisme de traitement des
+    /// réclamations</i> of the règlement 01/CIMA/2024 is its own function, with its own deadlines
+    /// and its own report to a supervisor — and the people who staff it at an IMF are not the
+    /// people who sell. Folding it into <see cref="CanViewInsuranceClaim"/> would mean a claims
+    /// handler reading every grievance about their own handling.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanViewInsuranceComplaint =
+        new("Ins.Complaint.View", "Read the insurance complaints register and its report",
+            ApplicationModules.Integration, "Complaint.View");
+
+    /// <summary>
+    /// Record a complaint and move it along: acknowledge, escalate, answer, close. The ELEVENTH.
+    ///
+    /// <para>
+    /// Separate from the read for the reason this module already draws twice — a reader of the
+    /// register must not be able to answer on the institution's behalf. Answering is the act a
+    /// regulator reads back, and <c>Resolution</c> is the text it reads.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanHandleInsuranceComplaint =
+        new("Ins.Complaint.Handle", "Record and answer insurance complaints",
+            ApplicationModules.Integration, "Complaint.Handle");
+
     public static readonly PermissionItem CanResolveInsuranceReconciliation =
         new("Ins.Reconciliation.Resolve", "Mark an insurance reconciliation gap as resolved",
             ApplicationModules.Integration, "Reconciliation.Resolve");
@@ -789,8 +818,9 @@ public static class Permissions
         CanResolveIntegrationReconciliation,
         CanViewLiveBalance,
 
-        // Insurance family (ASS-11), plus Ins.Product.View and Ins.Statement.Finalise — see their
-        // own remarks for why the specification's table of seven became nine.
+        // Insurance family (ASS-11), plus Ins.Product.View, Ins.Statement.Finalise and the
+        // complaints pair — see their own remarks for why the specification's table of seven
+        // became eleven.
         CanManageInsuranceProduct,
         CanViewInsuranceProduct,
         CanSubscribeInsurancePolicy,
@@ -799,6 +829,8 @@ public static class Permissions
         CanViewInsuranceClaim,
         CanViewInsuranceStatement,
         CanFinaliseInsuranceStatement,
+        CanViewInsuranceComplaint,
+        CanHandleInsuranceComplaint,
         CanResolveInsuranceReconciliation,
     ];
 }

@@ -50,6 +50,8 @@ public sealed class IntegrationDbContext(
     public DbSet<InsurerStatement> InsurerStatements => Set<InsurerStatement>();
     public DbSet<InsurerStatementLine> InsurerStatementLines => Set<InsurerStatementLine>();
 
+    public DbSet<InsuranceComplaint> InsuranceComplaints => Set<InsuranceComplaint>();
+
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<IntegrationInboxMessage> InboxMessages => Set<IntegrationInboxMessage>();
 
@@ -133,6 +135,7 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<ClaimDocument>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<InsurerStatement>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<InsurerStatementLine>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<InsuranceComplaint>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
     }
 }
 

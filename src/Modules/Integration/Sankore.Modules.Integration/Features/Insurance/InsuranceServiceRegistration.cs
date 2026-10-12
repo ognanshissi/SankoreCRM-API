@@ -2,6 +2,7 @@ namespace Sankore.Modules.Integration.Features.Insurance;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Sankore.Modules.Integration.Features.Insurance.Complaints;
 using Sankore.Modules.Integration.Features.Insurance.Retention;
 
 /// <summary>
@@ -23,6 +24,12 @@ internal static class InsuranceServiceRegistration
         // a typo in a configuration file cannot take the API down.
         services.Configure<InsuranceRetentionOptions>(
             configuration.GetSection(InsuranceRetentionOptions.SectionName));
+
+        // The complaint deadlines of the règlement 01/CIMA/2024. Same shape and same reasoning as
+        // the retention floor above, including the defaults being a placeholder rather than a
+        // quotation of the text — see the options type.
+        services.Configure<ComplaintOptions>(
+            configuration.GetSection(ComplaintOptions.SectionName));
 
         // Scoped, and that matters: the probe caches one adapter lookup per connection for the
         // lifetime of a request, which is what keeps a page of fifty products from resolving the

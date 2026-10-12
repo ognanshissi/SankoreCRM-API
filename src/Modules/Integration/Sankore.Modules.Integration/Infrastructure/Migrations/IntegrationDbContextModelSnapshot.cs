@@ -433,6 +433,148 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("ins_consent_proof", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceComplaint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledged_at");
+
+                    b.Property<Guid?>("AcknowledgedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("acknowledged_by");
+
+                    b.Property<DateTimeOffset>("AcknowledgementDueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledgement_due_at");
+
+                    b.Property<string>("BodyEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("body_encrypted");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid?>("ClaimId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("claim_id");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<DateTimeOffset?>("EscalatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escalated_at");
+
+                    b.Property<string>("EscalatedTo")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("escalated_to");
+
+                    b.Property<Guid?>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<Guid>("ReceivedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("received_by");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("reference");
+
+                    b.Property<string>("Resolution")
+                        .HasColumnType("text")
+                        .HasColumnName("resolution");
+
+                    b.Property<DateTimeOffset>("ResolutionDueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolution_due_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<bool?>("WasUpheld")
+                        .HasColumnType("boolean")
+                        .HasColumnName("was_upheld");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_complaint");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_ins_complaint_connection_id");
+
+                    b.HasIndex("TenantId", "Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_complaint_reference");
+
+                    b.HasIndex("TenantId", "CrmCustomerId", "ReceivedAt")
+                        .HasDatabaseName("ix_ins_complaint_customer");
+
+                    b.HasIndex("TenantId", "Status", "ResolutionDueAt")
+                        .HasDatabaseName("ix_ins_complaint_open_due");
+
+                    b.ToTable("ins_complaint", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceProduct", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2327,6 +2469,15 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_ins_consent_proof_insurance_subscriptions_subscription_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceComplaint", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.IntegrationConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_ins_complaint_connections_connection_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceProduct", b =>
