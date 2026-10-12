@@ -172,4 +172,66 @@ public sealed class KycModuleFacade(
 
         return Task.FromResult(KycFlowUsage.Unknown);
     }
+
+    public async Task<IReadOnlyDictionary<Guid, KycJourneySummary>> GetJourneySummariesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> customerIds, CancellationToken ct)
+    {
+        if (customerIds.Count == 0) return new Dictionary<Guid, KycJourneySummary>();
+        var ids = customerIds.Distinct().ToList();
+
+        // Même choix de dossier que GetStatusAsync : l'ouvert d'abord, sinon le plus récent.
+        var files = (await db.KycFiles
+                .IgnoreQueryFilters()
+                .Where(f => f.TenantId == tenantId && ids.Contains(f.CustomerId))
+                .Select(f => new { f.Id, f.CustomerId, f.Status, f.ConfidenceScore, f.UpdatedAt })
+                .ToListAsync(ct))
+            .GroupBy(f => f.CustomerId)
+            .Select(g => g
+                .OrderByDescending(f => f.Status != KycFileStatus.Rejected && f.Status != KycFileStatus.Suspended)
+                .ThenByDescending(f => f.UpdatedAt)
+                .First())
+            .ToList();
+        if (files.Count == 0) return new Dictionary<Guid, KycJourneySummary>();
+
+        var fileIds = files.Select(f => f.Id).ToList();
+        var identityRead = (await db.KycIdentityDocuments.IgnoreQueryFilters()
+                .Where(d => fileIds.Contains(d.KycFileId) && (d.OcrFieldsJson != null || d.MrzDataJson != null))
+                .Select(d => d.KycFileId).Distinct().ToListAsync(ct))
+            .ToHashSet();
+        var faceMatched = (await db.KycFaceVerifications.IgnoreQueryFilters()
+                .Where(v => fileIds.Contains(v.KycFileId) && v.IsMatch)
+                .Select(v => v.KycFileId).Distinct().ToListAsync(ct))
+            .ToHashSet();
+        var proofOfAddress = (await db.KycDocuments.IgnoreQueryFilters()
+                .Where(d => fileIds.Contains(d.KycFileId)
+                         && d.Kind == Infrastructure.Storage.KycDocumentKind.ProofOfAddress
+                         && d.ReviewDecision != KycDocumentReviewDecision.Refused)
+                .Select(d => d.KycFileId).Distinct().ToListAsync(ct))
+            .ToHashSet();
+
+        return files.ToDictionary(f => f.CustomerId, f => new KycJourneySummary(
+            f.CustomerId,
+            f.Id,
+            f.Status.ToString(),
+            CompletedSteps(f.Status),
+            identityRead.Contains(f.Id),
+            faceMatched.Contains(f.Id),
+            proofOfAddress.Contains(f.Id),
+            AmlCheckCompleted: f.Status is KycFileStatus.Simplified or KycFileStatus.Full
+                or KycFileStatus.UnderReview or KycFileStatus.Expired,
+            f.ConfidenceScore));
+    }
+
+    /// <summary>
+    /// Trois temps : collecte, vérification, validation complète. Un KYC simplifié est validé
+    /// mais plafonné — il lui reste le troisième temps, d'où 2.
+    /// </summary>
+    internal static int CompletedSteps(KycFileStatus status) => status switch
+    {
+        KycFileStatus.Collecting or KycFileStatus.ComplementRequired => 1,
+        KycFileStatus.Verifying or KycFileStatus.Validating => 2,
+        KycFileStatus.Simplified or KycFileStatus.Expired => 2,
+        KycFileStatus.Full or KycFileStatus.UnderReview => 3,
+        _ => 1,
+    };
 }

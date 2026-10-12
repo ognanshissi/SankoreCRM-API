@@ -121,4 +121,27 @@ public sealed record ClientSearchItemDto(
     string KycStatus,
     string RiskLevel,
     string? SegmentCode,
-    string? PrimaryPhoneMasked);
+    string? PrimaryPhoneMasked,
+    // ── Pour la liste et son aperçu. Lus après la pagination, sur la page seule. ──
+    bool HasPepExposure = false,
+    DateTimeOffset? CreatedAt = null,
+    string? AgencyName = null,
+    string? AdvisorName = null,
+    /// <summary>Produits en cours ou en souscription (ni brouillon, ni rejetés, ni clos).</summary>
+    List<string>? Products = null,
+    /// <summary>Dernière entrée du fil du client.</summary>
+    string? LastActivitySummary = null,
+    DateTimeOffset? LastActivityAt = null,
+    /// <summary>Null quand le client n'a aucun dossier KYC.</summary>
+    ClientKycJourneyDto? Kyc = null);
+
+/// <summary>Le parcours KYC tel que la liste le montre ; voir <c>IKycModule.GetJourneySummariesAsync</c>.</summary>
+public sealed record ClientKycJourneyDto(
+    Guid KycFileId,
+    string Stage,
+    int CompletedSteps,
+    bool IdentityDocumentRead,
+    bool FaceMatched,
+    bool ProofOfAddressProvided,
+    bool AmlCheckCompleted,
+    int? ConfidenceScore);

@@ -629,6 +629,17 @@ internal sealed class AdministrationModuleFacade(
         PepEnabled:           true,
         PepPostMandateMonths: Domain.ComplianceSettings.DefaultPepPostMandateMonths);
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetUserNamesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0) return new Dictionary<Guid, string>();
+        var ids = userIds.Distinct().ToList();
+        return await db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.TenantId == tenantId && ids.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+    }
+
     public async Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct)
     {
         var agent = await db.Users.SingleOrDefaultAsync(u => u.Id == agentId, ct);

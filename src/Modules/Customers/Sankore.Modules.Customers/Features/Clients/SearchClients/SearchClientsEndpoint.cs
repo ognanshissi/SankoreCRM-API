@@ -32,6 +32,10 @@ public static class SearchClientsEndpoint
                 + "this query within the p95 < 300 ms objective at 100 000 clients per tenant — the "
                 + "count and the page are two server-side queries, nothing is materialised before "
                 + "Skip/Take. "
+                + "quick narrows to a shortcut of the list screen (KycToStart, KycInProgress, HighRisk, "
+                + "WithoutAdvisor), counted the same way by GET clients/quick-counts. "
+                + "agencyName, advisorName, products, the last timeline entry and the KYC journey are "
+                + "resolved for the returned page only; a module that cannot answer leaves its column empty. "
                 + "primaryPhoneMasked is masked; use POST clients/{clientId}/reveal for a clear value. "
                 + "Requires permission: customers:read.")
             .RequireAuthorization(Permissions.CanReadCustomer.Code)
@@ -58,6 +62,9 @@ public static class SearchClientsEndpoint
         string? segmentCode,
         int? page,
         int? pageSize,
+        ClientQuickFilter? quick,
+        RiskLevel? riskLevel,
+        bool? hasPepExposure,
         CancellationToken ct)
     {
         var result = await sender.Send(new SearchClientsQuery(
@@ -71,7 +78,10 @@ public static class SearchClientsEndpoint
             Type: type,
             SegmentCode: segmentCode,
             Page: page ?? 1,
-            PageSize: pageSize ?? 20), ct);
+            PageSize: pageSize ?? 20,
+            Quick: quick ?? ClientQuickFilter.All,
+            RiskLevel: riskLevel,
+            HasPepExposure: hasPepExposure), ct);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)

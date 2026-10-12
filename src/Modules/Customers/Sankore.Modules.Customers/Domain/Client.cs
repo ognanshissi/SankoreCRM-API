@@ -653,6 +653,23 @@ public sealed class Client : AggregateRoot
         return Result.Ok();
     }
 
+    /// <summary>
+    /// Un dossier KYC vient d'être ouvert. Ne fait avancer que ce qui n'est pas encore tranché :
+    /// un client déjà validé dont on ouvre un dossier de revue reste validé — une revue ne le
+    /// dévalide pas, comme le statut public <c>UnderReview</c> le dit déjà côté KYC. Renvoie vrai
+    /// quand le statut a changé.
+    /// </summary>
+    public bool ApplyKycInitiated(DateTimeOffset at)
+    {
+        if (KycStatus is not (KycStatus.NotStarted or KycStatus.Rejected or KycStatus.Expired))
+            return false;
+
+        KycStatus = KycStatus.InProgress;
+        KycUpdatedAt = at;
+        UpdatedAt = at;
+        return true;
+    }
+
     public void ApplyRiskLevel(RiskLevel level, DateTimeOffset at)
     {
         RiskLevel = level;

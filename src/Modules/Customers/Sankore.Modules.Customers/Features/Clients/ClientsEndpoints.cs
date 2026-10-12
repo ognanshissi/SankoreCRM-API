@@ -25,6 +25,7 @@ public static class ClientsEndpoints
         // :guid constraint is what keeps them apart, so keep it on every parameter route.
         return group
             .MapCreateIndividualClient()
+            .MapGetClientQuickCounts()
             .MapSearchClients()
             .MapGetClient()
             .MapUpdateClient()

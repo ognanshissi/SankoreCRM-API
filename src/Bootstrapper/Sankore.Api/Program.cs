@@ -334,6 +334,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Customers.Features.Holdings.Consumers.HoldingSyncRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRejectedConsumer>();
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycRiskLevelChangedConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycInitiatedConsumer>();
     // Development-only auto-validation stub; inert outside Development (US-M01-BE-13).
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.DevKycAutoValidateConsumer>();
 

@@ -56,6 +56,15 @@ dotnet user-secrets set "Customers:BlindIndexKey" "$(openssl rand -base64 32)" -
 dotnet user-secrets set "Leads:FieldEncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 dotnet user-secrets set "Leads:BlindIndexKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 
+# Outbound batch files (INT-24) — the encrypted store for the files deposited at a CBS/IMF. Its
+# own key: one object aggregates a whole institution's day of customer writes, so it must not be
+# openable with the key that protects the command payload columns. A dev value sits in
+# appsettings.Development.json; the store reads it on the FIRST batch generation, not at boot, so
+# a missing key breaks a dispatch (`DispatchTenantCommandsJob ... threw`) rather than the
+# start-up. Point Integration:Batch:Storage:BasePath at a mounted volume too, or configure a
+# bucket — the default lands under the content root, which a redeploy destroys.
+dotnet user-secrets set "Integration:Batch:Storage:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+
 # Insurance claim pieces (ASS-09) — the encrypted store for pièces de sinistre. A FOURTH key,
 # separate from Integration:FieldEncryptionKey, Integration:Batch:Storage and Kyc:Storage: one
 # compromised key must open one concern. A dev value sits in appsettings.Development.json; the

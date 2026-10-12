@@ -52,7 +52,41 @@ public interface IKycModule
     /// </para>
     /// </summary>
     Task<KycFlowUsage> GetFlowUsageAsync(Guid tenantId, Guid customerEntityId, CancellationToken ct);
+
+    /// <summary>
+    /// Où en est le parcours KYC de chaque client, pour une liste : l'étape du dossier courant et
+    /// les pièces déjà obtenues. Un client absent du dictionnaire n'a aucun dossier.
+    ///
+    /// <para>
+    /// Ne renvoie que des booléens et un score : ni numéro de pièce, ni image, ni motif. Une liste
+    /// de clients n'a pas à transporter plus que « c'est fait » ou « ça manque ».
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, KycJourneySummary>> GetJourneySummariesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> customerIds, CancellationToken ct);
 }
+
+/// <param name="Stage">
+/// Statut interne du dossier : Collecting, ComplementRequired, Verifying, Validating, Simplified,
+/// Full, UnderReview, Expired, Rejected ou Suspended. Plus fin que <see cref="KycStatus"/>, qui
+/// confond par exemple un dossier en collecte et un dossier renvoyé pour complément.
+/// </param>
+/// <param name="CompletedSteps">Avancement sur trois temps — collecte, vérification, validation complète.</param>
+/// <param name="IdentityDocumentRead">Une pièce d'identité a été lue (OCR ou MRZ).</param>
+/// <param name="FaceMatched">Un selfie a été comparé à la pièce avec succès.</param>
+/// <param name="ProofOfAddressProvided">Un justificatif de domicile a été déposé et n'a pas été refusé.</param>
+/// <param name="AmlCheckCompleted">Le circuit d'approbation LBC-FT est allé à son terme.</param>
+/// <param name="ConfidenceScore">Score de confiance eKYC sur 100, quand le service l'a calculé.</param>
+public sealed record KycJourneySummary(
+    Guid CustomerId,
+    Guid KycFileId,
+    string Stage,
+    int CompletedSteps,
+    bool IdentityDocumentRead,
+    bool FaceMatched,
+    bool ProofOfAddressProvided,
+    bool AmlCheckCompleted,
+    int? ConfidenceScore);
 
 /// <param name="IsCapped">False for a full KYC: the amounts below carry no meaning.</param>
 /// <param name="MaxBalance">Ceiling on the balance AFTER an operation, in the tenant's currency.</param>

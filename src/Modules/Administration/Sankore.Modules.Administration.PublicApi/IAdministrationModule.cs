@@ -47,6 +47,13 @@ public interface IAdministrationModule
     Task<IReadOnlyList<Guid>> GetTeamAgentIdsAsync(Guid tenantId, Guid supervisorId, CancellationToken ct);
 
     /// <summary>
+    /// Le nom affiché de chaque utilisateur demandé, en un appel — pour une liste qui montre un
+    /// conseiller par ligne. Un identifiant inconnu (ou d'un autre tenant) est absent du résultat.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetUserNamesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> userIds, CancellationToken ct);
+
+    /// <summary>
     /// Returns the product category (Loan, Savings, Tontine) for a given product code.
     /// Used by Leads module for qualification template resolution.
     /// Returns null if the product code is not found.

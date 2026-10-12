@@ -29,5 +29,13 @@ public sealed record SearchClientsQuery(
     ClientType? Type,
     string? SegmentCode,
     int Page = 1,
-    int PageSize = 20
-) : IRequest<Result<PagedResult<ClientSearchItemDto>>>;
+    int PageSize = 20,
+    ClientQuickFilter Quick = ClientQuickFilter.All,
+    RiskLevel? RiskLevel = null,
+    bool? HasPepExposure = null
+) : IRequest<Result<PagedResult<ClientSearchItemDto>>>
+{
+    public ClientSearchCriteria Criteria => new(
+        ClientNumber, Phone, IdentityDocumentNumber, Name, Status, AgencyId, AdvisorUserId, Type,
+        SegmentCode, RiskLevel, HasPepExposure);
+}
