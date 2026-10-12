@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Administration.Features.Users.AdminResetPassword;
+using Sankore.Modules.Administration.Features.Users.AgentSettings;
 using Sankore.Modules.Administration.Features.Users.AssignManager;
 using Sankore.Modules.Administration.Features.Users.AssignRole;
 using Sankore.Modules.Administration.Features.Users.BulkAssign;
@@ -46,6 +47,9 @@ public static class UsersEndpoints
             .MapChangePassword()
             .MapAdminResetPassword()
             .MapBulkAssign()
-            .MapAssignManager();
+            .MapAssignManager()
+            .MapGetMyAgentSettings()
+            .MapUpdateMyAgentSettings()
+            .MapSetAgentCapacityCeiling();
     }
 }

@@ -260,6 +260,76 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.ToTable("agencies", "administration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.AgentSettings", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateOnly?>("AbsenceFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("absence_from");
+
+                    b.Property<DateOnly?>("AbsenceTo")
+                        .HasColumnType("date")
+                        .HasColumnName("absence_to");
+
+                    b.Property<string>("Availability")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Available")
+                        .HasColumnName("availability");
+
+                    b.Property<int>("CapacityCeiling")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30)
+                        .HasColumnName("capacity_ceiling");
+
+                    b.Property<int?>("MaxActiveLeads")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_active_leads");
+
+                    b.Property<string>("NotificationPreferences")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("notification_preferences")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<Guid?>("ReplacementUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("replacement_user_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<bool>("TransferTasksToReplacement")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("transfer_tasks_to_replacement");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("WorkingHours")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("working_hours")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_agent_settings");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_agent_settings_tenant_id");
+
+                    b.ToTable("agent_settings", "administration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.AppRole", b =>
                 {
                     b.Property<Guid>("Id")

@@ -20,6 +20,7 @@ internal static class NotificationsSeeder
         await SeedLeadSourceSnippetAsync(db, logger, ct);
         await SeedAgencyManagerAssignedAsync(db, logger, ct);
         await SeedAgencyManagerUnassignedAsync(db, logger, ct);
+        await SeedAgentAbsenceDeclaredAsync(db, logger, ct);
         await SeedUserAgencyChangedAsync(db, logger, ct);
         await SeedUserRoleGrantedAsync(db, logger, ct);
         await SeedClientWelcomeAsync(db, logger, ct);
@@ -430,6 +431,81 @@ internal static class NotificationsSeeder
                       </ol>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">Public key: {{ public_key }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── agent.absence-declared ──────────────────────────────────────────────
+    // Destinataire : le supérieur de l'agent (AgentAbsenceNotifier, M12).
+
+    private static async Task SeedAgentAbsenceDeclaredAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "agent.absence-declared";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "{{ agent_name }} sera absent(e) du {{ absence_from }} au {{ absence_to }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        <strong>{{ agent_name }}</strong> a déclaré une absence du
+                        <strong>{{ absence_from }}</strong> au <strong>{{ absence_to }}</strong>.
+                        Aucun nouveau lead ne lui sera attribué pendant cette période.
+                      </p>
+                      <p>Remplaçant choisi&nbsp;: <strong>{{ replacement_name }}</strong>.</p>
+                      <p>Tâches en cours transférées au remplaçant&nbsp;: {{ tasks_transferred }}.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "{{ agent_name }} will be away from {{ absence_from }} to {{ absence_to }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        <strong>{{ agent_name }}</strong> has declared an absence from
+                        <strong>{{ absence_from }}</strong> to <strong>{{ absence_to }}</strong>.
+                        No new lead will be assigned to them during that period.
+                      </p>
+                      <p>Chosen replacement: <strong>{{ replacement_name }}</strong>.</p>
+                      <p>Open tasks transferred to the replacement: {{ tasks_transferred }}.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name }}</p>
                     </body>
                     </html>
                     """));

@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Administration.Tests.Infrastructure;
 
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.Tests.TestSupport;
@@ -210,5 +211,51 @@ public sealed class GetAvailableAgentsTests : IDisposable
         var second = await Facade().GetAvailableAgentsAsync(_tenantId, BranchA, default);
 
         first.Select(a => a.Id).Should().Equal(second.Select(a => a.Id));
+    }
+
+    // ── Paramétrage agent (statut déclaré, capacité) ──────────────────────
+
+    private void SeedSettings(AppUser agent, Action<AgentSettings> configure)
+    {
+        using var db = _factory.CreateContext();
+        var settings = AgentSettings.Create(_tenantId, agent.Id);
+        configure(settings);
+        db.AgentSettings.Add(settings);
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task An_agent_who_declared_a_pause_leaves_the_pool()
+    {
+        var agent = SeedAgent("Moussa", BranchA, Roles.CommercialAgent.Code);
+        SeedSettings(agent, s => s.UpdateBySelf(AgentAvailability.Paused, null, [], null, []));
+
+        (await Facade().GetAvailableAgentsAsync(_tenantId, BranchA, default)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_absence_declared_for_later_keeps_the_agent_in_the_pool_today()
+    {
+        var agent = SeedAgent("Aminata", BranchA, Roles.CommercialAgent.Code);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        SeedSettings(agent, s => s.UpdateBySelf(
+            AgentAvailability.Absent, new AbsenceDeclaration(today.AddDays(7), today.AddDays(11), null, false), [], null, []));
+
+        (await Facade().GetAvailableAgentsAsync(_tenantId, BranchA, default)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task An_agent_at_capacity_leaves_the_pool()
+    {
+        var agent = SeedAgent("Yao", BranchA, Roles.CommercialAgent.Code);
+        using (var db = _factory.CreateContext())
+        {
+            var tracked = db.Users.AsTracking().Single(u => u.Id == agent.Id);
+            tracked.AdjustLeadCounters(3, 0);
+            db.SaveChanges();
+        }
+        SeedSettings(agent, s => s.UpdateBySelf(AgentAvailability.Available, null, [], 3, []));
+
+        (await Facade().GetAvailableAgentsAsync(_tenantId, BranchA, default)).Should().BeEmpty();
     }
 }

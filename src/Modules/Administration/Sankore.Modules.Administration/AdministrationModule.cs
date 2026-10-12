@@ -106,6 +106,7 @@ public static class AdministrationModule
         services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerRoleCoordinator>();
         services.AddScoped<Infrastructure.ModuleEmailSender>();
         services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerNotifier>();
+        services.AddScoped<Features.Users.AgentSettings.AgentAbsenceNotifier>();
         services.AddScoped<Features.Users.BulkAssign.BulkAssignNotifier>();
         services.AddScoped<Features.Users.AssignManager.ReportingLine>();
         services.Configure<JwtOptions>(config.GetSection("Jwt"));

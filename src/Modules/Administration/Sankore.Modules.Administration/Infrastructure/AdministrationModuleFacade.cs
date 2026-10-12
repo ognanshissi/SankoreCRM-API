@@ -112,8 +112,25 @@ internal sealed class AdministrationModuleFacade(
         // but they rank on load and conversion rate, where ties are common — an unordered pool makes
         // a tie resolve differently on each dispatch, which is impossible to reproduce.
         var agents = await query.OrderBy(u => u.Id).ToListAsync(ct);
+        if (agents.Count == 0)
+            return [];
 
-        return agents.Select(ToSummary).ToList();
+        // Ce que l'agent a déclaré lui-même : statut (pause, absence datée), horaires et capacité.
+        // `IsAvailable` reste l'interrupteur de l'administration ; les deux doivent laisser passer.
+        // Filtré en mémoire : les règles (période d'absence, plage horaire du jour) ne se traduisent
+        // pas en SQL, et le vivier d'une agence se compte en dizaines. Un agent sans paramétrage n'a
+        // déclaré aucune contrainte et reste dispatchable, comme avant l'écran.
+        var ids = agents.Select(a => a.Id).ToList();
+        var settings = await db.AgentSettings
+            .IgnoreQueryFilters()
+            .Where(s => s.TenantId == tenantId && ids.Contains(s.UserId))
+            .ToDictionaryAsync(s => s.UserId, ct);
+
+        var now = DateTimeOffset.UtcNow;
+        return agents
+            .Where(a => !settings.TryGetValue(a.Id, out var s) || s.IsDispatchable(now, a.ActiveLeadsCount))
+            .Select(ToSummary)
+            .ToList();
     }
 
     /// <summary>
