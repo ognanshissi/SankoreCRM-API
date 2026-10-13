@@ -4,6 +4,7 @@ using FluentValidation;
 using NCrontab;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.LeadSources.Mapping;
+using Sankore.Shared.Infrastructure.Validation;
 
 internal sealed class UpdateLeadSourceValidator
     : AbstractValidator<UpdateLeadSourceCommand>
@@ -30,14 +31,14 @@ internal sealed class UpdateLeadSourceValidator
                 .Must(CssColor.IsValidColor)
                 .When(x => !string.IsNullOrWhiteSpace(
                     ((EmbeddedScriptSettings)x.Settings!).HostedForm?.AccentColor))
-                .WithName("settings.hostedForm.accentColor")
+                .WithClientField("settings.hostedForm.accentColor")
                 .WithMessage("settings.hostedForm.accentColor must be a hex colour (#2563eb) or a CSS colour keyword.");
 
             RuleFor(x => ((EmbeddedScriptSettings)x.Settings!).HostedForm!.FontFamily)
                 .Must(CssColor.IsValidFontFamily)
                 .When(x => !string.IsNullOrWhiteSpace(
                     ((EmbeddedScriptSettings)x.Settings!).HostedForm?.FontFamily))
-                .WithName("settings.hostedForm.fontFamily")
+                .WithClientField("settings.hostedForm.fontFamily")
                 .WithMessage("settings.hostedForm.fontFamily must be a plain font stack, e.g. \"Inter, system-ui, sans-serif\".");
 
             RuleForEach(x => ((EmbeddedScriptSettings)x.Settings!).AllowedOrigins)
@@ -48,7 +49,7 @@ internal sealed class UpdateLeadSourceValidator
         When(x => x.Settings is ServerWebhookSettings, () =>
         {
             RuleFor(x => ((ServerWebhookSettings)x.Settings!).ContentType)
-                .NotEmpty().WithName("settings.contentType");
+                .NotEmpty().WithClientField("settings.contentType");
             RuleFor(x => ((ServerWebhookSettings)x.Settings!).SignatureAlgorithm)
                 .Must(a => a is "sha256" or "sha512")
                 .When(x => ((ServerWebhookSettings)x.Settings!).SignatureAlgorithm is not null)
@@ -60,10 +61,20 @@ internal sealed class UpdateLeadSourceValidator
             // Validated on the COMPOSED url, named after the field the editor owns: the three
             // parts are only ever wrong together, and "settings.endpointUrl" named nothing the
             // caller could go and correct.
+            //
+            // FORMAT only, and nothing about presence: a pull source is configured over several
+            // visits — mappings, consent, then the provider's URL when it arrives — and refusing
+            // the save made the whole screen unsaveable until the URL was typed, which is why
+            // this rule read as a bug rather than as a requirement. An ABSENT endpoint is refused
+            // where it actually matters: `CheckActivationPrerequisites` answers
+            // `NoEndpointConfigured` rather than activating, and `LeadSourceConfig.UpdateSettings`
+            // refuses to blank the URL of a source that is already past Testing. A present one
+            // must still parse — a typo stored now is a pull that fails later, in a Hangfire log.
             RuleFor(x => ((ScheduledPullSettings)x.Settings!).EndpointUrl)
-                .NotEmpty()
                 .Must(BeAValidUrl)
-                .WithName("settings.pull.baseUrl")
+                .When(x => !string.IsNullOrWhiteSpace(
+                    ((ScheduledPullSettings)x.Settings!).EndpointUrl))
+                .WithClientField("settings.pull.baseUrl")
                 .WithMessage("settings.pull.baseUrl and requestPath must compose a valid http/https URL.");
 
             // No rule on the verb: it is an enum now, so an unknown value is refused when the
@@ -76,22 +87,22 @@ internal sealed class UpdateLeadSourceValidator
                 .Must(BeAParseableCron)
                 .When(x => !string.IsNullOrWhiteSpace(
                     ((ScheduledPullSettings)x.Settings!).Pull?.CronExpression))
-                .WithName("settings.pull.cronExpression")
+                .WithClientField("settings.pull.cronExpression")
                 .WithMessage("settings.pull.cronExpression is not a valid cron expression.");
         });
 
         When(x => x.Settings is PlatformSettings, () =>
         {
             RuleFor(x => ((PlatformSettings)x.Settings!).PlatformName)
-                .NotEmpty().WithName("settings.platformName");
+                .NotEmpty().WithClientField("settings.platformName");
         });
 
         When(x => x.Settings is SocialTrackingSettings, () =>
         {
             RuleFor(x => ((SocialTrackingSettings)x.Settings!).PlatformName)
-                .NotEmpty().WithName("settings.platformName");
+                .NotEmpty().WithClientField("settings.platformName");
             RuleFor(x => ((SocialTrackingSettings)x.Settings!).MinEngagementScore)
-                .GreaterThanOrEqualTo(0).WithName("settings.minEngagementScore");
+                .GreaterThanOrEqualTo(0).WithClientField("settings.minEngagementScore");
         });
 
         // One failure per mapping error, so the client gets a usable list

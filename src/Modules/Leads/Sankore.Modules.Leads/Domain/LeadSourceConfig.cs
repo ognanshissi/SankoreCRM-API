@@ -156,8 +156,28 @@ public sealed class LeadSourceConfig : ITenant
         if (settings is not null && settings.ExpectedMode != Mode)
             throw new DomainException(
                 $"Settings type mismatch: settings.$mode={settings.ExpectedMode} but source mode={Mode}");
+
+        // A pull source may be SAVED without its endpoint while it is still being configured:
+        // the editor collects the mappings, the consent and the provider's URL over several
+        // visits, and refusing the save made the whole screen unsaveable until the URL arrived.
+        // An incomplete one simply cannot go live — CheckActivationPrerequisites answers
+        // NoEndpointConfigured.
+        //
+        // Past Testing the same blank means something else: PullLeadSourceJob is on a schedule,
+        // and an empty URL makes every run fail and escalates the source to Error after three
+        // consecutive failures. So the relaxation stops exactly where the schedule starts.
+        if (settings is ScheduledPullSettings { EndpointUrl: "" or null } && !IsBeingConfigured)
+            throw new DomainException("LIVE_SOURCE_ENDPOINT_REQUIRED");
+
         Settings = settings;
     }
+
+    /// <summary>
+    /// The two statuses in which nothing pulls yet, so an incomplete configuration harms nothing.
+    /// Archived counts as configured on purpose: it is not a place to go and fix anything.
+    /// </summary>
+    private bool IsBeingConfigured
+        => Status is LeadSourceStatus.Draft or LeadSourceStatus.Testing;
 
     /// <summary>
     /// Returns the list of field names that changed compared to the given values.
@@ -343,12 +363,24 @@ public sealed class LeadSourceConfig : ITenant
             case ServerWebhookSettings { SignatureAlgorithm: not null, SignatureCredentialVaultRef: null }:
                 missing.Add("SecretMissing");
                 break;
-            case ScheduledPullSettings { EndpointUrl: "" or null }:
-                missing.Add("NoEndpointConfigured");
+
+            // Two independent prerequisites, so two ifs rather than two switch cases: a `case`
+            // match stops at the first, and a pull source with neither endpoint nor credential
+            // reported only the endpoint — the caller fixed it, retried, and was told about the
+            // next one. A list called "what is missing" must be the whole list.
+            case ScheduledPullSettings pull:
+                if (pull.EndpointUrl is "" or null)
+                    missing.Add("NoEndpointConfigured");
+
+                // Only an auth type that HAS a credential can be missing one. `None` is an open
+                // provider API — and demanding a vault reference there made such a source
+                // impossible to activate at all: nothing writes a secret for it, so
+                // SecretMissing was permanent and the source stayed stuck in Testing.
+                if (pull.AuthType is not PullAuthType.None && pull.AuthCredentialVaultRef is null)
+                    missing.Add("SecretMissing");
+
                 break;
-            case ScheduledPullSettings { AuthCredentialVaultRef: null }:
-                missing.Add("SecretMissing");
-                break;
+
             case PlatformSettings { OAuthCredentialVaultRef: null }:
                 missing.Add("SecretMissing");
                 break;

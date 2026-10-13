@@ -200,4 +200,119 @@ public sealed class LeadSourceLifecycleTests
         missing.Should().BeEmpty();
         source.Status.Should().Be(LeadSourceStatus.Active);
     }
+
+    // ── A pull endpoint may be missing while configuring, never once live ─
+
+    private LeadSourceConfig BuildPullSource(string baseUrl)
+        => LeadSourceConfig.Create(_tenantId, "PULL", "Lead Factory-pull",
+            LeadChannelType.ExternalApiPull, 0, IntegrationMode.ScheduledPull,
+            settings: PullSettings(baseUrl));
+
+    private static ScheduledPullSettings PullSettings(string baseUrl) => new()
+    {
+        Pull = new PullConfig { BaseUrl = baseUrl },
+        FieldMappings =
+        [
+            new() { SourceField = "$.data.phoneNumber", TargetField = "phoneNumber" },
+            new() { SourceField = "$.data.name", TargetField = "fullName" }
+        ]
+    };
+
+    [Fact]
+    public void A_draft_pull_source_saves_without_its_endpoint()
+    {
+        var source = BuildPullSource(string.Empty);
+
+        source.UpdateSettings(PullSettings(string.Empty));
+
+        source.Settings.Should().BeOfType<ScheduledPullSettings>();
+    }
+
+    [Fact]
+    public void A_pull_source_without_an_endpoint_cannot_be_activated()
+    {
+        var source = BuildPullSource(string.Empty);
+        source.StartTesting();
+
+        source.Activate().Should().Contain("NoEndpointConfigured");
+        source.Status.Should().NotBe(LeadSourceStatus.Active);
+    }
+
+    [Fact]
+    public void A_live_pull_source_refuses_to_have_its_endpoint_blanked()
+    {
+        var source = BuildPullSource("https://leads.example.com/v1/leads");
+        source.StartTesting();
+        source.Activate();
+        source.Status.Should().Be(LeadSourceStatus.Active);
+
+        // The schedule is running: an empty url would fail every run and escalate the source
+        // to Error after three.
+        var act = () => source.UpdateSettings(PullSettings(string.Empty));
+
+        act.Should().Throw<DomainException>().WithMessage("LIVE_SOURCE_ENDPOINT_REQUIRED");
+        source.Settings.Should().BeOfType<ScheduledPullSettings>()
+            .Which.EndpointUrl.Should().Be("https://leads.example.com/v1/leads");
+    }
+
+    /// <summary>
+    /// `authType: None` is an open provider API: nothing ever writes a vault reference for it,
+    /// so a prerequisite demanding one was permanent — the source could reach Testing and never
+    /// leave it, with "SecretMissing" naming a secret that does not exist.
+    /// </summary>
+    [Fact]
+    public void An_unauthenticated_pull_source_needs_no_credential_to_activate()
+    {
+        var source = BuildPullSource("https://leads.example.com/v1/leads");
+        source.StartTesting();
+
+        source.Activate().Should().BeEmpty();
+        source.Status.Should().Be(LeadSourceStatus.Active);
+    }
+
+    [Fact]
+    public void An_authenticated_pull_source_still_needs_its_credential()
+    {
+        var settings = PullSettings("https://leads.example.com/v1/leads") with
+        {
+            Pull = new PullConfig
+            {
+                BaseUrl = "https://leads.example.com/v1/leads",
+                AuthType = PullCredentialType.Bearer,
+            },
+        };
+        var source = LeadSourceConfig.Create(_tenantId, "PULL", "Lead Factory-pull",
+            LeadChannelType.ExternalApiPull, 0, IntegrationMode.ScheduledPull, settings: settings);
+        source.StartTesting();
+
+        source.Activate().Should().Contain("SecretMissing");
+    }
+
+    [Fact]
+    public void Every_missing_pull_prerequisite_is_reported_at_once()
+    {
+        var settings = PullSettings(string.Empty) with
+        {
+            Pull = new PullConfig { BaseUrl = string.Empty, AuthType = PullCredentialType.Bearer },
+        };
+        var source = LeadSourceConfig.Create(_tenantId, "PULL", "Lead Factory-pull",
+            LeadChannelType.ExternalApiPull, 0, IntegrationMode.ScheduledPull, settings: settings);
+        source.StartTesting();
+
+        // Not one at a time: a caller who fixes the endpoint must not then discover the secret.
+        source.Activate().Should().Contain("NoEndpointConfigured").And.Contain("SecretMissing");
+    }
+
+    [Fact]
+    public void A_live_pull_source_still_accepts_a_new_endpoint()
+    {
+        var source = BuildPullSource("https://leads.example.com/v1/leads");
+        source.StartTesting();
+        source.Activate();
+
+        source.UpdateSettings(PullSettings("https://leads.example.com/v2/leads"));
+
+        source.Settings.Should().BeOfType<ScheduledPullSettings>()
+            .Which.EndpointUrl.Should().Be("https://leads.example.com/v2/leads");
+    }
 }

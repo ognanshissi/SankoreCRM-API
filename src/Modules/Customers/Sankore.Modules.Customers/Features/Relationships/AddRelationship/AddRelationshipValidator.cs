@@ -1,4 +1,5 @@
 using FluentValidation;
+using Sankore.Shared.Infrastructure.Validation;
 
 namespace Sankore.Modules.Customers.Features.Relationships.AddRelationship;
 
@@ -14,7 +15,7 @@ public sealed class AddRelationshipValidator : AbstractValidator<AddRelationship
         RuleFor(x => x)
             .Must(c => (c.RelatedClientId is not null && c.RelatedClientId != Guid.Empty)
                        ^ !string.IsNullOrWhiteSpace(c.ExternalFullName))
-            .WithName("relatedParty")
+            .WithClientField("relatedParty")
             .WithMessage(
                 "Provide either relatedClientId (an existing client) or externalFullName " +
                 "(a person who is not a client), but not both.");
