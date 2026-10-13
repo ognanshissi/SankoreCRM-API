@@ -26,6 +26,13 @@ public sealed class UserSession
     public LoginPlatform Platform { get; private set; } = LoginPlatform.Unknown;
     public LoginClientKind ClientKind { get; private set; } = LoginClientKind.Unknown;
 
+    /// <summary>
+    /// Renseigné pour une session d'usurpation : l'administrateur qui agit sous l'identité de
+    /// <see cref="UserId"/>. Une telle session n'a pas de jeton de rafraîchissement et meurt avec
+    /// son jeton d'accès.
+    /// </summary>
+    public Guid? ImpersonatorUserId { get; private set; }
+
     public DateTimeOffset? RevokedAt { get; private set; }
     public SessionEndReason? EndReason { get; private set; }
 
@@ -48,6 +55,14 @@ public sealed class UserSession
             Platform = userAgent?.Platform ?? LoginPlatform.Unknown,
             ClientKind = userAgent?.ClientKind ?? LoginClientKind.Unknown,
         };
+    }
+
+    public static UserSession OpenImpersonation(
+        Guid tenantId, Guid userId, Guid impersonatorUserId, string? ipAddress, UserAgentInfo? userAgent)
+    {
+        var session = Open(tenantId, userId, ipAddress, userAgent);
+        session.ImpersonatorUserId = impersonatorUserId;
+        return session;
     }
 
     public void Touch(DateTimeOffset now)
@@ -84,4 +99,7 @@ public enum SessionEndReason
 
     /// <summary>Le mot de passe a changé : les autres appareils doivent se reconnecter.</summary>
     PasswordChanged,
+
+    /// <summary>L'administrateur est revenu à son propre compte.</summary>
+    ImpersonationEnded,
 }

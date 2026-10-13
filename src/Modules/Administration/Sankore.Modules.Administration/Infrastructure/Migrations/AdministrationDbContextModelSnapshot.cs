@@ -418,6 +418,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
                     b.Property<DateTimeOffset?>("DeactivatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deactivated_at");
@@ -463,6 +467,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<int>("HotLeadsCount")
                         .HasColumnType("integer")
                         .HasColumnName("hot_leads_count");
+
+                    b.Property<DateTimeOffset?>("InvitationSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("invitation_sent_at");
 
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("boolean")
@@ -587,6 +595,11 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "AgencyId")
                         .HasDatabaseName("ix_app_users_tenant_id_agency_id");
+
+                    b.HasIndex("TenantId", "EmployeeNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_app_users_tenant_id_employee_number")
+                        .HasFilter("employee_number IS NOT NULL");
 
                     b.HasIndex("TenantId", "NormalizedEmail")
                         .IsUnique()
@@ -1707,6 +1720,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("end_reason");
+
+                    b.Property<Guid?>("ImpersonatorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("impersonator_user_id");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)

@@ -12,5 +12,9 @@ namespace Sankore.Modules.Administration.Features.Users.AdminResetPassword;
 /// </summary>
 internal sealed record AdminResetPasswordCommand(
     Guid TargetUserId,
-    string NewPassword,
-    string ConfirmPassword) : IRequest<Result>, ICommand;
+    [property: SensitiveData] string NewPassword,
+    [property: SensitiveData] string ConfirmPassword) : IRequest<Result>, ICommand, IResourceCommand
+{
+    public string ResourceType => "User";
+    public string? ResourceId => TargetUserId.ToString();
+}

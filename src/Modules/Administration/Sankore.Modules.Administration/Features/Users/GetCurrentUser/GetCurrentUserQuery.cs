@@ -17,4 +17,7 @@ public sealed record CurrentUserDto(
     DateTimeOffset? LastLoginAt,
     IReadOnlyList<string> Roles,
     IReadOnlyList<string> Permissions,
-    string DefaultLanguage);
+    string DefaultLanguage,
+    /// <summary>L'administrateur qui agit sous cette identité, ou null hors usurpation.</summary>
+    Guid? ImpersonatorId = null,
+    string? ImpersonatorName = null);

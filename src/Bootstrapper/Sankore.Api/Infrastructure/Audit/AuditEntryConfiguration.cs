@@ -25,6 +25,7 @@ internal sealed class AuditEntryConfiguration : IEntityTypeConfiguration<AuditLo
         builder.HasIndex(e => new { e.TenantId, e.UserId });
         builder.HasIndex(e => new { e.TenantId, e.Action });
         builder.HasIndex(e => new { e.TenantId, e.ResourceType, e.ResourceId });
+        builder.HasIndex(e => new { e.TenantId, e.ImpersonatorUserId }).HasFilter("impersonator_user_id IS NOT NULL");
 
         // ── Immutability ──────────────────────────────────────────────────
         // ENFORCED, and not by this file: the `ImmutableEntries` migration installs three

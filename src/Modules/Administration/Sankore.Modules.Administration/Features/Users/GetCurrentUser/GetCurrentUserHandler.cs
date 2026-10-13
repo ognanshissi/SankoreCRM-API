@@ -50,6 +50,10 @@ internal sealed class GetCurrentUserHandler(
         var profile = await db.UserProfiles
             .FirstOrDefaultAsync(p => p.UserId == user.Id, ct);
 
+        string? impersonatorName = null;
+        if (currentUser.ImpersonatorId is { } impersonatorId)
+            impersonatorName = await db.Users.Where(u => u.Id == impersonatorId).Select(u => u.FullName).FirstOrDefaultAsync(ct);
+
         return Result.Ok(new CurrentUserDto(
             Id:              user.Id,
             TenantId:        user.TenantId,
@@ -62,6 +66,8 @@ internal sealed class GetCurrentUserHandler(
             LastLoginAt:     user.LastLoginAt,
             Roles:           roles.ToList(),
             Permissions:     allPermissions,
-            DefaultLanguage: profile?.DefaultLanguage ?? "fr"));
+            DefaultLanguage: profile?.DefaultLanguage ?? "fr",
+            ImpersonatorId:  currentUser.ImpersonatorId,
+            ImpersonatorName: impersonatorName));
     }
 }

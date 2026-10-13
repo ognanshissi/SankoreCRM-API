@@ -6,9 +6,9 @@ namespace Sankore.Modules.Administration.Features.Authentication.AccountActivati
 
 public sealed record AccountActivationCommand(
     string UserId,
-    string Token,
-    string NewPassword,
-    string ConfirmPassword) : IRequest<Result<AccountActivationResult>>, ICommand;
+    [property: SensitiveData] string Token,
+    [property: SensitiveData] string NewPassword,
+    [property: SensitiveData] string ConfirmPassword) : IRequest<Result<AccountActivationResult>>, ICommand;
 
 
 public sealed record AccountActivationResult(bool Success, string Message);

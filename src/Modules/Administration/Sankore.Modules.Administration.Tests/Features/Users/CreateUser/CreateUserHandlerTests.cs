@@ -9,6 +9,7 @@ using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Modules.Administration.Domain.Events;
 using Sankore.Modules.Administration.Features.Users.CreateUser;
+using Sankore.Modules.Administration.Features.Users.Invitation;
 using Sankore.Modules.Administration.Infrastructure.Identity;
 using Sankore.Modules.Administration.Tests.TestSupport;
 using Sankore.Modules.Notifications.PublicApi;
@@ -33,6 +34,14 @@ public sealed class CreateUserHandlerTests : IDisposable
     }
 
     public void Dispose() => _factory.Dispose();
+
+    private static CreateUserHandler Build(
+        Sankore.Modules.Administration.Infrastructure.AdministrationDbContext db, UserManager<AppUser> userManager, RoleManager<AppRole> roleManager,
+        ITenantContext tenantContext, ITenantStore tenantStore, IEventPublisher publisher, INotificationsModule notifications)
+        => new(db, userManager, roleManager, tenantContext, publisher,
+            new ActivationInvitationSender(userManager, tenantStore, notifications,
+                Microsoft.Extensions.Options.Options.Create(new IdentityTokenOptions()), TimeProvider.System),
+            new EmployeeNumberAllocator(db));
 
     // ── S1: Happy-path — user created, event published ────────────────────
 
@@ -78,7 +87,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         notifications.QueueEmailAsync(Arg.Any<QueueEmailRequest>(), Arg.Any<CancellationToken>())
             .Returns(Result<Guid>.Ok(Guid.NewGuid()));
 
-        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
+        var handler = Build(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: agency.Id,
@@ -125,7 +134,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         tenantContext.CurrentTenantId.Returns(_tenantId);
 
         var notifications = Substitute.For<INotificationsModule>();
-        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
+        var handler = Build(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: Guid.NewGuid(), // no agency seeded
@@ -175,7 +184,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         tenantContext.CurrentTenantId.Returns(_tenantId);
 
         var notifications = Substitute.For<INotificationsModule>();
-        var handler = new CreateUserHandler(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
+        var handler = Build(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
 
         var command = new CreateUserCommand(
             AgencyId: agency.Id,
@@ -250,7 +259,7 @@ public sealed class CreateUserHandlerTests : IDisposable
                 return Result<Guid>.Ok(Guid.NewGuid());
             });
 
-        var handler = new CreateUserHandler(
+        var handler = Build(
             db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
 
         var command = new CreateUserCommand(

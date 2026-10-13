@@ -120,6 +120,7 @@ internal static class MySecurityEndpoints
             .WithSummary("Déconnecte à distance une autre session de l'utilisateur connecté.")
             .WithTags("Users")
             .RequireAuthorization()
+            .DisallowImpersonation()
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest);
 
@@ -134,6 +135,7 @@ internal static class MySecurityEndpoints
             .WithSummary("Déconnecte toutes les sessions de l'utilisateur connecté sauf celle-ci.")
             .WithTags("Users")
             .RequireAuthorization()
+            .DisallowImpersonation()
             .Produces<EndSessionsResult>()
             .Produces(StatusCodes.Status400BadRequest);
 
@@ -148,6 +150,7 @@ internal static class MySecurityEndpoints
             .WithSummary("Signale une connexion qui ne vient pas de l'utilisateur : ses autres sessions sont fermées et son superviseur est prévenu.")
             .WithTags("Users")
             .RequireAuthorization()
+            .DisallowImpersonation()
             .Produces<EndSessionsResult>()
             .Produces(StatusCodes.Status400BadRequest);
 

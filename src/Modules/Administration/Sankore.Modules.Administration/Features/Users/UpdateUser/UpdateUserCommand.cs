@@ -12,7 +12,13 @@ public sealed record UpdateUserCommand(
     List<string>? Specialties,
     bool? EnableNotifications,
     /// <summary>Null : inchangé. Chaîne vide : effacé.</summary>
-    string? EmployeeNumber = null
+    string? EmployeeNumber = null,
+    string? FirstName = null,
+    string? LastName = null,
+    /// <summary>Accepté seulement avant activation ; renvoie alors l'invitation à la nouvelle adresse.</summary>
+    string? Email = null,
+    /// <summary>Null : inchangé. Chaîne vide : effacé.</summary>
+    string? WorkPhone = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "User";

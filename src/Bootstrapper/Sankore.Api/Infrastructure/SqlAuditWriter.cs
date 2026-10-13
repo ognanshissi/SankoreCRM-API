@@ -1,6 +1,7 @@
 using System.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Api.Infrastructure.Audit;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 
 using AuditEntryDto = Sankore.Shared.Infrastructure.Behaviors.AuditEntry;
@@ -49,6 +50,7 @@ public sealed class SqlAuditWriter(
             IpAddress = context?.Connection.RemoteIpAddress?.ToString(),
             UserAgent = context?.Request.Headers.UserAgent.ToString(),
             CorrelationId = context?.TraceIdentifier,
+            ImpersonatorUserId = ImpersonationClaims.ReadImpersonatorId(context?.User),
         };
 
         db.Entries.Add(entity);

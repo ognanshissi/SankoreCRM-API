@@ -12,4 +12,4 @@ namespace Sankore.Modules.Administration.Features.Authentication.ResetPassword;
 /// </summary>
 public sealed record ValidateResetTokenQuery(
     string UserId,
-    string Token) : IRequest<Result>;
+    [property: SensitiveData] string Token) : IRequest<Result>;

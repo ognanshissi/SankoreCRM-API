@@ -39,7 +39,11 @@ public static class UpdateUserEndpoint
             req.SpokenLanguages,
             req.Specialties,
             req.EnableNotifications,
-            req.EmployeeNumber), ct);
+            req.EmployeeNumber,
+            req.FirstName,
+            req.LastName,
+            req.Email,
+            req.WorkPhone), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -53,4 +57,8 @@ public sealed record UpdateUserRequest(
     List<string>? SpokenLanguages,
     List<string>? Specialties,
     bool? EnableNotifications,
-    string? EmployeeNumber = null);
+    string? EmployeeNumber = null,
+    string? FirstName = null,
+    string? LastName = null,
+    string? Email = null,
+    string? WorkPhone = null);

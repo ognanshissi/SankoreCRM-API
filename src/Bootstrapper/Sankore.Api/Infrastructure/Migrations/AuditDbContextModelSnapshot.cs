@@ -18,7 +18,7 @@ namespace Sankore.Api.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("audit")
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -45,6 +45,10 @@ namespace Sankore.Api.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("error_detail");
+
+                    b.Property<Guid?>("ImpersonatorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("impersonator_user_id");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
@@ -94,6 +98,10 @@ namespace Sankore.Api.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "Action")
                         .HasDatabaseName("ix_entries_tenant_id_action");
+
+                    b.HasIndex("TenantId", "ImpersonatorUserId")
+                        .HasDatabaseName("ix_entries_tenant_id_impersonator_user_id")
+                        .HasFilter("impersonator_user_id IS NOT NULL");
 
                     b.HasIndex("TenantId", "Timestamp")
                         .HasDatabaseName("ix_entries_tenant_id_timestamp");

@@ -20,10 +20,11 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> option): IJwtTokenSer
         IList<string> roles,
         IList<string> permissionCodes,
         string language,
-        Guid? sessionId = null)
+        Guid? sessionId = null,
+        ImpersonationGrant? impersonation = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(option.Value.SigningKey!));
-        var expiresAt = DateTimeOffset.UtcNow.AddHours(8);
+        var expiresAt = DateTimeOffset.UtcNow.Add(impersonation?.Lifetime ?? TimeSpan.FromHours(8));
 
         var claims = new List<Claim>
         {
@@ -39,6 +40,12 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> option): IJwtTokenSer
         // La session de l'appareil : révoquée, elle invalide ce jeton avant son expiration.
         if (sessionId is { } sid)
             claims.Add(new Claim(SessionClaim.Type, sid.ToString()));
+
+        if (impersonation is not null)
+        {
+            claims.Add(new Claim(ImpersonationClaims.ActorId, impersonation.ActorId.ToString()));
+            claims.Add(new Claim(ImpersonationClaims.ActorName, impersonation.ActorName));
+        }
 
         // Role claims — consumed by RequireRole() policies (e.g. Leads.Reassign)
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));

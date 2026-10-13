@@ -10,4 +10,4 @@ namespace Sankore.Modules.Administration.Features.Authentication.AccountActivati
 /// </summary>
 public sealed record ValidateActivationTokenQuery(
     string UserId,
-    string Token) : IRequest<Result>;
+    [property: SensitiveData] string Token) : IRequest<Result>;

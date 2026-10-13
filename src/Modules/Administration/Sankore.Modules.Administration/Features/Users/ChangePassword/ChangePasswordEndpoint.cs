@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Shared.Infrastructure.Auth;
 
 namespace Sankore.Modules.Administration.Features.Users.ChangePassword;
 
@@ -25,6 +26,7 @@ internal static class ChangePasswordEndpoint
         .WithSummary("Allows the authenticated user to set a new password. No reset token required. Enforces password-history policy (last 12 passwords).")
         .WithTags("Users")
         .RequireAuthorization()
+        .DisallowImpersonation()
         .Produces(StatusCodes.Status204NoContent)
         .Produces<object>(StatusCodes.Status400BadRequest)
         .Produces(StatusCodes.Status401Unauthorized);

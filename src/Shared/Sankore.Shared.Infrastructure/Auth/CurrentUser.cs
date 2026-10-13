@@ -16,6 +16,12 @@ public interface ICurrentUser
 
     /// <summary>Role names from the JWT ClaimTypes.Role claims.</summary>
     IReadOnlyList<string> Roles { get; }
+
+    /// <summary>
+    /// L'administrateur qui agit sous cette identité, ou null hors usurpation. Membre par défaut :
+    /// les identités de tâches de fond et les doubles de test n'usurpent jamais personne.
+    /// </summary>
+    Guid? ImpersonatorId => null;
 }
 
 /// <summary>
@@ -43,6 +49,8 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICur
         .FindAll(ClaimTypes.Role)
         .Select(c => c.Value)
         .ToList() ?? [];
+
+    public Guid? ImpersonatorId => ImpersonationClaims.ReadImpersonatorId(Principal);
 }
 
 /// <summary>

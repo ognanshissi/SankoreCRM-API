@@ -12,5 +12,6 @@ public sealed record AuditEntryDto(
     string? ResourceType,
     string? ResourceId,
     string? IpAddress,
-    string? CorrelationId
+    string? CorrelationId,
+    Guid? ImpersonatorUserId = null
 );

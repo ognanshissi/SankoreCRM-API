@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Domain;
+using Sankore.Modules.Administration.Features.Users.Invitation;
 using Sankore.Modules.Administration.Infrastructure.Identity;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Modules.Administration.PublicApi;
@@ -18,9 +19,9 @@ internal sealed class CreateUserHandler(
     UserManager<AppUser> userManager,
     RoleManager<AppRole> roleManager,
     ITenantContext tenantContext,
-    ITenantStore tenantStore,
     [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher,
-    INotificationsModule notifications
+    ActivationInvitationSender invitations,
+    EmployeeNumberAllocator employeeNumbers
 ) : IRequestHandler<CreateUserCommand, Result<CreateUserResult>>
 {
     public async Task<Result<CreateUserResult>> Handle(
@@ -51,6 +52,8 @@ internal sealed class CreateUserHandler(
 
         // 4. Create the user aggregate (Status = PendingActivation, no password yet)
         var user = AppUser.Create(tenantId, request.AgencyId, request.FirstName, request.LastName, request.Email);
+        user.RecordCreator(request.CallerUserId);
+        user.SetEmployeeNumber(await employeeNumbers.NextAsync(tenantId, ct));
 
         var identityResult = await userManager.CreateAsync(user);
         if (!identityResult.Succeeded)
@@ -73,34 +76,13 @@ internal sealed class CreateUserHandler(
 
         await db.SaveChangesAsync(ct);
 
-        // 8. Generate activation token and publish event — email service sends the activation link.
-        //    Its own provider, not the password-reset one, so onboarding gets a multi-day
-        //    lifespan without extending reset links (Identity:ActivationTokenLifespan).
-        var activationToken = await userManager.GenerateUserTokenAsync(
-            user, ActivationTokens.ProviderName, ActivationTokens.Purpose);
-
+        // 8. Publish the event, then send the activation link (its own provider, not the
+        //    password-reset one — see Identity:ActivationTokenLifespan).
         await publisher.PublishAsync(
             new UserCreatedEvent(tenantId, user.Id, user.Email!, user.FullName), ct);
 
-        var tenantInfo = await tenantStore.GetAsync(tenantContext.CurrentTenantId, ct);
-
-        // 9. Queue activation email — runs after SaveChangesAsync so the user row is committed
-        await notifications.QueueEmailAsync(new QueueEmailRequest(
-            TemplateKey:    "user.activation",
-            RecipientEmail: user.Email!,
-            RecipientName:  user.FullName,
-            Module:         "Administration",
-            Locale:         request.DefaultLanguage,
-            TemplateData: new Dictionary<string, object>
-            {
-                ["full_name"]        = user.FullName,
-                ["activation_url"] = $"{tenantInfo?.Fqdn}/auth/account-activation?token={Uri.EscapeDataString(activationToken)}&userId={user.Id}&RequestType=AccountActivation",
-                ["company_name"]     = tenantInfo?.Name ?? "",
-                ["tenant_id"]        = tenantId.ToString(),
-                ["user_id"]          = user.Id.ToString()
-            },
-            IdempotencyKey: $"user-activation-{user.Id}",
-            TenantId:       tenantId), ct);
+        await invitations.SendAsync(user, request.DefaultLanguage, invalidatePrevious: false, ct);
+        await db.SaveChangesAsync(ct);
 
         // AuditBehavior writes the AuditEntry automatically (ICommand marker).
         return Result.Ok(new CreateUserResult(user.Id));

@@ -5,4 +5,4 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Authentication.RefreshToken;
 
-public sealed record RefreshTokenCommand(string Token) : IRequest<Result<LoginResult>>, ICommand;
+public sealed record RefreshTokenCommand([property: SensitiveData] string Token) : IRequest<Result<LoginResult>>, ICommand;

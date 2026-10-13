@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies;
@@ -109,6 +110,9 @@ public static class AdministrationModule
         services.AddScoped<Features.Users.AgentSettings.AgentAbsenceNotifier>();
         services.AddScoped<Sankore.Shared.Infrastructure.Auth.ISessionValidator, Infrastructure.Sessions.SessionValidator>();
         services.AddScoped<Features.Users.Security.SuspiciousLoginNotifier>();
+        services.AddScoped<Features.Users.Invitation.ActivationInvitationSender>();
+        services.AddScoped<Features.Users.Invitation.EmployeeNumberAllocator>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<Features.Users.BulkAssign.BulkAssignNotifier>();
         services.AddScoped<Features.Users.AssignManager.ReportingLine>();
         services.Configure<JwtOptions>(config.GetSection("Jwt"));

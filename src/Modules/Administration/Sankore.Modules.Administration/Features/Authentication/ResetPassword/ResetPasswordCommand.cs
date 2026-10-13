@@ -9,8 +9,8 @@ namespace Sankore.Modules.Administration.Features.Authentication.ResetPassword;
 /// </summary>
 public sealed record ResetPasswordCommand(
     string UserId,
-    string Token,
-    string NewPassword,
-    string ConfirmPassword) : IRequest<Result<ResetPasswordResult>>;
+    [property: SensitiveData] string Token,
+    [property: SensitiveData] string NewPassword,
+    [property: SensitiveData] string ConfirmPassword) : IRequest<Result<ResetPasswordResult>>;
 
 public sealed record ResetPasswordResult(string Message);

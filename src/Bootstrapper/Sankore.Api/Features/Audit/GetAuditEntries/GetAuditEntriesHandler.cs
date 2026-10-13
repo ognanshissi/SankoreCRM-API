@@ -62,7 +62,8 @@ internal sealed class GetAuditEntriesHandler(
                 e.ResourceType,
                 e.ResourceId,
                 e.IpAddress,
-                e.CorrelationId))
+                e.CorrelationId,
+                e.ImpersonatorUserId))
             .ToListAsync(cancellationToken);
 
         return Result.Ok(new PagedResult<AuditEntryDto>(items, totalCount, request.Page, request.PageSize));

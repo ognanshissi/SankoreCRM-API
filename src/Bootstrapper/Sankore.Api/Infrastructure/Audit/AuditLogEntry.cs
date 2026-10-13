@@ -41,4 +41,10 @@ public sealed class AuditLogEntry
 
     /// <summary>ASP.NET Core TraceIdentifier (maps to X-Request-ID header).</summary>
     public string? CorrelationId { get; init; }
+
+    /// <summary>
+    /// L'administrateur qui agissait sous l'identité de <see cref="UserId"/>, ou null. Les deux
+    /// sont gardés : l'action a eu lieu avec les droits de l'un, à l'initiative de l'autre.
+    /// </summary>
+    public Guid? ImpersonatorUserId { get; init; }
 }

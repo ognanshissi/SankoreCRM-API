@@ -52,8 +52,17 @@ public sealed class AppUser: IdentityUser<Guid>
     /// </summary>
     public DateTimeOffset? CreatedAt { get; private set; }
 
-    /// <summary>Matricule interne, attribué par l'administrateur. L'utilisateur ne le modifie pas.</summary>
+    /// <summary>Matricule interne (AGT-0001…), attribué à la création. L'utilisateur ne le modifie pas.</summary>
     public string? EmployeeNumber { get; private set; }
+
+    /// <summary>Qui a créé le compte ; null pour un compte racine ou antérieur à la colonne.</summary>
+    public Guid? CreatedByUserId { get; private set; }
+
+    /// <summary>
+    /// Dernier envoi d'un lien d'activation. Le lien vit <c>Identity:ActivationTokenLifespan</c>
+    /// à partir de là, et chaque nouvel envoi invalide les précédents.
+    /// </summary>
+    public DateTimeOffset? InvitationSentAt { get; private set; }
 
     // ── Dispatching (M13) ─────────────────────────────────────────────────
     public bool IsAvailable { get; private set; } = true;
@@ -274,6 +283,32 @@ public sealed class AppUser: IdentityUser<Guid>
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
         FullName = $"{FirstName} {LastName}";
+    }
+
+    public void RecordCreator(Guid creatorUserId) => CreatedByUserId ??= creatorUserId;
+
+    public void MarkInvitationSent(DateTimeOffset at) => InvitationSentAt = at;
+
+    /// <summary>
+    /// Change l'adresse — et donc l'identifiant de connexion — d'un compte pas encore activé.
+    /// Refusé ensuite : un compte actif qui change d'adresse doit prouver qu'il la possède, et ce
+    /// circuit de confirmation n'existe pas. Avant activation, personne ne s'est encore connecté
+    /// avec l'ancienne : la nouvelle invitation suffit à la valider.
+    /// </summary>
+    public void ChangeEmailBeforeActivation(string email)
+    {
+        if (Status != UserStatus.PendingActivation)
+            throw new DomainException(
+                "L'adresse ne peut être modifiée qu'avant l'activation du compte.", "User.Email.LockedAfterActivation");
+        if (string.IsNullOrWhiteSpace(email))
+            throw new DomainException("User must have an email.", "User.Email.Required");
+
+        var trimmed = email.Trim();
+        Email = trimmed;
+        UserName = trimmed;
+        NormalizedEmail = trimmed.ToUpperInvariant();
+        NormalizedUserName = trimmed.ToUpperInvariant();
+        EmailConfirmed = false;
     }
 
     /// <summary>Blanc efface le matricule.</summary>

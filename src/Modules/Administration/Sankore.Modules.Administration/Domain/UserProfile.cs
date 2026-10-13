@@ -80,6 +80,15 @@ public class UserProfile
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    /// <summary>Le téléphone professionnel, réglé par l'administrateur. Blanc l'efface.</summary>
+    public void SetWorkPhone(string? workPhone)
+    {
+        var phone = Blank(workPhone);
+        if (phone != WorkNumber?.Contact)
+            WorkNumber = phone is null ? null! : PhoneNumber.Create(phone);
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>
     /// Le fuseau de l'agent, ou UTC s'il est illisible — une ligne corrompue ne doit pas sortir
     /// l'agent du dispatching.

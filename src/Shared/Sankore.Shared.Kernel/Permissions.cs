@@ -72,6 +72,14 @@ public static class Permissions
     public static readonly PermissionItem CanUpdateUser =
         new("user:update", "Update User", ApplicationModules.Administration, "update");
 
+    /// <summary>
+    /// Agir sous l'identité d'un autre utilisateur, pour voir ce qu'il voit. Accordé à part de
+    /// <see cref="CanUpdateUser"/> : modifier un compte et parler en son nom ne sont pas le même
+    /// pouvoir. Chaque action faite ainsi est auditée au nom des deux personnes.
+    /// </summary>
+    public static readonly PermissionItem CanImpersonateUser =
+        new("user:impersonate", "Impersonate User", ApplicationModules.Administration, "impersonate");
+
     public static readonly PermissionItem CanReactivateUser =
         new("user:reactivate", "Reactivate User", ApplicationModules.Administration, "reactivate");
 
@@ -698,6 +706,7 @@ public static class Permissions
         CanCreateUser,
         CanReadUser,
         CanUpdateUser,
+        CanImpersonateUser,
         CanDeactivateUser,
         CanReactivateUser,
         CanResetPassword,
