@@ -10,7 +10,11 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Users.AgentSettings;
 
-public sealed record GetMyAgentSettingsQuery : IRequest<Result<AgentSettingsDto>>;
+/// <param name="UserId">
+/// Null : l'utilisateur connecté (son onglet Paramétrage agent). Renseigné : la fiche d'un
+/// utilisateur vue par un administrateur, en lecture.
+/// </param>
+public sealed record GetMyAgentSettingsQuery(Guid? UserId = null) : IRequest<Result<AgentSettingsDto>>;
 
 internal sealed class GetMyAgentSettingsHandler(AdministrationDbContext db, ICurrentUser currentUser)
     : IRequestHandler<GetMyAgentSettingsQuery, Result<AgentSettingsDto>>
@@ -31,7 +35,7 @@ internal sealed class GetMyAgentSettingsHandler(AdministrationDbContext db, ICur
     {
         var user = await db.Users
             .Include(u => u.Agency)
-            .FirstOrDefaultAsync(u => u.Id == currentUser.Id, ct);
+            .FirstOrDefaultAsync(u => u.Id == (request.UserId ?? currentUser.Id), ct);
         if (user is null)
             return Result.Fail<AgentSettingsDto>("USER_NOT_FOUND");
 
@@ -123,6 +127,18 @@ internal static class GetMyAgentSettingsEndpoint
             .WithSummary("Paramétrage agent de l'utilisateur connecté : disponibilité, horaires, capacité, notifications, délégations.")
             .WithTags("Users")
             .RequireAuthorization()
+            .Produces<AgentSettingsDto>()
+            .Produces(StatusCodes.Status404NotFound);
+
+        app.MapGet("{userId:guid}/agent-settings", async (Guid userId, ISender sender, CancellationToken ct) =>
+            {
+                var result = await sender.Send(new GetMyAgentSettingsQuery(userId), ct);
+                return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound();
+            })
+            .WithName("GetUserAgentSettings")
+            .WithSummary("Paramétrage agent d'un utilisateur, pour sa fiche d'administration : plafond, produits, et ce que l'agent a déclaré (disponibilité, horaires, langues). Requires permission: user:read.")
+            .WithTags("Users")
+            .RequireAuthorization(Permissions.CanReadUser.Code)
             .Produces<AgentSettingsDto>()
             .Produces(StatusCodes.Status404NotFound);
 
