@@ -30,6 +30,12 @@ internal static class NotificationsSeeder
         await SeedComplaintDeadlineAsync(db, logger, ct);
         await SeedKycRemoteInvitationAsync(db, logger, ct);
         await SeedKycRemoteLinkExpiredAsync(db, logger, ct);
+        await SeedKycRemoteLinkLockedAsync(db, logger, ct);
+        await SeedKycRemoteReviewRequiredAsync(db, logger, ct);
+        await SeedKycRemoteReviewOverdueAsync(db, logger, ct);
+        await SeedKycRemoteApprovedAsync(db, logger, ct);
+        await SeedKycRemoteRejectedAsync(db, logger, ct);
+        await SeedKycRemoteComplementAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -1511,6 +1517,646 @@ internal static class NotificationsSeeder
                       </p>
                       <p style="color:#555;font-size:13px">
                         KYC file: <span style="font-family:monospace">{{ kyc_file_id }}</span>
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── kyc.remote-link-locked ──────────────────────────────────────────────
+
+    /// <summary>
+    /// KRM-B-05: the customer failed to identify themselves too many times and their link is now
+    /// locked. The agent who converted them is the only one who can get them moving again.
+    ///
+    /// <para>
+    /// Carries the file id and the time, and NO customer identity: the body says what happened and
+    /// the agent opens the file to see who it was. It deliberately does not say which field was
+    /// wrong, because the server never learned that either — M01 answers the identity check with a
+    /// boolean.
+    /// </para>
+    /// </summary>
+    private static async Task SeedKycRemoteLinkLockedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "kyc.remote-link-locked";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Lien KYC à distance verrouillé — client à rappeler",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        Un client que vous avez converti n'a pas réussi à s'identifier sur la page
+                        de dépôt des pièces : son lien a été <strong>verrouillé</strong> le
+                        {{ locked_at }} par sécurité.
+                      </p>
+                      <p>
+                        C'est le plus souvent un numéro client mal recopié ou une date de naissance
+                        erronée dans sa fiche. Ouvrez le dossier, vérifiez la date de naissance
+                        enregistrée, puis <strong>renvoyez un lien</strong> : un nouveau lien remet
+                        le compteur à zéro.
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        Dossier KYC : <span style="font-family:monospace">{{ kyc_file_id }}</span>
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Remote KYC link locked — customer needs a call",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        A customer you converted could not identify themselves on the document
+                        upload page: their link was <strong>locked</strong> on {{ locked_at }} as a
+                        precaution.
+                      </p>
+                      <p>
+                        It is usually a mistyped client number, or a date of birth recorded
+                        incorrectly on their record. Open the file, check the date of birth on
+                        record, then <strong>send a new link</strong>: a new link resets the counter.
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        KYC file: <span style="font-family:monospace">{{ kyc_file_id }}</span>
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── kyc.remote-review-required ──
+
+    /// <summary>
+    /// KRM-B-09: a customer deposited their documents from their own phone and the product's
+    /// policy asks for a human decision. Addressed to the responsible agent, or to the branch
+    /// manager when that agent can no longer act.
+    ///
+    /// <para>
+    /// The client's display NAME is here — KRM-B-09 asks for it, and it is what lets an agent
+    /// recognise the file without opening five of them. Nothing else about the customer: no score,
+    /// no flag, no field read on the document. A rendered body sits in a mail provider's delivery
+    /// log for weeks.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>routing_reason</c> is a CODE (<c>KycRoutingReasons</c>) and is rendered as one. The
+    /// translation lives in the back office, where the agent is about to go anyway, and a French
+    /// sentence duplicated here would be the copy nobody keeps in step.
+    /// </para>
+    /// </summary>
+    private static async Task SeedKycRemoteReviewRequiredAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "kyc.remote-review-required";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Dossier KYC à distance à valider — {{ client_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        <strong>{{ client_name }}</strong> a transmis ses pièces d'identité depuis son
+                        téléphone. Le dossier attend votre décision.
+                      </p>
+                      <p style="color:#555;font-size:14px">
+                        Produit : <strong>{{ product_name }}</strong><br>
+                        Motif du routage : <span style="font-family:monospace">{{ routing_reason }}</span>
+                      </p>
+                      <p>
+                        <a href="{{ backoffice_link }}"
+                           style="display:inline-block;background:#0f766e;color:#fff;padding:12px 20px;
+                                  border-radius:6px;text-decoration:none">Ouvrir le dossier</a>
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        Vous pouvez valider, demander un complément en choisissant les pièces à reprendre,
+                        ou refuser le dossier.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Remote KYC file awaiting your decision — {{ client_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        <strong>{{ client_name }}</strong> has sent their identity documents from their own
+                        phone. The file is waiting for your decision.
+                      </p>
+                      <p style="color:#555;font-size:14px">
+                        Product: <strong>{{ product_name }}</strong><br>
+                        Routing reason: <span style="font-family:monospace">{{ routing_reason }}</span>
+                      </p>
+                      <p>
+                        <a href="{{ backoffice_link }}"
+                           style="display:inline-block;background:#0f766e;color:#fff;padding:12px 20px;
+                                  border-radius:6px;text-decoration:none">Open the file</a>
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── kyc.remote-review-overdue ──
+
+    /// <summary>
+    /// KRM-B-09's relance: the decision has been owed for longer than the tenant's
+    /// <c>remote-review-sla-hours</c>. Sent to the responsible agent AND to the branch manager.
+    ///
+    /// <para>
+    /// Deliberately a separate template from <c>kyc.remote-review-required</c> rather than the
+    /// same one sent twice. A second identical message reads as a mail-server fault and is
+    /// ignored; this one says how long the customer has been waiting, which is the fact that makes
+    /// somebody act.
+    /// </para>
+    /// </summary>
+    private static async Task SeedKycRemoteReviewOverdueAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "kyc.remote-review-overdue";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Rappel — dossier KYC à distance en attente depuis {{ sla_hours }} h",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        Le dossier de <strong>{{ client_name }}</strong> attend une décision depuis le
+                        {{ waiting_since }}, soit plus de {{ sla_hours }} heures. Le client a fait sa part :
+                        il a envoyé ses pièces et attend une réponse.
+                      </p>
+                      <p style="color:#555;font-size:14px">
+                        Motif du routage : <span style="font-family:monospace">{{ routing_reason }}</span>
+                      </p>
+                      <p>
+                        <a href="{{ backoffice_link }}"
+                           style="display:inline-block;background:#b45309;color:#fff;padding:12px 20px;
+                                  border-radius:6px;text-decoration:none">Traiter le dossier</a>
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Reminder — remote KYC file waiting for over {{ sla_hours }} h",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        <strong>{{ client_name }}</strong>'s file has been waiting for a decision since
+                        {{ waiting_since }} — more than {{ sla_hours }} hours. The customer has done their
+                        part and is waiting for an answer.
+                      </p>
+                      <p style="color:#555;font-size:14px">
+                        Routing reason: <span style="font-family:monospace">{{ routing_reason }}</span>
+                      </p>
+                      <p>
+                        <a href="{{ backoffice_link }}"
+                           style="display:inline-block;background:#b45309;color:#fff;padding:12px 20px;
+                                  border-radius:6px;text-decoration:none">Handle the file</a>
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── kyc.remote-approved ──
+
+    /// <summary>
+    /// KRM-B-10: the customer's remotely deposited file has been approved.
+    ///
+    /// <para>
+    /// <b>Identical whether a machine or a human approved it.</b> KRM-F-05 makes that a
+    /// requirement of the customer's own screen ("écran final identique quel que soit le mode de
+    /// validation"), and it would be odd for the email to then give the mode away — the customer
+    /// has no action to take either way, and "validé automatiquement" invites a question nobody at
+    /// the branch can answer better than "your documents were in order".
+    /// </para>
+    ///
+    /// <para>
+    /// No score, no tier, no field read on the document (§8). The product name is the one detail
+    /// that makes the message mean something.
+    /// </para>
+    /// </summary>
+    private static async Task SeedKycRemoteApprovedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "kyc.remote-approved";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Votre dossier est validé",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ client_first_name }},</h2>
+                      <p>
+                        Vos pièces justificatives ont été vérifiées et votre dossier est
+                        <strong>validé</strong>. Merci de les avoir transmises.
+                      </p>
+                      <p>
+                        Votre souscription <strong>{{ product_name }}</strong> peut maintenant suivre son
+                        cours. Votre conseiller vous contactera pour la suite.
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        Le lien de dépôt que vous avez utilisé n'est plus actif : il ne servait qu'une fois.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Your file has been approved",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ client_first_name }},</h2>
+                      <p>
+                        Your documents have been checked and your file is <strong>approved</strong>. Thank
+                        you for sending them.
+                      </p>
+                      <p>
+                        Your <strong>{{ product_name }}</strong> subscription can now proceed. Your adviser
+                        will be in touch.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── kyc.remote-rejected ──
+
+    /// <summary>
+    /// KRM-B-10: the file was refused.
+    ///
+    /// <para>
+    /// <b>No motive, deliberately.</b> The approver's comment travels on
+    /// <c>KycRejectedEvent</c> and is dropped before this message is built. It is written for
+    /// operators, it can name a document defect or a suspicion, and some refusals must not be
+    /// explained at all — telling somebody which check they failed is telling them what to change
+    /// before trying again. The customer is asked to call their agency, where a human can say what
+    /// may be said.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>agency_phone</c> renders empty today: no telephone number exists on an agency or on the
+    /// institution anywhere in this platform. The variable is in the template because KRM-B-10
+    /// names it and because adding the field later must not require a template migration; until
+    /// then the paragraph degrades to the agency's name alone, which the condition below keeps
+    /// readable.
+    /// </para>
+    /// </summary>
+    private static async Task SeedKycRemoteRejectedAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "kyc.remote-rejected";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Votre dossier n'a pas pu être validé",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ client_first_name }},</h2>
+                      <p>
+                        Après examen, votre dossier n'a pas pu être validé.
+                      </p>
+                      <p>
+                        Pour en connaître les raisons et savoir comment procéder, contactez votre agence
+                        {{ agency_name }}{% if agency_phone %} au <strong>{{ agency_phone }}</strong>{% endif %}.
+                        Un conseiller vous accompagnera.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Your file could not be approved",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ client_first_name }},</h2>
+                      <p>
+                        After review, your file could not be approved.
+                      </p>
+                      <p>
+                        Please contact your {{ agency_name }} branch
+                        {% if agency_phone %}on <strong>{{ agency_phone }}</strong>{% endif %} to find out why
+                        and what to do next.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── kyc.remote-complement ──
+
+    /// <summary>
+    /// KRM-B-10: a validator asked the customer to retake one or more photographs, and this
+    /// carries the new single-use link scoped to exactly those.
+    ///
+    /// <para>
+    /// Separate from <c>kyc.remote-invitation</c> because a single template would have to say both
+    /// "welcome, here is how to send your documents" and "your utility bill could not be read" —
+    /// and the second message is the one that has to be unambiguous.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>items</c> is a list of French phrases built by <c>KycRemoteDocumentLabels</c>, not enum
+    /// names. It can be EMPTY — an unscoped complement means the whole journey again — so the list
+    /// is conditional and the page itself names what is missing.
+    /// </para>
+    ///
+    /// <para>
+    /// Like the invitation it replaces, it does NOT carry the client number: that arrived with the
+    /// welcome message and is the secret the link is checked against.
+    /// </para>
+    /// </summary>
+    private static async Task SeedKycRemoteComplementAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "kyc.remote-complement";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Une photo à reprendre pour finaliser votre dossier",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ client_first_name }},</h2>
+                      <p>
+                        Votre dossier est presque complet. Une ou plusieurs photos n'ont pas pu être
+                        exploitées et doivent être reprises.
+                      </p>
+                      {% if items %}
+                      <p>À reprendre :</p>
+                      <ul style="color:#333">
+                        {% for item in items %}<li>{{ item }}</li>{% endfor %}
+                      </ul>
+                      {% endif %}
+                      <p>
+                        <a href="{{ link }}"
+                           style="display:inline-block;background:#0f766e;color:#fff;padding:12px 20px;
+                                  border-radius:6px;text-decoration:none">Reprendre mes photos</a>
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        Ce lien est personnel, à usage unique, et valable jusqu'au {{ expires_at }}.
+                        Il vous sera demandé votre numéro client — celui de votre email de bienvenue — et
+                        votre date de naissance.
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        Une question ? Votre agence {{ agency_name }} est là pour vous aider.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "One document to retake to complete your file",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ client_first_name }},</h2>
+                      <p>
+                        Your file is almost complete. One or more photographs could not be used and need to
+                        be retaken.
+                      </p>
+                      {% if items %}
+                      <p>To retake:</p>
+                      <ul style="color:#333">
+                        {% for item in items %}<li>{{ item }}</li>{% endfor %}
+                      </ul>
+                      {% endif %}
+                      <p>
+                        <a href="{{ link }}"
+                           style="display:inline-block;background:#0f766e;color:#fff;padding:12px 20px;
+                                  border-radius:6px;text-decoration:none">Retake my photographs</a>
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        This link is personal, single-use, and valid until {{ expires_at }}.
                       </p>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">

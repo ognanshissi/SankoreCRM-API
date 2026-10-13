@@ -15,7 +15,9 @@ using Sankore.Modules.Kyc.Features.Documents;
 using Sankore.Modules.Kyc.Features.Duplicates;
 using Sankore.Modules.Kyc.Features.Files;
 using Sankore.Modules.Kyc.Features.Limits;
+using Sankore.Modules.Kyc.Features.PublicRemote;
 using Sankore.Modules.Kyc.Features.RemoteInvitations;
+using Sankore.Modules.Kyc.Features.Routing;
 using Sankore.Modules.Kyc.Features.Reviews;
 using Sankore.Modules.Kyc.Features.Settings;
 using Sankore.Modules.Kyc.Features.Verification;
@@ -57,6 +59,37 @@ public static class KycModule
     /// </para>
     /// </summary>
     public static string ObjectStorageConcern => KycObjectStorage.Concern;
+
+    /// <summary>
+    /// Name of the authentication scheme and of the policy that carry a remote-KYC SESSION
+    /// (KRM-B-05).
+    ///
+    /// <para>
+    /// Exposed so the host can register the scheme: a module cannot — the JWT bearer middleware is
+    /// configured once, on the host, and this is the one value both sides must agree on. The
+    /// internal constant it mirrors is what the endpoints require.
+    /// </para>
+    /// </summary>
+    public static string RemoteSessionScheme
+        => Infrastructure.RemoteLinks.KycRemoteSessionClaims.SchemeName;
+
+    /// <summary>Audience of a session token. Accepted by nothing else in the platform.</summary>
+    public static string RemoteSessionAudience
+        => Infrastructure.RemoteLinks.KycRemoteSessionOptions.Audience;
+
+    /// <summary>
+    /// The session's signing identity, for the host to configure its bearer scheme with.
+    ///
+    /// <para>
+    /// Read here and passed in rather than resolved from the container, because the host needs it
+    /// at <c>AddJwtBearer</c> time — before any service provider exists. The same options instance
+    /// is registered as a singleton by <see cref="AddKycModule"/>, so the issuer and the key cannot
+    /// differ between the token that is minted and the token that is validated.
+    /// </para>
+    /// </summary>
+    public static Infrastructure.RemoteLinks.KycRemoteSessionOptions ReadRemoteSessionOptions(
+        IConfiguration config)
+        => Infrastructure.RemoteLinks.KycRemoteSessionOptions.FromConfiguration(config);
 
     /// <summary>
     /// Where this module's evidence lives when no bucket is configured — <c>Kyc:Storage:BasePath</c>,
@@ -214,9 +247,36 @@ public static class KycModule
 
         services.AddScoped<Features.RemoteInvitations.KycRemoteEligibility>();
         services.AddScoped<Features.RemoteInvitations.KycRemoteInvitationRevoker>();
+
+        // ── The customer's own journey (KRM-B-05/06/07) ─────────────────────
+        //
+        // The session's signing identity is a SINGLETON built once from configuration: it derives a
+        // key with HKDF and must not do that per request. Everything else is scoped.
+        services.TryAddSingleton(sp =>
+            Infrastructure.RemoteLinks.KycRemoteSessionOptions.FromConfiguration(config));
+
+        services.TryAddScoped<Infrastructure.RemoteLinks.IKycRemoteSessions,
+                              Infrastructure.RemoteLinks.KycRemoteSessions>();
+
+        services.AddScoped<Features.PublicRemote.KycRemoteGate>();
+        services.AddScoped<Features.PublicRemote.KycRemoteJourney>();
+        services.AddScoped<Features.PublicRemote.KycRemoteQualityGate>();
+        services.AddScoped<Features.PublicRemote.KycRemoteSubmission>();
         services.AddTransient<Features.RemoteInvitations.SendKycRemoteInvitationJob>();
         services.AddTransient<Features.RemoteInvitations.Expiry.KycRemoteInvitationExpiryOrchestratorJob>();
         services.AddTransient<Features.RemoteInvitations.Expiry.ExpireTenantKycRemoteInvitationsJob>();
+
+        // ── Routing and the control of unattended decisions (KRM-B-08…11) ───
+        services.AddScoped<Features.Routing.Controls.KycAutoApprovalSampler>();
+
+        // KRM-B-12. TryAdd so a deployment that DOES have an SMS channel registers its own sender
+        // before this line runs and keeps it — this is the fallback, not an override. It answers
+        // IsAvailable = false, which is what makes `remote-otp` refuse to be turned on here: see
+        // IKycOtpSender for why the mechanism ships without its delivery.
+        services.TryAddScoped<Infrastructure.RemoteLinks.IKycOtpSender,
+                              Infrastructure.RemoteLinks.UnavailableKycOtpSender>();
+        services.AddTransient<Features.Routing.ReviewSla.KycRemoteReviewSlaOrchestratorJob>();
+        services.AddTransient<Features.Routing.ReviewSla.ChaseTenantKycRemoteReviewsJob>();
 
         services.AddScoped<IKycSettings, KycSettingsService>();
         services.AddScoped<IKycModule, KycModuleFacade>();
@@ -240,6 +300,20 @@ public static class KycModule
             sp.GetRequiredService<ILogger<KycDbContext>>());
     }
 
+    /// <summary>
+    /// The customer-facing surface of remote KYC, mounted by the bootstrapper under
+    /// <c>api/v1/public</c> — a DIFFERENT group from the one below, with no authentication and its
+    /// own rate-limiting policy.
+    ///
+    /// <para>
+    /// Separate entry point rather than a branch inside <see cref="MapKycModuleEndpoints"/>,
+    /// because the host has to be able to apply a different policy to it — and because nothing
+    /// should be able to land on the anonymous surface by being added to the wrong aggregator.
+    /// </para>
+    /// </summary>
+    public static IEndpointRouteBuilder MapKycPublicEndpoints(this IEndpointRouteBuilder app)
+        => app.MapKycPublicRemoteEndpoints();
+
     /// <summary>Mounted by the bootstrapper under <c>api/v1</c>.</summary>
     public static IEndpointRouteBuilder MapKycModuleEndpoints(this IEndpointRouteBuilder app)
     {
@@ -252,6 +326,7 @@ public static class KycModule
         app.MapKycApprovalEndpoints();
         app.MapKycReviewsEndpoints();
         app.MapKycRemoteInvitationsEndpoints();
+        app.MapKycRoutingEndpoints();
         app.MapKycSettingsEndpoints();
         return app;
     }

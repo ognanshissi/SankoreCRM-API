@@ -79,6 +79,11 @@ public static class CustomersModule
         // place and the locale fallback is written once.
         services.AddScoped<Infrastructure.Notifications.ClientEmailNotifier>();
 
+        // The client-number + date-of-birth check behind the public remote-KYC page (KRM-B-05).
+        // It lives here because both values are M01's and neither may cross the module boundary.
+        services.AddScoped<Infrastructure.RemoteIdentity.RemoteIdentityVerifier>();
+        services.AddScoped<Infrastructure.RemoteIdentity.ReadIdentityComparer>();
+
         // ── Cross-module surface ────────────────────────────────────────────
         services.AddScoped<ICustomersModule, CustomersModuleFacade>();
 

@@ -695,6 +695,58 @@ internal sealed class AdministrationModuleFacade(
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
     }
 
+    /// <summary>
+    /// KRM-B-09's recipient cascade. Two queries at most, and it answers null rather than
+    /// guessing — see the contract for why the specification's third rung does not exist here.
+    /// </summary>
+    public async Task<Guid?> ResolveAgencyRecipientAsync(
+        Guid tenantId, Guid agencyId, Guid? preferredUserId, CancellationToken ct)
+    {
+        // IgnoreQueryFilters with explicit tenant predicates throughout: every caller of this
+        // contract may be a consumer or a job, whose ambient tenant is not necessarily this one.
+        if (preferredUserId is { } preferred && preferred != Guid.Empty)
+        {
+            // Status AND agency, together. A disabled account still has an address the mail
+            // provider accepts, so "the mail went out" would be indistinguishable from "somebody
+            // read it"; and an agent who changed branch must stop receiving their old branch's
+            // work rather than silently keep it.
+            var usable = await db.Users
+                .IgnoreQueryFilters()
+                .AnyAsync(
+                    u => u.TenantId == tenantId
+                      && u.Id == preferred
+                      && u.AgencyId == agencyId
+                      && u.Status == UserStatus.Active,
+                    ct);
+
+            if (usable) return preferred;
+        }
+
+        // The branch's chief. Read off the agency rather than by looking for a role, because the
+        // manager is an assignment on the agency (Agency.AssignManager) and a role grant says what
+        // somebody MAY do, not which branch they answer for.
+        var manager = await db.Agencies
+            .IgnoreQueryFilters()
+            .Where(a => a.TenantId == tenantId && a.Id == agencyId && !a.IsDeleted)
+            .Select(a => a.ManagerUserId)
+            .FirstOrDefaultAsync(ct);
+
+        if (manager is not { } managerId || managerId == Guid.Empty) return null;
+
+        // The manager is checked too. An agency whose chief left keeps the stale assignment until
+        // somebody reassigns it, and mailing that account would look like a delivered notification
+        // nobody will ever act on.
+        var managerUsable = await db.Users
+            .IgnoreQueryFilters()
+            .AnyAsync(
+                u => u.TenantId == tenantId
+                  && u.Id == managerId
+                  && u.Status == UserStatus.Active,
+                ct);
+
+        return managerUsable ? managerId : null;
+    }
+
     public async Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct)
     {
         var agent = await db.Users.SingleOrDefaultAsync(u => u.Id == agentId, ct);

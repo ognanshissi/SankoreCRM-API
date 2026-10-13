@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Infrastructure.Storage;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
@@ -43,7 +44,8 @@ internal static class DecideKycApprovalEndpoint
             KycFileId: kycFileId,
             Level: req.Level,
             Decision: req.Decision,
-            Comment: req.Comment), ct);
+            Comment: req.Comment,
+            RequestedDocuments: req.RequestedDocuments), ct);
 
         if (result.IsSuccess)
             return Results.Ok(new DecideKycApprovalResponse(
@@ -66,6 +68,14 @@ internal static class DecideKycApprovalEndpoint
             KycErrors.ApprovalOutOfOrder or KycErrors.ApprovalStepAlreadyDecided
                 => Results.Conflict(new { error = result.Error }),
 
+            // A stale screen offering a document the product no longer collects. 400, not 409:
+            // the fix is to reload the file's journey and choose again, not to retry. The code
+            // carries the offending kind after a colon, so it is matched by prefix — the front
+            // shows the code's own translation and names the document from the suffix.
+            string code when code.StartsWith(
+                KycErrors.ComplementDocumentNotCollectable, StringComparison.Ordinal)
+                => Results.BadRequest(new { error = result.Error }),
+
             _ => Results.BadRequest(new { error = result.Error }),
         };
     }
@@ -78,7 +88,12 @@ internal static class DecideKycApprovalEndpoint
 internal sealed record DecideKycApprovalRequest(
     KycApprovalLevel Level,
     KycApprovalDecision Decision,
-    string? Comment = null);
+    string? Comment = null,
+    /// <summary>
+    /// On a complement request for a remotely collected file, the documents the customer must
+    /// retake — they become the scope of the new collection link (KRM-B-10). Ignored otherwise.
+    /// </summary>
+    IReadOnlyCollection<KycDocumentKind>? RequestedDocuments = null);
 
 internal sealed record DecideKycApprovalResponse(
     Guid KycFileId,

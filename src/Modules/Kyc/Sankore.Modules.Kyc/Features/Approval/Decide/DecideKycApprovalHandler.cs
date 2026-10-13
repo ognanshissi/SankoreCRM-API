@@ -5,6 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Administration.PublicApi;
+using Sankore.Modules.Kyc.Features.PublicRemote;
+using Sankore.Modules.Kyc.Features.RemoteInvitations.IssueInvitation;
+using Sankore.Modules.Kyc.Infrastructure.Storage;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Workflow.PublicApi;
@@ -38,6 +42,8 @@ using Sankore.Shared.Kernel;
 /// </summary>
 internal sealed class DecideKycApprovalHandler(
     KycDbContext db,
+    ISender sender,
+    IAdministrationModule administration,
     ICurrentUser currentUser,
     [FromKeyedServices(nameof(KycDbContext))] IEventPublisher publisher,
     IWorkflowModule workflow,
@@ -107,6 +113,15 @@ internal sealed class DecideKycApprovalHandler(
         if (currentUser.Id == file.LastSubmittedBy || currentUser.Id == file.ManuallyValidatedBy)
             return Result.Fail<DecideKycApprovalResult>(KycErrors.SelfApprovalForbidden);
 
+        // KRM-B-10: the documents a complement asks for become the scope of a collection link, so
+        // they are checked BEFORE the decision is applied rather than when the link is issued. The
+        // link is issued best-effort after the commit — a refusal there would be a log line the
+        // agent never sees, and they would be left believing they had asked for a utility bill the
+        // customer will never be prompted for.
+        var scope = await GuardComplementScopeAsync(cmd, file, ct);
+        if (scope.IsFailure)
+            return Result.Fail<DecideKycApprovalResult>(scope.Error!);
+
         // CIMA LBC/FT article 13.6, at the last moment it can still be asked for: a file opened
         // remotely needs an accepted, recent proof of address before its holder becomes a
         // customer. Checked only on the FINAL approval — an intermediate signature is a person
@@ -161,6 +176,8 @@ internal sealed class DecideKycApprovalHandler(
 
         await MirrorToWorkflowAsync(cmd, file, ct);
 
+        await IssueComplementLinkAsync(cmd, file, ct);
+
         logger.LogInformation(
             "KYC file {KycFileId} — {Level} decided {Decision} by {UserId}; file is now {Status}",
             file.Id, cmd.Level, cmd.Decision, currentUser.Id, file.Status);
@@ -170,6 +187,126 @@ internal sealed class DecideKycApprovalHandler(
         return Result.Ok(new DecideKycApprovalResult(
             file.Id, cmd.Level.ToString(), cmd.Decision.ToString(),
             file.Status.ToString(), file.Tier.ToString(), completed));
+    }
+
+    /// <summary>
+    /// Refuses a complement that names a document the product's remote policy does not collect.
+    ///
+    /// <para>
+    /// The list offered to the approver comes from the file's own journey (KRM-F-08), so reaching
+    /// here with an unknown kind means a screen left open across a product change — or a
+    /// hand-made request. Either way the honest answer is "choose again", not a link that asks a
+    /// customer for a document the journey will refuse to accept.
+    /// </para>
+    ///
+    /// <para>
+    /// The identity document's BACK is admissible even though no product lists it: whether it is
+    /// required depends on the document type the customer chose, and <c>KycRemoteJourney</c>
+    /// decides that per file rather than per product.
+    /// </para>
+    /// </summary>
+    private async Task<Result> GuardComplementScopeAsync(
+        DecideKycApprovalCommand cmd, KycFile file, CancellationToken ct)
+    {
+        if (cmd.Decision != KycApprovalDecision.ComplementRequired) return Result.Ok();
+        if (file.Channel != KycChannel.RemoteSelfService) return Result.Ok();
+        if (cmd.RequestedDocuments is not { Count: > 0 } requested) return Result.Ok();
+
+        var policy = file.ProductLineId is { } lineId
+            ? await administration.GetKycRemotePolicyAsync(file.TenantId, lineId, ct)
+            : null;
+
+        // No policy at all: the link cannot be issued either, and IssueComplementLinkAsync will
+        // say so. Refusing the whole decision over it would trap a file whose product an
+        // administrator retired — the approver must still be able to send it back.
+        if (policy is null) return Result.Ok();
+
+        var collectable = new HashSet<KycDocumentKind>(KycRemoteJourney.AlwaysRequired)
+        {
+            KycDocumentKind.IdentityDocumentBack,
+        };
+
+        foreach (var raw in policy.RequiredDocuments)
+        {
+            if (Enum.TryParse<KycDocumentKind>(raw, ignoreCase: true, out var kind))
+                collectable.Add(kind);
+        }
+
+        var unknown = requested.FirstOrDefault(k => !collectable.Contains(k));
+
+        return requested.All(collectable.Contains)
+            ? Result.Ok()
+            : Result.Fail($"{KycErrors.ComplementDocumentNotCollectable}:{unknown}");
+    }
+
+    /// <summary>
+    /// KRM-B-10 — a complement asked of a customer who deposited their documents themselves gets
+    /// a new collection link, scoped to what the approver listed.
+    ///
+    /// <para>
+    /// <b>Only for a remotely collected file.</b> On a counter file the agent fetches the better
+    /// photograph themselves, and mailing their customer a link would be the institution asking
+    /// somebody to do work an employee is standing in front of them to do.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Best-effort, after the commit, like the workflow mirror above — and for a stronger
+    /// reason.</b> The decision is already recorded and the file is already back with the customer;
+    /// the link is how they act on it. Rolling the decision back because a link could not be
+    /// issued would discard an approver's judgement over a delivery problem, and the agent can
+    /// re-issue by hand from the file's own panel (KRM-F-07), which is exactly the button that
+    /// exists for it.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>ReplaceActive: true</c>: a customer in this position may still be holding the link they
+    /// used, and at most one link into a file is ever live. <c>DelayMinutes: 0</c>: the five-minute
+    /// hold exists to let the welcome email arrive first, and that was days ago.
+    /// </para>
+    /// </summary>
+    private async Task IssueComplementLinkAsync(
+        DecideKycApprovalCommand cmd, KycFile file, CancellationToken ct)
+    {
+        if (cmd.Decision != KycApprovalDecision.ComplementRequired) return;
+        if (file.Channel != KycChannel.RemoteSelfService) return;
+
+        try
+        {
+            var issued = await sender.Send(
+                new IssueKycRemoteInvitationCommand(
+                    TenantId: file.TenantId,
+                    KycFileId: file.Id,
+                    // The APPROVER, not SYSTEM. A link issued because a named person asked for a
+                    // complement is their act, and the invitation's CreatedBy is what tells a
+                    // later reader whether the system or a human sent a bearer credential.
+                    IssuedBy: currentUser.Id,
+                    ReplaceActive: true,
+                    DelayMinutes: 0,
+                    Purpose: KycRemoteInvitationPurpose.Complement,
+                    RequestedKinds: cmd.RequestedDocuments),
+                ct);
+
+            if (issued.IsFailure)
+            {
+                logger.LogWarning(
+                    "KYC file {KycFileId}: a complement was requested but no collection link "
+                    + "could be issued: {Error}. The agent can re-issue one from the file.",
+                    file.Id, issued.Error);
+
+                return;
+            }
+
+            logger.LogInformation(
+                "KYC file {KycFileId}: complement link {InvitationId} issued for {Count} document(s)",
+                file.Id, issued.Value.InvitationId, cmd.RequestedDocuments?.Count ?? 0);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "KYC file {KycFileId}: issuing the complement collection link threw. "
+                + "The decision stands and the agent can re-issue one from the file.",
+                file.Id);
+        }
     }
 
     /// <summary>

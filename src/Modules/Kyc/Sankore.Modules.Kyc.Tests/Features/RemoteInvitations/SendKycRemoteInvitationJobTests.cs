@@ -130,8 +130,15 @@ public sealed class SendKycRemoteInvitationJobTests : IDisposable
         await Job().ExecuteAsync(invitation.Id, _tenantId);
 
         var data = _sent.Should().ContainSingle().Subject.TemplateData!;
-        data.Keys.Should().BeEquivalentTo(["link", "expires_at", "agency_name"]);
+
+        // The WHOLE payload, pinned as a set rather than key by key: the property being protected
+        // is that nothing else is in there, and a per-key assertion passes just as well with a
+        // client number sitting beside the three it checked. `items` joined the list with KRM-B-10
+        // and is empty on an initial link — the complement wording is the only thing that renders
+        // it, and this one is not a complement.
+        data.Keys.Should().BeEquivalentTo(["link", "expires_at", "agency_name", "items"]);
         data["agency_name"].Should().Be("Abidjan Plateau");
+        data["items"].Should().BeEquivalentTo(Array.Empty<string>());
     }
 
     [Fact]

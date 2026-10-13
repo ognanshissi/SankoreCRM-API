@@ -1,5 +1,7 @@
 namespace Sankore.Modules.Kyc.Tests.Features.Approval;
 
+using Sankore.Modules.Administration.PublicApi;
+using MediatR;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -51,7 +53,8 @@ public sealed class DecideKycApprovalHandlerTests : IDisposable
         // The mirror onto M12 is best-effort; these tests are about the circuit, so the substitute's
         // default (a null Result) stands in for "no instance to record against".
         _handler = new DecideKycApprovalHandler(
-            _db, _currentUser, _publisher, _workflow,
+            _db, Substitute.For<ISender>(), Substitute.For<IAdministrationModule>(),
+            _currentUser, _publisher, _workflow,
             TestSupport.TestRemoteSaleEvidence.For(_db, _clock),
             TestSupport.TestPepEvidence.For(), _clock,
             NullLogger<DecideKycApprovalHandler>.Instance);

@@ -76,7 +76,8 @@ internal sealed class IssueKycRemoteInvitationHandler(
             validityHours: policy.LinkValidityHours,
             createdBy: cmd.IssuedBy,
             clock: clock,
-            purpose: cmd.Purpose);
+            purpose: cmd.Purpose,
+            requestedKinds: cmd.RequestedKinds);
 
         db.KycRemoteInvitations.Add(invitation);
 

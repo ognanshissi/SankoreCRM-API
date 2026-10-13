@@ -66,6 +66,69 @@ public static class KycSettingKeys
     /// </summary>
     public const string RemoteEmailDelayMinutes = "remote-email-delay-minutes";
 
+    /// <summary>
+    /// Lifetime of the session a customer gets after identifying, in minutes.
+    ///
+    /// <para>
+    /// It bounds how long a phone left on a café table can keep uploading into somebody's KYC
+    /// file. Twenty minutes is enough to photograph a card and take a selfie without hurrying;
+    /// longer buys the customer nothing, because an expired session sends them back to the
+    /// identification screen and KEEPS the photos they already sent (KRM-F-03).
+    /// </para>
+    /// </summary>
+    public const string RemoteSessionMinutes = "remote-session-minutes";
+
+    /// <summary>
+    /// Failed identification attempts before the LINK is locked.
+    ///
+    /// <para>
+    /// On the link and not on the customer: locking a customer out would hand anybody holding a
+    /// stale link the power to freeze a real enrolment. It is the per-token rate limit — and a
+    /// durable one, unlike a sliding window in memory, which is why the public endpoints rely on
+    /// this rather than on the rate limiter for the guessing attack that actually matters.
+    /// </para>
+    /// </summary>
+    public const string RemoteMaxIdentifyAttempts = "remote-max-identify-attempts";
+
+    /// <summary>
+    /// How many times the customer may retake each photo before the quality gate stops refusing.
+    ///
+    /// <para>
+    /// A BUDGET, not a wall: past it the upload is accepted anyway and the file carries a flag for
+    /// the validator. Refusing outright would strand a customer whose phone camera the service
+    /// simply does not like, with no way forward and no human to ask — the one outcome a remote
+    /// journey must not produce.
+    /// </para>
+    /// </summary>
+    public const string RemoteMaxQualityRetries = "remote-max-quality-retries";
+
+    /// <summary>
+    /// Hours a remotely collected file may wait for its responsible agent's decision before they
+    /// are chased, with a copy to the branch manager (KRM-B-09).
+    ///
+    /// <para>
+    /// It measures from the ROUTING, not from the submission: the customer's part was over when
+    /// they pressed send, and the clock that matters to them is how long the institution then
+    /// took. A file approved automatically never starts it — there is nobody to chase.
+    /// </para>
+    /// </summary>
+    public const string RemoteReviewSlaHours = "remote-review-sla-hours";
+
+    /// <summary>
+    /// Whether a customer must also type a code received by SMS before their session opens
+    /// (KRM-B-12).
+    ///
+    /// <para>
+    /// <b>It cannot be turned on in this deployment, and the refusal is deliberate.</b> This
+    /// platform has no SMS channel — M08 is email only — so enabling it would lock every customer
+    /// of the tenant out of their own journey. <c>UpdateKycSettingHandler</c> refuses the write
+    /// while <c>IKycOtpSender.IsAvailable</c> is false, so an administrator is told at the moment
+    /// they try instead of their customers finding out. The whole mechanism behind it is
+    /// implemented and tested; only the delivery is missing.
+    /// </para>
+    /// </summary>
+    public const string RemoteOtp = "remote-otp";
+
     public const string TypeString = "string";
     public const string TypeInt = "int";
     public const string TypeBool = "bool";
@@ -107,6 +170,19 @@ public static class KycSettingKeys
             "Délai, en minutes après la conversion, avant l'envoi du lien de dépôt des pièces à "
             + "distance. Laisse arriver d'abord l'email de bienvenue, qui porte le numéro client "
             + "demandé sur la page publique."),
+        new(RemoteSessionMinutes, "20", TypeInt,
+            "Durée de la session du client après son identification, en minutes."),
+        new(RemoteMaxIdentifyAttempts, "5", TypeInt,
+            "Nombre d'échecs d'identification avant verrouillage du lien."),
+        new(RemoteMaxQualityRetries, "5", TypeInt,
+            "Nombre de reprises de photo par document avant que le contrôle qualité cesse de "
+            + "refuser ; au-delà, le dépôt est accepté et signalé au validateur."),
+        new(RemoteReviewSlaHours, "24", TypeInt,
+            "Délai, en heures, au-delà duquel un dossier à distance en attente de décision "
+            + "relance l'agent responsable, avec copie au chef d'agence."),
+        new(RemoteOtp, "false", TypeBool,
+            "Exiger un code reçu par SMS en plus du numéro client et de la date de naissance. "
+            + "Indisponible tant qu'aucun canal SMS n'est configuré : l'activation est refusée."),
     ];
 
     private static readonly Dictionary<string, KycSettingDefault> ByKey =

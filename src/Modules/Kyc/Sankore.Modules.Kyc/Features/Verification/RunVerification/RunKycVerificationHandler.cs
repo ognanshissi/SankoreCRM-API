@@ -1,6 +1,5 @@
 namespace Sankore.Modules.Kyc.Features.Verification.RunVerification;
 
-using System.Globalization;
 using System.Text.Json;
 using Hangfire;
 using MediatR;
@@ -117,6 +116,14 @@ internal sealed class RunKycVerificationHandler(
             if (submitted.IsFailure)
                 return Result.Fail<RunKycVerificationResult>(submitted.Error!);
 
+            // KRM-B-08: a NEW round of evidence gets a new routing decision. The routing is
+            // idempotent on the file's own ValidationRoute — which is what makes a redelivered
+            // event harmless — so without this the second round would be unroutable: the agent
+            // would keep reading the reason the first attempt produced and no notification would
+            // go out for the complement the customer has just sent. It cannot clear an AUTOMATIC
+            // route; a file holding a tier does not come back here.
+            file.ClearRouting(clock);
+
             // KRM-B-04: the file has left collection, so any collection link still in force is
             // withdrawn. It is a no-op on the remote path — the customer's own submission marks
             // their link Submitted before this runs — and it bites on the one case that matters:
@@ -223,7 +230,18 @@ internal sealed class RunKycVerificationHandler(
         // shows who is awaited, so creating them from a consumer would leave a window where the
         // file claims to be in validation with nothing to approve. Done after the save, and
         // idempotently, so a replayed verification does not build a second circuit.
-        if (file.Status == KycFileStatus.Validating)
+        //
+        // EXCEPT for a remotely collected file (KRM-B-08). There, the product's policy may approve
+        // with no human at all, and the routing is what decides — so the ladder of pending human
+        // rungs is written by RouteRemoteKycFileHandler's manual branch, or not at all. Writing it
+        // here first would mean the automatic branch had to UNWRITE it, and deleting approval steps
+        // is the one thing a circuit must never do: a step is evidence, and a routine that removes
+        // them is a routine that can remove a signed one. The window this opens — a Validating
+        // remote file with no circuit until the outbox delivers KycVerificationCompleted — is
+        // bounded by that delivery, and nobody is sitting on the screen: there is no agent behind a
+        // remote submission.
+        if (file.Status == KycFileStatus.Validating
+            && file.Channel != KycChannel.RemoteSelfService)
         {
             var started = await sender.Send(
                 new StartKycApprovalCommand(cmd.TenantId, file.Id, cmd.RequestedBy), ct);
@@ -483,60 +501,25 @@ internal sealed class RunKycVerificationHandler(
     }
 
     // ── OCR field plumbing ──────────────────────────────────────────────────
-
-    /// <summary>
-    /// Field names are the biometric service's own and it is free to change them — "number" on one
-    /// deployment, "document_number" on the next. The candidates are matched on letters and digits
-    /// only so a rename between the two spellings does not silently stop producing a blind index.
-    /// </summary>
-    private static readonly HashSet<string> DocumentNumberKeys =
-    [
-        "documentnumber", "documentno", "idnumber", "number", "no", "cardnumber",
-    ];
-
-    private static bool IsDocumentNumberKey(string key) => DocumentNumberKeys.Contains(Simplify(key));
-
-    private static string Simplify(string key)
-        => new(key.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+    //
+    // Moved to KycOcrFields and kept here as one-line forwards. Field-name matching is now shared
+    // with KRM-B-08's routing, which reads the same dictionary back out of OcrFieldsJson to
+    // compare the identity against the client record — two private copies of Simplify would have
+    // meant two opinions on whether "given_names" and "givenNames" are the same field.
 
     private static string? FindDocumentNumber(IReadOnlyDictionary<string, string> fields)
-        => fields.FirstOrDefault(f => IsDocumentNumberKey(f.Key) && !string.IsNullOrWhiteSpace(f.Value)).Value;
+        => KycOcrFields.FindDocumentNumber(fields);
 
     private static Dictionary<string, string> WithoutDocumentNumber(IReadOnlyDictionary<string, string> fields)
-        => fields.Where(f => !IsDocumentNumberKey(f.Key)).ToDictionary(f => f.Key, f => f.Value);
+        => KycOcrFields.WithoutDocumentNumber(fields);
 
-    /// <summary>Same rule, for the confidences — one generic would hide which rule is shared.</summary>
     private static Dictionary<string, double> WithoutDocumentNumber(IReadOnlyDictionary<string, double> values)
-        => values.Where(v => !IsDocumentNumberKey(v.Key)).ToDictionary(v => v.Key, v => v.Value);
+        => KycOcrFields.WithoutDocumentNumber(values);
 
     private static string? FindFirst(IReadOnlyDictionary<string, string> fields, params string[] candidates)
-    {
-        foreach (var candidate in candidates)
-        {
-            var simplified = Simplify(candidate);
-            var hit = fields.FirstOrDefault(f => Simplify(f.Key) == simplified).Value;
-            if (!string.IsNullOrWhiteSpace(hit)) return hit;
-        }
+        => KycOcrFields.FindFirst(fields, candidates);
 
-        return null;
-    }
-
-    /// <summary>
-    /// Day-first formats are tried before the invariant parser, which reads "02/04/1987" as the
-    /// 4th of February. An unparsable date is dropped rather than guessed: a wrong expiry silently
-    /// downgrades a valid file to the simplified tier later on.
-    /// </summary>
-    private static DateOnly? ParseDate(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-
-        return DateOnly.TryParseExact(
-            raw.Trim(),
-            ["yyyy-MM-dd", "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "dd.MM.yyyy", "yyyyMMdd"],
-            CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
-            ? parsed
-            : null;
-    }
+    private static DateOnly? ParseDate(string? raw) => KycOcrFields.ParseDate(raw);
 }
 
 /// <summary>

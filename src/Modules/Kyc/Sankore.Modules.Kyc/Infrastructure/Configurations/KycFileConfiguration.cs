@@ -38,6 +38,21 @@ internal sealed class KycFileConfiguration : IEntityTypeConfiguration<KycFile>
         b.Property(f => f.ProductLineId);
         b.Property(f => f.ResponsibleAgentId);
 
+        // KRM-B-08. Text like every other enum here, and NULLABLE — null means "this file never
+        // went through the remote decision policy", which is not the same statement as "a human
+        // decides it". Almost every file in the table is in that state and always will be.
+        b.Property(f => f.ValidationRoute).HasConversion<string>().HasMaxLength(16);
+
+        // A code from KycRoutingReasons, not a sentence. 64 is generous for the longest of them
+        // (QUALITY_RETRIES_EXCEEDED is 24) and leaves room for one more without a migration.
+        b.Property(f => f.RoutingReason).HasMaxLength(64);
+        b.Property(f => f.RoutedAt);
+
+        // NO index, for the same reason ProductLineId has none: nothing filters on it today. The
+        // compliance report KRM-B-11 will want — "the automatic approvals of this month" — reads
+        // the Automatic approval STEPS, which ix_kyc_approval_steps_* already serves, not this
+        // column.
+
         // One OPEN file per customer. Rejected and suspended files stay as evidence, so the
         // constraint is filtered rather than a plain unique index — and it is what makes
         // concurrent creation safe: the loser gets a unique violation, reported as

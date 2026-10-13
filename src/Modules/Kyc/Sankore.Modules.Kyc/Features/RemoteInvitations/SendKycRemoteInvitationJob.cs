@@ -34,6 +34,14 @@ public sealed class SendKycRemoteInvitationJob(IServiceScopeFactory scopeFactory
     /// <summary>The seeded template of the message the customer receives.</summary>
     public const string TemplateKey = "kyc.remote-invitation";
 
+    /// <summary>
+    /// The same link, worded for a customer who has already been through the journey once
+    /// (KRM-B-10). A single template would have to say both "welcome, here is how to send your
+    /// documents" and "your utility bill could not be read, please retake it", and the second
+    /// message is the one that has to be unambiguous.
+    /// </summary>
+    public const string ComplementTemplateKey = "kyc.remote-complement";
+
     public async Task ExecuteAsync(Guid invitationId, Guid tenantId)
     {
         // Set BEFORE the DI scope is created: ITenantContext and ICurrentUser are built from this
@@ -112,14 +120,20 @@ public sealed class SendKycRemoteInvitationJob(IServiceScopeFactory scopeFactory
 
             var agencyName = await ResolveAgencyNameAsync(scope, tenantId, invitation.KycFileId);
 
+            // KRM-B-10: a complement link is a different message, chosen from the invitation's
+            // own purpose rather than from a job argument. The purpose is already persisted, so a
+            // replayed job cannot send the wrong one — and the job's payload stays two ids.
+            var isComplement = invitation.Purpose == KycRemoteInvitationPurpose.Complement;
+            var templateKey = isComplement ? ComplementTemplateKey : TemplateKey;
+
             var queued = await customers.NotifyClientAsync(new NotifyClientRequest(
                 TenantId: tenantId,
                 ClientId: invitation.CustomerId,
-                TemplateKey: TemplateKey,
+                TemplateKey: templateKey,
                 // Keyed on the INVITATION and not on the file or the customer: a second link is a
                 // second legitimate message, and keying it on either of those would silence every
                 // re-issue. Matches the key KRM-B-03 names.
-                IdempotencyKey: $"{TemplateKey}-{invitationId}",
+                IdempotencyKey: $"{templateKey}-{invitationId}",
                 TemplateData: new Dictionary<string, object>
                 {
                     // The link, and deliberately NOT the client number. The customer already has
@@ -129,6 +143,13 @@ public sealed class SendKycRemoteInvitationJob(IServiceScopeFactory scopeFactory
                     ["link"] = link,
                     ["expires_at"] = invitation.ExpiresAt,
                     ["agency_name"] = agencyName ?? string.Empty,
+                    // What to retake, in the customer's own words rather than as enum names. Empty
+                    // on an initial link, and empty on a complement the agent did not scope — the
+                    // template renders the list only when there is one, so a blank list reads as
+                    // "the whole journey again", which is what an unscoped complement means.
+                    ["items"] = isComplement
+                        ? KycRemoteDocumentLabels.For(invitation.RequestedKinds())
+                        : Array.Empty<string>(),
                 }), CancellationToken.None);
 
             if (!queued)

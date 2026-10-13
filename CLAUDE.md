@@ -770,6 +770,387 @@ trap — the unscoped path would still be one parameter away from any future end
 before it counts or `TotalCount` and the page boundaries are computed over rows the caller may not
 see.
 
+### The customer's own journey: the only anonymous write surface (KRM-B-05…07)
+
+`api/v1/public/kyc` is the first and only place in this product where somebody with no account
+writes to the database. Everything below follows from that.
+
+**`TenantResolutionMiddleware` exempts `/api/v1/public` wholesale**, so nothing upstream resolves a
+tenant or compares it with the host for these routes. `KycRemoteGate` does both instead: it hashes
+the presented token, probes the globally-unique `token_hash` index, reads the tenant off the ROW,
+and refuses when an `X-Tenant-Fqdn` resolves to a different tenant. Without that last check a link
+leaked from one institution would open under another institution's logo and the customer would type
+their client number into it. An ABSENT header passes — the token is the credential, and refusing a
+request that merely did not say which domain it came from breaks every non-browser client.
+
+**Every public endpoint re-reads the invitation, and that is what "the session is revoked" means.**
+A signed JWT cannot be withdrawn, so a session is never trusted on its signature alone: an agent
+revoking a link, or the customer submitting, stops the session on its very next call — no
+revocation list, and no 20-minute window in which a spent link still writes.
+
+**The link's window is read off the CLOCK, never off the status.** `Expired` only appears when the
+nightly sweep runs; trusting it would leave a bearer credential working for up to a day past its
+stated lifetime. `KycRemoteInvitation.IsUsableAt` is the authority and the sweep is cosmetic.
+
+**The session token is a second JWT identity** — its own scheme (`KycRemoteSession`), audience
+(`sankore-kyc-remote-session`) and signing key, plus a `scope=kyc:remote` claim the policy requires.
+Three independent reasons a token issued for anything else is refused. The key is **derived** from
+`Jwt:SigningKey` with HKDF-SHA256 and a versioned info string rather than being a new secret:
+requiring one would fail every existing deployment on the upgrade that merely adds the feature, and
+whoever holds the platform key can already mint an administrator's token, so derivation is not the
+weak link. `Kyc:RemoteSession:SigningKey` overrides it for an operator who wants independent
+rotation. See `KycRemoteSessionOptions`.
+
+**The identification endpoint answers ONE failure for everything.** Wrong number, wrong date, both,
+a client with no recorded date of birth: all `401 KYC_REMOTE_IDENTIFICATION_FAILED`. Telling them
+apart would make it an oracle — "that client number exists" is the half an attacker cannot get
+anywhere else, and from there a date of birth is a few thousand guesses. The number of remaining
+attempts is deliberately not returned either.
+
+**The guessing bound is the per-link counter, not the rate limiter.** The `kyc-public` policy is per
+IP, in memory, and resets on every deployment — it bounds a flood. `FailedAttempts` on the
+invitation is durable and per token, and locks the link for good at
+`remote-max-identify-attempts`. A SUCCESSFUL identification resets it: a customer who mistyped three
+times and then got it right has not burned three of their five tries for the rest of the link's
+life.
+
+**`ICustomersModule.VerifyRemoteIdentityAsync` returns a boolean and takes the question, not the
+answer.** The client number and the date-of-birth blind index are M01's; the comparison happens in
+`RemoteIdentityVerifier`, compares the date on its HMAC index rather than decrypting, and runs both
+comparisons with `CryptographicOperations.FixedTimeEquals` combined with `&` and not `&&` — so
+"wrong number" does not return measurably faster than "right number, wrong date". Whitespace and
+casing are forgiven; the format's own separators are not, because stripping them collapses every
+tenant's format into one digit string.
+
+**The public endpoints are thin endpoints, not MediatR slices, and that breaks the repo
+convention deliberately.** `AuditBehavior` serialises a command's whole payload into the audit
+trail, and these payloads are a client number, a date of birth, and photographs. The identification
+attempt is still audited — with an empty payload, which is the entire point. The one write that
+genuinely belongs in a command is the verification, dispatched from the submission with storage
+references and no bytes.
+
+**The quality gate is a gate, not the evidence.** KRM-B-06 asked for the upload-time OCR reading to
+be kept and reused at submission; it is not. The authoritative reading runs through
+`RunKycVerificationCommand`, which is the only thing that writes `KycIdentityDocument` — reusing the
+upload-time one would bypass the field corrections, the duplicate detection and the scoring the
+command performs around it. The cost is one extra OCR call per document; the benefit is one path
+from a photograph to a verified identity. An unavailable service ACCEPTS the photograph, and past
+the tenant's retake budget the gate stops refusing: a customer whose camera the service dislikes
+must never be stranded with no human to ask.
+
+**A selfie is quality-checked through the face-match call and the verdict is discarded.** It is the
+only way to ask "is there exactly one face here", which is why the identity document must be
+uploaded first. Only `NO_FACE_DETECTED` and `MULTIPLE_FACES_DETECTED` reach the customer; any other
+rejection is about the document, and refusing the selfie for it would send them retaking the wrong
+photograph.
+
+**`uploaded_by` is the INVITATION id, never a user.** An employee recorded as having uploaded the
+image would be barred from deciding on the file by the four-eyes rule, and no employee touched it.
+The same reasoning puts SYSTEM in `LastSubmittedBy` at submission — which is exactly what lets the
+remote path route to one human instead of two.
+
+**`KycChannel.RemoteSelfService` moves at SUBMISSION**, not when the link is sent: a link nobody
+used is a file waiting at a counter, not a remote enrolment. Adding that value also moved the
+"which channels are remote" predicate into `KycChannels.IsRemoteSale` — spelled as
+`Web or MobileAgent` in two places, the newest and most remote channel of all would have fallen
+outside both, and CIMA article 13.6's proof-of-address gate would have stopped applying to the only
+channel where no employee ever saw the document.
+
+**The consent text is compiled in, versioned, and served by the API.** What has to be provable years
+later is the exact wording this person agreed to; a row an administrator can edit cannot answer
+that, because editing it once makes every past consent point at text nobody consented to. A stale
+version is refused with `KYC_REMOTE_CONSENT_VERSION_STALE` so the page reloads rather than recording
+agreement to wording it never displayed.
+
+**`KycDocument.DeclaredDocumentType` exists for this journey.** On the agent path a human passes the
+document type at verification time; on the remote path nobody is there when the file is submitted,
+so the customer's choice has to live on the image they made it for. Reading it off the newest
+front is also how a customer corrects a wrong choice — they retake the photograph.
+
+Front-end counterparts worth knowing: the Angular route is `kyc/verification`, declared **before**
+the guarded `kyc` route (declared after, `authorized` would capture it and the emailed link would
+never have worked), the token is read from `location.hash` and wiped with `replaceState`, the
+session lives in memory only (`KycRemoteSessionStore` — a refresh sends the customer back to
+identification and KEEPS their photographs, which are server-side), `public/kyc/` is excluded from
+`accessTokenInterceptor` so a customer's expiring session cannot trigger a `logout()` that signs out
+the agent working in another tab, and `KycCameraCapture` gained an `audience` input that changes the
+camera-unblocking instructions only — "click the padlock left of the address bar" and "plug in a
+webcam" are support calls when said to somebody on a phone.
+
+### Who decides a remote file, and the one gate that makes the feature almost unreachable (KRM-B-08…10)
+
+A remotely collected file is routed once its verification comes back: either the product's policy
+approves it with **no human at all**, or a human is asked and told why. Lot 3 is that decision, the
+notification that follows it, and what the customer is told.
+
+**`KycAutoApprovalPolicy` is a pure function over a record, and every compliance condition lives
+there.** No DbContext, no module contract, no clock: `RouteRemoteKycFileHandler` gathers the facts
+and the policy weighs them. That is what makes the specification's own definition of done —
+"règles d'approbation automatique couvertes par des tests unitaires cas par cas" — a sentence a
+unit test can satisfy, instead of a scenario needing a scored file, a product, a tenant and a mail
+server. A condition implemented in the handler would be one no test could reach.
+
+**It only ever approves.** There is no verdict that refuses a customer, including on the worst
+possible evidence: a `Rejected` score goes to an agent who chooses between a complement and a
+refusal. That asymmetry is the whole compliance argument for the feature — the automatic path can
+only skip a signature the institution would have given anyway.
+
+**Three places the specification cannot be followed literally**, each documented on
+`KycAutoApprovalPolicy.Evaluate`:
+
+| §3.2 says | What exists | What is done |
+|---|---|---|
+| "Niveau de confiance **Validated**" | `KycConfidenceLevel` is Rejected/Low/Medium/High; the service grades Low/Medium/High | read as `High` **and** the product's score floor on top. Reading it as "anything but Rejected" would let a Low-confidence file through on a score |
+| "aucune **alerte LBC-FT** ouverte" | no AML-alert entity anywhere | an OPEN event-driven `KycReviewSchedule` plus the file's own `DuplicateSuspected`, folded into `HIGH_VIGILANCE` and `BLOCKING_FLAG` so the reason list stands |
+| five **blocking flags** | strings from the scoring service, stored verbatim | `KycBlockingFlags`, matched case-insensitively. A flag the list does not know is NOT blocking — widening it is a decision somebody takes, not something a service deployment does overnight |
+
+**Two reason codes beyond the specification's list, and both had to exist.**
+`AUTO_APPROVAL_DISABLED`, because KRM-B-01 refuses to *save* a product in automatic mode while the
+tenant switch is off — so the state is only reachable by switching it off afterwards, which is
+exactly when an officer needs to see it bite, and the nearest listed code would send them to edit
+the wrong screen. And `PROOF_OF_ADDRESS_REQUIRED`, which is the consequential one:
+
+> **CIMA article 13.6 makes an automatic approval nearly unreachable today, and that is deliberate
+> rather than a bug.** `RemoteSaleEvidence` refuses the FINAL approval of any remote file without a
+> proof of address that is `Accepted` and carries an issue date inside the tenant's window — and
+> `RemoteSelfService` is the most remote channel there is. "Accepted" is a reviewer's decision and
+> the issue date is a reviewer's entry, so until somebody at the institution reviews a customer's
+> utility bill, no remote file of a product subject to 13.6 is approved by the policy: it routes to
+> a human under this code. The gate is called from the routing precisely so the automatic path can
+> never grant a tier the manual path would have refused on the same file — the one way this feature
+> could be worse than no feature. Whether the remote journey should collect the issue date from the
+> customer and the policy accept an unreviewed proof is a **compliance decision for each
+> institution** and is not taken in code.
+
+**`KycFile.ApproveAutomatically` exists because `Approve` cannot be used.** `Approve` refuses
+whoever `LastSubmittedBy` names, and a remotely submitted file deliberately names SYSTEM there —
+so `Approve(tier, Guid.Empty, …)` is refused by the four-eyes rule every time. That refusal is
+correct and stays: SYSTEM approving what SYSTEM submitted is exactly what the rule describes. An
+unattended approval is therefore a different act, named differently, so the audit trail says what
+happened instead of showing a signature nobody gave. The method re-checks the channel itself: it is
+the single place in the module that grants a tier with no human, and "the caller already checked" is
+not good enough there.
+
+**An automatic approval must be indistinguishable from a manual one downstream**, and a test pins
+each half: same tier, same status, the same `KycValidatedEvent` + `KycTierChangedEvent` through the
+same outbox, and the same *absence* of a scheduled periodic review — because the manual path does
+not schedule one either (nothing calls `KycReviewScheduler.SchedulePeriodicAsync`, a pre-existing
+gap). A path that scheduled one would be a divergence in the other direction. `KycRemoteDecidedEvent`
+is published on BOTH outcomes and is the only thing that says *who* decided; the two existing events
+say nothing about how, and must not.
+
+**`RunKycVerificationHandler` no longer opens the circuit for a remote file.** The router owns it:
+either the single already-decided `Automatic` step, or the human ladder through
+`StartKycApprovalCommand`. Writing the ladder first would mean the automatic branch had to unwrite
+it, and deleting approval steps is the one thing a circuit must never do — a routine that removes a
+pending step is a routine that can remove a signed one. The cost is a window where a `Validating`
+remote file has no circuit until the outbox delivers; nobody is sitting on that screen, because
+there is no agent behind a remote submission.
+
+**`KycApprovalLevel.Automatic = 90`, specifically not 0.** Zero reads as "below the agent", which is
+the honest description — and would make it `default(KycApprovalLevel)`, so a deserialisation that
+lost the field would say a file was approved automatically. For a compliance enum that is the one
+default nobody can afford.
+
+**Idempotence is `KycFile.ValidationRoute`.** M02 has no inbox table, the trigger is a broker
+message, and a second evaluation would either mail the agent twice or re-approve a file an agent has
+since sent back. `RouteToManual` refuses to overwrite a route; the automatic branch is guarded by
+the status transition itself. `ClearRouting` is called when a file re-enters verification so the
+NEXT round is routable — without it the idempotence guard would silence the complement the customer
+just sent. It deliberately cannot clear `Automatic`.
+
+**`KycFile.RoutedAt` is its own column and not a reading of `UpdatedAt`.** KRM-B-09 chases the
+responsible agent N hours after the file was handed to them, and `UpdatedAt` moves every time
+somebody opens the file — measuring from it would reset the promise on every look, which is the
+opposite of what an SLA on a decision means.
+
+**The recipient cascade is M12's, and its third rung does not exist.**
+`IAdministrationModule.ResolveAgencyRecipientAsync` answers the responsible agent when they are
+`Active` **and** still attached to that agency, else the agency's manager (also checked for
+`Active`), else null. The specification's "sinon la file de l'agence" has nothing to address — this
+platform has no agency distribution list — so the cascade stops rather than inventing a recipient,
+and null is an ordinary answer every caller handles: the file is in the back-office backlog either
+way. Both legs matter: a disabled account still has a mailbox the provider accepts, and an agent who
+changed branch must stop receiving their old branch's work.
+
+**Every email is sent from an outbox consumer with an idempotency key**, which §8 asks for in those
+words: `QueueEmailAsync` is another module's table and is not part of M02's transaction, so a mail
+queued inside the routing would be sent for a decision that then rolled back. The keys are shaped
+for what a legitimate second message is — `kyc.remote-review-required` is keyed on
+`(file, routing reason)`, so a complement that re-routes the file can notify again while a
+redelivery stays silent; the overdue chase adds the recipient id, because a shared key would let the
+agent's copy silence the manager's.
+
+**The customer's approval email is identical whether a machine or a human approved.** KRM-F-05 makes
+that a requirement of the customer's own screen, and it would be odd for the email to then give the
+mode away — they have no action to take either way. The refusal carries **no motive at all**: the
+approver's comment travels on `KycRejectedEvent` and is dropped here, because it is written for
+operators and some refusals must not be explained (telling somebody which check they failed tells
+them what to change before trying again). `agency_phone` renders empty — no telephone number exists
+on an agency or on the institution anywhere in this platform, and the variable is in the template so
+adding the field later needs no template migration.
+
+**A complement link is scoped, and the scope also re-opens the journey.**
+`KycRemoteInvitation.RequestedKindsJson` holds the kinds the approver listed; `KycRemoteJourney`
+then requires exactly those — not even the front and the selfie an initial link always collects —
+and counts one as present only when it was uploaded *after* the invitation was created. Without that
+second half the journey would open with nothing missing and the send button would resubmit the very
+image that was refused. The old evidence stays on the file, where it belongs. An EMPTY scope means
+"the whole journey again", which is the reading that cannot strand anybody. The scope is validated
+against the product's policy **before** the decision is applied, not when the link is issued: the
+link is issued best-effort after the commit, so a refusal there would be a log line the agent never
+sees.
+
+**`ICustomersModule.MatchesReadIdentityAsync` is asymmetric on purpose.** Every given name on the
+RECORD must appear among those READ on the document, not the reverse — a card lists a person's full
+civil given names and a counter capture routinely holds fewer, so the strict direction would route
+nearly every file to a human and the condition would stop discriminating. The surname is compared
+whole. An INCOMPLETE reading is NOT a match: a document whose surname the extractor could not
+produce is not a document that agrees with the record, it is a document nobody checked. Normalisation
+is `SearchKeyBuilder.NormalizeTerm`, which already defines "accent-free, upper-cased, punctuation
+collapsed" for client search — which is exactly what §3.2 asks for.
+
+**`KycOcrFields` was extracted so the field-name matching has one body.** The verification writes
+`OcrFieldsJson` and the routing reads it back; two private copies of `Simplify` would mean two
+opinions on whether `given_names` and `givenNames` are the same field, and the routing copy is the
+one nobody looks at — a service rename would silently make every remote file fail its identity check
+and route to a human. A failure in the safe direction is still a failure nobody would diagnose.
+
+Front-end counterparts (KRM-F-08): `KycRemoteDecisionBanner` sits at the TOP of the decision screen,
+before the status card — a validator opening a remote file reads something different from a counter
+file, and the reason the machine did not decide orients their whole reading; placed lower it would be
+read after the score, which is too late. It renders nothing for a counter file. `kycRoutingReasonLabel`
+is the only translation of the reason codes and a code it does not know becomes a generic instruction
+rather than an identifier under a branch manager's eyes — `kyc-routing-reason.spec.ts` pins exactly
+that, the same property `kyc-remote-labels.spec.ts` pins on the customer's side. `KycApprovalLevel.Automatic`
+is labelled "Validé automatiquement" and NOT given a validator's name, so the history cannot read as
+though a person signed. The retake-document checkboxes only appear for a remote file, because on a
+counter file the agent fetches the better photograph themselves and the list would have nowhere to go.
+
+### Controlling what the machine decided, and the second factor that cannot be delivered (KRM-B-11/B-12, F-09)
+
+**`kyc_auto_approval_controls` is the price of the automatic mode, and it is a table rather than an
+assurance.** Every other KYC file in this platform passes under at least two pairs of human eyes;
+an automatic approval replaces both with the SYSTEM account. The specification's own compliance
+note says what that costs — a sampled after-the-fact control — and this is it. Its own entity and
+not a flag on `KycFile`, for three reasons and the third decides it: a file can be approved
+automatically more than once over a lifetime (a review re-opens it) so a column would be
+overwritten; the queue is read by a different person under a different permission; and the verdict
+carries its own author, date and finding, which is evidence in its own right — a regulator asks who
+checked, not only whether somebody did.
+
+**The draw is random and deliberately NOT a hash of the file id.** A deterministic draw would be
+reproducible, which is attractive for an audit, and also PREDICTABLE — anybody who can influence
+which id a file gets could keep their approvals out of the sample, and a control that can be steered
+is not one. Reproducibility comes from the rows instead: an institution answers from the table, not
+by re-running a function. `RandomNumberGenerator` rather than `Random.Shared` because nothing in the
+process can seed or replay it.
+
+**It is drawn AT the approval, inside its transaction.** The sample is of APPROVALS: a nightly job
+picking rows would sample the approvals that still exist and still look automatic, which is a
+different and quietly shrinking population. `KycAutoApprovalSampler.Draw` adds the row and the
+CALLER saves — a crash between them would leave either an approval nobody will ever control or a
+control of an approval that never happened. It never throws and never fails the approval: a
+compliance control causing the harm it exists to detect is the one failure mode it may not have.
+
+**`PolicyVersion` is on the row because the rules are code.** The question is "under which
+conditions was this relationship entered into without a human", and an approval from last quarter
+was taken under a `KycAutoApprovalPolicyVersion` the service no longer runs. Bump that constant when
+a condition is added, removed or loosened — never for a wording change.
+
+**`kyc:auto-approval:control` is its own permission, not `kyc:approve`.** An approver decides whether
+to enter into a relationship; this one answers to a regulator for the institution having let a
+machine decide at all. Granting it to every approver would mean the people whose signatures the
+automatic mode replaced are the ones auditing its replacement.
+
+**The queue read has NO agency perimeter**, the only KYC list that does not, and the permission is
+what makes that safe: a queue narrowed to one branch answers "did MY branch let machines decide"
+while leaving the real question, about the tenant, unanswerable.
+
+**The four-eyes rule this feature can enforce is about the FILE, not the approval.** An automatic
+approval was signed by SYSTEM, so `LastSubmittedBy` is useless as an anchor; the guard refuses the
+file's own `ResponsibleAgentId` instead — the person whose conversion produced the file must not
+certify that a machine was right to validate it unattended. It answers 403 and not 404 here, unlike
+everywhere else in this module: the caller can already see the row, so there is nothing left to
+hide, and "not found" would send an officer looking for a row in front of them.
+
+**A non-compliant verdict raises its review AFTER the commit and its failure does not undo the
+verdict.** A control recorded without its review is a true statement about what happened and leaves
+a visible row; a verdict rolled back because a review could not be scheduled would lose the finding,
+which is the one thing that cannot be reconstructed. The response carries `raisedReviewId: null` so
+the screen can say "raise one by hand" instead of hiding the gap. The review's reason is a FIXED
+sentence and not the officer's finding — the two have different audiences.
+
+**KRM-B-12's SMS second factor ships complete except for its delivery, and the switch fails
+closed.** This platform has **no SMS channel at all**: M08 is email only — `EmailTemplate`,
+`QueueEmailAsync`, SMTP, Brevo — and there is no provider, no queue, no per-tenant credential and no
+delivery receipt for a text message anywhere in the solution. The story lists « M08 SMS » as a
+dependency that does not exist, and building it is a module-sized piece of work, not a clause of a
+Could-Have story.
+
+So the mechanism is real and tested — six digits, SHA-256 salted with the invitation id, a
+ten-minute window, three tries, one-time consumption, a bounded resend — and the delivery is
+`IKycOtpSender`, whose only registered implementation is `UnavailableKycOtpSender`.
+**`UpdateKycSettingHandler` refuses to turn `remote-otp` on while that sender is unavailable**, the
+one setting in this module whose validity depends on what the host registered rather than on its
+own value (which is why the check is not in `KycSettingRanges` — a range validator cannot see the
+container). Turning it on with no channel would not degrade the journey, it would END it: every
+customer of that tenant would reach a code screen for a message that is never sent, with nothing in
+the logs to say why. The day a provider lands it implements the port and replaces one registration.
+
+Three properties of the OTP worth knowing before touching it. The hash is **salted with the
+invitation id** — a six-digit code has a million values and an unsalted SHA-256 of all of them is a
+table somebody builds once, so a stolen column must be a million hashes per row rather than a
+lookup. A **malformed entry costs no attempt**: `HashOrNull` shape-checks before hashing, so a blank
+or four-digit entry cannot burn somebody else's three tries, and a public endpoint cannot be made to
+hash an arbitrary string. And a new code resets the code's own counter but **never** the per-link
+`FailedAttempts` — that one bounds guessing at the client number and date of birth, and a resend
+must not buy an attacker five fresh tries at the first factor. A code that could not be SENT is not
+a session: falling back to opening one would switch the tenant's second factor off at the exact
+moment the channel failed.
+
+**`KycOtpVerdict` has four values and the endpoint shows one.** The aggregate distinguishes "no code
+pending", "expired", "too many attempts" and "wrong" because they call for different instructions;
+the public surface answers a single `KYC_REMOTE_OTP_INVALID`, because telling them apart says whether
+a live code exists for a link somebody holds. The verdict is LOGGED — an operator diagnosing "nobody
+can get through" needs to know whether codes are stale or wrong — and never returned.
+
+**nginx (§8).** `log_format sankore_public` is defined without `$request_body` and without
+`$http_referer` and applied to `^~ /api/v1/public/kyc`: the default format carries neither, but
+nothing stops a deployment from copying one that does, and under that prefix the body is a client
+number, a date of birth and an SMS code. The `Referer` goes for the reason the token is in the
+fragment — a fragment never reaches the server, but an intermediate page could put the whole URL in
+a header, and a log is where a string survives for months. HSTS is emitted only when
+`$http_x_forwarded_proto` is https (TLS terminates upstream, so this server listens on 80 and cannot
+require it, only make the browser require it) — unconditional, it would make a local HTTP deployment
+unreachable for a year on any machine that saw it once. `map` is an `http`-context directive: in a
+`server` block nginx refuses to start, which is why it sits at the top of the file and not next to
+the `add_header` that reads it. Verified with `nginx -t`.
+
+**KRM-F-09 is a proposition and never a barrier**, because the detection is a heuristic and says so.
+The only reliable test is `getUserMedia({video:{facingMode:{exact:'environment'}}})`, which raises
+the camera permission prompt — asking somebody on a desktop for camera access in order to tell them
+to use their phone is the opposite of the point. `enumerateDevices` without permission returns
+entries with empty labels, so neither `label` nor `facingMode` is readable and what remains is the
+COUNT: two or more video inputs means a phone, one on a touch device means a tablet. A laptop has a
+webcam and no touch screen and lands on "no rear camera"; a touch-screen desktop with one webcam is
+the documented false negative and goes straight to capture, which is the less annoying of the two
+outcomes. An API that is absent or refuses counts as "continue here" — a browser that will not
+answer must not send every customer to a QR code.
+
+**The QR encodes the full link, token included**, which is what makes the screen useful: scanning it
+opens the same page on the phone, identification included. The token therefore reappears on screen,
+so the component writes it nowhere — the parent rebuilds the URL from the token held in MEMORY,
+because `_readTokenFromFragment` wiped the address bar. The link stays single-use server-side:
+scanning moves the journey, it does not duplicate it, and the desktop's session stops working on its
+next call because `KycRemoteGate` re-reads the invitation every time. `qrcode-generator@2.0.4` is a
+new dependency (zero transitive deps, MIT, one lockfile entry) — **installed with
+`--legacy-peer-deps`, which this repo already requires**: `ngx-quill@30.1.3` peers on Angular 21
+while the workspace is on 22, a pre-existing conflict. The SVG is drawn by hand and
+`kyc-continue-on-phone.spec.ts` pins the part that was written here rather than the encoder: one
+rect per dark module, `x`/`y` as (column, row) — a transposed QR looks identical and does not scan —
+and the four-module quiet zone, which is part of the standard and not decoration.
+
 ### Lead e-mail is encrypted — never compare it in a query
 
 `Lead.Email` is plaintext in the domain and AES-256-GCM ciphertext in the column (`email_enc`),

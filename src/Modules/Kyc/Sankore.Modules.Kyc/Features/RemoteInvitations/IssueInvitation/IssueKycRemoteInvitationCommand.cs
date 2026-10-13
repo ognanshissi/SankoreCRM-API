@@ -2,6 +2,7 @@ namespace Sankore.Modules.Kyc.Features.RemoteInvitations.IssueInvitation;
 
 using MediatR;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Infrastructure.Storage;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
@@ -38,13 +39,25 @@ using Sankore.Shared.Kernel;
 /// after the welcome message that carries the client number. An agent re-issuing passes 0: the
 /// welcome mail went out days ago and they are usually on the phone with the customer.
 /// </param>
+/// <param name="RequestedKinds">
+/// On a <see cref="KycRemoteInvitationPurpose.Complement"/> link, the document kinds the agent
+/// asked the customer to retake (KRM-B-10). Ignored on an initial link — a link that collected
+/// less than the product requires would produce a file nobody can approve.
+///
+/// <para>
+/// Empty on a complement is allowed and means "the product's own list": an agent who asked for a
+/// complement without naming documents wants the whole journey again, which is the reading that
+/// cannot strand anybody.
+/// </para>
+/// </param>
 internal sealed record IssueKycRemoteInvitationCommand(
     Guid TenantId,
     Guid KycFileId,
     Guid IssuedBy,
     bool ReplaceActive,
     int? DelayMinutes = null,
-    KycRemoteInvitationPurpose Purpose = KycRemoteInvitationPurpose.Initial
+    KycRemoteInvitationPurpose Purpose = KycRemoteInvitationPurpose.Initial,
+    IReadOnlyCollection<KycDocumentKind>? RequestedKinds = null
 ) : IRequest<Result<IssueKycRemoteInvitationResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "KycRemoteInvitation";

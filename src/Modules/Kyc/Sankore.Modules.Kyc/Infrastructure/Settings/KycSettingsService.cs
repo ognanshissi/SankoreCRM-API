@@ -32,6 +32,13 @@ internal sealed class KycSettingsService(KycDbContext db, TimeProvider clock) : 
             ? parsed
             : 0m;
 
+    /// <summary>
+    /// FALSE for anything that will not parse. Every bool this module has is written so that
+    /// false is the safe reading — see the contract.
+    /// </summary>
+    public async Task<bool> GetBoolAsync(Guid tenantId, string key, CancellationToken ct)
+        => bool.TryParse(await GetStringAsync(tenantId, key, ct), out var parsed) && parsed;
+
     public async Task<IReadOnlyDictionary<string, string>> GetAllAsync(Guid tenantId, CancellationToken ct)
     {
         var stored = await db.KycSettings

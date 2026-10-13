@@ -35,12 +35,28 @@ internal sealed class KycRemoteInvitationConfiguration : IEntityTypeConfiguratio
         b.Property(i => i.TokenHash)
             .HasColumnType("bytea");
 
+        // KRM-B-12. bytea like the link's own digest, and NO index: a code is never looked up by
+        // its hash — it is compared against the row the token already resolved. An index would be
+        // a second way to find a credential, which is exactly what the token's own unique index
+        // had to be and this one does not.
+        b.Property(i => i.OtpHash)
+            .HasColumnType("bytea");
+
         b.Property(i => i.QualityRetriesJson)
             .HasColumnType("jsonb")
             .HasColumnName("quality_retries")
             // Same trap as M12's typed jsonb columns: EF generates `DEFAULT ''` for a non-nullable
             // string property and PostgreSQL rejects `''` on jsonb outright.
             .HasDefaultValueSql("'{}'::jsonb")
+            .IsRequired();
+
+        // KRM-B-10. Same column shape and the same `DEFAULT ''` trap, with an ARRAY literal: the
+        // scope of a complement link is a list of kinds, and `'{}'::jsonb` here would deserialise
+        // to an object where the reader expects an array.
+        b.Property(i => i.RequestedKindsJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("requested_kinds")
+            .HasDefaultValueSql("'[]'::jsonb")
             .IsRequired();
 
         b.Property(i => i.ConsentTextVersion).HasMaxLength(32);

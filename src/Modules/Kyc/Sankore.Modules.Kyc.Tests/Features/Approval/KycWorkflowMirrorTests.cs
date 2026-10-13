@@ -1,5 +1,7 @@
 namespace Sankore.Modules.Kyc.Tests.Features.Approval;
 
+using Sankore.Modules.Administration.PublicApi;
+using MediatR;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -73,7 +75,8 @@ public sealed class KycWorkflowMirrorTests : IDisposable
             NullLogger<StartKycApprovalHandler>.Instance);
 
     private DecideKycApprovalHandler DecideHandler() =>
-        new(_db, _currentUser, Substitute.For<IEventPublisher>(), _workflow,
+        new(_db, Substitute.For<ISender>(), Substitute.For<IAdministrationModule>(),
+            _currentUser, Substitute.For<IEventPublisher>(), _workflow,
             TestSupport.TestRemoteSaleEvidence.For(_db, _clock),
             TestSupport.TestPepEvidence.For(), _clock,
             NullLogger<DecideKycApprovalHandler>.Instance);

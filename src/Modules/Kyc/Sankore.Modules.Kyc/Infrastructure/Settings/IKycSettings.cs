@@ -20,6 +20,13 @@ public interface IKycSettings
     Task<string> GetStringAsync(Guid tenantId, string key, CancellationToken ct);
     Task<int> GetIntAsync(Guid tenantId, string key, CancellationToken ct);
     Task<decimal> GetDecimalAsync(Guid tenantId, string key, CancellationToken ct);
+
+    /// <summary>
+    /// A boolean parameter. FALSE for a value that will not parse, and that is the fail-closed
+    /// direction for every bool this module has: <c>remote-otp</c> off is a journey that works
+    /// without a second factor, while on with no SMS channel is a journey nobody can finish.
+    /// </summary>
+    Task<bool> GetBoolAsync(Guid tenantId, string key, CancellationToken ct);
     Task<IReadOnlyDictionary<string, string>> GetAllAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>

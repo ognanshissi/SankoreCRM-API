@@ -26,7 +26,9 @@ internal sealed class CustomersModuleFacade(
     ILeadConversionService leadConversion,
     Sankore.Shared.Infrastructure.Crypto.IBlindIndexer indexer,
     Features.Holdings.Sync.HoldingSyncService holdingSync,
-    Notifications.ClientEmailNotifier clientEmails)
+    Notifications.ClientEmailNotifier clientEmails,
+    RemoteIdentity.RemoteIdentityVerifier remoteIdentity,
+    RemoteIdentity.ReadIdentityComparer readIdentity)
     : ICustomersModule
 {
     /// <summary>
@@ -371,6 +373,21 @@ internal sealed class CustomersModuleFacade(
 
     public Task<bool> NotifyClientAsync(NotifyClientRequest request, CancellationToken ct)
         => clientEmails.NotifyAsync(request, ct);
+
+    // KRM-B-05. Straight through, and the signature is the whole design: a boolean out, no value
+    // in either direction, and the comparison in one place that holds the key.
+    public Task<bool> VerifyRemoteIdentityAsync(
+        Guid tenantId, Guid clientId, string? clientNumber, DateOnly? birthDate, CancellationToken ct)
+        => remoteIdentity.VerifyAsync(tenantId, clientId, clientNumber, birthDate, ct);
+
+    // KRM-B-08, and the same shape for the same reason: the caller sends what it read, this module
+    // compares it against the record it holds, and a boolean comes back. The normalisation rule
+    // ("sans accents ni casse") is SearchKeyBuilder's, which already defines it for client search.
+    public Task<bool> MatchesReadIdentityAsync(
+        Guid tenantId, Guid clientId, string? readSurname, string? readGivenNames,
+        DateOnly? readBirthDate, CancellationToken ct)
+        => readIdentity.MatchesAsync(
+            tenantId, clientId, readSurname, readGivenNames, readBirthDate, ct);
 
     /// <summary>
     /// Email and PhoneNumber are deliberately left null: both are encrypted at rest in

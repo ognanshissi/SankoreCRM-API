@@ -47,6 +47,55 @@ public interface IAdministrationModule
     Task<IReadOnlyList<Guid>> GetTeamAgentIdsAsync(Guid tenantId, Guid supervisorId, CancellationToken ct);
 
     /// <summary>
+    /// Who should be TOLD about something that happened in one of the tenant's agencies
+    /// (KRM-B-09): the preferred user when they can still act, otherwise the agency's manager,
+    /// otherwise nobody.
+    ///
+    /// <para>
+    /// <b>A resolution, not a lookup, and it belongs here.</b> "Active" is <c>AppUser.Status</c>
+    /// and "attached to the agency" is <c>AppUser.AgencyId</c>; "the branch's chief" is
+    /// <c>Agency.ManagerUserId</c>. All three are M12's, none of them is on
+    /// <see cref="AgentSummary"/>, and a caller handed the three parts would re-implement the
+    /// cascade — differently each time, and wrongly the first time somebody forgets that a
+    /// disabled account still has a mailbox the mail provider will accept.
+    /// </para>
+    ///
+    /// <para>
+    /// Deliberately named for a RECIPIENT and not for an approver: it answers who receives a
+    /// message, never who is entitled to decide anything. Authorisation stays with the
+    /// authorization pipeline and the agency perimeter.
+    /// </para>
+    ///
+    /// <para>
+    /// <b><c>null</c> is an ordinary answer</b> and every caller must handle it: an agency with no
+    /// manager and a departed agent is a real configuration. The thing being notified about is
+    /// still visible in the back office — a notification is a convenience, never the only way
+    /// work surfaces.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What this does NOT do</b>, and the specification asks for it: fall back to "la file de
+    /// l'agence". This platform has no agency distribution list and no shared mailbox — there is
+    /// nothing to address — so the cascade stops at the manager rather than inventing a recipient.
+    /// Adding one is a feature in M12, not a branch here.
+    /// </para>
+    /// </summary>
+    /// <param name="agencyId">
+    /// The agency the subject belongs to — a client's agency, a file's agency. The preferred user
+    /// is only accepted when they are attached to THIS agency: an agent who moved branch keeps
+    /// their account and should not keep receiving another branch's work.
+    /// </param>
+    /// <param name="preferredUserId">
+    /// The first choice — the agent accountable for the subject. Null skips straight to the
+    /// manager.
+    /// </param>
+    Task<Guid?> ResolveAgencyRecipientAsync(
+        Guid tenantId,
+        Guid agencyId,
+        Guid? preferredUserId,
+        CancellationToken ct);
+
+    /// <summary>
     /// Le nom affiché de chaque utilisateur demandé, en un appel — pour une liste qui montre un
     /// conseiller par ligne. Un identifiant inconnu (ou d'un autre tenant) est absent du résultat.
     /// </summary>

@@ -39,6 +39,12 @@ public interface IKycRemoteLinkTokens
     /// </para>
     /// </summary>
     string BuildLink(string fqdn, string token);
+
+    /// <summary>
+    /// The back-office address of a KYC file, for a message to an employee (KRM-B-09). No token:
+    /// the recipient's own session is the credential.
+    /// </summary>
+    string BuildBackOfficeLink(string fqdn, Guid kycFileId);
 }
 
 /// <inheritdoc />
@@ -99,6 +105,34 @@ internal sealed class KycRemoteLinkTokens : IKycRemoteLinkTokens
         // scheme must not produce "https://https://…". HTTPS is not negotiable: a browser refuses
         // getUserMedia on an insecure origin, so a link on http would open a page whose camera
         // never starts and whose failure says nothing about why.
+        return $"https://{NormalizeHost(fqdn)}/kyc/verification#t={token}";
+    }
+
+    /// <summary>
+    /// The BACK-OFFICE address of a KYC file, for a message sent to an employee (KRM-B-09).
+    ///
+    /// <para>
+    /// It lives beside <see cref="BuildLink"/> because the host normalisation is the awkward part
+    /// and it is the same: a tenant FQDN is stored bare but may carry a scheme, and "https://https://…"
+    /// is the bug that gets written twice. HTTPS for the same non-negotiable reason — a session
+    /// cookie must not travel in clear — plus the one specific to this product: the back office
+    /// refuses to run on an insecure origin.
+    /// </para>
+    ///
+    /// <para>
+    /// No token and no fragment. This URL is useless to anybody who is not signed in, which is
+    /// what makes it safe to put in an email: the recipient's own session is the credential.
+    /// </para>
+    /// </summary>
+    public string BuildBackOfficeLink(string fqdn, Guid kycFileId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fqdn);
+
+        return $"https://{NormalizeHost(fqdn)}/kyc/{kycFileId}";
+    }
+
+    private static string NormalizeHost(string fqdn)
+    {
         var host = fqdn.Trim().TrimEnd('/');
 
         if (host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
@@ -106,6 +140,6 @@ internal sealed class KycRemoteLinkTokens : IKycRemoteLinkTokens
         else if (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
             host = host["http://".Length..];
 
-        return $"https://{host}/kyc/verification#t={token}";
+        return host;
     }
 }

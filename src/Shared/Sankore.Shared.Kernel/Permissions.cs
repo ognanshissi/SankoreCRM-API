@@ -553,6 +553,29 @@ public static class Permissions
         new("kyc:remote-invite", "Send or revoke a remote KYC collection link",
             ApplicationModules.Kyc, "remote-invite");
 
+    /// <summary>
+    /// Review the sample of files that were approved with NO human, and record whether each one
+    /// should have been (KRM-B-11).
+    ///
+    /// <para>
+    /// Its own permission, and deliberately not <c>kyc:approve</c>. An approver decides whether to
+    /// enter into a relationship; this is the control that answers to a regulator for the
+    /// institution having let a machine decide at all — « garder la maîtrise du dispositif face au
+    /// régulateur », in the story's own words. Giving it to every approver would mean the people
+    /// whose signatures the automatic mode replaced are the ones auditing its replacement, which is
+    /// the opposite of a control.
+    /// </para>
+    ///
+    /// <para>
+    /// Separate from <c>kyc:settings:manage</c> too, although a compliance officer usually holds
+    /// both: one changes the ceiling, the other examines what was granted under it, and an
+    /// institution is entitled to split them.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanControlKycAutoApproval =
+        new("kyc:auto-approval:control", "Review the sampled automatic KYC approvals",
+            ApplicationModules.Kyc, "auto-approval:control");
+
     // ── Integration module (INT-11, ASS-11) ───────────────────────────────
     //
     // These codes are PascalCase-dotted, which is the one place in this file that departs from
@@ -718,6 +741,7 @@ public static class Permissions
         CanValidateKycDocument,
         CanManageKycSettings,
         CanInviteKycRemote,
+        CanControlKycAutoApproval,
         CanCreateLoan,
         CanCreateAgency,
         CanReadAgency,

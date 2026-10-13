@@ -19,6 +19,7 @@ internal sealed class UpdateKycSettingHandler(
     IKycSettings settings,
     IDistributedCache cache,
     ICurrentUser currentUser,
+    Infrastructure.RemoteLinks.IKycOtpSender otpSender,
     TimeProvider clock)
     : IRequestHandler<UpdateKycSettingCommand, Result<KycSettingDto>>
 {
@@ -30,6 +31,21 @@ internal sealed class UpdateKycSettingHandler(
             return Result.Fail<KycSettingDto>(KycErrors.SettingUnknown);
 
         var value = command.Value.Trim();
+
+        // KRM-B-12. The only setting in this module whose validity depends on what the HOST has
+        // registered rather than on the value itself, which is why the check is here and not in
+        // KycSettingRanges — a range validator cannot see the container.
+        //
+        // Turning the second factor on with no SMS channel would not degrade the journey, it would
+        // END it: every customer of the tenant would reach a code entry screen for a message that
+        // is never sent, and nothing in the logs would say why. Refused at the moment an
+        // administrator tries, so they learn it instead of their customers.
+        if (declared.Key.Equals(KycSettingKeys.RemoteOtp, StringComparison.OrdinalIgnoreCase)
+            && bool.TryParse(value, out var enabling) && enabling
+            && !otpSender.IsAvailable)
+        {
+            return Result.Fail<KycSettingDto>(KycErrors.RemoteOtpUnavailable);
+        }
 
         var write = await settings.SetAsync(currentUser.TenantId, declared.Key, value, currentUser.Id, ct);
         if (write.IsFailure)

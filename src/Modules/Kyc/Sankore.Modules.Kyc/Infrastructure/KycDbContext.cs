@@ -28,6 +28,12 @@ public sealed class KycDbContext(DbContextOptions<KycDbContext> options, ITenant
     public DbSet<KycReviewSchedule> KycReviewSchedules => Set<KycReviewSchedule>();
 
     /// <summary>
+    /// The compliance queue of KRM-B-11: the sampled approvals a machine took, and what an officer
+    /// found when they looked.
+    /// </summary>
+    public DbSet<KycAutoApprovalControl> KycAutoApprovalControls => Set<KycAutoApprovalControl>();
+
+    /// <summary>
     /// The images attached to a file, and the verdict a validator gave each one. One row per
     /// upload; nothing here is ever edited except to record that decision.
     /// </summary>
@@ -107,6 +113,7 @@ public sealed class KycDbContext(DbContextOptions<KycDbContext> options, ITenant
         modelBuilder.Entity<KycFieldCorrection>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycApprovalStep>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycReviewSchedule>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<KycAutoApprovalControl>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycDocument>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycDocumentAccessLog>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycRemoteInvitation>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);

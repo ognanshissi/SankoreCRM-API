@@ -8,6 +8,7 @@ using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Features.ContactPoints.Shared;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.Infrastructure.Notifications;
+using Sankore.Modules.Customers.Infrastructure.RemoteIdentity;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Crypto;
@@ -96,6 +97,28 @@ public static class TestDoubles
             notifications ?? SilentNotifications(),
             tenantStore ?? SilentTenantStore(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ClientEmailNotifier>.Instance);
+
+    /// <summary>
+    /// The client-number + date-of-birth check behind the public remote-KYC page (KRM-B-05), over
+    /// the reversible fake blind indexer — so a test can seed a client and have the real comparison
+    /// succeed on the right values and fail on the wrong ones.
+    /// </summary>
+    public static RemoteIdentityVerifier RemoteIdentity(CustomersDbContext db)
+        => new(
+            db,
+            Indexer(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<RemoteIdentityVerifier>.Instance);
+
+    /// <summary>
+    /// The "does the document agree with the record" check behind KRM-B-08's routing, over the
+    /// same reversible fake indexer — so a test can seed a client and have the real normalisation
+    /// (accents, case, the asymmetric given-name rule) decide.
+    /// </summary>
+    public static ReadIdentityComparer ReadIdentity(CustomersDbContext db)
+        => new(
+            db,
+            Indexer(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ReadIdentityComparer>.Instance);
 
     private static Sankore.Modules.Notifications.PublicApi.INotificationsModule SilentNotifications()
     {

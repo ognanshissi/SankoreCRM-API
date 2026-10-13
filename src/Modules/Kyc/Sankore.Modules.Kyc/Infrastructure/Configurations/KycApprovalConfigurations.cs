@@ -52,3 +52,36 @@ internal sealed class KycReviewScheduleConfiguration : IEntityTypeConfiguration<
         b.Ignore(r => r.DomainEvents);
     }
 }
+
+internal sealed class KycAutoApprovalControlConfiguration
+    : IEntityTypeConfiguration<KycAutoApprovalControl>
+{
+    public void Configure(EntityTypeBuilder<KycAutoApprovalControl> b)
+    {
+        b.ToTable("kyc_auto_approval_controls");
+        b.HasKey(c => c.Id);
+
+        b.Property(c => c.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
+        b.Property(c => c.GrantedTier).HasConversion<string>().HasMaxLength(16).IsRequired();
+
+        // Same width as KycApprovalStep.Comment and KycFile.ManualValidationReason — the places an
+        // operator's own words are stored — so one validator cap serves all of them.
+        b.Property(c => c.Finding).HasMaxLength(2000);
+
+        // THE query of this feature: "what is still waiting in my tenant's compliance queue",
+        // oldest first. Status leads because the queue is almost always read pending-only, and the
+        // sample is a small fraction of approvals — so a scan of the whole table per page would
+        // otherwise be the cheap thing that stops being cheap after a year.
+        b.HasIndex(c => new { c.TenantId, c.Status, c.SampledAt })
+            .HasDatabaseName("ix_kyc_auto_approval_controls_queue");
+
+        // One control per approval. A file can be approved automatically more than once over a
+        // lifetime — a review re-opens it — so the uniqueness is per (file, sampling) and NOT per
+        // file: there is deliberately no unique index here, and the sampler's own read is what
+        // stops a redelivered routing event from drawing the same approval twice.
+        b.HasIndex(c => c.KycFileId)
+            .HasDatabaseName("ix_kyc_auto_approval_controls_file");
+
+        b.Ignore(c => c.DomainEvents);
+    }
+}

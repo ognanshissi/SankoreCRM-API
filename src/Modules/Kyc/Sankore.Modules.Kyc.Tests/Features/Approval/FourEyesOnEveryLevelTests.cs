@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Kyc.Tests.Features.Approval;
 
+using Sankore.Modules.Administration.PublicApi;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -81,7 +82,8 @@ public sealed class FourEyesOnEveryLevelTests : IDisposable
     {
         var db = _factory.CreateContext();
 
-        return new(db, User(approver),
+        return new(db, Substitute.For<ISender>(), Substitute.For<IAdministrationModule>(),
+            User(approver),
             Substitute.For<IEventPublisher>(), Substitute.For<IWorkflowModule>(),
             TestSupport.TestRemoteSaleEvidence.For(db, TimeProvider.System),
             TestSupport.TestPepEvidence.For(), TimeProvider.System,

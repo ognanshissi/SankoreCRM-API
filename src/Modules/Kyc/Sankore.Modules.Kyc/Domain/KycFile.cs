@@ -87,6 +87,47 @@ public sealed class KycFile : AggregateRoot
     /// </summary>
     public Guid? ResponsibleAgentId { get; private set; }
 
+    /// <summary>
+    /// How this file's decision was reached, once the router has looked at it (KRM-B-08). Null
+    /// until then — and null on every file that was never collected remotely, which is most of
+    /// them.
+    ///
+    /// <para>
+    /// Null is NOT "manual by default". A counter file is decided by a human too, and the
+    /// difference matters: this column answers "was this file put through the remote decision
+    /// policy, and what did it conclude", which is the question a compliance report asks. A file
+    /// that never went near it has no answer, not a default one.
+    /// </para>
+    /// </summary>
+    public KycValidationRoute? ValidationRoute { get; private set; }
+
+    /// <summary>
+    /// Which condition of the specification's section 3.2 sent this file to a human — one of
+    /// <see cref="KycRoutingReasons"/>, or null when it was approved automatically.
+    ///
+    /// <para>
+    /// A code and not a sentence: the agent's screen translates it (KRM-F-08), compliance counts
+    /// it, and it is never shown to the customer. It names the FIRST condition that failed, in the
+    /// policy's documented order — the full per-rule verdict is on the
+    /// <see cref="KycApprovalLevel.Automatic"/> step's comment payload when there is one, and in
+    /// the log line otherwise.
+    /// </para>
+    /// </summary>
+    public string? RoutingReason { get; private set; }
+
+    /// <summary>
+    /// When the routing decision was taken (KRM-B-08).
+    ///
+    /// <para>
+    /// Its own column rather than a reading of <see cref="UpdatedAt"/>, and the SLA is why:
+    /// KRM-B-09 chases the responsible agent a configured number of HOURS after the file was
+    /// handed to them, and <c>UpdatedAt</c> moves on every touch — a validator opening the file, a
+    /// field correction, a vigilance change. Measuring from it would reset the promise every time
+    /// somebody looked at the file, which is the opposite of what an SLA on a decision means.
+    /// </para>
+    /// </summary>
+    public DateTimeOffset? RoutedAt { get; private set; }
+
     public KycFileStatus Status { get; private set; }
     public KycTier Tier { get; private set; }
     public KycChannel Channel { get; private set; }
@@ -505,6 +546,142 @@ public sealed class KycFile : AggregateRoot
             UpdatedAt = clock.GetUtcNow();
 
         return changed;
+    }
+
+    /// <summary>
+    /// Records that this file's evidence was sent by the CUSTOMER from their own device
+    /// (KRM-B-07).
+    ///
+    /// <para>
+    /// Called at submission and not when the link was issued, because a link nobody used is not a
+    /// remote enrolment — it is a file still waiting at a counter. Until then the channel stays
+    /// whatever opened the file.
+    /// </para>
+    ///
+    /// <para>
+    /// One-way. Nothing un-remotes a file: the fact that no employee saw the document is permanent
+    /// evidence about how this file was built, and it is what CIMA LBC/FT article 13.6's proof of
+    /// address keys on. An agent who later collects a better photograph at the counter does not
+    /// erase it.
+    /// </para>
+    /// </summary>
+    public void MarkRemotelyCollected(TimeProvider clock)
+    {
+        if (Channel == KycChannel.RemoteSelfService) return;
+
+        Channel = KycChannel.RemoteSelfService;
+        UpdatedAt = clock.GetUtcNow();
+    }
+
+    /// <summary>
+    /// Records that the product's policy declined to decide this file and a human has to
+    /// (KRM-B-08).
+    ///
+    /// <para>
+    /// It changes no status. The file is already where the verification left it — <c>Validating</c>
+    /// with a circuit to climb, or <c>ComplementRequired</c> when the score was refused — and
+    /// routing is a statement about WHO decides, not a transition. Conflating the two would let a
+    /// routing decision move a file, which is the one thing the transition table exists to stop.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns false when this file already carries a route: the evaluation happens once per
+    /// verification (KRM-B-08's idempotence criterion), and a redelivered event must not overwrite
+    /// the reason an agent is currently reading. A NEW verification clears the route first — see
+    /// <see cref="ClearRouting"/>.
+    /// </para>
+    /// </summary>
+    public bool RouteToManual(string reason, TimeProvider clock)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new DomainException("A manual routing decision must carry its reason.");
+
+        if (ValidationRoute is not null) return false;
+
+        var now = clock.GetUtcNow();
+
+        ValidationRoute = KycValidationRoute.Manual;
+        RoutingReason = reason.Trim();
+        RoutedAt = now;
+        UpdatedAt = now;
+        return true;
+    }
+
+    /// <summary>
+    /// Final approval with NO human approver — the product's policy decided (KRM-B-08).
+    ///
+    /// <para>
+    /// <b>Why this cannot be <see cref="Approve"/> with a SYSTEM id.</b> That method refuses
+    /// whoever <see cref="LastSubmittedBy"/> names, and a remotely submitted file deliberately
+    /// names SYSTEM there (KRM-B-07) — so <c>Approve(tier, Guid.Empty, …)</c> is refused by the
+    /// four-eyes rule, every time. That refusal is correct and must stay: SYSTEM approving what
+    /// SYSTEM submitted is exactly what the rule describes. An unattended approval is therefore a
+    /// DIFFERENT act, named differently, and the audit trail says which one happened instead of
+    /// showing a signature nobody gave.
+    /// </para>
+    ///
+    /// <para>
+    /// It is reachable only from <c>RouteRemoteKycFileHandler</c>, only on a
+    /// <see cref="KycChannel.RemoteSelfService"/> file, and only once
+    /// <c>KycAutoApprovalPolicy</c> has found every condition of section 3.2 satisfied —
+    /// including the tenant's authorisation and its tier ceiling. The guard below re-checks the
+    /// channel rather than trusting the caller: this is the single method in the module that
+    /// grants a tier with no human in the loop, and the one place where "the caller already
+    /// checked" is not good enough.
+    /// </para>
+    /// </summary>
+    public Result ApproveAutomatically(KycTier tier, TimeProvider clock, DateOnly? nextReviewDate = null)
+    {
+        if (tier == KycTier.None)
+            return Result.Fail(KycErrors.InvalidTransition);
+
+        // A tier granted without a human may only ever be granted on evidence no human produced.
+        // On any other channel an employee collected the documents, and the four-eyes rule on
+        // their submission is precisely what must not be walked around.
+        if (Channel != KycChannel.RemoteSelfService)
+            return Result.Fail(KycErrors.AutoApprovalChannelNotEligible);
+
+        var target = tier == KycTier.Simplified ? KycFileStatus.Simplified : KycFileStatus.Full;
+
+        var moved = MoveTo(target, clock);
+        if (moved.IsFailure) return moved;
+
+        Tier = tier;
+        ValidatedAt = clock.GetUtcNow();
+        NextReviewDate = nextReviewDate;
+        ValidationRoute = KycValidationRoute.Automatic;
+        RoutingReason = null;
+        RoutedAt = ValidatedAt;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Forgets the previous routing decision so the NEXT verification can be routed afresh.
+    ///
+    /// <para>
+    /// Called when a file re-enters verification — a complement the customer sent, an agent
+    /// re-running the capture. Without it <see cref="RouteToManual"/>'s idempotence guard, which is
+    /// what makes a redelivered event harmless, would also make the second round unroutable: the
+    /// agent would keep reading the reason the FIRST attempt produced, and no email would be sent
+    /// for the second.
+    /// </para>
+    ///
+    /// <para>
+    /// It deliberately cannot clear <see cref="KycValidationRoute.Automatic"/>: that one is a
+    /// record of how a tier was granted, and a file holding a tier does not go back into
+    /// collection (<see cref="AttachConversionContext"/> says why). Returning to collection from an
+    /// automatic approval is not a state this module produces, and quietly erasing the evidence if
+    /// it ever were would be the wrong failure.
+    /// </para>
+    /// </summary>
+    public void ClearRouting(TimeProvider clock)
+    {
+        if (ValidationRoute is null or KycValidationRoute.Automatic) return;
+
+        ValidationRoute = null;
+        RoutingReason = null;
+        RoutedAt = null;
+        UpdatedAt = clock.GetUtcNow();
     }
 
     public void SetVigilanceLevel(KycVigilanceLevel level, TimeProvider clock)

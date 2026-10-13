@@ -15,6 +15,12 @@
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
     <PackageReference Include="Microsoft.Extensions.Localization" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <!--
+      KRM-B-05: this module mints and reads the short-lived SESSION token of the public upload
+      journey, so it needs the JWT handler itself and not only the bearer middleware. Same package
+      M12 takes for the platform's own tokens.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Hangfire.Core" />
     <!-- Hangfire.Core drags Newtonsoft.Json 11.0.1 (GHSA-5crp-9r3c-p9vr). Pinned direct
          reference to 13.0.3, same override the other modules apply. -->

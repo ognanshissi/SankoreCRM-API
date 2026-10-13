@@ -380,8 +380,11 @@ internal sealed class HttpBiometryClient(
     };
 
     /// <summary>
-    /// M02's five channels onto the service's three. Import and LeadConversion are REMOTE because
-    /// that is what they are from the scorer's point of view: nobody was in front of the customer.
+    /// M02's six channels onto the service's three. Everything that is not a branch counter or a
+    /// field agent is REMOTE from the scorer's point of view: nobody was in front of the customer.
+    /// RemoteSelfService therefore needs no case of its own — but it is the one the fallback was
+    /// written for, so a future channel that is NOT remote must add an explicit case rather than
+    /// inherit this one.
     /// </summary>
     private static Channel ToWireChannel(KycChannel channel) => channel switch
     {

@@ -22,6 +22,27 @@ public enum KycApprovalLevel
     /// </para>
     /// </summary>
     GeneralManagement = 4,
+
+    /// <summary>
+    /// No human at all: the product's policy approved the file (KRM-B-08).
+    ///
+    /// <para>
+    /// <b>Not a rung.</b> It is the ONLY step on a file it decides, written already-decided by
+    /// <c>RouteRemoteKycFileHandler</c>, and a circuit never mixes it with a human level — the
+    /// router either writes this one or asks <c>StartKycApprovalHandler</c> for the human ladder,
+    /// never both. Its position therefore arbitrates nothing, and the invariant that keeps it that
+    /// way is pinned by a test.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>90, and specifically not 0.</b> Zero would read as "below the agent", which is the
+    /// honest description — and would also make it <c>default(KycApprovalLevel)</c>. A
+    /// deserialisation that lost the field, or a row written by a future bug, would then say a file
+    /// was approved automatically. For a compliance enum that is the one default nobody can
+    /// afford. The gap to 90 is deliberate too: the human ladder stays free to grow.
+    /// </para>
+    /// </summary>
+    Automatic = 90,
 }
 
 public enum KycApprovalDecision

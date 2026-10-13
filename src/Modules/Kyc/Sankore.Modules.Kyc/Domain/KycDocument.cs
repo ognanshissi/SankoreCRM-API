@@ -97,6 +97,32 @@ public sealed class KycDocument : AggregateRoot
     /// </summary>
     public DateOnly? DocumentIssuedOn { get; private set; }
 
+    /// <summary>
+    /// What the uploader SAID they photographed — the <c>KycDocumentType</c> that
+    /// <c>POST /v1/ocr</c> needs to pick its field template (KRM-B-06).
+    ///
+    /// <para>
+    /// Null for the kinds where it is meaningless (a selfie, a proof of address), and null for
+    /// every row written before this column existed — the agent path has always carried the type on
+    /// the verify call instead, and nothing can recover it after the fact.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>It exists for the remote journey.</b> On the agent path a human passes the type at
+    /// verification time; on the remote path there is nobody there when the file is submitted, so
+    /// the choice the customer made on their phone has to be on the image they made it for. Storing
+    /// it on the invitation instead would have put one journey's worth of state next to a
+    /// credential, and would not survive a re-issued link.
+    /// </para>
+    ///
+    /// <para>
+    /// It is the DECLARATION and not a reading: <c>KycIdentityDocument.DocType</c> is what the OCR
+    /// believed it saw, and the two are allowed to disagree — that disagreement is one of the things
+    /// the confidence score is computed from.
+    /// </para>
+    /// </summary>
+    public KycDocumentType? DeclaredDocumentType { get; private set; }
+
     public Guid UploadedBy { get; private set; }
     public DateTimeOffset UploadedAt { get; private set; }
 
@@ -152,7 +178,8 @@ public sealed class KycDocument : AggregateRoot
         string sha256,
         Guid uploadedBy,
         TimeProvider clock,
-        DateOnly? documentIssuedOn = null)
+        DateOnly? documentIssuedOn = null,
+        KycDocumentType? declaredDocumentType = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
         if (kycFileId == Guid.Empty) throw new DomainException("KycFileId is required.");
@@ -171,6 +198,12 @@ public sealed class KycDocument : AggregateRoot
             SizeBytes = sizeBytes,
             Sha256 = sha256,
             DocumentIssuedOn = documentIssuedOn,
+            // Only kept for the kinds it describes. A declared type on a selfie would be a value
+            // that looks authoritative and means nothing.
+            DeclaredDocumentType = kind is KycDocumentKind.IdentityDocumentFront
+                                        or KycDocumentKind.IdentityDocumentBack
+                ? declaredDocumentType
+                : null,
             UploadedBy = uploadedBy,
             UploadedAt = clock.GetUtcNow(),
             ReviewDecision = KycDocumentReviewDecision.Pending,

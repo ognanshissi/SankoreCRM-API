@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
+using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
@@ -13,6 +14,7 @@ internal sealed class GetKycFileHandler(
     KycDbContext db,
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
+    IKycSettings settings,
     IWorkflowModule workflow)
     : IRequestHandler<GetKycFileQuery, Result<KycFileDto>>
 {
@@ -66,13 +68,88 @@ internal sealed class GetKycFileHandler(
                 f.ValidatedAt,
                 f.CreatedAt,
                 f.UpdatedAt,
-                f.WorkflowInstanceId))
+                f.WorkflowInstanceId,
+                null,
+                f.ProductLineId,
+                f.ResponsibleAgentId,
+                f.ValidationRoute == null ? null : f.ValidationRoute.ToString(),
+                f.RoutingReason,
+                f.RoutedAt))
             .FirstOrDefaultAsync(ct);
 
         if (dto is null)
             return Result.Fail<KycFileDto>(KycErrors.FileNotFound);
 
-        return Result.Ok(dto with { WorkflowStatus = await ReadWorkflowStatusAsync(dto, ct) });
+        // Only for a remotely collected file, and in a second query: the consent and the retake
+        // counts live on the invitation, and joining them into the projection above would make
+        // every counter file pay for a LEFT JOIN that is always null.
+        var remote = await ReadRemoteFactsAsync(dto, ct);
+
+        return Result.Ok(dto with
+        {
+            WorkflowStatus = await ReadWorkflowStatusAsync(dto, ct),
+            ConsentGivenAt = remote.ConsentGivenAt,
+            ConsentTextVersion = remote.ConsentTextVersion,
+            ExcessiveQualityRetries = remote.ExcessiveQualityRetries,
+        });
+    }
+
+    /// <summary>
+    /// The two things KRM-F-08 shows that live on the invitation rather than on the file: when the
+    /// customer consented (and to which version of the text), and which documents they had to
+    /// photograph more often than the tenant allows.
+    ///
+    /// <para>
+    /// Read from the NEWEST invitation of the file. A complement link supersedes the initial one,
+    /// and the consent that matters to a validator looking at the evidence in front of them is the
+    /// one given for the round that produced it.
+    /// </para>
+    ///
+    /// <para>
+    /// The retake budget is the tenant's <c>remote-max-quality-retries</c>, so the comparison
+    /// happens here rather than in the front end — a screen that hard-coded five would stop
+    /// agreeing with the server the day a compliance officer changed it, and would flag files
+    /// nobody flagged.
+    /// </para>
+    /// </summary>
+    private async Task<RemoteFacts> ReadRemoteFactsAsync(KycFileDto dto, CancellationToken ct)
+    {
+        if (dto.Channel != nameof(KycChannel.RemoteSelfService)) return new RemoteFacts();
+
+        var invitation = await db.KycRemoteInvitations
+            .Where(i => i.KycFileId == dto.Id)
+            .OrderByDescending(i => i.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (invitation is null) return new RemoteFacts();
+
+        var budget = await settings.GetIntAsync(
+            currentUser.TenantId, KycSettingKeys.RemoteMaxQualityRetries, ct);
+
+        var excessive = budget <= 0
+            ? []
+            : invitation.QualityRetries()
+                .Where(r => r.Value > budget)
+                .Select(r => r.Key)
+                .ToList();
+
+        return new RemoteFacts
+        {
+            ConsentGivenAt = invitation.ConsentGivenAt,
+            ConsentTextVersion = invitation.ConsentTextVersion,
+            ExcessiveQualityRetries = excessive,
+        };
+    }
+
+    /// <summary>
+    /// The subset of <see cref="KycFileDto"/> this second read fills — a record rather than three
+    /// out parameters, so adding a field here is a compile error at the one place that copies it.
+    /// </summary>
+    private readonly record struct RemoteFacts
+    {
+        public DateTimeOffset? ConsentGivenAt { get; init; }
+        public string? ConsentTextVersion { get; init; }
+        public IReadOnlyList<string>? ExcessiveQualityRetries { get; init; }
     }
 
     /// <summary>

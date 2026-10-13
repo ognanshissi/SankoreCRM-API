@@ -133,6 +133,88 @@ public interface ICustomersModule
     Task<string?> GetMaskedEmailAsync(Guid tenantId, Guid clientId, CancellationToken ct);
 
     /// <summary>
+    /// Whether the client number and date of birth a CUSTOMER typed on the public remote-KYC page
+    /// match the client the KYC file belongs to (KRM-B-05).
+    ///
+    /// <para>
+    /// <b>A boolean, and the question is asked rather than answered.</b> M02 holds the file and the
+    /// link; M01 holds the client number and the date of birth — the second of which is AES-256-GCM
+    /// in <c>clients.encrypted_date_of_birth</c> with an HMAC blind index beside it. Handing either
+    /// value across the boundary so M02 could compare them itself would copy a regulated field into
+    /// a module that has no key for it, and the comparison would then exist in two places.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>No value is ever returned, and none is logged.</b> The caller is an anonymous endpoint:
+    /// the only thing it may learn is yes or no, because anything else is an oracle for guessing a
+    /// date of birth. The attempt itself is audited by M02 on the invitation — without the values
+    /// that were typed.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>false</c> for an unknown client, for a client with no recorded date of birth, and for a
+    /// client of another tenant. The date of birth is nullable on a converted lead that never
+    /// carried one, and such a client cannot identify remotely at all — which is correct: there is
+    /// no second factor to check, and the agent collects at the counter.
+    /// </para>
+    /// </summary>
+    /// <param name="clientNumber">
+    /// As the customer typed it, from their welcome email. Normalised by this module — spacing and
+    /// casing — so the caller does not have to know the format.
+    /// </param>
+    Task<bool> VerifyRemoteIdentityAsync(
+        Guid tenantId,
+        Guid clientId,
+        string? clientNumber,
+        DateOnly? birthDate,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Whether the surname, given names and date of birth READ on a customer's identity document
+    /// agree with the client record (KRM-B-08, section 3.2).
+    ///
+    /// <para>
+    /// <b>The caller holds the reading; this module holds the record.</b> The two names are clear
+    /// columns here and the date of birth is AES-256-GCM with an HMAC index beside it, so M02 sends
+    /// what it read and gets a boolean — the record never crosses the boundary, and the
+    /// normalisation rule ("sans accents ni casse") stays in the one class that already defines it
+    /// for client search.
+    /// </para>
+    ///
+    /// <para>
+    /// <b><c>false</c> whenever the question cannot be answered</b>: an unknown client, a client of
+    /// another tenant, a client with no recorded date of birth, and — importantly — an INCOMPLETE
+    /// reading. A document whose surname the extractor could not produce is not a document that
+    /// agrees with the record; it is a document nobody checked, and the condition it feeds is a
+    /// positive one. The file then goes to a human, which is the only safe direction for a gate
+    /// that can otherwise approve a relationship unattended.
+    /// </para>
+    ///
+    /// <para>
+    /// The comparison is asymmetric on the given names and strict on the surname: every given name
+    /// on the RECORD must appear among those read, not the reverse, because a card lists a
+    /// person's full civil names and a counter capture routinely holds fewer. The surname is one
+    /// field on both sides and must match outright.
+    /// </para>
+    ///
+    /// <para>
+    /// No value is returned and none is logged — only which of the three comparisons disagreed.
+    /// </para>
+    /// </summary>
+    /// <param name="readSurname">The surname as the OCR produced it, unnormalised.</param>
+    /// <param name="readGivenNames">
+    /// The given names as the OCR produced them, in one string — which is how both the MRZ and the
+    /// service's <c>given_names</c> field carry them.
+    /// </param>
+    Task<bool> MatchesReadIdentityAsync(
+        Guid tenantId,
+        Guid clientId,
+        string? readSurname,
+        string? readGivenNames,
+        DateOnly? readBirthDate,
+        CancellationToken ct);
+
+    /// <summary>
     /// Sends a templated notification to one of the tenant's CLIENTS, and answers whether it was
     /// queued (KRM-B-03).
     ///

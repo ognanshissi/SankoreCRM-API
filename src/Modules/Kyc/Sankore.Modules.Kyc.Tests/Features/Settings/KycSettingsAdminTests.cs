@@ -11,6 +11,7 @@ using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Settings.GetKycSetting;
 using Sankore.Modules.Kyc.Features.Settings.ListKycSettings;
 using Sankore.Modules.Kyc.Features.Settings.UpdateKycSetting;
+using Sankore.Modules.Kyc.Infrastructure.RemoteLinks;
 using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Kyc.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
@@ -54,7 +55,11 @@ public sealed class KycSettingsAdminTests : IDisposable
     }
 
     private UpdateKycSettingHandler UpdateHandler() => new(
-        _factory.CreateContext(), Settings(), _cache, CurrentUser(), _clock);
+        _factory.CreateContext(), Settings(), _cache, CurrentUser(),
+        // The shipped sender, which answers IsAvailable = false — so these tests exercise the
+        // deployment as it actually is, and the one case that depends on it (remote-otp refusing
+        // to be turned on) is a real assertion rather than a double's opinion.
+        new UnavailableKycOtpSender(), _clock);
 
     private KycModuleFacade Facade() => new(
         _factory.CreateContext(), Settings(), _cache, NullLogger<KycModuleFacade>.Instance);

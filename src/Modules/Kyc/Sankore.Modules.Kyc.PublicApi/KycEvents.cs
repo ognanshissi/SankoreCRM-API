@@ -57,6 +57,87 @@ public sealed record KycRiskLevelChangedEvent(
 /// <paramref name="Channel"/> is the NAME of the enrolment channel ("Agency", "LeadConversion",
 /// …) so no consumer has to reference this module's domain assembly.
 /// </summary>
+/// <summary>
+/// A customer sent their own KYC file from their own device, through a single-use link
+/// (KRM-B-07).
+///
+/// <para>
+/// It exists to trigger the ROUTING of KRM-B-08 — automatic approval or a human — and that is why
+/// it is published at submission rather than inferred later from the channel: the decision needs
+/// the product line and the responsible agent in one place, and a consumer cannot correlate a
+/// status change with a file read that may already have moved on.
+/// </para>
+///
+/// <para>
+/// Carries no identity and no evidence: an id for the customer, an id for the file, and the two
+/// references the routing needs. A rendered notification downstream reads the file.
+/// </para>
+/// </summary>
+/// <param name="ProductLineId">
+/// The catalogue line whose policy decides how this file is validated. Null for a file that names
+/// no product, which cannot be submitted remotely — carried nullable so the contract matches the
+/// file rather than promising something the file cannot guarantee.
+/// </param>
+/// <param name="ResponsibleAgentId">
+/// Who gets told when the file needs a human (KRM-B-09). Null for a file with no agent — a counter
+/// enrolment, or one predating KRM-B-02.
+/// </param>
+public sealed record KycRemoteSubmittedEvent(
+    Guid TenantId,
+    Guid CustomerEntityId,
+    Guid KycFileId,
+    Guid InvitationId,
+    Guid? ProductLineId,
+    Guid? ResponsibleAgentId,
+    DateTimeOffset SubmittedAt) : IntegrationEventBase;
+
+/// <summary>
+/// A remotely collected KYC file has been ROUTED (KRM-B-08): either approved with no human, or
+/// handed to one with a coded reason.
+///
+/// <para>
+/// <b>Why it exists beside <c>KycValidatedEvent</c>.</b> That one means "this customer's KYC is
+/// approved" and is what M01 activates a client on; it says nothing about how, and must not — a
+/// second definition of "validated" is how two modules end up disagreeing about whether somebody
+/// is a customer. This one says who decided, which is what three unrelated consumers need and
+/// none of them can infer: the agent's notification (KRM-B-09), the customer's email (KRM-B-10),
+/// and the after-the-fact sampling of unattended approvals (KRM-B-11).
+/// </para>
+///
+/// <para>
+/// It is published on BOTH outcomes rather than only on the manual one, so the sampling has a
+/// single trigger and does not have to watch an approval event and filter it by a column.
+/// </para>
+/// </summary>
+/// <param name="Automatic">
+/// True when the product's policy approved the file and nobody was asked. The file is already at
+/// its <paramref name="Tier"/> when this is published.
+/// </param>
+/// <param name="RoutingReason">
+/// One of <c>KycRoutingReasons</c> when a human was asked; null when
+/// <paramref name="Automatic"/> is true. A CODE — a consumer that shows it to somebody translates
+/// it, and no consumer may branch on a substring of it.
+/// </param>
+/// <param name="Tier">
+/// The file's tier at the moment of routing: the granted one on an automatic approval,
+/// <c>None</c> on a manual route (the human has not decided yet).
+/// </param>
+/// <param name="ResponsibleAgentId">
+/// The agent accountable for the file, carried so a notification consumer does not have to read
+/// M02's schema to find out who to tell. Null on a file opened without one — the consumer then
+/// falls back to the agency, which is KRM-B-09's own cascade.
+/// </param>
+public sealed record KycRemoteDecidedEvent(
+    Guid TenantId,
+    Guid CustomerEntityId,
+    Guid KycFileId,
+    bool Automatic,
+    string? RoutingReason,
+    string Tier,
+    Guid? ProductLineId,
+    Guid? ResponsibleAgentId,
+    DateTimeOffset DecidedAt) : IntegrationEventBase;
+
 public sealed record KycInitiatedEvent(
     Guid TenantId,
     Guid CustomerEntityId,

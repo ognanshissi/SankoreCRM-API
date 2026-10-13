@@ -5,6 +5,7 @@ using NSubstitute;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Files.GetKycFile;
 using Sankore.Modules.Kyc.Infrastructure;
+using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Kyc.Tests.TestSupport;
 using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
@@ -61,7 +62,12 @@ public sealed class GetKycFileAgencyPerimeterTests : IDisposable
 
         // The mirrored workflow status is best-effort and irrelevant to the perimeter: the
         // substitute's default failure leaves it null, which is what a file with no mirror reads as.
-        return new GetKycFileHandler(_db, currentUser, scope, Substitute.For<IWorkflowModule>());
+        // The settings substitute answers 0 for the retake budget, which the handler reads as
+        // "no budget configured" and reports no excessive retakes — these files are not
+        // remote anyway, so the second read returns early.
+        return new GetKycFileHandler(
+            _db, currentUser, scope, Substitute.For<IKycSettings>(),
+            Substitute.For<IWorkflowModule>());
     }
 
     private async Task<KycFile> SeedAsync(Guid? agencyId)

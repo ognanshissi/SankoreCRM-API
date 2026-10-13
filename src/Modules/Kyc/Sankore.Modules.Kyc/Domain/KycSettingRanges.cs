@@ -77,6 +77,34 @@ public static class KycSettingRanges
                 => Int(value, 0, 1440,
                     "Le délai d'envoi du lien doit tenir entre 0 et 1440 minutes (24 h)."),
 
+            // remote-otp has no RANGE — a bool has two values and the type check covers both.
+            // What it does have is an availability guard, in UpdateKycSettingHandler: this
+            // deployment has no SMS channel, so turning it on would lock every customer out. A
+            // range validator cannot see the container, which is why the guard is not here.
+
+            // One hour is already an aggressive chase on a file a customer sent at nine in the
+            // evening; a fortnight is already far past the point where the relance is the
+            // problem. Zero is excluded because it would relance every file on the next sweep.
+            KycSettingKeys.RemoteReviewSlaHours
+                => Int(value, 1, 336,
+                    "Le délai de relance doit tenir entre 1 et 336 heures (14 jours)."),
+
+            // Five minutes is already short for photographing a card; two hours is already long
+            // for a bearer session on a phone that may be shared or lost.
+            KycSettingKeys.RemoteSessionMinutes
+                => Int(value, 5, 120, "La durée de session doit tenir entre 5 et 120 minutes."),
+
+            // Zero would lock the link before the customer typed anything; a hundred is no limit
+            // at all against a date-of-birth guess.
+            KycSettingKeys.RemoteMaxIdentifyAttempts
+                => Int(value, 3, 10,
+                    "Le nombre d'essais d'identification doit tenir entre 3 et 10."),
+
+            // Zero would mean the first blurred photo ends the journey.
+            KycSettingKeys.RemoteMaxQualityRetries
+                => Int(value, 1, 20,
+                    "Le nombre de reprises de photo doit tenir entre 1 et 20."),
+
             _ => null,
         };
     }

@@ -157,7 +157,55 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+// ── The remote-KYC session scheme (KRM-B-05, §4.3) ─────────────────────────
+//
+// A SECOND bearer scheme, with its own signing key and its own audience, for the token an
+// anonymous customer receives after identifying themselves on the public page. The separation is
+// the security property: a session token's signature does not validate under the platform scheme,
+// so it is refused by every back-office endpoint, and a platform token does not validate here, so
+// it cannot drive a customer's upload journey.
+//
+// The key is derived from Jwt:SigningKey by default — see KycRemoteSessionOptions for why that is
+// both safe and the only option that does not break an existing deployment on upgrade.
+var kycRemoteSessionOptions =
+    Sankore.Modules.Kyc.KycModule.ReadRemoteSessionOptions(builder.Configuration);
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(Sankore.Modules.Kyc.KycModule.RemoteSessionScheme, options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = kycRemoteSessionOptions.Issuer,
+            ValidAudience = Sankore.Modules.Kyc.KycModule.RemoteSessionAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(kycRemoteSessionOptions.SigningKey),
+            // No clock skew. A 20-minute session with the default five minutes of tolerance would
+            // be a 25-minute one, and the whole point of the window is that it is short.
+            ClockSkew = TimeSpan.Zero,
+        };
+
+        // No OnTokenValidated session check: there is no ISessionValidator for a customer, and the
+        // revocation that matters is done per request by KycRemoteGate, which re-reads the
+        // invitation. A signed session whose link has been spent or withdrawn stops working on its
+        // very next call.
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    // Pins the SCHEME as well as requiring authentication: without AddAuthenticationSchemes the
+    // policy would fall back to the default scheme and a platform token would satisfy it.
+    options.AddPolicy(Sankore.Modules.Kyc.KycModule.RemoteSessionScheme, policy => policy
+        .AddAuthenticationSchemes(Sankore.Modules.Kyc.KycModule.RemoteSessionScheme)
+        .RequireAuthenticatedUser()
+        // Third independent reason, after the key and the audience: a token issued for anything
+        // else is refused even if somebody reuses the key by mistake.
+        .RequireClaim("scope", "kyc:remote"));
+});
+
 builder.Services.AddSankoreAuthorization();
 
 builder.Services.AddRateLimiter(options =>
@@ -215,6 +263,23 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
             });
     });
+
+    // Remote KYC public surface (KRM-B-05, §8). Per IP.
+    //
+    // 30/min: a customer walking the journey makes a handful of calls, and each photograph is one
+    // upload — a burst of four or five is normal, a hundred is not. It bounds the FLOOD only; the
+    // attack that matters against this surface is guessing a date of birth, and that is bounded by
+    // the per-link failed-attempt counter on the invitation, which is durable and per-token rather
+    // than per-instance and resettable by a deployment.
+    options.AddPolicy("kyc-public", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"kyc-public:{ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 30,
+                QueueLimit = 0,
+            }));
 
     // Web ingest: 10 req/min per IP+key (US-F13.37-BE-12)
     options.AddPolicy("ingest-key", ctx =>
@@ -291,6 +356,20 @@ builder.Services.AddMassTransit(x =>
     // KRM-B-04: withdraws a customer's remote-collection link when the email it was posted to, or
     // the date of birth it is checked against, changes in M01.
     x.AddConsumer<Sankore.Modules.Kyc.Features.RemoteInvitations.Consumers.ClientContactChangedInvitationConsumer>();
+
+    // KRM-B-08: applies the product's policy once a verification comes back — approving a clean
+    // remote file with no human, or handing it to one with a coded reason. Registered in M02 and
+    // consuming M02's own event, which is what makes the decision durable across a replay.
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Routing.Consumers.KycVerificationCompletedRoutingConsumer>();
+
+    // KRM-B-09: tells the responsible agent (or their branch manager) that a remote file is
+    // waiting for them. A consumer and not a line in the handler, because QueueEmailAsync is not
+    // part of M02's transaction — §8 of the specification asks for exactly this shape.
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Routing.Consumers.KycRemoteReviewRequiredConsumer>();
+
+    // KRM-B-10: tells the CUSTOMER how their file ended up. On the validation and rejection events
+    // rather than on the routing, so an automatic and a manual approval produce the same message.
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Routing.Consumers.KycRemoteOutcomeConsumer>();
 
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer>();
     x.AddConsumer<LeadDispatchedTaskConsumer>();
@@ -743,6 +822,16 @@ if (emitOpenApiTo is null) {
             Sankore.Modules.Kyc.Features.RemoteInvitations.Expiry
                 .KycRemoteInvitationExpiryOrchestratorJob.CronExpression);   // daily (KRM-B-04)
 
+        // KRM-B-09's relance. HOURLY and not daily, unlike its neighbours: the SLA is expressed in
+        // hours and defaults to 24, so a daily sweep would turn that promise into anything between
+        // 24 and 48 depending on what time of day the file was routed.
+        AddOrUpdate<Sankore.Modules.Kyc.Features.Routing.ReviewSla.KycRemoteReviewSlaOrchestratorJob>(
+            Sankore.Modules.Kyc.Features.Routing.ReviewSla
+                .KycRemoteReviewSlaOrchestratorJob.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Kyc.Features.Routing.ReviewSla
+                .KycRemoteReviewSlaOrchestratorJob.CronExpression);          // hourly (KRM-B-09)
+
         // ── Integration module ────────────────────────────────────────────────────
         // Both GLOBAL orchestrators: they walk the active tenants themselves and enqueue opaque
         // per-tenant work, so adding a tenant needs no new recurring registration.
@@ -879,6 +968,15 @@ appVersion1.MapNotificationsModuleEndpoints();
 appVersion1.MapCustomersModuleEndpoints();
 appVersion1.MapKycModuleEndpoints();
 appVersion1.MapIntegrationModuleEndpoints();
+
+// The customer-facing remote-KYC surface (KRM-B-05/06/07). Under api/v1/public, which is what
+// TenantResolutionMiddleware exempts — so the tenant is resolved from the token or the session and
+// compared with X-Tenant-Fqdn inside KycRemoteGate instead. Its own rate-limiting policy, and
+// NOT the "api" one: that policy partitions on the JWT subject, which an anonymous caller has
+// none of, so every customer in the country would have shared one window.
+appVersion1.MapGroup("public")
+    .RequireRateLimiting("kyc-public")
+    .MapKycPublicEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 appVersion1.MapGroup("object-storage").MapMigrateObjects();

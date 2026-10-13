@@ -16,6 +16,10 @@ internal sealed class KycDocumentConfiguration : IEntityTypeConfiguration<KycDoc
         b.Property(d => d.Kind).HasConversion<string>().HasMaxLength(32).IsRequired();
         b.Property(d => d.ReviewDecision).HasConversion<string>().HasMaxLength(16).IsRequired();
 
+        // KRM-B-06. Nullable: meaningless on a selfie or a proof of address, and absent from every
+        // row written before the remote journey existed.
+        b.Property(d => d.DeclaredDocumentType).HasConversion<string>().HasMaxLength(16);
+
         // 200 matches kyc_document_access_logs.storage_ref and kyc_face_verifications
         // .selfie_storage_ref — the same opaque reference, so the same width.
         b.Property(d => d.StorageRef).HasMaxLength(200).IsRequired();

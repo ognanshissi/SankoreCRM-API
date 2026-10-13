@@ -12,9 +12,16 @@ using Sankore.Shared.Kernel;
 /// document, « une quittance de moins de trois mois attestant du domicile ».
 ///
 /// <para>
-/// <b>Which files are remote is already modelled</b> — <see cref="KycChannel.Web"/> and
-/// <see cref="KycChannel.MobileAgent"/> — so there is nothing to infer. A file opened at a counter
-/// or through an import is not a remote sale and the requirement does not apply to it.
+/// <b>Which files are remote is already modelled</b> — <see cref="KycChannels.IsRemoteSale"/> — so
+/// there is nothing to infer. A file opened at a counter or through an import is not a remote sale
+/// and the requirement does not apply to it.
+/// </para>
+///
+/// <para>
+/// That predicate used to be spelled out here as <c>Web or MobileAgent</c>. It moved the day
+/// <see cref="KycChannel.RemoteSelfService"/> was added, because the most remote channel of all
+/// would otherwise have fallen outside the list and this gate would have stopped applying to it —
+/// silently, and in the customer's favour.
 /// </para>
 ///
 /// <para>
@@ -35,7 +42,7 @@ internal sealed class RemoteSaleEvidence(KycDbContext db, IKycSettings settings,
     {
         ArgumentNullException.ThrowIfNull(file);
 
-        if (file.Channel is not (KycChannel.Web or KycChannel.MobileAgent))
+        if (!KycChannels.IsRemoteSale(file.Channel))
             return Result.Ok();
 
         var maxAgeDays = await settings.GetIntAsync(

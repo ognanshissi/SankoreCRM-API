@@ -2,6 +2,7 @@ namespace Sankore.Modules.Kyc.Features.Approval.Decide;
 
 using MediatR;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Infrastructure.Storage;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
@@ -24,11 +25,24 @@ using Sankore.Shared.Kernel;
 /// and the customer are told — and it travels on <c>KycRejectedEvent</c>, so it must never carry a
 /// document number, a phone or an address.
 /// </param>
+/// <param name="RequestedDocuments">
+/// On a <see cref="KycApprovalDecision.ComplementRequired"/> decision, which document kinds the
+/// customer must retake (KRM-B-10). Meaningful only on a REMOTELY collected file, where it becomes
+/// the scope of the new collection link; on a counter file the agent collects the documents
+/// themselves and the list has nowhere to go.
+///
+/// <para>
+/// Empty is allowed and means the whole journey again, which is the reading that cannot strand a
+/// customer. The screen offers the kinds the file's own journey knows about (KRM-F-08), and the
+/// handler refuses one the product does not collect rather than issuing a link asking for it.
+/// </para>
+/// </param>
 internal sealed record DecideKycApprovalCommand(
     Guid KycFileId,
     KycApprovalLevel Level,
     KycApprovalDecision Decision,
-    string? Comment
+    string? Comment,
+    IReadOnlyCollection<KycDocumentKind>? RequestedDocuments = null
 ) : IRequest<Result<DecideKycApprovalResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "KycFile";

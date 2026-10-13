@@ -1,5 +1,7 @@
 namespace Sankore.Modules.Kyc.Domain;
 
+using System.Text.Json;
+using Sankore.Modules.Kyc.Infrastructure.Storage;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -88,6 +90,30 @@ public enum KycRemoteInvitationPurpose
 /// who intercepted an older one holds nothing.
 /// </para>
 /// </summary>
+/// <summary>
+/// What <see cref="KycRemoteInvitation.VerifyOtp"/> concluded (KRM-B-12). Four outcomes rather
+/// than a boolean because they call for four different instructions — and because the endpoint
+/// deliberately shows the customer fewer than four, which is a choice that has to be visible at
+/// the call site rather than buried in the aggregate.
+/// </summary>
+public enum KycOtpVerdict
+{
+    /// <summary>No code has been issued, or the pending one has already been used.</summary>
+    NonePending,
+
+    /// <summary>The ten-minute window has closed. A new code can be asked for.</summary>
+    Expired,
+
+    /// <summary>Three wrong tries against this code. A new code resets the count.</summary>
+    TooManyAttempts,
+
+    /// <summary>Wrong digits — or not six digits at all, which costs no attempt.</summary>
+    Wrong,
+
+    /// <summary>Correct, and consumed: the session may be issued.</summary>
+    Accepted
+}
+
 public sealed class KycRemoteInvitation : AggregateRoot
 {
     /// <summary>
@@ -143,12 +169,55 @@ public sealed class KycRemoteInvitation : AggregateRoot
     public DateTimeOffset? LockedAt { get; private set; }
 
     /// <summary>
+    /// SHA-256 of the six-digit second factor, salted with this invitation's id (KRM-B-12). Null
+    /// when the tenant does not require one, and null again once it has been consumed.
+    ///
+    /// <para>
+    /// Hash-only for the reason <see cref="TokenHash"/> is: it is a credential, and a database
+    /// dump, a replica or a backup must not contain a usable one.
+    /// </para>
+    /// </summary>
+    public byte[]? OtpHash { get; private set; }
+
+    /// <summary>When the code stops being accepted. Ten minutes after it was issued.</summary>
+    public DateTimeOffset? OtpExpiresAt { get; private set; }
+
+    /// <summary>
+    /// Wrong codes typed against the CURRENT code. Reset by each new code, unlike
+    /// <see cref="FailedAttempts"/>, which is per link: a customer who asks for a fresh code after
+    /// mistyping twice has not spent two of the three tries on the new one.
+    /// </summary>
+    public int OtpAttempts { get; private set; }
+
+    /// <summary>
     /// How many times the customer retook each photo, keyed by document kind (KRM-B-06). A
     /// document retaken past the tenant's budget is a signal for the validator rather than a
     /// refusal, so the count has to survive the submission.
     /// <para>Written from KRM-B-06 onwards; empty until then.</para>
     /// </summary>
     public string QualityRetriesJson { get; private set; } = "{}";
+
+    /// <summary>
+    /// On a <see cref="KycRemoteInvitationPurpose.Complement"/> link, the document kinds the agent
+    /// asked the customer to RETAKE — a JSON array of <c>KycDocumentKind</c> names (KRM-B-10).
+    /// Empty on an initial link, which collects everything the product requires.
+    ///
+    /// <para>
+    /// <b>It narrows the journey, and it also re-opens it.</b> A complement link asks for exactly
+    /// these kinds, and a photograph the customer already sent must no longer count for them —
+    /// otherwise the journey would open with nothing missing and a send button that submits the
+    /// same rejected image again. <see cref="KycRemoteJourney"/> therefore counts a listed kind as
+    /// present only when it was uploaded after <see cref="CreatedAt"/>: the old evidence stays on
+    /// the file, where it belongs, and stops satisfying this round.
+    /// </para>
+    ///
+    /// <para>
+    /// Kind NAMES and not a bitmask: the column is read in psql during a compliance question
+    /// ("what was this customer asked for a second time"), and an integer there is a lookup in a
+    /// source file.
+    /// </para>
+    /// </summary>
+    public string RequestedKindsJson { get; private set; } = "[]";
 
     /// <summary>
     /// When the customer accepted the processing of their biometric data, and which version of the
@@ -198,6 +267,7 @@ public sealed class KycRemoteInvitation : AggregateRoot
         Guid createdBy,
         TimeProvider clock,
         KycRemoteInvitationPurpose purpose = KycRemoteInvitationPurpose.Initial,
+        IReadOnlyCollection<KycDocumentKind>? requestedKinds = null,
         Guid? id = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
@@ -221,6 +291,14 @@ public sealed class KycRemoteInvitation : AggregateRoot
             // attempted.
             Status = KycRemoteInvitationStatus.Scheduled,
             Purpose = purpose,
+            // Only meaningful on a complement. An initial link that carried a scope would be a
+            // link that collects less than the product asks for, which no caller wants and which
+            // the journey would have to second-guess.
+            RequestedKindsJson = purpose == KycRemoteInvitationPurpose.Complement
+                                 && requestedKinds is { Count: > 0 }
+                ? JsonSerializer.Serialize(
+                    requestedKinds.Distinct().Select(k => k.ToString()).ToList(), RetriesJson)
+                : "[]",
             ExpiresAt = now.AddHours(validityHours),
             CreatedBy = createdBy,
             CreatedAt = now,
@@ -274,6 +352,297 @@ public sealed class KycRemoteInvitation : AggregateRoot
         SentAt = clock.GetUtcNow();
         return Result.Ok();
     }
+
+    /// <summary>
+    /// Records that somebody holding the link opened it. Answers whether anything moved.
+    ///
+    /// <para>
+    /// <b>FIRST open only.</b> <see cref="OpenedAt"/> answers "did this message reach a human and
+    /// when", which is a deliverability question; letting every page refresh overwrite it would
+    /// turn it into "last touched" and lose the one piece of information an agent chasing a silent
+    /// customer actually needs.
+    /// </para>
+    ///
+    /// <para>
+    /// The status only moves <c>Sent → Opened</c>. A link already <c>Identified</c> is further
+    /// along, and walking it backwards on a refresh would make the journey appear to un-happen.
+    /// </para>
+    /// </summary>
+    public bool MarkOpened(TimeProvider clock)
+    {
+        if (OpenedAt is not null && Status != KycRemoteInvitationStatus.Sent)
+            return false;
+
+        var moved = false;
+
+        if (OpenedAt is null)
+        {
+            OpenedAt = clock.GetUtcNow();
+            moved = true;
+        }
+
+        if (Status == KycRemoteInvitationStatus.Sent)
+        {
+            Status = KycRemoteInvitationStatus.Opened;
+            moved = true;
+        }
+
+        return moved;
+    }
+
+    /// <summary>
+    /// The customer answered the identification questions correctly: the link may now carry a
+    /// session.
+    ///
+    /// <para>
+    /// <b>The failed-attempt counter is reset.</b> A customer who mistyped their date of birth
+    /// three times and then got it right has not used up three of their five tries for the rest of
+    /// the link's life — the counter exists to stop a guessing run, and a correct answer ends the
+    /// run. Keeping it would lock out the one person the link belongs to, on their next session,
+    /// for mistakes they already recovered from.
+    /// </para>
+    ///
+    /// <para>
+    /// Re-identification is allowed while the link lives: <see cref="IdentifiedAt"/> keeps the
+    /// FIRST success for the same reason <see cref="OpenedAt"/> keeps the first open, and a
+    /// customer whose 20-minute session lapsed mid-upload comes back through this method rather
+    /// than losing the photos they already sent.
+    /// </para>
+    /// </summary>
+    public Result MarkIdentified(TimeProvider clock)
+    {
+        if (!IsUsableAt(clock.GetUtcNow()))
+            return Result.Fail(KycErrors.RemoteInvitationNotUsable);
+
+        IdentifiedAt ??= clock.GetUtcNow();
+        Status = KycRemoteInvitationStatus.Identified;
+        FailedAttempts = 0;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// The customer answered wrongly. Answers whether that attempt was the one that locked the
+    /// link.
+    ///
+    /// <para>
+    /// This counter is the per-token rate limit, and a durable one: an in-memory window resets on
+    /// every deployment and is per-instance, so it bounds nothing an attacker with patience cares
+    /// about. The IP-based limiter in front of these endpoints bounds the FLOOD; this bounds the
+    /// GUESSING, which against a date of birth is the attack that matters.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Attaches a freshly minted second factor (KRM-B-12).
+    ///
+    /// <para>
+    /// Only on a link that is still usable: issuing a code against an expired or revoked
+    /// invitation would create a credential for a journey nobody can continue, and the endpoint
+    /// that calls this has already resolved the link through <c>KycRemoteGate</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// A second call REPLACES the code and resets <see cref="OtpAttempts"/> — "send me another
+    /// one" has to work, because a text message that does not arrive is the ordinary failure of
+    /// this mechanism. The per-link <see cref="FailedAttempts"/> counter is deliberately NOT reset:
+    /// that one bounds guessing at the client number and date of birth, and a new code must not
+    /// buy an attacker five fresh tries at the first factor.
+    /// </para>
+    /// </summary>
+    public Result IssueOtp(byte[] hash, TimeSpan validity, TimeProvider clock)
+    {
+        ArgumentNullException.ThrowIfNull(hash);
+
+        if (hash.Length == 0)
+            throw new DomainException("An empty digest is not a code.");
+
+        var now = clock.GetUtcNow();
+
+        if (!IsUsableAt(now))
+            return Result.Fail(KycErrors.RemoteInvitationNotUsable);
+
+        OtpHash = hash;
+        OtpExpiresAt = now.Add(validity);
+        OtpAttempts = 0;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Checks a code and consumes it on success (KRM-B-12).
+    ///
+    /// <para>
+    /// <b>Four outcomes, and each is a different thing to tell the customer.</b> No code pending
+    /// (they have not asked for one, or it has already been used); the window has closed; too many
+    /// wrong tries; or wrong. The endpoint collapses the last two into one message on purpose —
+    /// see its own remarks — but the aggregate distinguishes them, because "ask for a new code"
+    /// and "wait" are different instructions and only the caller knows which it may safely give.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The code is cleared on success.</b> It is a one-time factor: a second call with the same
+    /// digits must not open a second session, and leaving it in place would make the column a
+    /// replayable credential for ten minutes.
+    /// </para>
+    /// </summary>
+    /// <param name="candidateHash">
+    /// The digest of what the customer typed, or null when it was not even code-shaped. Null is a
+    /// FAILURE that costs no attempt: a blank field or a four-digit entry is a typing accident, and
+    /// charging it against three tries would let a bored script burn somebody else's factor.
+    /// </param>
+    public KycOtpVerdict VerifyOtp(byte[]? candidateHash, int maxAttempts, TimeProvider clock)
+    {
+        if (OtpHash is null || OtpExpiresAt is null) return KycOtpVerdict.NonePending;
+
+        if (clock.GetUtcNow() >= OtpExpiresAt.Value) return KycOtpVerdict.Expired;
+
+        if (maxAttempts > 0 && OtpAttempts >= maxAttempts) return KycOtpVerdict.TooManyAttempts;
+
+        if (candidateHash is null) return KycOtpVerdict.Wrong;
+
+        // Fixed-time, like every other credential comparison in this journey: the digests are the
+        // same length, so what must not leak is where they first differ.
+        if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                candidateHash, OtpHash))
+        {
+            OtpAttempts++;
+            return KycOtpVerdict.Wrong;
+        }
+
+        // Consumed. One factor, one session.
+        OtpHash = null;
+        OtpExpiresAt = null;
+        OtpAttempts = 0;
+        return KycOtpVerdict.Accepted;
+    }
+
+    /// <summary>True while a code is pending and its window is still open.</summary>
+    public bool HasPendingOtpAt(DateTimeOffset now)
+        => OtpHash is not null && OtpExpiresAt is { } expiry && now < expiry;
+
+    public bool RecordFailedIdentification(int maxAttempts, TimeProvider clock)
+    {
+        if (maxAttempts < 1)
+            throw new DomainException("A link must allow at least one identification attempt.");
+
+        // An inactive link cannot be locked further, and counting against it would let a stale
+        // token's failures look like activity on the file.
+        if (!IsActive) return false;
+
+        FailedAttempts++;
+
+        if (FailedAttempts < maxAttempts)
+            return false;
+
+        Status = KycRemoteInvitationStatus.Locked;
+        LockedAt = clock.GetUtcNow();
+        return true;
+    }
+
+    /// <summary>
+    /// The customer sent their file. The link is spent from here on, and so is the session built
+    /// on it — <c>KycRemoteGate</c> re-reads this status on every call, which is what makes a
+    /// signed session stop working without a revocation list.
+    /// </summary>
+    public Result MarkSubmitted(TimeProvider clock)
+    {
+        // Only from Identified: a submission with no identification behind it would be an upload
+        // nobody proved they were entitled to make.
+        if (Status != KycRemoteInvitationStatus.Identified)
+            return Result.Fail(KycErrors.RemoteInvitationNotUsable);
+
+        Status = KycRemoteInvitationStatus.Submitted;
+        SubmittedAt = clock.GetUtcNow();
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Records that the customer retook a photo of <paramref name="kind"/>, and answers how many
+    /// retakes that kind has now had.
+    ///
+    /// <para>
+    /// Counted per kind rather than for the link as a whole: a customer fighting the glare on a
+    /// laminated card has not used up the budget for their selfie. The count survives the
+    /// submission because it is what tells the validator that this document was hard to capture —
+    /// which is a fact about the evidence, not an incident.
+    /// </para>
+    /// </summary>
+    public int RecordQualityRetry(KycDocumentKind kind, TimeProvider clock)
+    {
+        var retries = QualityRetries();
+        var next = retries.GetValueOrDefault(kind.ToString()) + 1;
+        retries[kind.ToString()] = next;
+
+        QualityRetriesJson = JsonSerializer.Serialize(retries, RetriesJson);
+        return next;
+    }
+
+    /// <summary>Retakes so far, by <c>KycDocumentKind</c> name. Empty rather than null.</summary>
+    public Dictionary<string, int> QualityRetries()
+    {
+        if (string.IsNullOrWhiteSpace(QualityRetriesJson))
+            return new Dictionary<string, int>(StringComparer.Ordinal);
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, int>>(QualityRetriesJson, RetriesJson)
+                   ?? new Dictionary<string, int>(StringComparer.Ordinal);
+        }
+        catch (JsonException)
+        {
+            // A hand-edited column must not break a customer's upload. The budget restarts, which
+            // is the forgiving direction — the alternative is a journey that cannot continue.
+            return new Dictionary<string, int>(StringComparer.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The kinds this complement link asks for, by <c>KycDocumentKind</c> name. Empty on an
+    /// initial link and on a complement that named none — both mean "everything the product
+    /// requires", which is the reading a caller can act on without a null check.
+    /// </summary>
+    public IReadOnlyList<string> RequestedKinds()
+    {
+        if (string.IsNullOrWhiteSpace(RequestedKindsJson)) return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(RequestedKindsJson, RetriesJson) ?? [];
+        }
+        catch (JsonException)
+        {
+            // A hand-edited column must not strand a customer mid-journey. An empty scope asks for
+            // everything the product requires, which is the forgiving direction — the alternative
+            // is a complement link that asks for nothing and cannot be submitted.
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// The customer accepted the processing of their biometric data, against a named version of
+    /// the text they were shown.
+    ///
+    /// <para>
+    /// Both, and the version is not optional: consent to a text nobody can identify afterwards is
+    /// not evidence of anything. Recorded ONCE — a second acceptance does not move the date,
+    /// because what has to be provable is when the customer agreed, not when they last reloaded
+    /// the page.
+    /// </para>
+    /// </summary>
+    public Result RecordConsent(string textVersion, TimeProvider clock)
+    {
+        if (string.IsNullOrWhiteSpace(textVersion))
+            return Result.Fail(KycErrors.RemoteConsentVersionRequired);
+
+        if (ConsentGivenAt is not null)
+            return Result.Ok();
+
+        ConsentGivenAt = clock.GetUtcNow();
+        ConsentTextVersion = textVersion.Trim();
+        return Result.Ok();
+    }
+
+    public bool HasConsented => ConsentGivenAt is not null;
+
+    private static readonly JsonSerializerOptions RetriesJson = new(JsonSerializerDefaults.Web);
 
     /// <summary>
     /// Withdraws the link. Idempotent on an already-inactive one: an agent re-issuing a link while

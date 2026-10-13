@@ -83,6 +83,73 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                     b.ToTable("kyc_approval_steps", "kyc");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Kyc.Domain.KycAutoApprovalControl", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("Finding")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("finding");
+
+                    b.Property<string>("GrantedTier")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("granted_tier");
+
+                    b.Property<Guid>("KycFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("kyc_file_id");
+
+                    b.Property<int>("PolicyVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("policy_version");
+
+                    b.Property<Guid?>("RaisedReviewId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("raised_review_id");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<DateTimeOffset>("SampledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sampled_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_kyc_auto_approval_controls");
+
+                    b.HasIndex("KycFileId")
+                        .HasDatabaseName("ix_kyc_auto_approval_controls_file");
+
+                    b.HasIndex("TenantId", "Status", "SampledAt")
+                        .HasDatabaseName("ix_kyc_auto_approval_controls_queue");
+
+                    b.ToTable("kyc_auto_approval_controls", "kyc");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Kyc.Domain.KycConfidenceAssessment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -150,6 +217,11 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("content_type");
+
+                    b.Property<string>("DeclaredDocumentType")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("declared_document_type");
 
                     b.Property<DateOnly?>("DocumentIssuedOn")
                         .HasColumnType("date")
@@ -468,6 +540,15 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("responsible_agent_id");
 
+                    b.Property<DateTimeOffset?>("RoutedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("routed_at");
+
+                    b.Property<string>("RoutingReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("routing_reason");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(24)
@@ -491,6 +572,11 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("ValidatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("validated_at");
+
+                    b.Property<string>("ValidationRoute")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("validation_route");
 
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
@@ -660,6 +746,18 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("opened_at");
 
+                    b.Property<int>("OtpAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("otp_attempts");
+
+                    b.Property<DateTimeOffset?>("OtpExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("otp_expires_at");
+
+                    b.Property<byte[]>("OtpHash")
+                        .HasColumnType("bytea")
+                        .HasColumnName("otp_hash");
+
                     b.Property<string>("Purpose")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -672,6 +770,13 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("quality_retries")
                         .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<string>("RequestedKindsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("requested_kinds")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<string>("RevokeReason")
                         .HasMaxLength(2000)
