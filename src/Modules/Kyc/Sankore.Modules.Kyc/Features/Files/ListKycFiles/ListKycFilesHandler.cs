@@ -85,6 +85,12 @@ internal sealed class ListKycFilesHandler(
                 x.File.DuplicateSuspected,
                 x.File.UpdatedAt,
                 x.NextPendingRank,
+                // KRM-F-07's badge. An EXISTS correlated per row rather than a join or a second
+                // query: a join would multiply the page by the number of links a file has had, and
+                // a second query would be another round trip for one boolean. EF translates this
+                // to `EXISTS (SELECT 1 ...)`, which stops at the first match.
+                HasRemoteInvitation = db.KycRemoteInvitations
+                    .Any(i => i.KycFileId == x.File.Id),
             })
             .ToListAsync(ct);
 
@@ -110,7 +116,8 @@ internal sealed class ListKycFilesHandler(
                 DuplicateSuspected: r.DuplicateSuspected,
                 RequiredActionCode: RequiredAction(r.Status),
                 AwaitingMe: r.NextPendingRank is { } rank && myRanks.Contains(rank),
-                UpdatedAt: r.UpdatedAt))],
+                UpdatedAt: r.UpdatedAt,
+                IsRemoteCollection: r.HasRemoteInvitation))],
             TotalCount: totalCount,
             Page: page,
             PageSize: pageSize,

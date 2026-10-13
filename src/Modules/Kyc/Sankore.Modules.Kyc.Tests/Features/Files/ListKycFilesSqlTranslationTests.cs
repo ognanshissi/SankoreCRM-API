@@ -60,6 +60,16 @@ public sealed class ListKycFilesSqlTranslationTests
             .ThenBy(x => x.File.Id)
             .Skip(20)
             .Take(20)
+            .Select(x => new
+            {
+                x.File.Id,
+                x.NextPendingRank,
+                // KRM-F-07's badge, projected per row. The shape that matters: a correlated EXISTS
+                // inside a Select the InMemory provider would evaluate in memory without
+                // complaining.
+                HasRemoteInvitation = db.KycRemoteInvitations
+                    .Any(i => i.KycFileId == x.File.Id),
+            })
             .ToQueryString();
     }
 
@@ -98,6 +108,19 @@ public sealed class ListKycFilesSqlTranslationTests
         // page was fetched.
         sql.Should().MatchRegex(@"(?is)ORDER\s+BY");
         sql.Should().Contain("LIMIT");
+    }
+
+    [Fact]
+    public void The_remote_collection_badge_is_an_exists_and_not_a_join()
+    {
+        var sql = RenderSql([Guid.NewGuid()], [1]);
+
+        // A join would multiply the page by the number of links a file has had — a file re-sent
+        // three times would appear three times in a compliance worklist. EXISTS stops at the first
+        // match and leaves the row count alone.
+        sql.Should().Contain("kyc_remote_invitations");
+        sql.Should().MatchRegex(@"(?is)EXISTS\s*\(");
+        sql.Should().NotMatchRegex(@"(?is)JOIN[^\r\n]*kyc_remote_invitations");
     }
 
     [Fact]

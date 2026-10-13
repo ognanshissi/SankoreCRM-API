@@ -8,8 +8,8 @@ using Microsoft.Extensions.Logging;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.PublicApi.Events;
+using Sankore.Modules.Customers.Infrastructure.Notifications;
 using Sankore.Modules.Notifications.PublicApi;
-using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -28,7 +28,7 @@ using Sankore.Shared.Kernel;
 public sealed class ClientWelcomeEmailConsumer(
     CustomersDbContext db,
     IInboxGuard inbox,
-    IFieldEncryptor encryptor,
+    ClientEmailNotifier clientEmails,
     INotificationsModule notifications,
     ITenantStore tenantStore,
     ILogger<ClientWelcomeEmailConsumer> logger)
@@ -69,7 +69,10 @@ public sealed class ClientWelcomeEmailConsumer(
             return;
         }
 
-        var email = await ResolveEmailAsync(evt.TenantId, evt.ClientId, ct);
+        // Resolved by ClientEmailNotifier and no longer by a private copy here: M02 now mails
+        // customers too (the remote-collection link), and two decryption paths for one field is
+        // how "the primary address" starts meaning two different things.
+        var email = await clientEmails.ResolveEmailAsync(evt.TenantId, evt.ClientId, ct);
         if (email is null)
         {
             // Perfectly ordinary: a lead captured by an agent in the field often has a phone
@@ -114,40 +117,6 @@ public sealed class ClientWelcomeEmailConsumer(
         }
 
         await db.SaveChangesAsync(ct);
-    }
-
-    /// <summary>
-    /// Reads the client's primary email, preferring the one marked primary and falling back to
-    /// any active one. This is the single place in this flow that decrypts anything, and it
-    /// decrypts exactly one value.
-    /// </summary>
-    private async Task<string?> ResolveEmailAsync(Guid tenantId, Guid clientId, CancellationToken ct)
-    {
-        var encrypted = await db.ClientContactPoints
-            .IgnoreQueryFilters()
-            .Where(cp => cp.TenantId == tenantId
-                      && cp.ClientId == clientId
-                      && cp.Type == ContactPointType.Email
-                      && cp.ValidTo == null)
-            .OrderByDescending(cp => cp.IsPrimary)
-            .Select(cp => cp.EncryptedValue)
-            .FirstOrDefaultAsync(ct);
-
-        if (encrypted is null)
-            return null;
-
-        try
-        {
-            return encryptor.Decrypt(encrypted);
-        }
-        catch (Exception ex)
-        {
-            // A value that cannot be decrypted is a key problem, not a reason to crash a
-            // welcome message. It is worth shouting about, though.
-            logger.LogError(ex,
-                "Could not decrypt the email of client {ClientId}; welcome message skipped.", clientId);
-            return null;
-        }
     }
 
     /// <summary>

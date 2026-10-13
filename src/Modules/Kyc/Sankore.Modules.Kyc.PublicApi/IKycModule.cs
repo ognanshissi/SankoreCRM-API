@@ -150,4 +150,25 @@ public sealed record KycRequestedIntegrationEvent(
     string? NationalId,
     DateOnly? DateOfBirth,
     Guid RequestedBy,
-    bool HasPepExposure = false) : IntegrationEventBase;
+    bool HasPepExposure = false,
+    /// <summary>
+    /// The catalogue line the lead was converted on (KRM-B-02) — a <c>ProductSpeciality</c> id,
+    /// opaque to this module and carrying no foreign key.
+    ///
+    /// <para>
+    /// M02 needs it for two decisions it cannot otherwise make: whether this product allows the
+    /// customer to send their documents remotely, and which level of validation the resulting file
+    /// deserves. <c>LeadConvertedIntegrationEvent</c> has carried the same id since BNF-B-24, but
+    /// it goes to M01 and M-Integration — the KYC file is opened from THIS event, and a consumer
+    /// cannot correlate two events arriving in any order.
+    /// </para>
+    ///
+    /// <para>
+    /// NULLABLE and ordinary when null: a lead whose free-text product label matched nothing in the
+    /// catalogue converts perfectly well (<c>ResolveProductLineAsync</c> is best-effort by design).
+    /// Such a file simply gets no remote link, and the agent is told why. Defaulted so the
+    /// parameter is additive — an event serialised before this field existed and still sitting in
+    /// an outbox deserialises to "no product", which is what it meant.
+    /// </para>
+    /// </summary>
+    Guid? ProductLineId = null) : IntegrationEventBase;

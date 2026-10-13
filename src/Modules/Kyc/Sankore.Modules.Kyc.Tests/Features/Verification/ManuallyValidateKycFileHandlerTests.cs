@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Features.RemoteInvitations;
 using Sankore.Modules.Kyc.Features.Approval;
 using Sankore.Modules.Kyc.Features.Approval.StartApproval;
 using Sankore.Modules.Kyc.Features.Verification.ManualValidation;
@@ -71,7 +72,11 @@ public sealed class ManuallyValidateKycFileHandlerTests : IDisposable
                 call.Arg<StartKycApprovalCommand>(), call.Arg<CancellationToken>()));
 
         _handler = new ManuallyValidateKycFileHandler(
-            _db, _currentUser, _sender, _clock,
+            _db, _currentUser, _sender,
+            // KRM-B-04: a hand-validated file is no longer collecting, so its link is withdrawn.
+            new KycRemoteInvitationRevoker(
+                _db, _clock, NullLogger<KycRemoteInvitationRevoker>.Instance),
+            _clock,
             NullLogger<ManuallyValidateKycFileHandler>.Instance);
     }
 

@@ -30,7 +30,7 @@ public sealed class CustomersModuleFacadeBatchTests : IDisposable
         _db = _factory.CreateContext();
         _facade = new CustomersModuleFacade(
             _db, new UnusedLeadConversion(), TestDoubles.Indexer(),
-            TestHoldingSync.For(_db, _tenantId));
+            TestHoldingSync.For(_db, _tenantId), TestDoubles.ClientEmails(_db));
     }
 
     public void Dispose()

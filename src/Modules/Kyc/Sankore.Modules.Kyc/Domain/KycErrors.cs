@@ -47,6 +47,43 @@ public static class KycErrors
     public const string DuplicateClearReasonRequired = "KYC_DUPLICATE_CLEAR_REASON_REQUIRED";
     public const string VerificationImageNotFound = "KYC_VERIFICATION_IMAGE_NOT_FOUND";
 
+    // ── Remote collection links (KRM-B-03/04) ──────────────────────────────
+
+    /// <summary>
+    /// The file is not in a state that can be collected remotely — already approved, rejected, or
+    /// in the middle of a verification. Sending a link would invite a customer to upload evidence
+    /// for a decision that has been taken.
+    /// </summary>
+    public const string RemoteInvitationFileNotCollecting = "KYC_REMOTE_INVITATION_FILE_NOT_COLLECTING";
+
+    /// <summary>
+    /// The product this file was converted on does not allow remote collection — or the file names
+    /// no product at all. Named rather than folded into a generic refusal because what the agent
+    /// needs to be told is that the CATALOGUE forbids it, not that something went wrong.
+    /// </summary>
+    public const string RemoteInvitationProductNotEligible = "KYC_REMOTE_INVITATION_PRODUCT_NOT_ELIGIBLE";
+
+    /// <summary>
+    /// The customer record carries no email address, so there is nowhere to send the link. The
+    /// ordinary case for a lead captured in the field with a phone number and nothing else — the
+    /// agent adds an address and re-issues.
+    /// </summary>
+    public const string RemoteInvitationNoEmail = "KYC_REMOTE_INVITATION_NO_EMAIL";
+
+    public const string RemoteInvitationNotFound = "KYC_REMOTE_INVITATION_NOT_FOUND";
+
+    /// <summary>
+    /// <see cref="KycRemoteInvitation.MarkSent"/> on a link that is not waiting to be sent. The
+    /// delayed send job is retried by Hangfire, and one link must produce one email.
+    /// </summary>
+    public const string RemoteInvitationNotPending = "KYC_REMOTE_INVITATION_NOT_PENDING";
+
+    /// <summary>
+    /// Withdrawing a link without saying why. The customer loses their way in, and a support call
+    /// about it has nothing to go on.
+    /// </summary>
+    public const string RemoteInvitationRevokeReasonRequired = "KYC_REMOTE_INVITATION_REVOKE_REASON_REQUIRED";
+
     public const string SettingUnknown = "KYC_SETTING_UNKNOWN";
     public const string SettingInvalidValue = "KYC_SETTING_INVALID_VALUE";
 

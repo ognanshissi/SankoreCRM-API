@@ -15,7 +15,8 @@ internal sealed class AddContactPointHandler(
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
     IFieldEncryptor encryptor,
-    IBlindIndexer indexer
+    IBlindIndexer indexer,
+    ContactPointChangeAnnouncer announcer
 ) : IRequestHandler<AddContactPointCommand, Result<AddContactPointResult>>
 {
     public async Task<Result<AddContactPointResult>> Handle(
@@ -56,6 +57,12 @@ internal sealed class AddContactPointHandler(
                 if (promotion.IsFailure)
                     return Result.Fail<AddContactPointResult>(promotion.Error!);
 
+                // The value was already on file but it is now the one the client is reached at,
+                // which is the fact M02's collection link depends on (KRM-B-04).
+                await announcer.AnnounceAsync(
+                    currentUser.TenantId, client.Id, existing.Type, currentUser.Id,
+                    "Coordonnée existante promue en principale", ct);
+
                 await db.SaveChangesAsync(ct);
             }
 
@@ -82,6 +89,12 @@ internal sealed class AddContactPointHandler(
             isPrimary: request.MakePrimary,
             validFrom: DateTimeOffset.UtcNow,
             actor: currentUser.Id);
+
+        // Before SaveChanges: the outbox row belongs to this transaction, or M02 could revoke a
+        // link over an address that was never committed.
+        await announcer.AnnounceAsync(
+            currentUser.TenantId, client.Id, added.Type, currentUser.Id,
+            "Nouvelle coordonnée enregistrée", ct);
 
         await db.SaveChangesAsync(ct);
 

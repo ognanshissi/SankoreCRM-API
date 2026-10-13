@@ -25,7 +25,8 @@ public sealed class CloseContactPointHandlerTests : IDisposable
     private CloseContactPointHandler CreateHandler(
         CustomersDbContext db,
         IAgencyScopeProvider? scope = null)
-        => new(db, TestDoubles.CurrentUser(TenantId, UserId), scope ?? TestDoubles.AgencyScope());
+        => new(db, TestDoubles.CurrentUser(TenantId, UserId), scope ?? TestDoubles.AgencyScope(),
+               TestDoubles.ContactPointAnnouncer());
 
     /// <summary>Builds a client already carrying the requested contact points.</summary>
     private async Task<Client> SeedClientWithAsync(

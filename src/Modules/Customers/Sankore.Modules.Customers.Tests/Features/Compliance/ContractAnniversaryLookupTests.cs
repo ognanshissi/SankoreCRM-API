@@ -69,7 +69,8 @@ public sealed class ContractAnniversaryLookupTests : IDisposable
     /// started using one would NullReference here rather than pass quietly.
     /// </para>
     /// </summary>
-    private static CustomersModuleFacade Facade(CustomersDbContext db) => new(db, null!, null!, null!);
+    private static CustomersModuleFacade Facade(CustomersDbContext db)
+        => new(db, null!, null!, null!, null!);
 
     private async Task<IReadOnlyList<Guid>> OnAsync(DateOnly day)
     {

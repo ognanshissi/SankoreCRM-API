@@ -15,6 +15,7 @@ using Sankore.Modules.Kyc.Features.Documents;
 using Sankore.Modules.Kyc.Features.Duplicates;
 using Sankore.Modules.Kyc.Features.Files;
 using Sankore.Modules.Kyc.Features.Limits;
+using Sankore.Modules.Kyc.Features.RemoteInvitations;
 using Sankore.Modules.Kyc.Features.Reviews;
 using Sankore.Modules.Kyc.Features.Settings;
 using Sankore.Modules.Kyc.Features.Verification;
@@ -200,6 +201,23 @@ public static class KycModule
         services.AddTransient<Features.Reviews.ProcessTenantKycReviewsJob>();
         services.AddTransient<Features.Verification.ReplayKycVerificationJob>();
 
+        // ── Remote collection links (KRM-B-03/04) ───────────────────────────
+        //
+        // The token minter is a SINGLETON: it holds no state and its only dependency is the
+        // platform's CSPRNG. Everything else is scoped like the rest of the module.
+        services.TryAddSingleton<Infrastructure.RemoteLinks.IKycRemoteLinkTokens,
+                                 Infrastructure.RemoteLinks.KycRemoteLinkTokens>();
+
+        // "May the caller act on this file?", shared by every agent-facing single-file slice. One
+        // place, because a perimeter check each slice re-implements is one a slice will be missing.
+        services.AddScoped<Features.Files.KycFileAccess>();
+
+        services.AddScoped<Features.RemoteInvitations.KycRemoteEligibility>();
+        services.AddScoped<Features.RemoteInvitations.KycRemoteInvitationRevoker>();
+        services.AddTransient<Features.RemoteInvitations.SendKycRemoteInvitationJob>();
+        services.AddTransient<Features.RemoteInvitations.Expiry.KycRemoteInvitationExpiryOrchestratorJob>();
+        services.AddTransient<Features.RemoteInvitations.Expiry.ExpireTenantKycRemoteInvitationsJob>();
+
         services.AddScoped<IKycSettings, KycSettingsService>();
         services.AddScoped<IKycModule, KycModuleFacade>();
 
@@ -233,6 +251,7 @@ public static class KycModule
         app.MapKycDocumentsEndpoints();
         app.MapKycApprovalEndpoints();
         app.MapKycReviewsEndpoints();
+        app.MapKycRemoteInvitationsEndpoints();
         app.MapKycSettingsEndpoints();
         return app;
     }

@@ -37,5 +37,17 @@ internal sealed class UpdateComplianceSettingsValidator
         RuleFor(c => c.PepPostMandateMonths)
             .InclusiveBetween(0, 600)
             .WithMessage("'{PropertyName}' must be between 0 and 600 months.");
+
+        // KRM-B-01. The ceiling and the sample rate are validated whatever the switch says, same
+        // reasoning as the PEP window above.
+        RuleFor(c => c.KycAutoApprovalMaxTier)
+            .NotEmpty()
+            .Must(v => KycRemotePolicyValues.NormalizeTier(v) is not null)
+            .WithMessage(
+                $"'{{PropertyName}}' must be one of: {string.Join(", ", KycRemotePolicyValues.Tiers)}.");
+
+        RuleFor(c => c.KycAutoApprovalSamplePct)
+            .InclusiveBetween(0, 100)
+            .WithMessage("'{PropertyName}' is a percentage between 0 and 100.");
     }
 }

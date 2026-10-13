@@ -38,6 +38,7 @@ internal sealed class ManuallyValidateKycFileHandler(
     KycDbContext db,
     ICurrentUser currentUser,
     ISender sender,
+    Features.RemoteInvitations.KycRemoteInvitationRevoker remoteInvitations,
     TimeProvider clock,
     ILogger<ManuallyValidateKycFileHandler> logger)
     : IRequestHandler<ManuallyValidateKycFileCommand, Result<ManuallyValidateKycFileResult>>
@@ -58,6 +59,16 @@ internal sealed class ManuallyValidateKycFileHandler(
         var validated = file.ManuallyValidate(currentUser.Id, cmd.Reason, clock);
         if (validated.IsFailure)
             return Result.Fail<ManuallyValidateKycFileResult>(validated.Error!);
+
+        // KRM-B-04: a validator has asserted the evidence by hand, so the file is no longer
+        // collecting and the customer's link — typically issued when the file went back for a
+        // complement — must stop working. Committed by the save below, as part of the same unit of
+        // work: a link withdrawn without the validation, or a validation with a live link still
+        // inviting uploads, are both worse than either alone.
+        await remoteInvitations.RevokeActiveAsync(
+            currentUser.TenantId, file.Id,
+            Features.RemoteInvitations.KycRemoteInvitationRevoker.FileLeftCollectionReason,
+            currentUser.Id, ct);
 
         try
         {

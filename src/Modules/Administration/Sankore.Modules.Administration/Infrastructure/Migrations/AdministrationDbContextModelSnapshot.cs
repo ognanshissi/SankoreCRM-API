@@ -727,6 +727,26 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("fatca_required_at");
 
+                    b.Property<bool>("KycAutoApprovalEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("kyc_auto_approval_enabled");
+
+                    b.Property<string>("KycAutoApprovalMaxTier")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Simplified")
+                        .HasColumnName("kyc_auto_approval_max_tier");
+
+                    b.Property<int>("KycAutoApprovalSamplePct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(10)
+                        .HasColumnName("kyc_auto_approval_sample_pct");
+
                     b.Property<bool>("PepEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1091,6 +1111,13 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<string>("KycRemotePolicy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("kyc_remote_policy")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<string>("Name")
                         .IsRequired()

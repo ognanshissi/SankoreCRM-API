@@ -632,6 +632,144 @@ How to take a file from creation to validated — the two accounts the four-eyes
 circuit per vigilance level, the degraded manual path and the cases pinning each of them — is in
 `docs/plan-test-validation-kyc.md`.
 
+### Remote KYC collection: the link, and where its decisions live (KRM-B-01…04)
+
+A converted customer can be sent a single-use link and deposit their identity documents from
+their own phone. Lot 1 is the link itself — issuing it, sending it, re-sending it, letting it
+expire — plus the per-product policy that decides whether it is sent at all. The public pages the
+customer walks are KRM-B-05 onwards and do not exist yet, so a link clicked today reaches a route
+the Angular app has not got.
+
+**The policy is on the PRODUCT, the ceiling is on the TENANT, and that split is the feature.**
+`ProductSpeciality.KycRemotePolicy` (typed jsonb, same converter+comparer pair as
+`BeneficiaryPolicy`) says whether this line may be collected remotely, whether the machine may
+approve, which tier it requires, the score floor, the accepted document types and the link
+lifetime. `ComplianceSettings.KycAutoApprovalEnabled` / `KycAutoApprovalMaxTier` /
+`KycAutoApprovalSamplePct` say whether the institution permits machine approval at all and how far.
+Both are read by the same two modules, which is why the ceiling is in `compliance_settings` and
+**not** in `kyc_settings`: `SetKycRemotePolicyHandler` has to refuse "Automatic" on a tenant that
+forbids it, and this assembly cannot reference M02. A product saved as Automatic that then behaved
+manually would be the one discrepancy an administrator cannot debug.
+
+Turning the tenant switch off rewrites no product and un-approves no file — the product keeps
+saying what the institution once wanted and the gate stops honouring it, which is what lets an
+officer disable the feature in one click without losing a catalogue's worth of configuration.
+`SetKycRemotePolicyHandlerTests` pins that.
+
+**`KYC_AUTO_APPROVAL_ENABLED` defaults to FALSE and `PepEnabled` defaults to TRUE** — opposite
+directions, both deliberate. Vigilance off by default would drop an LBC/FT obligation as a side
+effect of a deployment; machine approval on by default would remove the human from a KYC circuit
+nobody asked to automate. `ComplianceSettingsDefaultsTests` spells both out rather than only
+comparing the facade to the entity, because that comparison passes just as well with both sides
+wrong.
+
+**The token is minted at SEND time, not at creation, and `token_hash` is therefore nullable.**
+The invitation row is created at the conversion in `Scheduled` so the agent sees immediately that
+a link is owed; `SendKycRemoteInvitationJob` runs minutes later, mints 32 random bytes, stores
+SHA-256 of them and mails the URL. Minting at creation would mean carrying the clear token in the
+job's arguments — and Hangfire arguments are rows in the shared application database and lines on
+a dashboard, the two places hash-only storage exists to keep a bearer credential out of. The clear
+value therefore lives inside one method, and `AttachTokenAndMarkSent` writes the hash and the
+status together so there is never a walkable link nobody was told about, nor a link marked sent
+that cannot be used.
+
+The token travels in the URL **fragment** (`/kyc/verification#t=…`), which is never sent to the
+server: it cannot appear in an nginx access log, in a proxy's log, or in a `Referer`. `BuildLink`
+always emits `https` whatever the stored FQDN looks like — a browser refuses `getUserMedia` on an
+insecure origin, so a link on http would open a page whose camera never starts for a reason no log
+mentions.
+
+**The email carries the link and deliberately NOT the client number.** The number arrives in
+`client.welcome` and is the secret the link is checked against; one intercepted message must not be
+enough to walk the whole flow. `KYC_REMOTE_EMAIL_DELAY_MINUTES` (default 5) exists only to ORDER
+the two messages — both are queued within the same second by two different modules, and without it
+the customer can reach an identification form asking for a number they have not received.
+
+**The link is issued from `KycRequestedConsumer`, and KRM-B-03 said `KycInitiated`.** That would
+not have worked: `ClientCreatedKycConsumer` usually wins the race, so `KycInitiated` is published
+by a trigger that does not know the product, and the decision would read a file whose
+`ProductLineId` is still null and conclude "product not eligible" for most conversions. The
+product line reaches M02 on `KycRequestedIntegrationEvent` and nowhere else (KRM-B-02), so the
+issue happens there — on BOTH branches of that consumer, including `AlreadyExisted`, which is the
+common one. `IssueKycRemoteInvitationCommand.ReplaceActive` is false for that path and true for an
+agent: a redelivered event reports the existing link and mails nothing, while an agent clicking
+"renvoyer" revokes the old one, because at most one link into a file may ever be live.
+
+**`KycFile.ResponsibleAgentId` is an ADDRESS, not a four-eyes anchor.** It is who gets told that a
+remote file is waiting and who gets chased when it sits there. `LastSubmittedBy` and
+`ManuallyValidatedBy` are the anchors, and a remotely submitted file will deliberately carry SYSTEM
+in the first — which is precisely what leaves this agent free to decide.
+`AttachConversionContext` refuses to touch a file whose `Tier` is no longer `None`: a customer
+subscribing a SECOND product walks the same path, and re-pointing their validated file at the new
+line would make the evidence appear to have been collected for a product nobody validated it for.
+
+**Three things revoke a link, and the fourth that looks like it should does not.** The customer's
+email changing (the credential is in a mailbox they no longer read), their date of birth changing
+(the identification question no longer has the answer they were given — they would fail five times
+and lock themselves out), and the file leaving collection through the back office. Every other
+sensitive change — a corrected surname, a new document number, a postal address — leaves the link
+valid, and revoking on those would make a routine correction cost the customer a new email.
+`KycRemoteInvitationRevoker` owns the three motives and **never saves**: each caller is inside a
+transaction that is about to commit the change that justified the revocation.
+
+**M01's contact-point slices now publish `ClientSensitiveDataChangedEvent`**, which they did not
+before. Nothing outside M01 cared which address was on file until M02 started mailing a credential
+to it; the event already means "these protected fields changed, names only", so
+`ContactPointChangeAnnouncer` reuses it rather than adding a second, contact-point-shaped event.
+
+**`ICustomersModule` gained a SEND, not an address getter.** `NotifyClientAsync` mirrors
+`IAdministrationModule.NotifyUserAsync` for the same reason: M01 owns the encrypted address, the
+client's locale preference and the fallback to the tenant default, and a caller handed an address
+would duplicate that fallback — a wrong locale does not degrade gracefully, PostgreSQL matches
+template locales case-sensitively and a miss mails the message's own JSON payload as its body.
+`ClientEmailNotifier` is the single decryption path, shared with `ClientWelcomeEmailConsumer`,
+which used to carry its own copy. `HasEmailAsync` (no decrypt, for the gate) and
+`GetMaskedEmailAsync` (decrypts, for the confirmation dialog) are separate on purpose: a gate
+deciding whether a link can be issued must not depend on the field-encryption key being right.
+
+**The nightly expiry sweep is not a security control.** `KycRemoteInvitation.IsUsableAt` compares
+the clock, so a link is dead the moment its window closes whether or not a job has run. The sweep
+makes the dead link VISIBLE — it moves the row to `Expired` so the agent's panel says "expiré"
+instead of "envoyé", and it tells the responsible agent that a customer they converted never
+finished.
+
+**Why the agent's panel computes its refusal reason on every read.** The three causes — no email,
+product not eligible, file no longer collecting — all change on their own. A stored reason would
+keep telling an agent "pas d'email" minutes after they typed one in, and the only way out of that
+is a column somebody has to remember to clear. `KycRemoteEligibility` answers the issue command and
+the read with the same verdict, so the screen can never explain a cause the server did not act on.
+
+**`kyc:remote-invite` is its own permission** and not part of `kyc:manage`: collecting evidence
+inside the back office and mailing a bearer credential out of the building are not the same act.
+A permission says which VERBS a caller has and nothing about which FILES they have them on, which
+is why every agent-facing slice here also goes through `KycFileAccess`.
+
+**`KycFileAccess` exists because one slice was missing its perimeter check.** The issue endpoint
+shipped with `kyc:remote-invite` and no scope, reaching the same command the conversion uses — and
+that one runs as SYSTEM and is deliberately unscoped. An agent in one branch holding a file id from
+another could therefore have the system mail a single-use link into that branch's customer file,
+and revoke the link that customer was already holding. The hole was invisible in review precisely
+because its two neighbours, list and revoke, each carried their own correct copy of the twelve
+lines.
+
+The fix is structural rather than a third copy. `KycFileAccess.CanActOnAsync` answers "may this
+caller act on this file" once, for the three agent-facing slices, and folds "does not exist" and
+"not yours" into one `KYC_FILE_NOT_FOUND` — telling them apart is what a 403 does, and a 403
+confirms another branch's file exists. The SYSTEM path deliberately does NOT go through it: the
+ambient `ICurrentUser` in a conversion consumer is the converting agent, so scoping it would
+silently refuse a link whenever a head-office user converts a lead for a branch customer, which
+`KycFile.AgencyId` already documents as ordinary.
+
+**That is also why there are two issue commands.** `IssueKycRemoteInvitationCommand` is the
+unscoped one and stays reachable from `KycRequestedConsumer` alone;
+`ReissueKycRemoteInvitationCommand` checks the perimeter and then delegates, and is the only one
+the HTTP surface can reach. A boolean on a single command would have closed the hole and left the
+trap — the unscoped path would still be one parameter away from any future endpoint. Use
+`KycFileAccess` for a single file by id and never to post-filter a page: `GetKycFileHandler` and
+`ListKycFilesHandler` apply the perimeter as a SQL predicate instead, because a list has to filter
+before it counts or `TotalCount` and the page boundaries are computed over rows the caller may not
+see.
+
 ### Lead e-mail is encrypted — never compare it in a query
 
 `Lead.Email` is plaintext in the domain and AES-256-GCM ciphertext in the column (`email_enc`),

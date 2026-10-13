@@ -74,6 +74,11 @@ public static class CustomersModule
         services.AddScoped<IInboxGuard, InboxGuard>();
         services.AddScoped<IPhoneticKeyCalculator, WestAfricanPhoneticKeyCalculator>();
 
+        // The single path from a client id to a sent email (KRM-B-03). Shared by the welcome
+        // consumer and by ICustomersModule.NotifyClientAsync, so the address is decrypted in one
+        // place and the locale fallback is written once.
+        services.AddScoped<Infrastructure.Notifications.ClientEmailNotifier>();
+
         // ── Cross-module surface ────────────────────────────────────────────
         services.AddScoped<ICustomersModule, CustomersModuleFacade>();
 

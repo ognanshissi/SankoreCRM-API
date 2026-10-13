@@ -41,7 +41,20 @@ public sealed record UpdateComplianceSettingsCommand(
     string FatcaRequiredAt,
     bool FatcaForCoHolders,
     bool PepEnabled,
-    int PepPostMandateMonths) : IRequest<Result>, ICommand, IResourceCommand
+    int PepPostMandateMonths,
+    /// <summary>
+    /// Whether any product may be configured to approve a remote KYC file automatically
+    /// (KRM-B-01). Switching it off stops new products being saved as Automatic and makes M02
+    /// route every remote file to a human; it rewrites no product and un-approves no file.
+    /// </summary>
+    bool KycAutoApprovalEnabled = false,
+    /// <summary>
+    /// Highest tier the machine may grant — "Simplified" (default) or "Full". Validated even while
+    /// the switch is off: the value stored now is the one a later enable will use.
+    /// </summary>
+    string KycAutoApprovalMaxTier = "Simplified",
+    /// <summary>Share of automatic approvals drawn for review afterwards (KRM-B-11), 0..100.</summary>
+    int KycAutoApprovalSamplePct = 10) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "ComplianceSettings";
 

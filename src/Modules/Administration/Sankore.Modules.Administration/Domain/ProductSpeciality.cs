@@ -56,6 +56,13 @@ public sealed class ProductSpeciality
     /// </summary>
     public bool AllowMultipleHoldings { get; private set; } = true;
 
+    /// <summary>
+    /// Whether this line may be KYC'd at a distance after a conversion, and how such a file is
+    /// validated (KRM-B-01). Never null: an unconfigured line carries
+    /// <see cref="KycRemotePolicy.Disabled"/>, which sends no link at all.
+    /// </summary>
+    public KycRemotePolicy KycRemotePolicy { get; private set; } = KycRemotePolicy.Disabled;
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     private ProductSpeciality() { }
@@ -82,6 +89,7 @@ public sealed class ProductSpeciality
             CreatedAt      = DateTimeOffset.UtcNow,
             BeneficiaryPolicy = BeneficiaryPolicy.None,
             AllowMultipleHoldings = true,
+            KycRemotePolicy = KycRemotePolicy.Disabled,
         };
 
     public void Update(
@@ -111,6 +119,18 @@ public sealed class ProductSpeciality
     }
 
     public void SetAllowMultipleHoldings(bool allow) => AllowMultipleHoldings = allow;
+
+    /// <summary>
+    /// Replaces the line's remote-KYC policy (KRM-B-01). A full replacement for the same reason
+    /// <see cref="SetBeneficiaryPolicy"/> is one: the fields constrain each other — an automatic
+    /// mode means nothing without a score floor, a required document kind means nothing on a line
+    /// that collects nothing — so there is no setter that can leave it half-applied.
+    /// </summary>
+    public void SetKycRemotePolicy(KycRemotePolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        KycRemotePolicy = policy;
+    }
 
     public void LinkToCbs(string businessPlatformName, string? businessProductId)
     {

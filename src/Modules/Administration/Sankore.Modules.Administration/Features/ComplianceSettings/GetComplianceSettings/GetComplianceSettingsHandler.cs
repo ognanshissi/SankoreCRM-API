@@ -12,6 +12,13 @@ internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
     private static readonly IReadOnlyList<string> Regimes = Enum.GetNames<FatcaRegime>();
     private static readonly IReadOnlyList<string> RequiredAtValues = Enum.GetNames<FatcaRequiredAt>();
 
+    /// <summary>
+    /// The tiers the auto-approval ceiling may take. Spelled from <c>KycRemotePolicyValues</c>
+    /// rather than from M02's enum, which this assembly cannot reference — see that class for why
+    /// the duplication is accepted.
+    /// </summary>
+    private static readonly IReadOnlyList<string> KycTiers = KycRemotePolicyValues.Tiers;
+
     public async Task<Result<ComplianceSettingsResponse>> Handle(
         GetComplianceSettingsQuery request, CancellationToken ct)
     {
@@ -32,9 +39,15 @@ internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
                 // for an institution that has simply never opened it.
                 PepEnabled:           true,
                 PepPostMandateMonths: Domain.ComplianceSettings.DefaultPepPostMandateMonths,
+                // OFF for a tenant with no row, and the screen must say so plainly: an institution
+                // that has never opened this page has not adopted machine approval.
+                KycAutoApprovalEnabled:   false,
+                KycAutoApprovalMaxTier:   KycRemotePolicyValues.SimplifiedTier,
+                KycAutoApprovalSamplePct: Domain.ComplianceSettings.DefaultKycAutoApprovalSamplePct,
                 UpdatedAt:            DateTimeOffset.UtcNow,
                 AllowedRegimes:       Regimes,
-                AllowedRequiredAt:    RequiredAtValues));
+                AllowedRequiredAt:    RequiredAtValues,
+                AllowedKycTiers:      KycTiers));
         }
 
         return Result.Ok(new ComplianceSettingsResponse(
@@ -45,8 +58,12 @@ internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
             settings.FatcaForCoHolders,
             settings.PepEnabled,
             settings.PepPostMandateMonths,
+            settings.KycAutoApprovalEnabled,
+            settings.KycAutoApprovalMaxTier,
+            settings.KycAutoApprovalSamplePct,
             settings.UpdatedAt,
             Regimes,
-            RequiredAtValues));
+            RequiredAtValues,
+            KycTiers));
     }
 }

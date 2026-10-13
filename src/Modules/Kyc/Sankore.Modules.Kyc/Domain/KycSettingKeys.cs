@@ -50,6 +50,22 @@ public static class KycSettingKeys
     public const string FaceMatchMaxAttempts = "face-match-max-attempts";
     public const string VerificationRejectionFloor = "verification-rejection-floor";
 
+    // ── Remote collection (KRM-B-03) ────────────────────────────────────────
+
+    /// <summary>
+    /// How long after a conversion the collection-link email is sent, in minutes.
+    ///
+    /// <para>
+    /// It exists to ORDER two messages, not to pace anything. The welcome email carries the client
+    /// number the customer will be asked for on the public page, and both messages are queued
+    /// within the same second by two different modules — so without a delay the link can easily
+    /// arrive first, and the customer reaches an identification form asking for a number they have
+    /// not received. Five minutes is generous for a mail queue and still short enough that nobody
+    /// has closed their inbox.
+    /// </para>
+    /// </summary>
+    public const string RemoteEmailDelayMinutes = "remote-email-delay-minutes";
+
     public const string TypeString = "string";
     public const string TypeInt = "int";
     public const string TypeBool = "bool";
@@ -86,6 +102,11 @@ public static class KycSettingKeys
         new(VerificationRejectionFloor, "40", TypeInt,
             "Score de confiance en dessous duquel le dossier repart en complément au lieu d'entrer "
             + "dans le circuit d'approbation."),
+
+        new(RemoteEmailDelayMinutes, "5", TypeInt,
+            "Délai, en minutes après la conversion, avant l'envoi du lien de dépôt des pièces à "
+            + "distance. Laisse arriver d'abord l'email de bienvenue, qui porte le numéro client "
+            + "demandé sur la page publique."),
     ];
 
     private static readonly Dictionary<string, KycSettingDefault> ByKey =

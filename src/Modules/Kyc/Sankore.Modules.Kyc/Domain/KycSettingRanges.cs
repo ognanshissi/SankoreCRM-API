@@ -69,6 +69,14 @@ public static class KycSettingRanges
                 => Int(value, 1, 365,
                     "L'ancienneté maximale du justificatif de domicile doit tenir entre 1 et 365 jours."),
 
+            // Zero is allowed: an institution whose mail provider is reliably ordered is entitled
+            // to send both messages at once. The ceiling is a day — a link the customer receives
+            // the next morning is one they no longer connect to the conversation they just had
+            // with their agent.
+            KycSettingKeys.RemoteEmailDelayMinutes
+                => Int(value, 0, 1440,
+                    "Le délai d'envoi du lien doit tenir entre 0 et 1440 minutes (24 h)."),
+
             _ => null,
         };
     }

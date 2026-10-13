@@ -26,6 +26,18 @@ internal sealed class KycFileConfiguration : IEntityTypeConfiguration<KycFile>
 
         b.Property(f => f.Version).IsRowVersion();
 
+        // KRM-B-02. Opaque references with no foreign key, like CustomerId and AgencyId: the
+        // product line lives in M12's schema and the agent in M12's identity tables, and nothing
+        // here joins across a schema boundary.
+        //
+        // NO index on either, deliberately. Neither is a predicate: the product is read with the
+        // file in hand, and the responsible agent is an address a notification resolves, not a
+        // filter — the list screens narrow by agency and status, which ix_kyc_files_agency_status
+        // already covers. An index that no query uses is a write cost on the hottest table of the
+        // module. If "my remote files" ever becomes a dashboard filter, that is when it earns one.
+        b.Property(f => f.ProductLineId);
+        b.Property(f => f.ResponsibleAgentId);
+
         // One OPEN file per customer. Rejected and suspended files stay as evidence, so the
         // constraint is filtered rather than a plain unique index — and it is what makes
         // concurrent creation safe: the loser gets a unique violation, reported as

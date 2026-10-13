@@ -24,8 +24,23 @@ public sealed record ComplianceSettingsResponse(
     /// </summary>
     bool PepEnabled,
     int PepPostMandateMonths,
+    /// <summary>
+    /// Whether this institution allows a remote KYC file to be approved by the machine
+    /// (KRM-B-01). FALSE for a tenant that has never opened the screen: removing the human from a
+    /// KYC circuit is never a default.
+    /// </summary>
+    bool KycAutoApprovalEnabled,
+    /// <summary>Highest tier the machine may grant — "Simplified" or "Full".</summary>
+    string KycAutoApprovalMaxTier,
+    /// <summary>Share of automatic approvals reviewed afterwards (KRM-B-11), 0..100.</summary>
+    int KycAutoApprovalSamplePct,
     DateTimeOffset UpdatedAt,
     /// <summary>Accepted values for <c>FatcaRegime</c>, so the client does not hard-code the enum.</summary>
     IReadOnlyList<string> AllowedRegimes,
     /// <summary>Accepted values for <c>FatcaRequiredAt</c>.</summary>
-    IReadOnlyList<string> AllowedRequiredAt);
+    IReadOnlyList<string> AllowedRequiredAt,
+    /// <summary>
+    /// Accepted values for <c>KycAutoApprovalMaxTier</c>, so the product screen can offer the
+    /// ceiling without hard-coding M02's tier names.
+    /// </summary>
+    IReadOnlyList<string> AllowedKycTiers);

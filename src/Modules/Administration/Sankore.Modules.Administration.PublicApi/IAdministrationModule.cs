@@ -180,6 +180,28 @@ public interface IAdministrationModule
         Guid tenantId, Guid productLineId, CancellationToken ct);
 
     /// <summary>
+    /// Whether a product line may be KYC'd remotely and how such a file is validated (KRM-B-01).
+    /// Read by M02 when a converted lead's file is opened, and again when its score comes back.
+    ///
+    /// <para>
+    /// Cached for five minutes over <c>IDistributedCache</c> and invalidated by every write to the
+    /// product, like the beneficiary policy next door. A conversion calls this once, so the cache
+    /// is about the burst a batch import produces rather than about a hot path.
+    /// </para>
+    /// </summary>
+    /// <param name="productLineId">
+    /// A <c>ProductSpeciality</c> id, opaque to the caller. <c>Guid.Empty</c> answers null without
+    /// a query: a KYC file opened for a product nobody named has no policy to apply.
+    /// </param>
+    /// <returns>
+    /// <c>null</c> when the line does not exist in that tenant — a DANGLING reference, which is
+    /// not the same thing as a line that forbids remote KYC. Both end with no link being sent, but
+    /// only the first is a bug, and the agent is told which.
+    /// </returns>
+    Task<KycRemotePolicyDto?> GetKycRemotePolicyAsync(
+        Guid tenantId, Guid productLineId, CancellationToken ct);
+
+    /// <summary>
     /// Resolves a free-text product label to a product line id (BNF-B-01), or <c>null</c> when
     /// nothing matches exactly.
     ///
@@ -225,6 +247,41 @@ public sealed record BeneficiaryPolicyDto(
     string? RequiredKycTier,
     string? IntegrationSystem);
 
+/// <summary>
+/// A product line's remote-KYC policy as other modules see it (KRM-B-01). Enum-typed concepts are
+/// strings so no consumer references the Administration domain assembly — and here they already
+/// ARE strings in the domain, because they name M02's own enums.
+/// </summary>
+/// <param name="ProductName">
+/// What an agent reads. Carried so a notification can name the product without a second call into
+/// this module — a mail telling an agent "a remote file is waiting" is useless without it.
+/// </param>
+/// <param name="IsActive">
+/// <c>false</c> once the line has been retired. Carried rather than inferred, because a retired
+/// line keeps its policy and M02 must be able to say "this product is no longer sold" instead of
+/// "this product forbids remote KYC".
+/// </param>
+/// <param name="Enabled">Whether a conversion on this line sends a remote-collection link.</param>
+/// <param name="ValidationMode">"Manual" | "Automatic".</param>
+/// <param name="RequiredTier">"Simplified" | "Full", or null when the line states no level.</param>
+/// <param name="MinAutoScore">Score floor for an automatic approval, 50..100.</param>
+/// <param name="RequiredDocuments"><c>KycDocumentKind</c> names the customer must send.</param>
+/// <param name="AllowedDocumentTypes"><c>KycDocumentType</c> names accepted as identity document.</param>
+/// <param name="LinkValidityHours">Lifetime of the link, in hours.</param>
+public sealed record KycRemotePolicyDto(
+    Guid ProductLineId,
+    string ProductCode,
+    string ProductName,
+    string Category,
+    bool IsActive,
+    bool Enabled,
+    string ValidationMode,
+    string? RequiredTier,
+    int MinAutoScore,
+    IReadOnlyList<string> RequiredDocuments,
+    IReadOnlyList<string> AllowedDocumentTypes,
+    int LinkValidityHours);
+
 /// <param name="SharesMustTotal100">
 /// Whether the quote-parts of this role must sum to 100% within a rank (BNF-B-15).
 /// </param>
@@ -266,7 +323,20 @@ public sealed record ComplianceSettingsDto(
     /// M13 stops requiring a PEP declaration when it is off; TRUE for a tenant with no row.
     /// </summary>
     bool PepEnabled,
-    int PepPostMandateMonths);
+    int PepPostMandateMonths,
+    /// <summary>
+    /// Whether this institution allows a remote KYC file to be approved by the machine at all
+    /// (KRM-B-01). FALSE for a tenant with no row, and false is also what an outage answers: the
+    /// decision to remove the human from a KYC circuit is never taken by default.
+    /// </summary>
+    bool KycAutoApprovalEnabled = false,
+    /// <summary>
+    /// Highest tier the machine may grant — "Simplified" or "Full". "Simplified" for a tenant with
+    /// no row, which bounds a wrong machine decision by the simplified ceilings.
+    /// </summary>
+    string KycAutoApprovalMaxTier = "Simplified",
+    /// <summary>Share of automatic approvals drawn for an after-the-fact review (KRM-B-11), 0..100.</summary>
+    int KycAutoApprovalSamplePct = 10);
 
 /// <summary>
 /// Read-only projection of tenant email provider settings exposed to

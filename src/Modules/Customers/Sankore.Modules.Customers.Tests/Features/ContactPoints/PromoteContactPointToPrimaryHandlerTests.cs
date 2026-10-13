@@ -25,7 +25,8 @@ public sealed class PromoteContactPointToPrimaryHandlerTests : IDisposable
     private PromoteContactPointToPrimaryHandler CreateHandler(
         CustomersDbContext db,
         IAgencyScopeProvider? scope = null)
-        => new(db, TestDoubles.CurrentUser(TenantId, UserId), scope ?? TestDoubles.AgencyScope());
+        => new(db, TestDoubles.CurrentUser(TenantId, UserId), scope ?? TestDoubles.AgencyScope(),
+               TestDoubles.ContactPointAnnouncer());
 
     private void Add(Client client, string value, bool primary)
         => client.AddContactPoint(

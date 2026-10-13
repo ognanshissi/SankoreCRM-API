@@ -28,7 +28,14 @@ internal sealed record CreateKycFileCommand(
     /// level would put management on every high-risk file.
     /// </para>
     /// </summary>
-    bool IsPoliticallyExposed = false
+    bool IsPoliticallyExposed = false,
+
+    /// <summary>
+    /// The catalogue line the customer was converted on (KRM-B-02), or null when the trigger knows
+    /// of none — a counter enrolment, or a lead whose product label matched nothing. It decides
+    /// whether a remote-collection link is sent and how the file is validated.
+    /// </summary>
+    Guid? ProductLineId = null
 ) : IRequest<Result<CreateKycFileResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "KycFile";

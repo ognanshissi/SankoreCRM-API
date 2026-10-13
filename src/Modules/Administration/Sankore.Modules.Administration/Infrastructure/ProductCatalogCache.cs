@@ -45,6 +45,15 @@ internal sealed class ProductCatalogCache(IDistributedCache? cache = null)
     internal static string CatalogueKey(Guid tenantId)
         => $"m12:product-catalogue:{tenantId}";
 
+    /// <summary>
+    /// The remote-KYC policy of one line (KRM-B-01). Its OWN key rather than a member of the
+    /// beneficiary-policy payload: the two are read by different callers at different moments — a
+    /// lead's completeness gate versus a conversion's link decision — and sharing one entry would
+    /// make every beneficiary-policy read deserialise a payload it has no use for.
+    /// </summary>
+    internal static string RemoteKycPolicyKey(Guid tenantId, Guid productLineId)
+        => $"m12:product-remote-kyc:{tenantId}:{productLineId}";
+
     internal async Task<T?> GetAsync<T>(string key, CancellationToken ct) where T : class
     {
         if (cache is null)
@@ -96,7 +105,10 @@ internal sealed class ProductCatalogCache(IDistributedCache? cache = null)
         try
         {
             if (productLineId is { } lineId)
+            {
                 await cache.RemoveAsync(PolicyKey(tenantId, lineId), ct);
+                await cache.RemoveAsync(RemoteKycPolicyKey(tenantId, lineId), ct);
+            }
 
             await cache.RemoveAsync(CatalogueKey(tenantId), ct);
         }

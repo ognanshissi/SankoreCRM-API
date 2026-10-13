@@ -522,6 +522,52 @@ internal sealed class AdministrationModuleFacade(
         return dto;
     }
 
+    public async Task<KycRemotePolicyDto?> GetKycRemotePolicyAsync(
+        Guid tenantId, Guid productLineId, CancellationToken ct)
+    {
+        if (productLineId == Guid.Empty)
+            return null;
+
+        var key = ProductCatalogCache.RemoteKycPolicyKey(tenantId, productLineId);
+
+        var cached = await catalogCache.GetAsync<KycRemotePolicyDto>(key, ct);
+        if (cached is not null)
+            return cached;
+
+        // IgnoreQueryFilters + explicit tenant predicate: the caller is M02's consumer of the
+        // conversion event, which has no ambient tenant of its own.
+        var line = await db.ProductSpecialities
+            .IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId && p.Id == productLineId)
+            .Select(p => new
+            {
+                p.Id, p.Code, p.Name, p.Category, p.IsActive, p.KycRemotePolicy
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (line is null)
+            return null;   // dangling reference — NOT the same as "forbids remote KYC"
+
+        var policy = line.KycRemotePolicy;
+
+        var dto = new KycRemotePolicyDto(
+            ProductLineId:        line.Id,
+            ProductCode:          line.Code,
+            ProductName:          line.Name,
+            Category:             line.Category.ToString(),
+            IsActive:             line.IsActive,
+            Enabled:              policy.Enabled,
+            ValidationMode:       policy.ValidationMode,
+            RequiredTier:         policy.RequiredTier,
+            MinAutoScore:         policy.MinAutoScore,
+            RequiredDocuments:    policy.Documents,
+            AllowedDocumentTypes: policy.DocumentTypes,
+            LinkValidityHours:    policy.LinkValidityHours);
+
+        await catalogCache.SetAsync(key, dto, ct);
+        return dto;
+    }
+
     public async Task<Guid?> ResolveProductLineAsync(
         Guid tenantId, string? label, CancellationToken ct)
     {
@@ -603,7 +649,10 @@ internal sealed class AdministrationModuleFacade(
                 s.FatcaRequiredAt.ToString(),
                 s.FatcaForCoHolders,
                 s.PepEnabled,
-                s.PepPostMandateMonths))
+                s.PepPostMandateMonths,
+                s.KycAutoApprovalEnabled,
+                s.KycAutoApprovalMaxTier,
+                s.KycAutoApprovalSamplePct))
             .FirstOrDefaultAsync(ct);
 
         // No row means the tenant has never opened the compliance screen, which is the same thing
@@ -627,7 +676,13 @@ internal sealed class AdministrationModuleFacade(
         // TRUE, matching CreateDefault: a tenant with no row keeps PEP vigilance, because the
         // alternative is switching off an LBC/FT obligation as a side effect of a deployment.
         PepEnabled:           true,
-        PepPostMandateMonths: Domain.ComplianceSettings.DefaultPepPostMandateMonths);
+        PepPostMandateMonths: Domain.ComplianceSettings.DefaultPepPostMandateMonths,
+        // FALSE, matching CreateDefault, and the opposite reasoning to PepEnabled's: a tenant with
+        // no row has never adopted machine approval, and an absent row must not be read as consent
+        // to remove the human from a KYC circuit.
+        KycAutoApprovalEnabled:   false,
+        KycAutoApprovalMaxTier:   Domain.KycRemotePolicyValues.SimplifiedTier,
+        KycAutoApprovalSamplePct: Domain.ComplianceSettings.DefaultKycAutoApprovalSamplePct);
 
     public async Task<IReadOnlyDictionary<Guid, string>> GetUserNamesAsync(
         Guid tenantId, IReadOnlyCollection<Guid> userIds, CancellationToken ct)

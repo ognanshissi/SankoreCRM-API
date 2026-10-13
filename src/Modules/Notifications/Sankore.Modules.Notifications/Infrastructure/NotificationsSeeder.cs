@@ -28,6 +28,8 @@ internal static class NotificationsSeeder
         await SeedHouseholdDesignationsToReviewAsync(db, logger, ct);
         await SeedClaimDocumentsRequiredAsync(db, logger, ct);
         await SeedComplaintDeadlineAsync(db, logger, ct);
+        await SeedKycRemoteInvitationAsync(db, logger, ct);
+        await SeedKycRemoteLinkExpiredAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -1286,6 +1288,234 @@ internal static class NotificationsSeeder
                       </p>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">{{ company_name }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── kyc.remote-invitation ───────────────────────────────────────────────
+
+    /// <summary>
+    /// KRM-B-03: the second message a newly converted customer receives, carrying the single-use
+    /// link to their own identification page.
+    ///
+    /// <para>
+    /// <b>It carries the link and deliberately NOT the client number.</b> The number arrives in the
+    /// welcome message, and the public page asks for it together with the date of birth — so the
+    /// link is a credential and the number is the secret it is checked against. Putting both in
+    /// one email would make a single intercepted message enough to walk the whole flow, which is
+    /// precisely what two factors are there to prevent. The body says where to find the number
+    /// instead.
+    /// </para>
+    ///
+    /// <para>
+    /// No name of a document, no score, no reading: nothing about the customer's identity. A
+    /// rendered body travels to a mail provider and sits in its delivery log.
+    /// </para>
+    /// </summary>
+    private static async Task SeedKycRemoteInvitationAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "kyc.remote-invitation";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "{{ company_name }} — finalisez votre dossier depuis votre téléphone",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ client_first_name }},</h2>
+                      <p>
+                        Il ne manque plus que vos pièces d'identité pour finaliser votre dossier
+                        chez {{ company_name }}. Vous pouvez les transmettre vous-même, en quelques
+                        minutes, depuis votre téléphone.
+                      </p>
+                      <p style="margin:28px 0">
+                        <a href="{{ link }}"
+                           style="background:#1f6feb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">
+                          Transmettre mes pièces
+                        </a>
+                      </p>
+                      <p>
+                        Ce lien est <strong>personnel</strong> et valable jusqu'au
+                        <strong>{{ expires_at }}</strong>. Ne le transmettez à personne.
+                      </p>
+                      <p>
+                        Il vous sera demandé votre <strong>numéro client</strong> et votre
+                        <strong>date de naissance</strong>. Votre numéro client figure dans l'email
+                        de bienvenue que nous venons de vous envoyer.
+                      </p>
+                      <p>
+                        Prévoyez votre pièce d'identité à portée de main. Si vous préférez, vous
+                        pouvez aussi passer à l'agence {{ agency_name }}.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Si vous n'êtes pas à l'origine de cette demande, ne cliquez pas sur le lien
+                        et contactez-nous.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "{{ company_name }} — complete your file from your phone",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ client_first_name }},</h2>
+                      <p>
+                        All that is missing to complete your file at {{ company_name }} is your
+                        identity document. You can send it yourself, in a few minutes, from your
+                        phone.
+                      </p>
+                      <p style="margin:28px 0">
+                        <a href="{{ link }}"
+                           style="background:#1f6feb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">
+                          Send my documents
+                        </a>
+                      </p>
+                      <p>
+                        This link is <strong>personal</strong> and valid until
+                        <strong>{{ expires_at }}</strong>. Do not forward it to anyone.
+                      </p>
+                      <p>
+                        You will be asked for your <strong>client number</strong> and your
+                        <strong>date of birth</strong>. Your client number is in the welcome email
+                        we have just sent you.
+                      </p>
+                      <p>
+                        Have your identity document to hand. If you would rather, you can also come
+                        to the {{ agency_name }} branch.
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        If you did not expect this message, do not click the link and contact us.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── kyc.remote-link-expired ─────────────────────────────────────────────
+
+    /// <summary>
+    /// KRM-B-04: the link a customer was sent lapsed without being used, and the agent who
+    /// converted them is the one who can do something about it.
+    ///
+    /// <para>
+    /// Carries the file id and the date, and NO name, number or contact detail of the customer:
+    /// the agent opens the file and the file has everything. A rendered body sits in a mail
+    /// provider's delivery log, and "who is being KYC'd" is not something to put there to save a
+    /// click.
+    /// </para>
+    /// </summary>
+    private static async Task SeedKycRemoteLinkExpiredAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "kyc.remote-link-expired";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Lien KYC à distance expiré — dossier à relancer",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Bonjour {{ full_name }},</h2>
+                      <p>
+                        Le lien de dépôt des pièces envoyé à un client que vous avez converti a
+                        expiré le <strong>{{ expired_at }}</strong> sans avoir été utilisé.
+                      </p>
+                      <p>
+                        Le dossier reste en collecte : ouvrez-le pour renvoyer un lien, ou
+                        convenez d'un passage en agence avec le client.
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        Dossier KYC : <span style="font-family:monospace">{{ kyc_file_id }}</span>
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Message automatique de {{ company_name }}.
+                      </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Remote KYC link expired — file needs a follow-up",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2>Hello {{ full_name }},</h2>
+                      <p>
+                        The document-collection link sent to a customer you converted expired on
+                        <strong>{{ expired_at }}</strong> without being used.
+                      </p>
+                      <p>
+                        The file is still collecting: open it to send a new link, or arrange a
+                        branch visit with the customer.
+                      </p>
+                      <p style="color:#555;font-size:13px">
+                        KYC file: <span style="font-family:monospace">{{ kyc_file_id }}</span>
+                      </p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">
+                        Automatic message from {{ company_name }}.
+                      </p>
                     </body>
                     </html>
                     """));

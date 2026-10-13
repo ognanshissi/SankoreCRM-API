@@ -47,6 +47,15 @@ internal sealed class UpdateComplianceSettingsHandler(
         if (pep.IsFailure)
             return pep;
 
+        // KRM-B-01. Applied in the same transaction as the rest: the three settings of this screen
+        // are one compliance posture, and a partially applied posture is the thing an auditor
+        // cannot be shown.
+        var autoApproval = settings.ConfigureKycAutoApproval(
+            cmd.KycAutoApprovalEnabled, cmd.KycAutoApprovalMaxTier, cmd.KycAutoApprovalSamplePct,
+            currentUser.Id, now);
+        if (autoApproval.IsFailure)
+            return autoApproval;
+
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

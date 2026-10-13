@@ -46,12 +46,17 @@ public sealed class ClientWelcomeEmailConsumerTests : IDisposable
     private ClientWelcomeEmailConsumer Consumer(INotificationsModule? notifications = null)
     {
         var db = _factory.CreateContext();
+        var mail = notifications ?? Notifications();
+        var tenants = TenantStore();
+
         return new ClientWelcomeEmailConsumer(
             db,
             new InboxGuard(db),
-            TestDoubles.Encryptor(),
-            notifications ?? Notifications(),
-            TenantStore(),
+            // Address resolution moved into ClientEmailNotifier when M02 started mailing customers
+            // too (KRM-B-03): one decryption path for one field.
+            TestDoubles.ClientEmails(db, mail, tenants),
+            mail,
+            tenants,
             NullLogger<ClientWelcomeEmailConsumer>.Instance);
     }
 

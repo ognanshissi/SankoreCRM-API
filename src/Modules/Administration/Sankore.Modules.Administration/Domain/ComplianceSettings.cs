@@ -61,6 +61,9 @@ public sealed class ComplianceSettings : ITenant
     /// <summary>Platform default for the PEP post-mandate window, in months.</summary>
     public const int DefaultPepPostMandateMonths = 12;
 
+    /// <summary>Platform default share of automatic approvals reviewed afterwards (KRM-B-11).</summary>
+    public const int DefaultKycAutoApprovalSamplePct = 10;
+
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
 
@@ -113,6 +116,50 @@ public sealed class ComplianceSettings : ITenant
     /// </summary>
     public int PepPostMandateMonths { get; private set; } = DefaultPepPostMandateMonths;
 
+    // ── Remote KYC: the tenant's ceiling on machine approval (KRM-B-01) ─────
+    //
+    // These three live HERE and not on the product, and not in M02's kyc_settings either, and the
+    // split is the point of the feature. A product says how much control ITS risk deserves; the
+    // institution says whether a KYC file may ever be validated without a human at all. M02
+    // enforces the ceiling and M12 refuses to save a product that exceeds it, so both modules read
+    // the same row — which is exactly what compliance_settings is for (M13, M01 and M02 already
+    // read it). Putting them in kyc_settings would have left M12 unable to validate the product
+    // screen: this assembly cannot reference M02.
+
+    /// <summary>
+    /// Whether any product of this tenant may be configured to approve a remote KYC file
+    /// automatically.
+    ///
+    /// <para>
+    /// <b>FALSE by default, and unlike <see cref="PepEnabled"/> that default is not a courtesy.</b>
+    /// Today every KYC file passes through at least two humans (agent, then branch manager).
+    /// Automatic approval replaces that circuit with a decision by the SYSTEM account, which is a
+    /// compliance posture the institution's own responsible officer has to adopt deliberately — no
+    /// deployment may adopt it on their behalf. An outage reading this flag answers false for the
+    /// same reason.
+    /// </para>
+    /// </summary>
+    public bool KycAutoApprovalEnabled { get; private set; }
+
+    /// <summary>
+    /// The highest KYC tier the machine may grant on its own — a <c>KycRemotePolicyValues</c> tier
+    /// name, <see cref="KycRemotePolicyValues.SimplifiedTier"/> by default.
+    ///
+    /// <para>
+    /// Defaulting to Simplified is the recommendation made to every institution: the simplified
+    /// tier is capped (250 000 / 500 000 FCFA by default), so a machine decision that turns out
+    /// wrong is bounded by those ceilings. Raising it to Full hands the machine an uncapped
+    /// relationship, and that is the responsible officer's call to make and to own.
+    /// </para>
+    /// </summary>
+    public string KycAutoApprovalMaxTier { get; private set; } = KycRemotePolicyValues.SimplifiedTier;
+
+    /// <summary>
+    /// Percentage of automatically approved files drawn for a compliance review after the fact
+    /// (KRM-B-11). 10 by default; 0 switches the sampling off.
+    /// </summary>
+    public int KycAutoApprovalSamplePct { get; private set; } = DefaultKycAutoApprovalSamplePct;
+
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
     public Guid UpdatedBy { get; private set; }
@@ -143,6 +190,10 @@ public sealed class ComplianceSettings : ITenant
         FatcaForCoHolders    = true,
         PepEnabled           = true,
         PepPostMandateMonths = DefaultPepPostMandateMonths,
+        // Machine approval off, and capped at the simplified tier if it is ever turned on.
+        KycAutoApprovalEnabled   = false,
+        KycAutoApprovalMaxTier   = KycRemotePolicyValues.SimplifiedTier,
+        KycAutoApprovalSamplePct = DefaultKycAutoApprovalSamplePct,
         CreatedAt            = now,
         UpdatedAt            = now,
         UpdatedBy            = createdBy,
@@ -236,6 +287,50 @@ public sealed class ComplianceSettings : ITenant
             return Result.Fail("PEP_POST_MANDATE_MONTHS_INVALID");
 
         PepPostMandateMonths = months;
+        Stamp(actor, now);
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Applies the tenant's position on automatic KYC approval (KRM-B-01): whether the machine may
+    /// decide at all, the highest tier it may grant, and how much of its output is reviewed
+    /// afterwards.
+    ///
+    /// <para>
+    /// One method for the three, like <see cref="ConfigureFatca"/>: a ceiling raised in one request
+    /// and the switch flipped in another leaves a window in which the machine grants more than the
+    /// officer intended. The ceiling and the sample rate are validated even while the switch is
+    /// off, because the values stored now are the ones a later enable will use.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>It does not relax any product.</b> Turning the switch off stops new products being saved
+    /// as Automatic and makes M02 route every file to a human; it does NOT rewrite a product that
+    /// was already configured Automatic, and it does not un-approve a file the machine has already
+    /// decided. The product keeps saying what the institution once wanted, and the gate simply
+    /// stops honouring it — which is also what lets the officer turn the feature off in one click
+    /// without losing a catalogue's worth of configuration.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// <c>KYC_AUTO_APPROVAL_MAX_TIER_INVALID</c> when the tier is not a known one, and
+    /// <c>KYC_AUTO_APPROVAL_SAMPLE_PCT_INVALID</c> outside 0..100.
+    /// </returns>
+    public Result ConfigureKycAutoApproval(
+        bool enabled, string? maxTier, int samplePct, Guid actor, DateTimeOffset now)
+    {
+        var tier = KycRemotePolicyValues.NormalizeTier(maxTier);
+        if (tier is null)
+            return Result.Fail("KYC_AUTO_APPROVAL_MAX_TIER_INVALID");
+
+        // Zero is legitimate — "no sampling" — so the floor is 0 and not 1.
+        if (samplePct is < 0 or > 100)
+            return Result.Fail("KYC_AUTO_APPROVAL_SAMPLE_PCT_INVALID");
+
+        KycAutoApprovalEnabled = enabled;
+        KycAutoApprovalMaxTier = tier;
+        KycAutoApprovalSamplePct = samplePct;
+
         Stamp(actor, now);
         return Result.Ok();
     }

@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Features.RemoteInvitations;
 using Sankore.Modules.Kyc.Features.Approval.StartApproval;
 using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Kyc.Features.Verification.RunVerification;
@@ -100,7 +101,13 @@ public sealed class RunKycVerificationHandlerTests : IDisposable
         return new(_db, _store, biometry,
             new BiometryPayloadProtector(_encryptor, NullLogger<BiometryPayloadProtector>.Instance),
             _encryptor, _indexer, _publisher, _hangfire,
-            settings, sender, TimeProvider.System,
+            settings, sender,
+            // KRM-B-04: the handler withdraws any collection link still in force when the file
+            // leaves collection. The real service over the same context — it is a couple of
+            // queries and no link exists in these tests, so it is a no-op that is still exercised.
+            new KycRemoteInvitationRevoker(
+                _db, TimeProvider.System, NullLogger<KycRemoteInvitationRevoker>.Instance),
+            TimeProvider.System,
             NullLogger<RunKycVerificationHandler>.Instance);
     }
 

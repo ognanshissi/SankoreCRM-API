@@ -47,7 +47,7 @@ internal sealed class CreateKycFileHandler(
 
         if (existing is not null)
         {
-            await RaiseVigilanceAsync(existing, cmd, ct);
+            await ApplyTriggerContextAsync(existing, cmd, ct);
             return Result.Ok(new CreateKycFileResult(existing.Id, AlreadyExisted: true));
         }
 
@@ -58,7 +58,13 @@ internal sealed class CreateKycFileHandler(
             createdBy: cmd.InitiatedBy,
             clock: clock,
             vigilanceLevel: cmd.VigilanceLevel,
-            agencyId: await ResolveAgencyAsync(cmd, ct));
+            agencyId: await ResolveAgencyAsync(cmd, ct),
+            // KRM-B-02. The product decides whether a remote-collection link is sent and how the
+            // file is validated; the agent is who gets told about it. InitiatedBy is the
+            // accountable actor of the trigger — the agent who converted the lead, never a SYSTEM
+            // placeholder — which is exactly who the responsible agent has to be.
+            productLineId: cmd.ProductLineId,
+            responsibleAgentId: cmd.InitiatedBy);
 
         db.KycFiles.Add(file);
 
@@ -97,7 +103,7 @@ internal sealed class CreateKycFileHandler(
                 .FirstOrDefaultAsync(ct);
 
             if (winner is not null)
-                await RaiseVigilanceAsync(winner, cmd, ct);
+                await ApplyTriggerContextAsync(winner, cmd, ct);
 
             return winner is not null
                 ? Result.Ok(new CreateKycFileResult(winner.Id, AlreadyExisted: true))
@@ -110,8 +116,9 @@ internal sealed class CreateKycFileHandler(
     }
 
     /// <summary>
-    /// Raises an EXISTING file's vigilance level when the trigger asks for more than it carries
-    /// (BNF-B-24: a converted lead with a politically exposed household).
+    /// Applies to an EXISTING file whatever the trigger brings that it does not already carry: a
+    /// higher vigilance level (BNF-B-24), the PEP marker, and the conversion's product and
+    /// responsible agent (KRM-B-02).
     ///
     /// <para>
     /// <b>Raised, never lowered.</b> A file already marked <c>High</c> — by a duplicate suspicion,
@@ -127,7 +134,7 @@ internal sealed class CreateKycFileHandler(
     /// flag had no effect in the common case — which is the kind of gap that looks like it works.
     /// </para>
     /// </summary>
-    private async Task RaiseVigilanceAsync(
+    private async Task ApplyTriggerContextAsync(
         KycFile file, CreateKycFileCommand cmd, CancellationToken ct)
     {
         var raisedLevel = cmd.VigilanceLevel > file.VigilanceLevel;
@@ -137,7 +144,13 @@ internal sealed class CreateKycFileHandler(
         // marking only on creation would leave the flag with no effect in the common case.
         var markedPep = cmd.IsPoliticallyExposed && !file.IsPoliticallyExposed;
 
-        if (!raisedLevel && !markedPep)
+        // KRM-B-02, and it is on this path for the same reason as the two above. The aggregate
+        // decides whether the context may be applied at all — it refuses on an already approved
+        // file, so a second product never re-points a settled KYC.
+        var attachedContext = file.AttachConversionContext(
+            cmd.ProductLineId, cmd.InitiatedBy, clock);
+
+        if (!raisedLevel && !markedPep && !attachedContext)
             return;
 
         if (raisedLevel) file.SetVigilanceLevel(cmd.VigilanceLevel, clock);
@@ -147,8 +160,9 @@ internal sealed class CreateKycFileHandler(
 
         logger.LogInformation(
             "KYC file {KycFileId}: vigilance {Level}, politically exposed {Pep}, "
-            + "set by a {Channel} trigger",
-            file.Id, file.VigilanceLevel, file.IsPoliticallyExposed, cmd.Channel);
+            + "product {ProductLineId}, responsible agent {AgentId}, set by a {Channel} trigger",
+            file.Id, file.VigilanceLevel, file.IsPoliticallyExposed,
+            file.ProductLineId, file.ResponsibleAgentId, cmd.Channel);
     }
 
     /// <summary>

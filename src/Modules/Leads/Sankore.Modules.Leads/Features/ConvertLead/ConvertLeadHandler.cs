@@ -267,7 +267,12 @@ internal sealed class ConvertLeadHandler(
                 // BNF-B-24: an exposed household opens the KYC file at High vigilance, which adds
                 // the compliance officer to the approval ladder. The FLAG only — the function, the
                 // country and the family link stay behind lead:pep:read.
-                HasPepExposure:   lead.HasPepExposure),
+                HasPepExposure:   lead.HasPepExposure,
+                // KRM-B-02: which catalogue line this conversion is on. M02 decides from it
+                // whether the new customer may send their documents remotely and how the file is
+                // validated. Null when the lead's product label resolved to nothing, which is
+                // ordinary — the file is then simply collected at the counter.
+                ProductLineId:    lead.ProductLineId),
             ct);
 
         await db.SaveChangesAsync(ct);

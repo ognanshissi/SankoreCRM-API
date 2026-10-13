@@ -288,6 +288,10 @@ builder.Services.AddMassTransit(x =>
     // through the same sweep a periodic one goes through.
     x.AddConsumer<Sankore.Modules.Kyc.Features.Reviews.Consumers.ClientPepExposureRaisedConsumer>();
 
+    // KRM-B-04: withdraws a customer's remote-collection link when the email it was posted to, or
+    // the date of birth it is checked against, changes in M01.
+    x.AddConsumer<Sankore.Modules.Kyc.Features.RemoteInvitations.Consumers.ClientContactChangedInvitationConsumer>();
+
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer>();
     x.AddConsumer<LeadDispatchedTaskConsumer>();
     x.AddConsumer<LeadDispatchingFailedTaskConsumer>();
@@ -728,6 +732,16 @@ if (emitOpenApiTo is null) {
             "kyc-review-orchestrator",
             job => job.ExecuteAsync(),
             "0 1 * * *");                                    // daily (KYC-B-07)
+
+        // Also GLOBAL, and deliberately AFTER the review sweep: it closes the remote-collection
+        // links whose window has passed and tells the agent who converted the customer. The link
+        // itself is already dead on the clock — the sweep is what makes it visible on the screen.
+        AddOrUpdate<Sankore.Modules.Kyc.Features.RemoteInvitations.Expiry.KycRemoteInvitationExpiryOrchestratorJob>(
+            Sankore.Modules.Kyc.Features.RemoteInvitations.Expiry
+                .KycRemoteInvitationExpiryOrchestratorJob.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Kyc.Features.RemoteInvitations.Expiry
+                .KycRemoteInvitationExpiryOrchestratorJob.CronExpression);   // daily (KRM-B-04)
 
         // ── Integration module ────────────────────────────────────────────────────
         // Both GLOBAL orchestrators: they walk the active tenants themselves and enqueue opaque

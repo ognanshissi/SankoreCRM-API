@@ -29,7 +29,20 @@ using Sankore.Shared.Infrastructure.BackgroundJobs;
 ///
 /// <para>
 /// <c>HasPepExposure</c> is the exception, and it is a FLAG rather than a value: it decides the
-/// file's vigilance level, which decides who has to sign it (BNF-B-24).
+/// file's vigilance level, which decides who has to sign it (BNF-B-24). <c>ProductLineId</c> is the
+/// second (KRM-B-02), and it is why this consumer still matters even when it loses the race: the
+/// catalogue line exists on no other event reaching this module.
+/// </para>
+///
+/// <para>
+/// <b>It also asks for the remote-collection link, and KRM-B-03 said to trigger that on
+/// <c>KycInitiated</c> instead.</b> That would not have worked, and the reason is this consumer's
+/// own first paragraph: <c>ClientCreatedKycConsumer</c> usually wins, so <c>KycInitiated</c> is
+/// published by a trigger that does not know the product — the link decision would then read a file
+/// whose <c>ProductLineId</c> is still null and conclude the product is not eligible, for most
+/// conversions. Issuing from here is deterministic: the product is in hand, the file is guaranteed
+/// to exist (the command above either created it or found it), and the issue command is idempotent
+/// on a file that already holds a usable link, so a redelivery mails nothing twice.
 /// </para>
 /// </summary>
 public sealed class KycRequestedConsumer(
@@ -75,7 +88,12 @@ public sealed class KycRequestedConsumer(
                         : KycVigilanceLevel.Standard,
                     // Carried as its own fact: High alone does not call for the general
                     // management's authorisation, a PEP does.
-                    IsPoliticallyExposed: evt.HasPepExposure),
+                    IsPoliticallyExposed: evt.HasPepExposure,
+                    // KRM-B-02. THE reason this consumer still matters even though M01's event
+                    // usually opens the file first: the product line exists only on this event,
+                    // and the file needs it to know whether the customer may send their documents
+                    // from their own phone and how the result is validated.
+                    ProductLineId: evt.ProductLineId),
                 context.CancellationToken);
 
             if (result.IsFailure)
@@ -95,12 +113,21 @@ public sealed class KycRequestedConsumer(
                 logger.LogDebug(
                     "Customer {CustomerId} already had KYC file {KycFileId}",
                     evt.CustomerEntityId, result.Value.KycFileId);
+
+                // And the link is still owed. This branch is the COMMON one for a converted lead,
+                // so returning here is how the feature would have shipped doing nothing most of
+                // the time — the trap the PEP flag fell into on this same path.
+                await RequestRemoteInvitationAsync(
+                    sender, evt, result.Value.KycFileId, context.CancellationToken);
                 return;
             }
 
             logger.LogInformation(
                 "KYC file {KycFileId} opened for customer {CustomerId} converted from lead {LeadId}",
                 result.Value.KycFileId, evt.CustomerEntityId, evt.LeadId);
+
+            await RequestRemoteInvitationAsync(
+                sender, evt, result.Value.KycFileId, context.CancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -110,5 +137,51 @@ public sealed class KycRequestedConsumer(
                 ex, "KYC file creation threw for customer {CustomerId} (tenant {TenantId})",
                 evt.CustomerEntityId, evt.TenantId);
         }
+    }
+
+    /// <summary>
+    /// Asks for the customer's collection link (KRM-B-03), and treats every refusal as information
+    /// rather than as a failure.
+    ///
+    /// <para>
+    /// The three refusals — no product policy, product not eligible, no email on file — are all
+    /// ORDINARY outcomes of a conversion, not faults: most catalogue lines will never enable remote
+    /// KYC, and a lead captured in the field often has a phone number and nothing else. They are
+    /// logged at Information and nothing is retried, because the agent's own screen re-evaluates
+    /// the same three causes on every read and tells them which one it is (KRM-F-07).
+    /// </para>
+    /// </summary>
+    private async Task RequestRemoteInvitationAsync(
+        ISender sender, KycRequestedIntegrationEvent evt, Guid kycFileId, CancellationToken ct)
+    {
+        var invitation = await sender.Send(
+            new Features.RemoteInvitations.IssueInvitation.IssueKycRemoteInvitationCommand(
+                TenantId: evt.TenantId,
+                KycFileId: kycFileId,
+                // SYSTEM, not the converting agent: issuing a link asserts nothing about anybody's
+                // identity, and the row says "the conversion did this" rather than naming somebody
+                // who never clicked a button.
+                IssuedBy: Guid.Empty,
+                // A redelivered conversion event must not mail a second link nor invalidate the
+                // one the customer may be reading at that moment.
+                ReplaceActive: false,
+                // Null means "read the tenant's remote-email-delay-minutes" — the link has to land
+                // after the welcome message that carries the client number it will ask for.
+                DelayMinutes: null),
+            ct);
+
+        if (invitation.IsFailure)
+        {
+            logger.LogInformation(
+                "No remote-collection link for KYC file {KycFileId} of customer {CustomerId}: {Reason}",
+                kycFileId, evt.CustomerEntityId, invitation.Error);
+            return;
+        }
+
+        if (invitation.Value.Reused) return;
+
+        logger.LogInformation(
+            "Remote-collection link {InvitationId} requested for KYC file {KycFileId}",
+            invitation.Value.InvitationId, kycFileId);
     }
 }

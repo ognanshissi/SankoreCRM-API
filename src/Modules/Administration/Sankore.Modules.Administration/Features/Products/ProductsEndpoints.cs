@@ -7,6 +7,7 @@ using Sankore.Modules.Administration.Features.Products.GetProduct;
 using Sankore.Modules.Administration.Features.Products.LinkProductToCbs;
 using Sankore.Modules.Administration.Features.Products.ListProducts;
 using Sankore.Modules.Administration.Features.Products.SetBeneficiaryPolicy;
+using Sankore.Modules.Administration.Features.Products.SetKycRemotePolicy;
 using Sankore.Modules.Administration.Features.Products.UpdateProduct;
 
 namespace Sankore.Modules.Administration.Features.Products;
@@ -25,6 +26,9 @@ internal static class ProductsEndpoints
 
         // Beneficiary policy of the product line (BNF-B-06)
         group.MapSetBeneficiaryPolicy();
+
+        // Remote KYC collection and validation of the product line (KRM-B-01)
+        group.MapSetKycRemotePolicy();
         return app;
     }
 }

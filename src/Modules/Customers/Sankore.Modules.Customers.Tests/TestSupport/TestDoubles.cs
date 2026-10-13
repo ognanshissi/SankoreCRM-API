@@ -5,7 +5,10 @@ using System.Security.Cryptography;
 using System.Text;
 using NSubstitute;
 using Sankore.Modules.Customers.Domain;
+using Sankore.Modules.Customers.Features.ContactPoints.Shared;
 using Sankore.Modules.Customers.Infrastructure;
+using Sankore.Modules.Customers.Infrastructure.Notifications;
+using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Kernel;
@@ -61,6 +64,57 @@ public static class TestDoubles
     /// </summary>
     public static IAgencyScopeProvider AgencyScope(params Guid[] accessibleAgencyIds)
         => new FakeAgencyScopeProvider(accessibleAgencyIds);
+
+    /// <summary>
+    /// The contact-point change announcer (KRM-B-04), over a publisher that records nothing.
+    ///
+    /// <para>
+    /// The three contact-point write slices take it so M02 can withdraw a collection link when the
+    /// address it was posted to changes. A test that cares about the announcement passes its own
+    /// recording publisher; the dozens that do not want a collaborator that costs them nothing.
+    /// </para>
+    /// </summary>
+    public static ContactPointChangeAnnouncer ContactPointAnnouncer(IEventPublisher? publisher = null)
+        => new(publisher ?? new SilentEventPublisher());
+
+    /// <summary>
+    /// The client email notifier, with a reversible fake encryptor and substituted notifications.
+    ///
+    /// <para>
+    /// Takes the DbContext because resolving an address is a query. Pass the notifications double
+    /// when the test asserts on what was queued; omit it for the callers that only need the
+    /// address resolution.
+    /// </para>
+    /// </summary>
+    public static ClientEmailNotifier ClientEmails(
+        CustomersDbContext db,
+        Sankore.Modules.Notifications.PublicApi.INotificationsModule? notifications = null,
+        ITenantStore? tenantStore = null)
+        => new(
+            db,
+            Encryptor(),
+            notifications ?? SilentNotifications(),
+            tenantStore ?? SilentTenantStore(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ClientEmailNotifier>.Instance);
+
+    private static Sankore.Modules.Notifications.PublicApi.INotificationsModule SilentNotifications()
+    {
+        var notifications = Substitute.For<Sankore.Modules.Notifications.PublicApi.INotificationsModule>();
+        notifications
+            .QueueEmailAsync(
+                Arg.Any<Sankore.Modules.Notifications.PublicApi.QueueEmailRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Ok(Guid.NewGuid()));
+        return notifications;
+    }
+
+    private static ITenantStore SilentTenantStore()
+    {
+        var store = Substitute.For<ITenantStore>();
+        store.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((TenantInfo?)null);
+        return store;
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -143,6 +197,17 @@ public static class TestDoubles
         private string Read(string key) => _values.TryGetValue(key, out var value)
             ? value
             : throw new InvalidOperationException($"Unknown customer setting key '{key}' in test doubles.");
+    }
+
+    /// <summary>
+    /// Drops every event. The outbox is tested where the outbox is the subject; a handler test that
+    /// would otherwise need a DbContext-backed publisher to exercise an unrelated rule does not.
+    /// </summary>
+    private sealed class SilentEventPublisher : IEventPublisher
+    {
+        public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct)
+            where TEvent : IIntegrationEvent
+            => Task.CompletedTask;
     }
 
     private sealed class FakeAgencyScopeProvider(Guid[] accessibleAgencyIds) : IAgencyScopeProvider

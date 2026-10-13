@@ -33,6 +33,22 @@ internal sealed class ComplianceSettingsConfiguration : IEntityTypeConfiguration
         b.Property(s => s.PepPostMandateMonths)
             .HasDefaultValue(ComplianceSettings.DefaultPepPostMandateMonths).IsRequired();
 
+        // KRM-B-01. DEFAULT FALSE at the column as well as in the factory, and that direction is
+        // the opposite of PepEnabled's on purpose: a deployment must never hand an existing
+        // institution the right to validate a KYC file without a human. The ceiling and the sample
+        // rate get their platform defaults so an officer who only flips the switch lands on the
+        // recommended posture — capped at the simplified tier, 10 % reviewed afterwards.
+        b.Property(s => s.KycAutoApprovalEnabled).HasDefaultValue(false).IsRequired();
+
+        b.Property(s => s.KycAutoApprovalMaxTier)
+            .HasMaxLength(16)
+            .HasDefaultValue(KycRemotePolicyValues.SimplifiedTier)
+            .IsRequired();
+
+        b.Property(s => s.KycAutoApprovalSamplePct)
+            .HasDefaultValue(ComplianceSettings.DefaultKycAutoApprovalSamplePct)
+            .IsRequired();
+
         b.Property(s => s.Version)
             .HasColumnName("xmin").HasColumnType("xid")
             .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();

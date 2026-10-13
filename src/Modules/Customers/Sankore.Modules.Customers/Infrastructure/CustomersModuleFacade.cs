@@ -25,7 +25,8 @@ internal sealed class CustomersModuleFacade(
     CustomersDbContext db,
     ILeadConversionService leadConversion,
     Sankore.Shared.Infrastructure.Crypto.IBlindIndexer indexer,
-    Features.Holdings.Sync.HoldingSyncService holdingSync)
+    Features.Holdings.Sync.HoldingSyncService holdingSync,
+    Notifications.ClientEmailNotifier clientEmails)
     : ICustomersModule
 {
     /// <summary>
@@ -355,6 +356,21 @@ internal sealed class CustomersModuleFacade(
                   && c.FundsOriginCode != null
                   && c.FundsOriginCode != "",
                 ct);
+
+    // ── Reaching a client by email (KRM-B-03) ───────────────────────────────
+    //
+    // Straight through to ClientEmailNotifier, for the reason the three holding-sync members above
+    // are: the work is a side effect on another system, not a read this module models. Both stay
+    // deliberately thin — the address never appears in either signature.
+
+    public Task<bool> HasEmailAsync(Guid tenantId, Guid clientId, CancellationToken ct)
+        => clientEmails.HasEmailAsync(tenantId, clientId, ct);
+
+    public Task<string?> GetMaskedEmailAsync(Guid tenantId, Guid clientId, CancellationToken ct)
+        => clientEmails.GetMaskedEmailAsync(tenantId, clientId, ct);
+
+    public Task<bool> NotifyClientAsync(NotifyClientRequest request, CancellationToken ct)
+        => clientEmails.NotifyAsync(request, ct);
 
     /// <summary>
     /// Email and PhoneNumber are deliberately left null: both are encrypted at rest in

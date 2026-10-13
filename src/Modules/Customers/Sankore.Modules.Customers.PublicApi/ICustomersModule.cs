@@ -93,6 +93,73 @@ public interface ICustomersModule
     Task<bool> HasRecordedFundsOriginAsync(Guid tenantId, Guid clientId, CancellationToken ct);
 
     /// <summary>
+    /// Whether the client has an active email address on file — a boolean, never the address
+    /// (KRM-B-03).
+    ///
+    /// <para>
+    /// M02 needs it to decide, BEFORE issuing anything, whether a remote-collection link can reach
+    /// its customer, and to tell the agent plainly why no link was sent when it cannot. The
+    /// address itself stays here: it is AES-256-GCM in <c>client_contact_points</c> under M01's
+    /// key, and handing it across the boundary would create a second, unprotected home for it.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>false</c> for an unknown client, and <c>false</c> for an address this module cannot
+    /// decrypt. Both are "do not promise a customer a link they will never get".
+    /// </para>
+    /// </summary>
+    Task<bool> HasEmailAsync(Guid tenantId, Guid clientId, CancellationToken ct);
+
+    /// <summary>
+    /// The client's active email address MASKED (<c>j***@e***.com</c>), or null when there is none
+    /// (KRM-F-07).
+    ///
+    /// <para>
+    /// For a confirmation dialog: an agent about to send a single-use collection link needs to
+    /// recognise where it is going, and the mask is enough to tell "the right customer" from "the
+    /// address we have on file is wrong". The same projection M01's own contact-point list already
+    /// shows, so this exposes nothing a screen in this product does not show already — the clear
+    /// value stays behind the audited reveal endpoint.
+    /// </para>
+    ///
+    /// <para>
+    /// Separate from <see cref="HasEmailAsync"/> rather than replacing it, because the two have
+    /// different costs and different consequences. This one DECRYPTS; that one does not. A gate
+    /// deciding whether a link can be issued must not depend on the field-encryption key being
+    /// right — an address that will not decrypt is an incident to fix, not a customer without an
+    /// email — so the gate asks the cheap question and only a display asks this one.
+    /// </para>
+    /// </summary>
+    Task<string?> GetMaskedEmailAsync(Guid tenantId, Guid clientId, CancellationToken ct);
+
+    /// <summary>
+    /// Sends a templated notification to one of the tenant's CLIENTS, and answers whether it was
+    /// queued (KRM-B-03).
+    ///
+    /// <para>
+    /// <b>A send, not an address lookup</b> — the exact arrangement
+    /// <c>IAdministrationModule.NotifyUserAsync</c> uses for users, and for the same reasons. This
+    /// module owns the encrypted address, the client's preferred language and the locale fallback
+    /// to the tenant default; a caller handed an address would duplicate that fallback, and a
+    /// wrong locale does not degrade gracefully — PostgreSQL matches template locales
+    /// case-sensitively and a miss mails the message's own JSON payload as its body.
+    /// </para>
+    ///
+    /// <para>
+    /// It also fills the recipient's own identity into the template — <c>full_name</c>,
+    /// <c>client_first_name</c> and <c>company_name</c> — so no caller has to carry a customer's
+    /// name through a Hangfire payload or an event to send them a message.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Never throws.</b> A client with no address, an unknown client, an undecryptable address
+    /// and a failure to queue all return <c>false</c>, because every caller is a consumer or a job
+    /// whose own work must stand whether or not the mail went out.
+    /// </para>
+    /// </summary>
+    Task<bool> NotifyClientAsync(NotifyClientRequest request, CancellationToken ct);
+
+    /// <summary>
     /// Clients holding a live product whose CONTRACT ANNIVERSARY falls on
     /// <paramref name="onDay"/> — the day the CIMA LBC/FT text says the file's information is to
     /// be brought up to date (« les informations sont mises à jour à la date anniversaire du
@@ -355,6 +422,32 @@ public sealed record CustomerMatch(
 /// Non-sensitive client projection. Enum-typed domain concepts are exposed as strings
 /// so no consumer has to reference the Customers domain assembly.
 /// </summary>
+/// <summary>
+/// A templated notification addressed to one of the tenant's clients (see
+/// <see cref="ICustomersModule.NotifyClientAsync"/>).
+/// </summary>
+/// <param name="TemplateKey">
+/// Key of a seeded email template. An unknown key is a failed send, not an exception.
+/// </param>
+/// <param name="IdempotencyKey">
+/// Deduplicates the message in M08. Key it on what the notification is ABOUT — the invitation, the
+/// decision — rather than on the broker's message id, so a replayed event cannot produce a second
+/// mail even if an inbox table was recreated.
+/// </param>
+/// <param name="TemplateData">
+/// Values the template needs. <c>full_name</c>, <c>client_first_name</c> and <c>company_name</c>
+/// are added by this module. Must carry NO sensitive value and no identity read off a document: a
+/// rendered body travels to a mail provider and sits in the delivery log. A single-use link is the
+/// one exception and it is the point of the first caller — it is a credential the recipient already
+/// holds, not a fact about them.
+/// </param>
+public sealed record NotifyClientRequest(
+    Guid TenantId,
+    Guid ClientId,
+    string TemplateKey,
+    string IdempotencyKey,
+    IReadOnlyDictionary<string, object>? TemplateData = null);
+
 public sealed record ClientSummary(
     Guid Id,
     string ClientNumber,

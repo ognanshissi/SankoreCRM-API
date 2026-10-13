@@ -26,7 +26,8 @@ public sealed class FindMatchesTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private CustomersModuleFacade Facade(CustomersDbContext db)
-        => new(db, new UnusedLeadConversion(), Indexer, TestHoldingSync.For(db, _tenant));
+        => new(db, new UnusedLeadConversion(), Indexer, TestHoldingSync.For(db, _tenant),
+               TestDoubles.ClientEmails(db));
 
     private sealed class UnusedLeadConversion : ILeadConversionService
     {

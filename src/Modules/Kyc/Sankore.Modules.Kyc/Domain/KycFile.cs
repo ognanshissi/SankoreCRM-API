@@ -45,6 +45,48 @@ public sealed class KycFile : AggregateRoot
     /// </summary>
     public Guid? AgencyId { get; private set; }
 
+    /// <summary>
+    /// The catalogue line the customer was converted on (KRM-B-02) — a <c>ProductSpeciality</c> id
+    /// of M12, opaque here and with no foreign key, like <see cref="CustomerId"/>.
+    ///
+    /// <para>
+    /// It decides two things this module cannot otherwise know: whether the customer may send
+    /// their documents from their own phone, and whether the resulting file may be validated
+    /// without a human. Both are per-product policies (KRM-B-01), and both have to be re-read when
+    /// the score comes back — hence a column on the file rather than a value carried through a
+    /// chain of commands.
+    /// </para>
+    ///
+    /// <para>
+    /// Nullable, and null is ordinary rather than degraded: a file opened at a counter is about a
+    /// customer, not about a product, and a converted lead whose free-text label matched no
+    /// catalogue entry carries none either. Null means "no product policy applies", which reads
+    /// as the restrictive answer everywhere — no remote link, no automatic approval.
+    /// </para>
+    /// </summary>
+    public Guid? ProductLineId { get; private set; }
+
+    /// <summary>
+    /// The agent accountable for this file reaching a decision (KRM-B-02): the one who converted
+    /// the lead, or who opened the file.
+    ///
+    /// <para>
+    /// Its own property rather than a reading of <see cref="CreatedBy"/>, because the two answer
+    /// different questions and will diverge. <see cref="CreatedBy"/> is a historical fact used by
+    /// nothing but the audit trail; this one is an ADDRESS — who gets told that a remotely
+    /// submitted file is waiting for a decision (KRM-B-09), and who gets chased when it sits
+    /// there. On the conversion path they happen to be the same person today, and a file
+    /// transferred with its customer's portfolio will not keep them that way.
+    /// </para>
+    ///
+    /// <para>
+    /// It is NOT a four-eyes anchor. <see cref="LastSubmittedBy"/> and
+    /// <see cref="ManuallyValidatedBy"/> are, and a remotely submitted file deliberately carries
+    /// SYSTEM in the first of them — which is precisely what leaves this agent free to decide.
+    /// </para>
+    /// </summary>
+    public Guid? ResponsibleAgentId { get; private set; }
+
     public KycFileStatus Status { get; private set; }
     public KycTier Tier { get; private set; }
     public KycChannel Channel { get; private set; }
@@ -153,7 +195,9 @@ public sealed class KycFile : AggregateRoot
         TimeProvider clock,
         KycVigilanceLevel vigilanceLevel = KycVigilanceLevel.Standard,
         Guid? id = null,
-        Guid? agencyId = null)
+        Guid? agencyId = null,
+        Guid? productLineId = null,
+        Guid? responsibleAgentId = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
         if (customerId == Guid.Empty) throw new DomainException("CustomerId is required.");
@@ -174,6 +218,11 @@ public sealed class KycFile : AggregateRoot
             // Guid.Empty is not an agency: a caller that passes it means "unknown", and storing it
             // would create a perimeter nobody belongs to while looking like a real value.
             AgencyId = agencyId == Guid.Empty ? null : agencyId,
+            // Guid.Empty is not a product and not an agent, for the same reason it is not an
+            // agency: a caller passing it means "unknown", and storing it would create a reference
+            // nothing resolves while looking like a real value.
+            ProductLineId = productLineId == Guid.Empty ? null : productLineId,
+            ResponsibleAgentId = responsibleAgentId == Guid.Empty ? null : responsibleAgentId,
             CreatedAt = now,
             UpdatedAt = now,
             CreatedBy = createdBy,
@@ -405,6 +454,57 @@ public sealed class KycFile : AggregateRoot
 
         IsPoliticallyExposed = true;
         UpdatedAt = clock.GetUtcNow();
+    }
+
+    /// <summary>
+    /// Points an ALREADY OPEN file at the product and the agent of a fresh conversion (KRM-B-02),
+    /// and answers whether anything moved.
+    ///
+    /// <para>
+    /// The already-existed path is the normal one here, not the edge: <c>ClientCreatedKycConsumer</c>
+    /// and <c>KycRequestedConsumer</c> both fire for a converted lead and M01's event usually wins,
+    /// so a context applied only at creation would have no effect in the common case — the same
+    /// trap the PEP flag fell into.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>It refuses to touch a file that has already been approved.</b> A customer whose KYC is
+    /// Simplified or Full and who subscribes a SECOND product arrives here again, and re-pointing
+    /// their file at the new line would rewrite the context under which their existing tier was
+    /// granted — the validated evidence would then appear to have been collected for a product
+    /// nobody validated it for. A new product does not re-open a settled KYC; it either runs on the
+    /// tier already granted or asks for its own review, and neither is this method's business.
+    /// </para>
+    ///
+    /// <para>
+    /// Fills blanks only, and never overwrites a value with another: whichever conversion opened
+    /// this round of collection owns it. Passing null for either argument leaves that one alone.
+    /// </para>
+    /// </summary>
+    public bool AttachConversionContext(
+        Guid? productLineId, Guid? responsibleAgentId, TimeProvider clock)
+    {
+        if (Tier != KycTier.None)
+            return false;
+
+        var changed = false;
+
+        if (ProductLineId is null && productLineId is { } line && line != Guid.Empty)
+        {
+            ProductLineId = line;
+            changed = true;
+        }
+
+        if (ResponsibleAgentId is null && responsibleAgentId is { } agent && agent != Guid.Empty)
+        {
+            ResponsibleAgentId = agent;
+            changed = true;
+        }
+
+        if (changed)
+            UpdatedAt = clock.GetUtcNow();
+
+        return changed;
     }
 
     public void SetVigilanceLevel(KycVigilanceLevel level, TimeProvider clock)

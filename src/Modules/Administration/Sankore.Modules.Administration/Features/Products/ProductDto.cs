@@ -22,4 +22,10 @@ internal sealed record ProductDto(
     /// </summary>
     BeneficiaryPolicy? BeneficiaryPolicy = null,
     /// <summary>Whether a customer may hold this line more than once (BNF-B-22).</summary>
-    bool AllowMultipleHoldings = true);
+    bool AllowMultipleHoldings = true,
+    /// <summary>
+    /// Whether this line may be KYC'd at a distance after a conversion, and how such a file is
+    /// validated (KRM-B-01). Never null in practice: an unconfigured line reads as the restrictive
+    /// default — remote collection off, manual validation.
+    /// </summary>
+    KycRemotePolicy? KycRemotePolicy = null);

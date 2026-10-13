@@ -41,11 +41,21 @@ public sealed class ComplianceSettingsDefaultsTests
         fromFacade.FatcaForCoHolders.Should().Be(fromEntity.FatcaForCoHolders);
         fromFacade.PepEnabled.Should().Be(fromEntity.PepEnabled);
         fromFacade.PepPostMandateMonths.Should().Be(fromEntity.PepPostMandateMonths);
+        fromFacade.KycAutoApprovalEnabled.Should().Be(fromEntity.KycAutoApprovalEnabled);
+        fromFacade.KycAutoApprovalMaxTier.Should().Be(fromEntity.KycAutoApprovalMaxTier);
+        fromFacade.KycAutoApprovalSamplePct.Should().Be(fromEntity.KycAutoApprovalSamplePct);
 
-        // Spelled out as well as compared, because this is the one default whose wrong value is a
-        // regulatory failure rather than a behavioural difference: a tenant with no row must keep
-        // PEP vigilance, and the comparison above would pass just as well with both sides false.
+        // Spelled out as well as compared, because these are the defaults whose wrong value is a
+        // regulatory failure rather than a behavioural difference, and the comparisons above would
+        // pass just as well with both sides wrong.
+        //
+        // A tenant with no row must keep PEP vigilance ON…
         fromFacade.PepEnabled.Should().BeTrue();
+        // …and must NOT have machine approval. The two defaults point in opposite directions and
+        // both are deliberate: vigilance off would drop an LBC/FT obligation, auto-approval on
+        // would remove the human from a KYC circuit nobody asked to automate (KRM-B-01).
+        fromFacade.KycAutoApprovalEnabled.Should().BeFalse();
+        fromFacade.KycAutoApprovalMaxTier.Should().Be(KycRemotePolicyValues.SimplifiedTier);
     }
 
     [Fact]

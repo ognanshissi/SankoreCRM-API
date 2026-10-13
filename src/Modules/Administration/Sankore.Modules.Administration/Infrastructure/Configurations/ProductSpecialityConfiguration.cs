@@ -39,6 +39,22 @@ public class ProductSpecialityConfiguration : IEntityTypeConfiguration<ProductSp
 
         builder.Property(x => x.AllowMultipleHoldings).HasDefaultValue(true);
 
+        // KRM-B-01. Same arrangement as beneficiary_policy above, including the `'{}'::jsonb`
+        // default for the same reason — EF would emit `DEFAULT ''` for a non-nullable converted
+        // property and PostgreSQL rejects it on a jsonb column.
+        //
+        // `{}` reads back as KycRemotePolicy.Disabled: every member of the record is optional, and
+        // on .NET the missing ones take their CONSTRUCTOR defaults, so an untouched line comes
+        // back "off, manual, score floor 85, link 72h" rather than "off, no mode, score floor 0".
+        // That matters — a zero floor on a line somebody later switches to Automatic would
+        // approve every answer the scoring service produced.
+        builder.Property(x => x.KycRemotePolicy)
+            .HasColumnType("jsonb")
+            .HasColumnName("kyc_remote_policy")
+            .HasConversion(new KycRemotePolicyConverter())
+            .HasDefaultValueSql("'{}'::jsonb")
+            .Metadata.SetValueComparer(new KycRemotePolicyComparer());
+
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.IsActive });
     }

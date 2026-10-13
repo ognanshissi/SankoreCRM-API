@@ -17,7 +17,7 @@ internal sealed class GetProductHandler(AdministrationDbContext db)
                 p.Description, p.ParametersJson,
                 p.IsActive, p.EffectiveFrom, p.EffectiveTo,
                 p.BusinessProductId, p.BusinessPlatformName,
-                p.BeneficiaryPolicy, p.AllowMultipleHoldings))
+                p.BeneficiaryPolicy, p.AllowMultipleHoldings, p.KycRemotePolicy))
             .FirstOrDefaultAsync(ct);
 
         if (product is null)

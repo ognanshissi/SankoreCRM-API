@@ -531,6 +531,28 @@ public static class Permissions
     public static readonly PermissionItem CanManageKycSettings =
         new("kyc:settings:manage", "Change the tenant KYC parameters", ApplicationModules.Kyc, "settings:manage");
 
+    /// <summary>
+    /// Send, re-send or withdraw the single-use link a customer uses to deposit their documents
+    /// from their own phone (KRM-B-04).
+    ///
+    /// <para>
+    /// Its own permission rather than part of <c>kyc:manage</c>, because the two are not the same
+    /// act. <c>kyc:manage</c> is collecting evidence inside the back office; this one mails a
+    /// BEARER CREDENTIAL to an address on file — anybody holding the link reaches one customer's
+    /// identification page. An institution that wants its counter clerks to collect documents
+    /// without being able to post credentials out of the building needs to be able to say so.
+    /// </para>
+    ///
+    /// <para>
+    /// It is still scoped by the agency perimeter: the read that precedes every issue and every
+    /// revocation answers NOT_FOUND outside it, so the permission widens the verbs available on a
+    /// file, never the set of files.
+    /// </para>
+    /// </summary>
+    public static readonly PermissionItem CanInviteKycRemote =
+        new("kyc:remote-invite", "Send or revoke a remote KYC collection link",
+            ApplicationModules.Kyc, "remote-invite");
+
     // ── Integration module (INT-11, ASS-11) ───────────────────────────────
     //
     // These codes are PascalCase-dotted, which is the one place in this file that departs from
@@ -695,6 +717,7 @@ public static class Permissions
         CanRevealKycDocumentNumber,
         CanValidateKycDocument,
         CanManageKycSettings,
+        CanInviteKycRemote,
         CanCreateLoan,
         CanCreateAgency,
         CanReadAgency,

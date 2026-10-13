@@ -460,6 +460,14 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("date")
                         .HasColumnName("next_review_date");
 
+                    b.Property<Guid?>("ProductLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_line_id");
+
+                    b.Property<Guid?>("ResponsibleAgentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("responsible_agent_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(24)
@@ -599,6 +607,134 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasDatabaseName("ix_kyc_identity_documents_blind_index");
 
                     b.ToTable("kyc_identity_documents", "kyc");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Kyc.Domain.KycRemoteInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConsentGivenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consent_given_at");
+
+                    b.Property<string>("ConsentTextVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("consent_text_version");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_attempts");
+
+                    b.Property<DateTimeOffset?>("IdentifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("identified_at");
+
+                    b.Property<Guid>("KycFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("kyc_file_id");
+
+                    b.Property<DateTimeOffset?>("LockedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("locked_at");
+
+                    b.Property<DateTimeOffset?>("OpenedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opened_at");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("purpose");
+
+                    b.Property<string>("QualityRetriesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("quality_retries")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<string>("RevokeReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("revoke_reason");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid?>("RevokedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revoked_by");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<byte[]>("TokenHash")
+                        .HasColumnType("bytea")
+                        .HasColumnName("token_hash");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_kyc_remote_invitations");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_kyc_remote_invitations_token")
+                        .HasFilter("token_hash IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ExpiresAt")
+                        .HasDatabaseName("ix_kyc_remote_invitations_expiry")
+                        .HasFilter("status IN ('Scheduled', 'Sent', 'Opened', 'Identified')");
+
+                    b.HasIndex("TenantId", "KycFileId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_kyc_remote_invitations_active_per_file")
+                        .HasFilter("status IN ('Scheduled', 'Sent', 'Opened', 'Identified')");
+
+                    b.HasIndex("TenantId", "KycFileId", "CreatedAt")
+                        .HasDatabaseName("ix_kyc_remote_invitations_file_created");
+
+                    b.ToTable("kyc_remote_invitations", "kyc");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Kyc.Domain.KycReviewSchedule", b =>

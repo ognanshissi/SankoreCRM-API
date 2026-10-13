@@ -29,7 +29,8 @@ public sealed class AddContactPointHandlerTests : IDisposable
             TestDoubles.CurrentUser(TenantId, UserId),
             scope ?? TestDoubles.AgencyScope(),
             _encryptor,
-            _indexer);
+            _indexer,
+            TestDoubles.ContactPointAnnouncer());
 
     [Fact]
     public async Task Adding_a_phone_stores_its_ciphertext_blind_index_and_valid_from_date()

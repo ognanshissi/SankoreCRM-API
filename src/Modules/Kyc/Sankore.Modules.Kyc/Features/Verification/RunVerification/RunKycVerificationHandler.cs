@@ -57,6 +57,7 @@ internal sealed class RunKycVerificationHandler(
     IBackgroundJobClient hangfire,
     IKycSettings settings,
     ISender sender,
+    Features.RemoteInvitations.KycRemoteInvitationRevoker remoteInvitations,
     TimeProvider clock,
     ILogger<RunKycVerificationHandler> logger)
     : IRequestHandler<RunKycVerificationCommand, Result<RunKycVerificationResult>>
@@ -115,6 +116,18 @@ internal sealed class RunKycVerificationHandler(
             var submitted = file.SubmitForVerification(cmd.RequestedBy, clock);
             if (submitted.IsFailure)
                 return Result.Fail<RunKycVerificationResult>(submitted.Error!);
+
+            // KRM-B-04: the file has left collection, so any collection link still in force is
+            // withdrawn. It is a no-op on the remote path — the customer's own submission marks
+            // their link Submitted before this runs — and it bites on the one case that matters:
+            // an agent took over at the counter while the customer still held a live link, and two
+            // parallel uploads into one file would race each other's evidence.
+            //
+            // No SaveChanges of its own: the revocation belongs to this handler's unit of work.
+            await remoteInvitations.RevokeActiveAsync(
+                cmd.TenantId, file.Id,
+                Features.RemoteInvitations.KycRemoteInvitationRevoker.FileLeftCollectionReason,
+                cmd.RequestedBy == Guid.Empty ? null : cmd.RequestedBy, ct);
         }
 
         // One id for the three calls, echoed to the biometric deployment so a support request can

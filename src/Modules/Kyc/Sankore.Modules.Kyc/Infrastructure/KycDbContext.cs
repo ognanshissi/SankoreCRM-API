@@ -35,6 +35,12 @@ public sealed class KycDbContext(DbContextOptions<KycDbContext> options, ITenant
 
     /// <summary>Append-only: who opened which KYC image, and when.</summary>
     public DbSet<KycDocumentAccessLog> KycDocumentAccessLogs => Set<KycDocumentAccessLog>();
+
+    /// <summary>
+    /// The single-use links sent to customers who complete their KYC from their own phone
+    /// (KRM-B-03). One active row per file; the spent ones stay as the history an agent reads.
+    /// </summary>
+    public DbSet<KycRemoteInvitation> KycRemoteInvitations => Set<KycRemoteInvitation>();
     public DbSet<KycSetting> KycSettings => Set<KycSetting>();
 
     /// <summary>Outbox lives in this module's own schema — same rule as every other module.</summary>
@@ -103,5 +109,6 @@ public sealed class KycDbContext(DbContextOptions<KycDbContext> options, ITenant
         modelBuilder.Entity<KycReviewSchedule>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycDocument>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycDocumentAccessLog>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<KycRemoteInvitation>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
     }
 }

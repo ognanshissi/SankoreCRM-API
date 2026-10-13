@@ -85,4 +85,22 @@ public sealed record KycFileListItem(
     bool DuplicateSuspected,
     string RequiredActionCode,
     bool AwaitingMe,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    /// <summary>
+    /// Whether a remote-collection link has ever been issued for this file (KRM-F-07).
+    ///
+    /// <para>
+    /// It carries the badge that tells a validator, before they open anything, that the evidence on
+    /// this file was sent by the customer from their own phone rather than captured at a counter —
+    /// which changes what they are looking at and who they can ask about it.
+    /// </para>
+    ///
+    /// <para>
+    /// "Ever", not "right now", and deliberately: a link that was sent, used and consumed is the
+    /// MOST remote a file gets, and a badge keyed on an active link would disappear exactly when
+    /// the file reaches the validator. It is also why this is not read off the channel — the
+    /// channel only becomes remote once the customer submits, so a file still waiting on them would
+    /// carry no badge at all.
+    /// </para>
+    /// </summary>
+    bool IsRemoteCollection = false);
