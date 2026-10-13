@@ -437,6 +437,17 @@ requests the API makes. With nothing configured outside Development the policy a
 and start-up logs a warning; an empty CORS policy is otherwise invisible, since every curl keeps
 working while the browser blocks the front-end.
 
+That allow-list governs every route **except the two SDK serve routes**, which carry their own
+`sankore-sdk-public` policy (`SdkEndpoints.PublicCorsPolicy`, registered by the Leads module and
+required per endpoint, so it fully replaces the default one). It is the only any-origin policy in
+the platform, and the snippet cannot work without it: `SnippetBuilder` emits `integrity` +
+`crossorigin="anonymous"`, so the browser fetches the script as a CORS request and a customer's
+own site — the only place the snippet is ever pasted — is never in the institution's allow-list.
+The symptom is the browser blaming CORS for a file that is served perfectly. The policy must
+never gain `AllowCredentials`: a wildcard is incompatible with it. The ingest endpoint the script
+then POSTs to keeps its per-source origin check in `WebIngestCorsEndpoint` — an allow-list belongs
+on the route that writes.
+
 **`POST users/create-root`** provisions a tenant's system user and cannot sit behind a JWT, so it
 carries `.RequireApiKey()` (`ApiKeyEndpointFilter`) against the root `ApiKey` value — the same
 secret the tenant registry uses. Unlike `ApiKeyMiddleware`, which skips validation when no key is

@@ -5,11 +5,57 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
 public static class SdkEndpoints
 {
+    /// <summary>
+    /// CORS policy of the two SERVE routes, and the only one in the platform that allows any
+    /// origin.
+    ///
+    /// <para>
+    /// The embed snippet emits <c>integrity</c> + <c>crossorigin="anonymous"</c> (see
+    /// <c>SnippetBuilder</c>), which makes the browser fetch the script as a CORS request and
+    /// refuse it unless the response carries <c>Access-Control-Allow-Origin</c>. The host's
+    /// DEFAULT policy is an allow-list of the institution's own front-ends, and a customer's
+    /// site is never in it — so under the default policy the snippet could not load on a single
+    /// third-party page, which is the only place it is ever pasted. The symptom is the browser
+    /// blaming CORS for a file that is served perfectly: <c>blocked by CORS policy: No
+    /// 'Access-Control-Allow-Origin' header</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// A wildcard is safe HERE and nowhere else in this API: the response is a public static
+    /// script, identical for every tenant, carries no credentials (the policy must NOT call
+    /// <c>AllowCredentials</c> — a wildcard is incompatible with it, and the browser would reject
+    /// the response at runtime) and reveals nothing a <c>curl</c> does not. The ingest endpoint
+    /// that the script then POSTs to keeps its per-source origin check in
+    /// <c>WebIngestCorsEndpoint</c>; that is where an allow-list belongs, because that one writes.
+    /// </para>
+    /// </summary>
+    public const string PublicCorsPolicy = "sankore-sdk-public";
+
+    /// <summary>
+    /// Registers <see cref="PublicCorsPolicy"/>. Declared by the module that owns the routes
+    /// rather than by the host's <c>CorsSetup</c>: the two must not drift, and a named policy a
+    /// route requires but nobody registered throws on the first request.
+    /// <see cref="Microsoft.Extensions.DependencyInjection.CorsServiceCollectionExtensions.AddCors(IServiceCollection, System.Action{Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions})"/>
+    /// is additive, so this adds the named policy without touching the host's default one.
+    /// </summary>
+    public static IServiceCollection AddSdkServeCors(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddCors(options => options.AddPolicy(PublicCorsPolicy, policy =>
+            policy.AllowAnyOrigin()
+                  .WithMethods("GET", "HEAD")
+                  .AllowAnyHeader()));
+
+        return services;
+    }
+
     /// <summary>
     /// Admin endpoints under api/v1/leads/sdk (authenticated).
     /// </summary>
@@ -41,6 +87,7 @@ public static class SdkEndpoints
         // Exact version: /sdk/{version}/forms.min.js → immutable cache
         app.MapGet("/sdk/{version}/forms.min.js", ServeExactVersion)
             .AllowAnonymous()
+            .RequireCors(PublicCorsPolicy)
             .WithName("ServeSdkExact")
             .WithTags("SDK")
             .ExcludeFromDescription();
@@ -48,6 +95,7 @@ public static class SdkEndpoints
         // Major alias: /sdk/v{major}/forms.min.js → short cache, resolves to current
         app.MapGet("/sdk/v{major:int}/forms.min.js", ServeMajorAlias)
             .AllowAnonymous()
+            .RequireCors(PublicCorsPolicy)
             .WithName("ServeSdkMajor")
             .WithTags("SDK")
             .ExcludeFromDescription();

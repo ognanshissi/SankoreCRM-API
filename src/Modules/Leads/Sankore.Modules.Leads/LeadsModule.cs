@@ -227,6 +227,10 @@ public static class LeadsModule
         // Web ingest — captcha validator (stub MVP)
         services.AddSingleton<ICaptchaValidator, StubCaptchaValidator>();
 
+        // SDK serve CORS — any origin, because the snippet is pasted on third-party sites and
+        // carries crossorigin="anonymous". See SdkEndpoints.PublicCorsPolicy.
+        services.AddSdkServeCors();
+
         // SDK file store — local filesystem, rooted at Leads:SdkStoragePath or <content root>/wwwroot/sdk
         services.AddSingleton<ISdkFileStore>(sp => new LocalSdkFileStore(
             LocalSdkFileStore.ResolveBasePath(
