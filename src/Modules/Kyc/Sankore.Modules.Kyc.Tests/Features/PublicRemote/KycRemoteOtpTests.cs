@@ -2,6 +2,9 @@ namespace Sankore.Modules.Kyc.Tests.Features.PublicRemote;
 
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+using Sankore.Modules.Administration.PublicApi;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure.RemoteLinks;
 using Xunit;
@@ -239,16 +242,162 @@ public sealed class KycRemoteOtpTests
             .Should().Be(KycOtpVerdict.NonePending);
     }
 
-    [Fact]
-    public void The_shipped_sender_refuses_and_says_it_is_unavailable()
-    {
-        // The whole reason `remote-otp` cannot be enabled in this deployment, asserted rather than
-        // assumed: a future registration that quietly answered true would turn the switch on for
-        // every tenant with no channel behind it.
-        var sender = new UnavailableKycOtpSender();
+    // ── Delivery ────────────────────────────────────────────────────────────
 
-        sender.IsAvailable.Should().BeFalse();
-        sender.SendAsync(Tenant, Customer, "123456", CancellationToken.None)
-            .GetAwaiter().GetResult().Should().BeFalse();
+    [Fact]
+    public async Task A_tenant_with_no_SMS_channel_cannot_offer_a_second_factor()
+    {
+        // The guard that keeps `remote-otp` from locking a tenant's customers out. Asserted rather
+        // than assumed: a change that answered true here would turn the switch on for every tenant
+        // with no provider behind it, and every one of their customers would reach a code screen
+        // for a message nobody sends.
+        var administration = Substitute.For<IAdministrationModule>();
+
+        administration.GetSmsConfigAsync(Tenant, Arg.Any<CancellationToken>())
+            .Returns((TenantSmsConfigDto?)null);
+
+        var sender = new SmsKycOtpSender(
+            administration, Substitute.For<ICustomersModule>(),
+            NullLogger<SmsKycOtpSender>.Instance);
+
+        (await sender.IsAvailableAsync(Tenant, CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_half_configured_channel_is_not_available_either()
+    {
+        // CanSend is M12's own computation over four conditions — provider, sender, credential,
+        // calling code. This pins that the KYC side TRUSTS it rather than re-deriving it: a
+        // second derivation here is a second chance to get one of the four wrong, and wrong in
+        // the permissive direction locks a tenant out.
+        var administration = Substitute.For<IAdministrationModule>();
+
+        administration.GetSmsConfigAsync(Tenant, Arg.Any<CancellationToken>())
+            .Returns(new TenantSmsConfigDto(
+                ProviderType: "Brevo", SenderId: "SANKORE", AccountSid: null,
+                DefaultCallingCode: "225", HasCredential: false,
+                CanSend: false, MonthlyQuotaLimit: null, CurrentMonthUsageCount: 0));
+
+        var sender = new SmsKycOtpSender(
+            administration, Substitute.For<ICustomersModule>(),
+            NullLogger<SmsKycOtpSender>.Instance);
+
+        (await sender.IsAvailableAsync(Tenant, CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task An_outage_reading_the_channel_fails_CLOSED()
+    {
+        // An administrator told "unavailable" retries; one allowed to enable a second factor on a
+        // channel nobody could verify locks a tenant's customers out. The direction matters more
+        // than the availability.
+        var administration = Substitute.For<IAdministrationModule>();
+
+        administration.GetSmsConfigAsync(Tenant, Arg.Any<CancellationToken>())
+            .Returns<TenantSmsConfigDto?>(_ => throw new InvalidOperationException("M12 is down"));
+
+        var sender = new SmsKycOtpSender(
+            administration, Substitute.For<ICustomersModule>(),
+            NullLogger<SmsKycOtpSender>.Instance);
+
+        (await sender.IsAvailableAsync(Tenant, CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_configured_channel_is_available()
+    {
+        var administration = Substitute.For<IAdministrationModule>();
+
+        administration.GetSmsConfigAsync(Tenant, Arg.Any<CancellationToken>())
+            .Returns(new TenantSmsConfigDto(
+                ProviderType: "Twilio", SenderId: "+22520123456",
+                AccountSid: new string('a', 34), DefaultCallingCode: "225",
+                HasCredential: true, CanSend: true,
+                MonthlyQuotaLimit: 500, CurrentMonthUsageCount: 12));
+
+        var sender = new SmsKycOtpSender(
+            administration, Substitute.For<ICustomersModule>(),
+            NullLogger<SmsKycOtpSender>.Instance);
+
+        (await sender.IsAvailableAsync(Tenant, CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task The_message_carries_the_code_and_the_window_and_NOTHING_else()
+    {
+        // §8's rule, on the channel where it bites hardest: a text message is readable on a
+        // locked screen, so naming the institution and the customer beside a code is how a stolen
+        // handset becomes an enrolment. M01 adds client_first_name and company_name itself for
+        // the templates that want them; this payload does not ask for either.
+        NotifyClientBySmsRequest? sent = null;
+
+        var customers = Substitute.For<ICustomersModule>();
+        customers.NotifyClientBySmsAsync(
+                Arg.Do<NotifyClientBySmsRequest>(r => sent = r), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var sender = new SmsKycOtpSender(
+            Substitute.For<IAdministrationModule>(), customers,
+            NullLogger<SmsKycOtpSender>.Instance);
+
+        (await sender.SendAsync(Tenant, Customer, "123456", CancellationToken.None))
+            .Should().BeTrue();
+
+        sent.Should().NotBeNull();
+        sent!.TemplateKey.Should().Be("kyc.remote-otp");
+        sent.ClientId.Should().Be(Customer);
+
+        sent.TemplateData.Should().NotBeNull();
+        sent.TemplateData!.Keys.Should().BeEquivalentTo(["code", "minutes"]);
+        sent.TemplateData["code"].Should().Be("123456");
+        sent.TemplateData["minutes"].Should().Be((int)KycRemoteOtpCodes.Validity.TotalMinutes);
+    }
+
+    [Fact]
+    public async Task Two_sends_of_the_SAME_code_window_share_an_idempotency_key()
+    {
+        // What stops a retried request from charging the tenant twice. Keyed on nothing it would
+        // double-bill; keyed on the invitation alone a customer asking for a SECOND code would be
+        // silently given none, because M08 drops a duplicate key.
+        var keys = new List<string>();
+
+        var customers = Substitute.For<ICustomersModule>();
+        customers.NotifyClientBySmsAsync(
+                Arg.Do<NotifyClientBySmsRequest>(r => keys.Add(r.IdempotencyKey)),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var sender = new SmsKycOtpSender(
+            Substitute.For<IAdministrationModule>(), customers,
+            NullLogger<SmsKycOtpSender>.Instance);
+
+        await sender.SendAsync(Tenant, Customer, "123456", CancellationToken.None);
+        await sender.SendAsync(Tenant, Customer, "123456", CancellationToken.None);
+
+        keys.Should().HaveCount(2);
+        keys[0].Should().Be(keys[1]);
+
+        // And a DIFFERENT customer never shares one, however close in time.
+        await sender.SendAsync(Tenant, Guid.NewGuid(), "123456", CancellationToken.None);
+        keys[2].Should().NotBe(keys[0]);
+    }
+
+    [Fact]
+    public async Task A_message_that_could_not_be_queued_is_reported_as_not_sent()
+    {
+        // The identification endpoint turns this into a 503 and keeps the link usable, rather than
+        // opening a session: falling back to one would switch the tenant's second factor off at
+        // the exact moment the channel failed.
+        var customers = Substitute.For<ICustomersModule>();
+        customers.NotifyClientBySmsAsync(
+                Arg.Any<NotifyClientBySmsRequest>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var sender = new SmsKycOtpSender(
+            Substitute.For<IAdministrationModule>(), customers,
+            NullLogger<SmsKycOtpSender>.Instance);
+
+        (await sender.SendAsync(Tenant, Customer, "123456", CancellationToken.None))
+            .Should().BeFalse();
     }
 }

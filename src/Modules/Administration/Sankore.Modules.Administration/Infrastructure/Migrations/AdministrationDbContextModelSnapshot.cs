@@ -1339,6 +1339,82 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.ToTable("tenant_notification_settings", "administration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.TenantSmsSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccountSid")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("account_sid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("CurrentMonthStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("current_month_started_at");
+
+                    b.Property<int>("CurrentMonthUsageCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_month_usage_count");
+
+                    b.Property<string>("DefaultCallingCode")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("default_calling_code");
+
+                    b.Property<bool>("HasCredential")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_credential");
+
+                    b.Property<int?>("MonthlyQuotaLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("monthly_quota_limit");
+
+                    b.Property<string>("ProviderType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("provider_type");
+
+                    b.Property<string>("SenderId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sender_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_sms_settings");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tenant_sms_settings_tenant_id");
+
+                    b.ToTable("tenant_sms_settings", "administration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.Territory", b =>
                 {
                     b.Property<Guid>("Id")

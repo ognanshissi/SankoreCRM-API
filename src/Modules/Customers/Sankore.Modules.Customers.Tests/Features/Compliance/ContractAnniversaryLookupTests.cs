@@ -70,7 +70,7 @@ public sealed class ContractAnniversaryLookupTests : IDisposable
     /// </para>
     /// </summary>
     private static CustomersModuleFacade Facade(CustomersDbContext db)
-        => new(db, null!, null!, null!, null!, null!, null!);
+        => new(db, null!, null!, null!, null!, null!, null!, null!);
 
     private async Task<IReadOnlyList<Guid>> OnAsync(DateOnly day)
     {

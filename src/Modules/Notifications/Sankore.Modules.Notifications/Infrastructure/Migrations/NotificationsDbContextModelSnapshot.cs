@@ -18,7 +18,7 @@ namespace Sankore.Modules.Notifications.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("notifications")
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -232,6 +232,220 @@ namespace Sankore.Modules.Notifications.Infrastructure.Migrations
                         .HasDatabaseName("ix_email_templates_tenant_id_template_key_locale_version");
 
                     b.ToTable("email_templates", "notifications");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Notifications.Domain.SmsDeliveryLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("MaskedPhone")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("masked_phone");
+
+                    b.Property<Guid?>("OutboxMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("outbox_message_id");
+
+                    b.Property<string>("ProviderStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider_status");
+
+                    b.Property<string>("RawPayload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("raw_payload");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sms_delivery_logs");
+
+                    b.HasIndex("OutboxMessageId")
+                        .HasDatabaseName("ix_sms_delivery_logs_outbox_message_id");
+
+                    b.HasIndex("TenantId", "RecordedAt")
+                        .HasDatabaseName("ix_sms_delivery_logs_tenant_id_recorded_at");
+
+                    b.ToTable("sms_delivery_logs", "notifications");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Notifications.Domain.SmsOutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("Locale")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("locale");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("module");
+
+                    b.Property<string>("ProviderMessageId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("provider_message_id");
+
+                    b.Property<string>("ProviderStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider_status");
+
+                    b.Property<string>("RecipientPhone")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("recipient_phone");
+
+                    b.Property<int>("SegmentCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("segment_count");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TemplateDataJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("template_data_json");
+
+                    b.Property<string>("TemplateKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("template_key");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sms_outbox_messages");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sms_outbox_messages_idempotency_key");
+
+                    b.HasIndex("ProviderMessageId")
+                        .HasDatabaseName("ix_sms_outbox_messages_provider_id")
+                        .HasFilter("provider_message_id IS NOT NULL");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_sms_outbox_messages_status_created_at");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_sms_outbox_messages_tenant_id_status");
+
+                    b.ToTable("sms_outbox_messages", "notifications");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Notifications.Domain.SmsTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_system");
+
+                    b.Property<string>("Locale")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("locale");
+
+                    b.Property<string>("TemplateKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("template_key");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sms_templates");
+
+                    b.HasIndex("TenantId", "TemplateKey", "Locale", "IsActive")
+                        .HasDatabaseName("ix_sms_templates_resolution");
+
+                    b.ToTable("sms_templates", "notifications");
                 });
 #pragma warning restore 612, 618
         }

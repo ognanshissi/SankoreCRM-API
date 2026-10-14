@@ -22,6 +22,21 @@ public static class NotificationSecrets
     public static SecretKey CredentialKey(Guid tenantId, string providerType)
         => new(tenantId, Scope, Guid.Empty, $"{Normalize(providerType)}-credential");
 
+    /// <summary>
+    /// The SMS credential of a provider — Brevo's API key, Twilio's Auth Token.
+    ///
+    /// <para>
+    /// <b>A different NAME from the email credential, and that is not cosmetic.</b> Brevo sells
+    /// both channels, so a tenant can legitimately run Brevo email and Brevo SMS at once; with a
+    /// shared name, storing the SMS key would silently overwrite the email key — the same provider
+    /// token producing the same secret entry. Two names keep the two keys independent, at the cost
+    /// of asking an administrator who uses one Brevo key for both to type it twice. That is the
+    /// right side of the trade: the alternative loses a working email configuration with no error.
+    /// </para>
+    /// </summary>
+    public static SecretKey SmsCredentialKey(Guid tenantId, string providerType)
+        => new(tenantId, Scope, Guid.Empty, $"{Normalize(providerType)}-sms-credential");
+
     /// <summary>Lower-cased, so "Smtp", "SMTP" and "smtp" never produce two different secrets.</summary>
     private static string Normalize(string providerType)
         => string.IsNullOrWhiteSpace(providerType)

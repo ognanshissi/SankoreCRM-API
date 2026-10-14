@@ -31,7 +31,7 @@ public sealed class CustomersModuleFacadeBatchTests : IDisposable
         _facade = new CustomersModuleFacade(
             _db, new UnusedLeadConversion(), TestDoubles.Indexer(),
             TestHoldingSync.For(_db, _tenantId), TestDoubles.ClientEmails(_db),
-            TestDoubles.RemoteIdentity(_db), TestDoubles.ReadIdentity(_db));
+            TestDoubles.RemoteIdentity(_db), TestDoubles.ReadIdentity(_db), TestDoubles.ClientSms(_db));
     }
 
     public void Dispose()

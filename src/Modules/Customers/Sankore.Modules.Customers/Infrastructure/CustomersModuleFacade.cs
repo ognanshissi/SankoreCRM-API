@@ -28,7 +28,8 @@ internal sealed class CustomersModuleFacade(
     Features.Holdings.Sync.HoldingSyncService holdingSync,
     Notifications.ClientEmailNotifier clientEmails,
     RemoteIdentity.RemoteIdentityVerifier remoteIdentity,
-    RemoteIdentity.ReadIdentityComparer readIdentity)
+    RemoteIdentity.ReadIdentityComparer readIdentity,
+    Notifications.ClientSmsNotifier clientSms)
     : ICustomersModule
 {
     /// <summary>
@@ -373,6 +374,16 @@ internal sealed class CustomersModuleFacade(
 
     public Task<bool> NotifyClientAsync(NotifyClientRequest request, CancellationToken ct)
         => clientEmails.NotifyAsync(request, ct);
+
+    // The SMS twin. Straight through for the same reason, and the service does the one piece of
+    // real work this channel needs: turning a number stored as it was dialled into E.164 with the
+    // tenant's calling code.
+    public Task<bool> HasPhoneAsync(Guid tenantId, Guid clientId, CancellationToken ct)
+        => clientSms.HasPhoneAsync(tenantId, clientId, ct);
+
+    public Task<bool> NotifyClientBySmsAsync(
+        NotifyClientBySmsRequest request, CancellationToken ct)
+        => clientSms.NotifyAsync(request, ct);
 
     // KRM-B-05. Straight through, and the signature is the whole design: a boolean out, no value
     // in either direction, and the comparison in one place that holds the key.

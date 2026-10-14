@@ -189,10 +189,16 @@ public static class KycErrors
     // ── The SMS second factor (KRM-B-12) ───────────────────────────────────
 
     /// <summary>
-    /// <c>remote-otp</c> cannot be turned on: this deployment has no SMS channel, so a second
+    /// <c>remote-otp</c> cannot be turned on: this TENANT has no usable SMS channel, so a second
     /// factor would be a code screen for a message that is never sent. Named rather than folded
-    /// into a generic range error so the administrator's screen can say what is missing instead of
-    /// telling them "false" was the wrong value.
+    /// into a generic range error so the administrator's screen can point them at the SMS settings
+    /// instead of telling them "true" was the wrong value.
+    ///
+    /// <para>
+    /// It is also what the identification endpoint answers (503) when a code could not be
+    /// delivered mid-journey: the customer is asked to try again rather than being handed a
+    /// session the tenant's own policy says they should not have.
+    /// </para>
     /// </summary>
     public const string RemoteOtpUnavailable = "KYC_REMOTE_OTP_UNAVAILABLE";
 

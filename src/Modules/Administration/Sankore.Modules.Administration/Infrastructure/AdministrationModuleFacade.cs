@@ -191,6 +191,62 @@ internal sealed class AdministrationModuleFacade(
     }
 
     /// <summary>
+    /// The SMS counterpart, and it differs in exactly one place: a tenant with NO row is refused
+    /// rather than granted.
+    ///
+    /// <para>
+    /// For email, no row means "never configured a limit" and an unlimited allowance is the right
+    /// reading — the platform's own account sends it either way. For SMS, no row means there is no
+    /// provider, no sender identity and nobody paying: granting an allowance would hand the
+    /// processor a message it is about to fail to send, and dead-letter it under a network error
+    /// instead of under "this tenant has no SMS channel".
+    /// </para>
+    /// </summary>
+    public async Task<SmsQuotaDecision> TryConsumeSmsQuotaAsync(Guid tenantId, CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < QuotaRetries; attempt++)
+        {
+            var settings = await db.TenantSmsSettings
+                .AsTracking()
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+
+            if (settings is null || !settings.CanSend)
+            {
+                return new SmsQuotaDecision(
+                    Granted: false, Limit: null, UsedThisMonth: 0,
+                    Reason: "CHANNEL_NOT_CONFIGURED");
+            }
+
+            var granted = settings.TryConsumeMonthlyQuota();
+
+            if (!granted)
+            {
+                return new SmsQuotaDecision(
+                    false, settings.MonthlyQuotaLimit, settings.CurrentMonthUsageCount,
+                    "MONTHLY_QUOTA_EXCEEDED");
+            }
+
+            try
+            {
+                await db.SaveChangesAsync(ct);
+
+                return new SmsQuotaDecision(
+                    true, settings.MonthlyQuotaLimit, settings.CurrentMonthUsageCount);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Someone else counted first. Drop the stale entity and read the new truth.
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        // Persistent contention: refuse rather than send uncounted. The outbox will retry.
+        return new SmsQuotaDecision(
+            Granted: false, Limit: null, UsedThisMonth: 0, Reason: "QUOTA_CONTENTION");
+    }
+
+    /// <summary>
     /// Notifies one of the tenant's users. The address never leaves this module — see the
     /// contract's own remarks for why that is the point rather than an accident.
     /// </summary>
@@ -355,6 +411,50 @@ internal sealed class AdministrationModuleFacade(
             s.SmtpUsername,
             s.SmtpUseSsl,
             s.SmtpUseStartTls);
+    }
+
+    /// <summary>
+    /// The tenant's SMS channel, or null when it has no row — see the contract for why null is
+    /// not substituted with a default here, unlike the email configuration next door.
+    /// </summary>
+    public async Task<TenantSmsConfigDto?> GetSmsConfigAsync(Guid tenantId, CancellationToken ct)
+    {
+        var s = await db.TenantSmsSettings
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.TenantId == tenantId, ct);
+
+        return s is null ? null : new TenantSmsConfigDto(
+            s.ProviderType,
+            s.SenderId,
+            s.AccountSid,
+            s.DefaultCallingCode,
+            s.HasCredential,
+            // Computed by the entity and carried, so no caller re-derives the four conditions and
+            // gets one of them subtly wrong.
+            s.CanSend,
+            s.MonthlyQuotaLimit,
+            s.CurrentMonthUsageCount);
+    }
+
+    /// <summary>
+    /// The tenant behind a Twilio Account SID. IgnoreQueryFilters with no tenant predicate —
+    /// which is exactly what this method is for: the caller is an anonymous webhook with no
+    /// ambient tenant, and finding out which one owns the account IS the question.
+    /// </summary>
+    public async Task<Guid?> ResolveTenantBySmsAccountSidAsync(
+        string accountSid, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(accountSid)) return null;
+
+        var trimmed = accountSid.Trim();
+
+        var tenantId = await db.TenantSmsSettings
+            .IgnoreQueryFilters()
+            .Where(s => s.AccountSid == trimmed)
+            .Select(s => (Guid?)s.TenantId)
+            .FirstOrDefaultAsync(ct);
+
+        return tenantId;
     }
 
     public async Task<string?> GetProductCategoryAsync(

@@ -14,6 +14,12 @@ public sealed class NotificationsDbContext(
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
     public DbSet<EmailDeliveryLog> EmailDeliveryLogs => Set<EmailDeliveryLog>();
 
+    // ── The SMS channel. Three tables beside the email ones rather than columns on them; each
+    // entity's own remarks say why.
+    public DbSet<SmsOutboxMessage> SmsOutboxMessages => Set<SmsOutboxMessage>();
+    public DbSet<SmsTemplate> SmsTemplates => Set<SmsTemplate>();
+    public DbSet<SmsDeliveryLog> SmsDeliveryLogs => Set<SmsDeliveryLog>();
+
     /// <summary>
     /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
     /// See <see cref="UtcTimestamps"/>.
@@ -35,6 +41,16 @@ public sealed class NotificationsDbContext(
 
         modelBuilder.Entity<EmailDeliveryLog>()
             .HasQueryFilter(l => l.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<SmsOutboxMessage>()
+            .HasQueryFilter(m => m.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<SmsDeliveryLog>()
+            .HasQueryFilter(l => l.TenantId == tenant.CurrentTenantId);
+
+        // SmsTemplate carries NO filter, exactly like EmailTemplate: its TenantId is NULLABLE
+        // because a platform default belongs to no tenant, and a filter comparing null to the
+        // ambient tenant would hide every seeded template from everybody.
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

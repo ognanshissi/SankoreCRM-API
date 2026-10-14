@@ -120,6 +120,37 @@ public static class TestDoubles
             Indexer(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ReadIdentityComparer>.Instance);
 
+    /// <summary>
+    /// The send-to-client SMS path, over the same fakes. The ADMINISTRATION substitute answers no
+    /// SMS config by default, so a test that does not set one up exercises the ordinary case — a
+    /// tenant with no SMS channel, where nothing is sent and nothing throws.
+    /// </summary>
+    public static ClientSmsNotifier ClientSms(
+        CustomersDbContext db,
+        Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
+        Sankore.Modules.Notifications.PublicApi.INotificationsModule? notifications = null,
+        ITenantStore? tenantStore = null)
+        => new(
+            db,
+            Encryptor(),
+            notifications ?? SilentNotificationsModule(),
+            administration ?? Substitute.For<Sankore.Modules.Administration.PublicApi.IAdministrationModule>(),
+            tenantStore ?? SilentTenantStore(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ClientSmsNotifier>.Instance);
+
+    private static Sankore.Modules.Notifications.PublicApi.INotificationsModule SilentNotificationsModule()
+    {
+        var notifications = Substitute.For<Sankore.Modules.Notifications.PublicApi.INotificationsModule>();
+
+        notifications
+            .QueueSmsAsync(
+                Arg.Any<Sankore.Modules.Notifications.PublicApi.QueueSmsRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result<Guid>.Ok(Guid.NewGuid()));
+
+        return notifications;
+    }
+
     private static Sankore.Modules.Notifications.PublicApi.INotificationsModule SilentNotifications()
     {
         var notifications = Substitute.For<Sankore.Modules.Notifications.PublicApi.INotificationsModule>();

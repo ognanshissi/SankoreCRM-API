@@ -17,4 +17,32 @@ public interface INotificationsModule
     /// Returns the Id of the created EmailOutboxMessage.
     /// </summary>
     Task<Result<Guid>> QueueEmailAsync(QueueEmailRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Enqueues a transactional text message for asynchronous delivery. Returns the id of the
+    /// created outbox row.
+    ///
+    /// <para>
+    /// The same contract as <see cref="QueueEmailAsync"/> — call it after the business operation
+    /// has committed — and the same idempotency: a duplicate key is dropped, which on this channel
+    /// is the difference between one charge and two.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Queuing is not sending, and on this channel the gap matters.</b> Whether the tenant HAS
+    /// an SMS channel, whether its monthly allowance is exhausted and whether a template exists
+    /// are all settled by the outbox processor, which dead-letters with a reason. A success here
+    /// means the message is queued and nothing more. A caller that needs to know a message can
+    /// actually go out — a second-factor flow, which must not strand a customer at a code screen
+    /// — asks <c>IAdministrationModule.GetSmsConfigAsync</c> first and reads <c>CanSend</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Every message sent through this is TRANSACTIONAL.</b> There is no marketing path and no
+    /// consent record to support one: the providers are configured in transactional mode, which is
+    /// what lets a one-time code arrive at two in the morning. Adding a campaign channel means
+    /// adding an opt-in record first, not reusing this one.
+    /// </para>
+    /// </summary>
+    Task<Result<Guid>> QueueSmsAsync(QueueSmsRequest request, CancellationToken ct = default);
 }

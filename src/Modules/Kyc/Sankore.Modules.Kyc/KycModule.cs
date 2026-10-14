@@ -269,12 +269,15 @@ public static class KycModule
         // ── Routing and the control of unattended decisions (KRM-B-08…11) ───
         services.AddScoped<Features.Routing.Controls.KycAutoApprovalSampler>();
 
-        // KRM-B-12. TryAdd so a deployment that DOES have an SMS channel registers its own sender
-        // before this line runs and keeps it — this is the fallback, not an override. It answers
-        // IsAvailable = false, which is what makes `remote-otp` refuse to be turned on here: see
-        // IKycOtpSender for why the mechanism ships without its delivery.
+        // KRM-B-12. Sends through M08's SMS channel, over M01's send-to-client contract — see
+        // SmsKycOtpSender for why it goes through M01 rather than straight to M08. Availability is
+        // per TENANT: an institution that has not configured a provider cannot enable the second
+        // factor, which is what stops its customers being locked out of their own journey.
+        //
+        // TryAdd so a deployment that wants its own delivery — an in-house gateway, a different
+        // aggregator — registers it before this line and keeps it.
         services.TryAddScoped<Infrastructure.RemoteLinks.IKycOtpSender,
-                              Infrastructure.RemoteLinks.UnavailableKycOtpSender>();
+                              Infrastructure.RemoteLinks.SmsKycOtpSender>();
         services.AddTransient<Features.Routing.ReviewSla.KycRemoteReviewSlaOrchestratorJob>();
         services.AddTransient<Features.Routing.ReviewSla.ChaseTenantKycRemoteReviewsJob>();
 

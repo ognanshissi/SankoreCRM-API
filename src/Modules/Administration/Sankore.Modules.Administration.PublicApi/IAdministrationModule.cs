@@ -164,6 +164,70 @@ public interface IAdministrationModule
     Task<EmailQuotaDecision> TryConsumeEmailQuotaAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
+    /// The tenant's SMS channel, or <c>null</c> when it has never been configured.
+    ///
+    /// <para>
+    /// <b>Null means "no SMS channel", and unlike the email configuration there is no platform
+    /// fallback to substitute.</b> An email can always go out through the platform's own SMTP
+    /// account; a text message cannot, because somebody pays per message and no platform-wide
+    /// account exists. Every caller therefore has to handle null as "cannot send", which is why
+    /// this one returns null where <see cref="GetNotificationConfigAsync"/>'s caller substitutes a
+    /// default.
+    /// </para>
+    ///
+    /// <para>
+    /// It carries no credential — only whether one is stored. The sender fetches the secret from
+    /// the vault at send time, and this DTO is cached.
+    /// </para>
+    /// </summary>
+    Task<TenantSmsConfigDto?> GetSmsConfigAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Counts one text message against the tenant's monthly allowance, or refuses it.
+    ///
+    /// <para>
+    /// <b>Its own allowance, separate from the email one.</b> A text message costs real money per
+    /// unit where an email costs almost nothing, so the two budgets are not comparable — and a
+    /// shared counter would let a month of emails exhaust the allowance a customer's one-time code
+    /// needs. Refused for a tenant with no SMS row at all: no channel is no allowance.
+    /// </para>
+    ///
+    /// <para>
+    /// Check and increment are ONE operation under optimistic concurrency, exactly as
+    /// <see cref="TryConsumeEmailQuotaAsync"/>: splitting them lets two senders both read
+    /// "999 of 1000" and both send.
+    /// </para>
+    /// </summary>
+    Task<SmsQuotaDecision> TryConsumeSmsQuotaAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Which tenant owns an SMS provider account, by the identifier the provider puts in its
+    /// callbacks — Twilio's Account SID.
+    ///
+    /// <para>
+    /// <b>It exists because a provider's delivery callback is anonymous and carries no tenant.</b>
+    /// Twilio posts an <c>AccountSid</c> and nothing else that identifies anybody, so the receiving
+    /// endpoint has to turn that into a tenant before it can even fetch the auth token its
+    /// signature is verified with. The alternative — M08 reading
+    /// <c>administration.tenant_sms_settings</c> directly — would be a cross-schema query, which
+    /// this solution does not do even for a single column.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>null</c> for an unknown SID, which an endpoint must treat as "ignore this callback"
+    /// rather than as an error: it is either a stale setting at the provider or somebody else's
+    /// traffic, and answering an error makes the provider retry it for hours.
+    /// </para>
+    ///
+    /// <para>
+    /// A LOOKUP BY SECRETLESS IDENTIFIER, deliberately: an Account SID authorises nothing on its
+    /// own — it is the username half of Twilio's basic auth — so answering which tenant holds one
+    /// leaks nothing a caller could use. The auth token stays in the vault.
+    /// </para>
+    /// </summary>
+    Task<Guid?> ResolveTenantBySmsAccountSidAsync(string accountSid, CancellationToken ct);
+
+    /// <summary>
     /// Sends a templated notification to one of the tenant's USERS — an agent, an advisor, a
     /// manager. Returns whether it was actually queued.
     ///
@@ -445,6 +509,47 @@ public sealed record AgentSummary(
 
 /// <param name="Limit">Null when the tenant has no monthly limit.</param>
 public sealed record EmailQuotaDecision(bool Granted, int? Limit, int UsedThisMonth);
+
+/// <param name="Limit">Null when the tenant has no monthly limit.</param>
+/// <param name="Reason">
+/// Why a refusal was a refusal — <c>CHANNEL_NOT_CONFIGURED</c> or <c>MONTHLY_QUOTA_EXCEEDED</c>.
+/// The email decision has no equivalent because an email always has a platform account to fall
+/// back on; here the two refusals call for different actions (configure a provider, or raise a
+/// ceiling) and a dead-lettered message has to say which.
+/// </param>
+public sealed record SmsQuotaDecision(
+    bool Granted, int? Limit, int UsedThisMonth, string? Reason = null);
+
+/// <summary>
+/// A tenant's SMS channel as other modules see it: which provider, under which sender identity,
+/// and whether it can actually send. Never a credential.
+/// </summary>
+/// <param name="ProviderType"><c>Disabled</c>, <c>Brevo</c> or <c>Twilio</c>.</param>
+/// <param name="SenderId">
+/// Brevo's alphanumeric sender ("SANKORE", ≤11 characters) or Twilio's own number / messaging
+/// service SID. One field, because what it means is the provider's business.
+/// </param>
+/// <param name="AccountSid">Twilio's Account SID. Null for Brevo.</param>
+/// <param name="HasCredential">A secret is stored in the vault. Not the secret.</param>
+/// <param name="CanSend">
+/// The only question most callers have: provider chosen, sender identity set, credential stored
+/// and — for Twilio — an Account SID present. Computed by the entity so no caller re-derives it
+/// and gets it subtly wrong.
+/// </param>
+/// <param name="DefaultCallingCode">
+/// The country calling code, digits only, that turns a locally-stored telephone number into an
+/// E.164 address. Configured per tenant because nothing else in this platform knows it — see the
+/// entity for why it is not inferred.
+/// </param>
+public sealed record TenantSmsConfigDto(
+    string ProviderType,
+    string? SenderId,
+    string? AccountSid,
+    string? DefaultCallingCode,
+    bool HasCredential,
+    bool CanSend,
+    int? MonthlyQuotaLimit,
+    int CurrentMonthUsageCount);
 
 /// <summary>
 /// Read-only projection of one product of the tenant's catalogue, safe to hand to other modules.

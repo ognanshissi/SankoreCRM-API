@@ -43,4 +43,40 @@ internal sealed class NotificationsModuleFacade(NotificationsDbContext db)
 
         return Result<Guid>.Ok(message.Id);
     }
+
+    public async Task<Result<Guid>> QueueSmsAsync(
+        QueueSmsRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // A destination is the one thing this module cannot supply or guess. Refused here rather
+        // than at send time, so a caller that failed to resolve a telephone number learns it
+        // synchronously instead of through a dead-letter row ten seconds later.
+        if (string.IsNullOrWhiteSpace(request.RecipientPhone))
+            return Result<Guid>.Fail("RECIPIENT_PHONE_REQUIRED");
+
+        // Idempotency: silently drop duplicates so callers can retry safely. On this channel that
+        // is also what stops a retried consumer from charging the tenant twice.
+        var exists = await db.SmsOutboxMessages
+            .IgnoreQueryFilters()
+            .AnyAsync(m => m.IdempotencyKey == request.IdempotencyKey, ct);
+
+        if (exists)
+            return Result<Guid>.Fail("DUPLICATE_IDEMPOTENCY_KEY");
+
+        var message = SmsOutboxMessage.Create(
+            tenantId: request.TenantId,
+            module: request.Module,
+            templateKey: request.TemplateKey,
+            locale: request.Locale,
+            recipientPhone: request.RecipientPhone.Trim(),
+            templateDataJson: JsonSerializer.Serialize(request.TemplateData),
+            idempotencyKey: request.IdempotencyKey);
+
+        db.SmsOutboxMessages.Add(message);
+        await db.SaveChangesAsync(ct);
+
+        return Result<Guid>.Ok(message.Id);
+    }
 }

@@ -34,6 +34,9 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     /// </summary>
     public new DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<TenantNotificationSettings> TenantNotificationSettings => Set<TenantNotificationSettings>();
+
+    /// <summary>The tenant's SMS channel — its own row beside the email one; see the entity.</summary>
+    public DbSet<TenantSmsSettings> TenantSmsSettings => Set<TenantSmsSettings>();
     public DbSet<ComplianceSettings> ComplianceSettings => Set<ComplianceSettings>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<CompanyInfo> CompanyInfos => Set<CompanyInfo>();
@@ -123,6 +126,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<Territory>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ProductSpeciality>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TenantNotificationSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<TenantSmsSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ComplianceSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);

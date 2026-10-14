@@ -281,6 +281,21 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
             }));
 
+    // SMS delivery callbacks. Per IP, and generous: a provider sends one callback per message
+    // and can batch a backlog after an outage of its own, so a tight window would drop status
+    // updates the platform then never hears about again — these are not retried indefinitely.
+    // The gate that matters here is not the rate but the signature: Twilio's HMAC and Brevo's
+    // derived URL token, both checked before anything is written.
+    options.AddPolicy("sms-webhooks", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"sms-webhooks:{ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 300,
+                QueueLimit = 0,
+            }));
+
     // Web ingest: 10 req/min per IP+key (US-F13.37-BE-12)
     options.AddPolicy("ingest-key", ctx =>
     {
@@ -370,6 +385,10 @@ builder.Services.AddMassTransit(x =>
     // KRM-B-10: tells the CUSTOMER how their file ended up. On the validation and rejection events
     // rather than on the routing, so an automatic and a manual approval produce the same message.
     x.AddConsumer<Sankore.Modules.Kyc.Features.Routing.Consumers.KycRemoteOutcomeConsumer>();
+
+    // Drops M08's SMS provider cache when a tenant reconfigures its channel. Its own consumer
+    // beside the email one so an email change does not invalidate the SMS entry and the reverse.
+    x.AddConsumer<Sankore.Modules.Notifications.Infrastructure.Consumers.TenantSmsSettingsChangedConsumer>();
 
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer>();
     x.AddConsumer<LeadDispatchedTaskConsumer>();
@@ -977,6 +996,13 @@ appVersion1.MapIntegrationModuleEndpoints();
 appVersion1.MapGroup("public")
     .RequireRateLimiting("kyc-public")
     .MapKycPublicEndpoints();
+
+// The SMS providers' delivery callbacks. Under `public` because TenantResolutionMiddleware
+// exempts that prefix and nothing else, and a provider callback carries no tenant header — each
+// endpoint resolves the tenant from its own payload and verifies it before writing anything.
+appVersion1.MapGroup("public")
+    .RequireRateLimiting("sms-webhooks")
+    .MapNotificationsPublicEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 appVersion1.MapGroup("object-storage").MapMigrateObjects();

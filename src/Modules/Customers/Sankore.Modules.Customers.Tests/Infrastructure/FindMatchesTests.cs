@@ -27,7 +27,7 @@ public sealed class FindMatchesTests : IDisposable
 
     private CustomersModuleFacade Facade(CustomersDbContext db)
         => new(db, new UnusedLeadConversion(), Indexer, TestHoldingSync.For(db, _tenant),
-               TestDoubles.ClientEmails(db), TestDoubles.RemoteIdentity(db), TestDoubles.ReadIdentity(db));
+               TestDoubles.ClientEmails(db), TestDoubles.RemoteIdentity(db), TestDoubles.ReadIdentity(db), TestDoubles.ClientSms(db));
 
     private sealed class UnusedLeadConversion : ILeadConversionService
     {

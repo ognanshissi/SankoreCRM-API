@@ -54,12 +54,28 @@ public sealed class KycSettingsAdminTests : IDisposable
         return user;
     }
 
+    /// <summary>
+    /// An OTP sender for a tenant with no SMS channel. NSubstitute's default for a Task&lt;bool&gt;
+    /// is already false, and it is spelled out anyway: a reader has to be able to see that the
+    /// refusal under test comes from the handler's guard and not from an unstubbed call.
+    /// </summary>
+    private static IKycOtpSender UnavailableOtpSender()
+    {
+        var sender = Substitute.For<IKycOtpSender>();
+
+        sender.IsAvailableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        return sender;
+    }
+
     private UpdateKycSettingHandler UpdateHandler() => new(
         _factory.CreateContext(), Settings(), _cache, CurrentUser(),
-        // The shipped sender, which answers IsAvailable = false — so these tests exercise the
-        // deployment as it actually is, and the one case that depends on it (remote-otp refusing
-        // to be turned on) is a real assertion rather than a double's opinion.
-        new UnavailableKycOtpSender(), _clock);
+        // A sender that reports NO channel, which is the state of a tenant that has not
+        // configured one — most of them. The one case that depends on it (remote-otp refusing to
+        // be turned on) is therefore a real assertion about the guard rather than a double's
+        // opinion about the provider.
+        UnavailableOtpSender(), _clock);
 
     private KycModuleFacade Facade() => new(
         _factory.CreateContext(), Settings(), _cache, NullLogger<KycModuleFacade>.Instance);

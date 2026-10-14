@@ -32,9 +32,9 @@ internal sealed class UpdateKycSettingHandler(
 
         var value = command.Value.Trim();
 
-        // KRM-B-12. The only setting in this module whose validity depends on what the HOST has
-        // registered rather than on the value itself, which is why the check is here and not in
-        // KycSettingRanges — a range validator cannot see the container.
+        // KRM-B-12. The only setting in this module whose validity depends on the TENANT's own
+        // SMS channel rather than on the value itself, which is why the check is here and not in
+        // KycSettingRanges — a range validator sees neither the container nor the tenant.
         //
         // Turning the second factor on with no SMS channel would not degrade the journey, it would
         // END it: every customer of the tenant would reach a code entry screen for a message that
@@ -42,7 +42,7 @@ internal sealed class UpdateKycSettingHandler(
         // administrator tries, so they learn it instead of their customers.
         if (declared.Key.Equals(KycSettingKeys.RemoteOtp, StringComparison.OrdinalIgnoreCase)
             && bool.TryParse(value, out var enabling) && enabling
-            && !otpSender.IsAvailable)
+            && !await otpSender.IsAvailableAsync(currentUser.TenantId, ct))
         {
             return Result.Fail<KycSettingDto>(KycErrors.RemoteOtpUnavailable);
         }

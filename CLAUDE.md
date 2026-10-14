@@ -1151,6 +1151,134 @@ while the workspace is on 22, a pre-existing conflict. The SVG is drawn by hand 
 rect per dark module, `x`/`y` as (column, row) — a transposed QR looks identical and does not scan —
 and the four-module quiet zone, which is part of the standard and not decoration.
 
+### The SMS channel: a second transport beside the email one, not a variant of it (M08)
+
+A tenant can configure **Brevo** or **Twilio** for text messages, with its own credential, its own
+sender identity and its own monthly allowance. Everything mirrors the email channel's shape so one
+mental model covers both — and the places it deliberately does not are all downstream of one fact:
+**an email costs almost nothing and a text message is billed per unit.**
+
+| | Email | SMS |
+|---|---|---|
+| Tenant settings | `administration.tenant_notification_settings` | `administration.tenant_sms_settings` |
+| Vault secret | `{provider}-credential` | `{provider}-sms-credential` |
+| Templates | `notifications.email_templates` | `notifications.sms_templates` |
+| Queue | `email_outbox_messages` | `sms_outbox_messages` |
+| Delivery log | `email_delivery_logs` | `sms_delivery_logs` |
+| Resolver cache key | `notifications:provider:{t}` | `notifications:sms-provider:{t}` |
+| Change event | `TenantNotificationSettingsChangedEvent` | `TenantSmsSettingsChangedEvent` |
+| Processor | 30 s, batch 50, 3 attempts | **10 s, batch 20, 2 attempts** |
+| Platform fallback | the platform's SMTP account | **none — no channel means no send** |
+
+**Separate tables rather than a `Channel` column, every time.** One settings row mixing both would
+make `UpdateProvider`, `ResetToDefault` and `TryConsumeMonthlyQuota` silently mean "email" — which
+is how a quota gets consumed by the wrong channel. One outbox would mean every email column
+nullable, two processors competing for the same hot rows, and a channel filter whose absence sends
+an SMS through the email sender and reports it delivered. One template row would carry a meaningless
+`Subject` and plain text in a column called `HtmlBody`.
+
+**`{provider}-sms-credential` is a different secret NAME from the email one, and that is not
+cosmetic.** Brevo sells both channels, so a tenant can legitimately run Brevo email and Brevo SMS at
+once — with a shared name, storing the SMS key would silently overwrite the email key. The cost is
+asking an administrator who uses one Brevo key for both to type it twice; the alternative loses a
+working email configuration with no error.
+
+**The two allowances are separate counters, and that is the point.** A month of marketing emails
+must not exhaust the allowance a customer's one-time code needs. `TryConsumeSmsQuotaAsync` also
+differs from its email twin in one place: a tenant with **no row is refused** rather than granted.
+For email, no row means "no limit configured" and the platform account sends it anyway; for SMS it
+means there is no provider and nobody paying, so granting an allowance would hand the processor a
+message it is about to fail on — dead-lettered under a network error instead of under
+`CHANNEL_NOT_CONFIGURED`.
+
+**`TenantSmsSettings.CanSend` is computed once, on the entity, and every other module carries it.**
+Four conditions — provider chosen, sender identity set, calling code configured, credential stored
+(plus an Account SID for Twilio) — and each one alone produces a channel that looks configured and
+sends nothing. M08's resolver copies the flag rather than re-deriving it, and so does M02: a second
+derivation is a second chance to get one of the four wrong, and wrong in the permissive direction
+locks a tenant's customers out of their own journey.
+
+**`DefaultCallingCode` exists because nothing else in this platform knows the country.** A tenant
+has a name, a logo and a default language and no country; M01 stores numbers as they were dialled,
+because `SensitiveValueNormalizer.NormalizePhone` deliberately infers no indicatif — inferring one
+wrongly makes two different subscribers collide in a blind index. So a customer captured at a
+counter in Abidjan is `0708091801` and a provider needs `+2250708091801`, and the bridge is a
+per-tenant setting. **Required to enable the channel**: an institution whose customers are stored in
+local form would otherwise have a channel that silently cannot reach most of them.
+`ClientSmsNotifier.ToE164` is `internal` rather than private so that conversion — the one place
+where being wrong sends a code to a stranger — has cases of its own. The documented limitation:
+a LOCAL number from a trunk-zero plan (Ghana, Nigeria, France) keeps a zero it should lose. Accepted
+knowingly — the tenants are UEMOA institutions whose plans have no trunk prefix, and stripping a
+zero that is significant in Côte d'Ivoire corrupts the common case to fix the rare one.
+
+**`SmsSegments` is the one piece of arithmetic that shows up on an invoice rather than in a log.** A
+GSM-7 message fits 160 characters; a single character outside that alphabet — one `œ` — switches the
+whole message to UCS-2 and drops the budget to 70, turning one segment into three. `body.Length /
+160` would report one and the provider would bill three. Note the trap the tests pay for: **`é` IS
+in GSM-7** (so are `è ù ì ò à ä ö ñ ü Ç`), so writing that case with `é` asserts nothing. The
+extension characters `^ { } [ ] ~ | € \` cost two septets each, and UCS-2 bills UTF-16 code units
+so an emoji above U+FFFF costs two. **The seeded French bodies carry no accents** — "verification",
+not "vérification" — which looks like a typo in `SmsSeeder` and is a cost decision; the seeder logs
+a warning when a platform body exceeds one segment and a test fails the build.
+
+**A missing template dead-letters instead of falling back.** `ScribanTemplateRenderer` renders the
+raw payload as a `<pre>` block and lets the email go, which is recoverable — somebody receives an
+ugly email. `SmsTemplateRenderer` reports `Found: false` and the processor refuses: the same
+behaviour here would spend a tenant's money to send a customer a JSON fragment. Same reason the
+composite sender has **no stub fallback**: an unknown provider must fail loudly, because the
+alternative on this channel is silence that still costs money somewhere.
+
+**The destination is redacted on every terminal state.** `SmsOutboxMessage.RecipientPhone` holds a
+clear E.164 address because the processor needs it minutes later in another process — a queue it
+cannot read is a queue it cannot send — and `Redact` replaces it with the masked form once the
+message can no longer be sent. The mitigation is lifetime, not secrecy.
+
+**`Sent` means the provider accepted it, never that the handset received it.** That second question
+is `ProviderStatus`, which a delivery callback fills in later, and conflating them is how a platform
+reports a 100% delivery rate on messages nobody got. A callback therefore **never** moves a message
+back out of `Sent`: rewriting the status would make the processor pick the row up and send a second
+one — a customer receiving two codes because the first was reported undelivered.
+
+**The two providers verify their callbacks differently, and that asymmetry is theirs.** Twilio signs
+with the account's Auth Token (HMAC-SHA1 over the URL plus the alphabetically sorted form body,
+base64) — so the tenant is resolved from the `AccountSid` the payload carries, through
+`IAdministrationModule.ResolveTenantBySmsAccountSidAsync` and **not** a cross-schema query, and the
+token is then read from the vault. Brevo does **not** sign SMS events at all; its documented
+protection is IP allow-listing, which a multi-tenant platform behind a load balancer cannot rely on,
+so its URL carries a per-tenant token derived with HKDF from `Jwt:SigningKey` — no new secret, no
+rotation story, and the same argument `KycRemoteSessionOptions` makes. Two things to know: **the
+Twilio signature must be computed over the URL Twilio built**, which behind a terminating proxy is
+not the one the application sees (`ExternalUrl` reconstructs it from the forwarded headers — this is
+the most likely reason a correct integration reports every callback as forged); and an **unknown
+account answers 204, a bad signature answers 403** — the first is a stale provider setting or
+somebody else's traffic and erroring makes the provider retry for hours, the second needs to be
+visible.
+
+**An unrecognised provider status word is `Accepted`, not `Undelivered`.** Both providers emit
+intermediate states and a future one will emit a word the list does not know; reading that as a
+failure reports non-delivery for messages still in flight, which produces false support tickets
+rather than missed ones.
+
+**KRM-B-12's second factor is now switchable, and only by a tenant that can actually send.**
+`IKycOtpSender.IsAvailableAsync` is per TENANT (it was a static `IsAvailable` when the mechanism
+shipped without a transport) and reads M12's `CanSend`; `UpdateKycSettingHandler` refuses to turn
+`remote-otp` on while it says no, so an administrator learns it instead of their customers.
+`SmsKycOtpSender` goes through **M01's** send-to-client contract rather than straight to M08,
+because the number is M01's secret and the E.164 conversion needs the tenant's calling code. Its
+idempotency key is the client plus the code's own ten-minute window: keyed on the invitation alone a
+customer asking for a second code would be silently given none, keyed on nothing a retry would
+charge twice. The message carries **the code and the window and nothing else** — a text message is
+readable on a locked screen, and naming the institution and the customer beside a code is how a
+stolen handset becomes an enrolment.
+
+Front-end: `sms-parametrage` is its own screen under `settings/notifications/sms`, not a section of
+the email one — the two share nothing and a tenant runs one without the other. Three things it shows
+that only the server knows: `canSend` (the difference between configured and half-configured),
+`senderIdHint` (the rule belongs to the provider, and a hard-coded "11 characters maximum" is wrong
+the moment somebody switches to Twilio), and the callback URL to paste into the provider. The
+provider list comes from `availableProviders` on the DTO so the options cannot drift from the
+server's own list. `qrcode-generator` aside, no new dependency.
+
 ### Lead e-mail is encrypted — never compare it in a query
 
 `Lead.Email` is plaintext in the domain and AES-256-GCM ciphertext in the column (`email_enc`),
@@ -1489,6 +1617,8 @@ M12 exposes **no generic settings store** — its only precedent for a tenant pa
 | `kyc.kyc_settings` | key/value + `IKycSettings` | M02 | M02 |
 | `leads.lead_settings` | key/value + `ILeadSettings` | M13 | M13 |
 | `administration.compliance_settings` | **typed, one row per tenant** | M12 | M13, M01, M02 |
+| `administration.tenant_notification_settings` | typed, one row per tenant | M12 | M08 |
+| `administration.tenant_sms_settings` | typed, one row per tenant | M12 | M08, M01, M02 |
 
 `compliance_settings` is typed and not key/value because its values have real invariants (a GIIN has
 a fixed 19-character structure, and enabling FATCA without one is a half-configured regulatory

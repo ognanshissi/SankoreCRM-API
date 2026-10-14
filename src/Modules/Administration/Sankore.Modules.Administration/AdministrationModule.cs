@@ -20,6 +20,7 @@ using Sankore.Modules.Administration.Features.Authentication.ResetPassword;
 using Sankore.Modules.Administration.Features.Authentication.RefreshToken;
 using Sankore.Modules.Administration.Features.Authentication.VerifyToken;
 using Sankore.Modules.Administration.Features.NotificationSettings;
+using Sankore.Modules.Administration.Features.SmsSettings;
 using Sankore.Modules.Administration.Features.ComplianceSettings;
 using Sankore.Modules.Administration.Features.Credentials;
 using Sankore.Modules.Administration.Infrastructure.Crypto;
@@ -200,6 +201,7 @@ public static class AdministrationModule
         app.MapPermissionsEndpoints();
         app.MapProductsEndpoints();
         app.MapNotificationSettingsEndpoints();
+        app.MapSmsSettingsEndpoints();
         app.MapComplianceSettingsEndpoints();
 
         // Professional cards (CIMA 503, 510, 732). Alongside the compliance settings rather than

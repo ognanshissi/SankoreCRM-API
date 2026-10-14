@@ -119,12 +119,13 @@ public static class KycSettingKeys
     /// (KRM-B-12).
     ///
     /// <para>
-    /// <b>It cannot be turned on in this deployment, and the refusal is deliberate.</b> This
-    /// platform has no SMS channel — M08 is email only — so enabling it would lock every customer
-    /// of the tenant out of their own journey. <c>UpdateKycSettingHandler</c> refuses the write
-    /// while <c>IKycOtpSender.IsAvailable</c> is false, so an administrator is told at the moment
-    /// they try instead of their customers finding out. The whole mechanism behind it is
-    /// implemented and tested; only the delivery is missing.
+    /// <b>It can only be turned on by a tenant that has an SMS channel.</b>
+    /// <c>UpdateKycSettingHandler</c> refuses the write while
+    /// <c>IKycOtpSender.IsAvailableAsync</c> says no — which means a provider, a sender identity,
+    /// a credential in the vault and a calling code, all configured in the SMS settings. Enabling
+    /// it without them would put every customer of the tenant in front of a code screen for a
+    /// message that is never sent, so the administrator is told at the moment they try instead of
+    /// their customers finding out.
     /// </para>
     /// </summary>
     public const string RemoteOtp = "remote-otp";
@@ -182,7 +183,8 @@ public static class KycSettingKeys
             + "relance l'agent responsable, avec copie au chef d'agence."),
         new(RemoteOtp, "false", TypeBool,
             "Exiger un code reçu par SMS en plus du numéro client et de la date de naissance. "
-            + "Indisponible tant qu'aucun canal SMS n'est configuré : l'activation est refusée."),
+            + "Nécessite un canal SMS configuré (fournisseur, expéditeur, clé, indicatif) : "
+            + "l'activation est refusée sans lui."),
     ];
 
     private static readonly Dictionary<string, KycSettingDefault> ByKey =

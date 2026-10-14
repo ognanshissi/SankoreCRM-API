@@ -83,6 +83,7 @@ public static class CustomersModule
         // It lives here because both values are M01's and neither may cross the module boundary.
         services.AddScoped<Infrastructure.RemoteIdentity.RemoteIdentityVerifier>();
         services.AddScoped<Infrastructure.RemoteIdentity.ReadIdentityComparer>();
+        services.AddScoped<Infrastructure.Notifications.ClientSmsNotifier>();
 
         // ── Cross-module surface ────────────────────────────────────────────
         services.AddScoped<ICustomersModule, CustomersModuleFacade>();

@@ -242,6 +242,47 @@ public interface ICustomersModule
     Task<bool> NotifyClientAsync(NotifyClientRequest request, CancellationToken ct);
 
     /// <summary>
+    /// Whether the client has an active telephone number on file — a boolean, never the number.
+    ///
+    /// <para>
+    /// The twin of <see cref="HasEmailAsync"/> and, like it, it does NOT decrypt: a gate deciding
+    /// whether a second factor can reach somebody must not depend on the field-encryption key
+    /// being right. A number that will not decrypt surfaces at send time, which is the right place
+    /// for a key problem to appear.
+    /// </para>
+    /// </summary>
+    Task<bool> HasPhoneAsync(Guid tenantId, Guid clientId, CancellationToken ct);
+
+    /// <summary>
+    /// Sends a templated TEXT MESSAGE to one of the tenant's clients, and answers whether it was
+    /// queued.
+    ///
+    /// <para>
+    /// A send and not a number lookup, for the reasons <see cref="NotifyClientAsync"/> gives —
+    /// plus one specific to this channel: a stored telephone number is whatever was dialled, and
+    /// turning <c>0708091801</c> into the <c>+2250708091801</c> a provider needs takes the
+    /// tenant's configured calling code. A caller handed the raw number would have to know that,
+    /// and would get it wrong for the one tenant whose customers were captured abroad.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Never throws</b>, and <c>false</c> covers every ordinary reason nothing was sent: an
+    /// unknown client, no telephone on file, a number that cannot be made dialable, and a tenant
+    /// with no SMS channel — which is most of them. Every caller is a consumer, a job or an
+    /// anonymous endpoint whose own work must stand regardless.
+    /// </para>
+    ///
+    /// <para>
+    /// <b><c>true</c> means queued, not delivered.</b> On this channel the gap is wider than on
+    /// email: whether the tenant's allowance is exhausted and whether a template exists are
+    /// settled later by the outbox processor, which dead-letters with a reason. A caller that must
+    /// not strand somebody — a second-factor flow — asks
+    /// <c>IAdministrationModule.GetSmsConfigAsync</c> first and reads <c>CanSend</c>.
+    /// </para>
+    /// </summary>
+    Task<bool> NotifyClientBySmsAsync(NotifyClientBySmsRequest request, CancellationToken ct);
+
+    /// <summary>
     /// Clients holding a live product whose CONTRACT ANNIVERSARY falls on
     /// <paramref name="onDay"/> — the day the CIMA LBC/FT text says the file's information is to
     /// be brought up to date (« les informations sont mises à jour à la date anniversaire du
@@ -523,6 +564,32 @@ public sealed record CustomerMatch(
 /// one exception and it is the point of the first caller — it is a credential the recipient already
 /// holds, not a fact about them.
 /// </param>
+/// <summary>
+/// A templated text message addressed to one of the tenant's clients (see
+/// <see cref="ICustomersModule.NotifyClientBySmsAsync"/>).
+/// </summary>
+/// <param name="TemplateKey">
+/// An SMS template key. SMS and email keys are SEPARATE sets: the same event often needs both,
+/// and sharing a key would make one the other's accidental fallback.
+/// </param>
+/// <param name="TemplateData">
+/// Values for the body. This module adds <c>client_first_name</c> and <c>company_name</c> after
+/// the caller's own, so a caller cannot address somebody else's customer by name. Deliberately
+/// fewer than the email path adds: a text message sits unlocked on a lock screen, so the bodies
+/// are written to need as little identity as possible.
+/// </param>
+/// <param name="IdempotencyKey">
+/// A duplicate is dropped and reported as SUCCESS — the caller asked for the customer to have
+/// this message and they do. On a per-message channel that is also what stops a retried consumer
+/// from charging the tenant twice.
+/// </param>
+public sealed record NotifyClientBySmsRequest(
+    Guid TenantId,
+    Guid ClientId,
+    string TemplateKey,
+    string IdempotencyKey,
+    IReadOnlyDictionary<string, object>? TemplateData = null);
+
 public sealed record NotifyClientRequest(
     Guid TenantId,
     Guid ClientId,
