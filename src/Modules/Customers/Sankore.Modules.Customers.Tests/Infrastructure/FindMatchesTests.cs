@@ -38,6 +38,10 @@ public sealed class FindMatchesTests : IDisposable
         public Task<Sankore.Shared.Kernel.Result<Guid>> CreateHoldingFromLeadAsync(
             PublicApi.CreateHoldingFromLeadRequest request, CancellationToken ct)
             => throw new NotSupportedException("Matching never opens a holding.");
+
+        public Task<Sankore.Shared.Kernel.Result<Guid>> CreateHoldingFromOpportunityAsync(
+            PublicApi.CreateHoldingFromOpportunityRequest request, CancellationToken ct)
+            => throw new NotSupportedException("Matching never opens a holding.");
     }
 
     private Client WithContacts(

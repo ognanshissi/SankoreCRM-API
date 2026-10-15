@@ -86,6 +86,7 @@ internal static class HoldingMapping
         IsReadOnly:      holding.IsReadOnly,
         AvailableActions: holding.AvailableActions,
         SourceLeadId:    holding.SourceLeadId,
+        SourceOpportunityId: holding.SourceOpportunityId,
         CreatedAt:       holding.CreatedAt,
         UpdatedAt:       holding.UpdatedAt,
         Designations:

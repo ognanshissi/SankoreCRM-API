@@ -25,4 +25,10 @@ internal interface ILeadConversionService
     /// </summary>
     Task<Result<Guid>> CreateHoldingFromLeadAsync(
         CreateHoldingFromLeadRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// The draft holding a WON request leaves behind. Same seam and same reason as its lead twin.
+    /// </summary>
+    Task<Result<Guid>> CreateHoldingFromOpportunityAsync(
+        CreateHoldingFromOpportunityRequest request, CancellationToken ct);
 }

@@ -53,6 +53,19 @@ public sealed class ProductHolding : AggregateRoot
     /// </summary>
     public Guid? SourceLeadId { get; private set; }
 
+    /// <summary>
+    /// The commercial request this subscription came from, when it came from one. Opaque, no FK —
+    /// an <c>Opportunity</c> lives in the leads schema.
+    ///
+    /// <para>
+    /// Distinct from <see cref="SourceLeadId"/> and NOT a replacement for it: a lead is a prospect
+    /// being converted, an opportunity is a request on a client who already exists. A holding
+    /// carries one or the other, and the pair cannot be collapsed because the two ids come from
+    /// different tables and mean different things to whoever is reading the trail.
+    /// </para>
+    /// </summary>
+    public Guid? SourceOpportunityId { get; private set; }
+
     // ── Signature and synchronisation (BNF-B-14, BNF-B-16) ───────────────────
 
     /// <summary>
@@ -174,7 +187,8 @@ public sealed class ProductHolding : AggregateRoot
         HoldingSpecifics specifics,
         Guid createdBy,
         DateTimeOffset now,
-        Guid? sourceLeadId = null)
+        Guid? sourceLeadId = null,
+        Guid? sourceOpportunityId = null)
     {
         ArgumentNullException.ThrowIfNull(line);
 
@@ -190,6 +204,7 @@ public sealed class ProductHolding : AggregateRoot
             Origin = HoldingOrigin.CrmSubscription,
             Specifics = specifics ?? HoldingSpecifics.None,
             SourceLeadId = sourceLeadId,
+            SourceOpportunityId = sourceOpportunityId,
             ClauseVersion = 1,
             CreatedBy = createdBy,
             CreatedAt = now,

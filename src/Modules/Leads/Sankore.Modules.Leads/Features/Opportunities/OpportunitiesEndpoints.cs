@@ -5,10 +5,13 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.Opportunities.AdvanceStage;
+using Sankore.Modules.Leads.Features.Opportunities.CloseOpportunity;
 using Sankore.Modules.Leads.Features.Opportunities.CreateOpportunity;
 using Sankore.Modules.Leads.Features.Opportunities.CreateOpportunityForCustomer;
 using Sankore.Modules.Leads.Features.Opportunities.GetOpportunity;
 using Sankore.Modules.Leads.Features.Opportunities.ListOpportunities;
+using Sankore.Modules.Leads.Features.Opportunities.UpdateOpportunity;
 using Sankore.Shared.Kernel;
 
 public static class OpportunitiesEndpoints
@@ -53,7 +56,124 @@ public static class OpportunitiesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        // PUT opportunities/{id}/stage
+        group.MapPut("{id:guid}/stage", AdvanceStage)
+            .WithName("AdvanceOpportunityStage")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // POST opportunities/{id}/close
+        group.MapPost("{id:guid}/close", Close)
+            .WithName("CloseOpportunity")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces<CloseOpportunityResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // PUT opportunities/{id}
+        group.MapPut("{id:guid}", Update)
+            .WithName("UpdateOpportunity")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .WithOpenApi();
+
         return app;
+    }
+
+    /// <summary>
+    /// Moving the cursor along the pipeline. <b>Closing is refused here</b> and sent to its own
+    /// endpoint: a closing carries a motive and opens a contract, which is not a thing a caller
+    /// should be able to do by picking a value in a dropdown.
+    /// </summary>
+    private static async Task<IResult> AdvanceStage(
+        Guid id,
+        AdvanceOpportunityStageRequest req,
+        ISender sender,
+        CancellationToken ct)
+    {
+        if (req.Stage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
+        {
+            return Results.Problem(
+                title: "Stage update failed",
+                detail: OpportunityErrors.CloseThroughCloseEndpoint,
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        var result = await sender.Send(
+            new AdvanceOpportunityStageCommand(id, req.Stage, req.ExpectedUpdatedAt), ct);
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error switch
+            {
+                OpportunityErrors.NotFound => Results.NotFound(new { error = result.Error }),
+                "CONFLICT"                 => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(
+                        title: "Stage update failed", detail: result.Error, statusCode: 422),
+            };
+    }
+
+    /// <summary>
+    /// 200 and not 204, because the body carries the draft contract the closing opened — or the
+    /// null that tells the screen to offer the subscription by hand.
+    /// </summary>
+    private static async Task<IResult> Close(
+        Guid id,
+        CloseOpportunityRequest req,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new CloseOpportunityCommand(id, req.Outcome, req.Reason, req.ExpectedUpdatedAt), ct);
+
+        return result.IsSuccess
+            ? Results.Ok(new CloseOpportunityResponse(result.Value!.HoldingId))
+            : result.Error switch
+            {
+                OpportunityErrors.NotFound => Results.NotFound(new { error = result.Error }),
+                "CONFLICT"                 => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(
+                        title: "Close failed", detail: result.Error, statusCode: 422),
+            };
+    }
+
+    private static async Task<IResult> Update(
+        Guid id,
+        UpdateOpportunityRequest req,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new UpdateOpportunityCommand(
+                OpportunityId:     id,
+                Title:             req.Title,
+                Description:       req.Description,
+                EstimatedAmount:   req.EstimatedAmount,
+                EstimatedCurrency: req.EstimatedCurrency,
+                ExpectedCloseDate: req.ExpectedCloseDate,
+                OwnerId:           req.OwnerId,
+                ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error switch
+            {
+                OpportunityErrors.NotFound => Results.NotFound(new { error = result.Error }),
+                "CONFLICT"                 => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(
+                        title: "Update failed", detail: result.Error, statusCode: 422),
+            };
     }
 
     private static async Task<IResult> ListOpportunities(
@@ -148,3 +268,35 @@ public sealed record CreateOpportunityForCustomerRequest(
     DateTimeOffset? ExpectedCloseDate = null,
     string? CustomerPhone = null,
     bool Force = false);
+
+/// <param name="ExpectedUpdatedAt">
+/// Ce que l'appelant a lu en dernier. Null saute le contrôle — l'onglet des demandes l'envoie, un
+/// script d'intégration n'a pas à le connaître.
+/// </param>
+public sealed record AdvanceOpportunityStageRequest(
+    OpportunityStage Stage,
+    DateTimeOffset? ExpectedUpdatedAt = null);
+
+/// <param name="Outcome">`ClosedWon` ou `ClosedLost`. Toute autre valeur est refusée.</param>
+/// <param name="Reason">Le motif, écrit tel quel sur la demande.</param>
+public sealed record CloseOpportunityRequest(
+    OpportunityStage Outcome,
+    string? Reason = null,
+    DateTimeOffset? ExpectedUpdatedAt = null);
+
+/// <param name="HoldingId">
+/// La souscription en brouillon que la clôture a ouverte, quand elle en a ouvert une. Null est une
+/// réponse ordinaire : demande perdue, demande sans fiche client, ou produit que le catalogue ne
+/// reconnaît pas.
+/// </param>
+public sealed record CloseOpportunityResponse(Guid? HoldingId);
+
+/// <summary>Tous les champs sont facultatifs : null laisse en place.</summary>
+public sealed record UpdateOpportunityRequest(
+    string? Title = null,
+    string? Description = null,
+    decimal? EstimatedAmount = null,
+    string? EstimatedCurrency = null,
+    DateTimeOffset? ExpectedCloseDate = null,
+    Guid? OwnerId = null,
+    DateTimeOffset? ExpectedUpdatedAt = null);

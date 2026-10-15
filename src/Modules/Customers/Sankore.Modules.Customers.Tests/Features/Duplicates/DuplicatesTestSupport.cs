@@ -47,6 +47,10 @@ internal sealed class UnusedLeadConversionService : ILeadConversionService
     public Task<Result<Guid>> CreateHoldingFromLeadAsync(
         CreateHoldingFromLeadRequest request, CancellationToken ct) =>
         throw new NotSupportedException("Lead conversion is out of scope for the deduplication tests.");
+
+    public Task<Result<Guid>> CreateHoldingFromOpportunityAsync(
+        CreateHoldingFromOpportunityRequest request, CancellationToken ct) =>
+        throw new NotSupportedException("Closing a request is out of scope for the deduplication tests.");
 }
 
 internal static class DuplicatesTestDoubles

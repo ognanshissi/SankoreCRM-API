@@ -116,6 +116,10 @@ public sealed class CustomersModuleFacadeBatchTests : IDisposable
         public Task<Result<Guid>> CreateHoldingFromLeadAsync(
             CreateHoldingFromLeadRequest request, CancellationToken ct)
             => throw new NotSupportedException("The batch read never converts a lead.");
+
+        public Task<Result<Guid>> CreateHoldingFromOpportunityAsync(
+            CreateHoldingFromOpportunityRequest request, CancellationToken ct)
+            => throw new NotSupportedException("The batch read never closes a request.");
     }
 
     [Fact]

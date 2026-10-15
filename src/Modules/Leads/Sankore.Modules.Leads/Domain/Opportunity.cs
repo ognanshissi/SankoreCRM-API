@@ -104,43 +104,80 @@ public sealed class Opportunity : AggregateRoot
         return opp;
     }
 
-    public Result AdvanceStage(OpportunityStage newStage)
+    /// <summary>
+    /// Moves the request to another stage.
+    ///
+    /// <para>
+    /// <b>Any open stage to any open stage, in both directions.</b> A commercial pipeline is not a
+    /// ladder: a deal that was in negotiation and goes back to needs analysis is an ordinary week,
+    /// and a forward-only rule would have agents closing and re-creating requests to express it —
+    /// which destroys the history the stage is there to keep.
+    /// </para>
+    ///
+    /// <para>
+    /// A CLOSED request refuses every move. Re-opening is not a transition but a decision with its
+    /// own consequences — a won one may already have produced a draft contract — and nothing in
+    /// this product asks for it yet.
+    /// </para>
+    /// </summary>
+    public Result AdvanceStage(OpportunityStage newStage, DateTimeOffset now)
     {
         if (Stage == OpportunityStage.ClosedWon || Stage == OpportunityStage.ClosedLost)
             return Result.Fail("OPPORTUNITY_ALREADY_CLOSED");
 
-        var previous = Stage;
         Stage       = newStage;
         Probability = StageProbability(newStage);
-        UpdatedAt   = DateTimeOffset.UtcNow;
+        UpdatedAt   = now;
 
         if (newStage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
-            ClosedAt = DateTimeOffset.UtcNow;
+            ClosedAt = now;
 
         return Result.Ok();
     }
 
-    public Result Close(OpportunityStage outcome, string? reason = null)
+    /// <summary>
+    /// Closes the request, won or lost, with the motive the agent gave.
+    ///
+    /// <para>
+    /// <b>The motive is written here and nowhere else.</b> It used to be accepted and silently
+    /// dropped while the column, the DTO and both read handlers projected it — so every closed
+    /// request answered <c>null</c> to "why", and the one field a later reviewer actually reads
+    /// was the one nothing stored.
+    /// </para>
+    /// </summary>
+    public Result Close(OpportunityStage outcome, DateTimeOffset now, string? reason = null)
     {
         if (outcome is not (OpportunityStage.ClosedWon or OpportunityStage.ClosedLost))
             return Result.Fail("INVALID_CLOSE_OUTCOME");
 
-        return AdvanceStage(outcome);
+        var moved = AdvanceStage(outcome, now);
+        if (moved.IsFailure)
+            return moved;
+
+        CloseReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+
+        return Result.Ok();
     }
 
+    /// <summary>
+    /// Patches the editable fields. <b>Null leaves alone</b> — the screen posts only what it
+    /// collected, so a null that cleared would make each save erase the last. Same rule as
+    /// <c>Lead.EnrichPrincipalIdentity</c>.
+    /// </summary>
     public void Update(
         string? title,
         string? description,
         Money? estimatedAmount,
         DateTimeOffset? expectedCloseDate,
-        Guid? ownerId)
+        Guid? ownerId,
+        DateTimeOffset now)
     {
         if (title is not null) Title = title.Trim();
         if (description is not null) Description = description.Trim();
         if (estimatedAmount is not null) EstimatedAmount = estimatedAmount;
         if (expectedCloseDate is not null) ExpectedCloseDate = expectedCloseDate;
         if (ownerId is not null) OwnerId = ownerId;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
     }
 
     private static double StageProbability(OpportunityStage stage) => stage switch

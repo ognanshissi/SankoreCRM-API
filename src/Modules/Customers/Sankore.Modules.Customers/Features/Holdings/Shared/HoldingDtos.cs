@@ -76,6 +76,8 @@ public sealed record HoldingDto(
     /// </summary>
     IReadOnlyList<string> AvailableActions,
     Guid? SourceLeadId,
+    /// <summary>La demande dont cette souscription est issue, quand elle vient d'une demande.</summary>
+    Guid? SourceOpportunityId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     IReadOnlyList<DesignationDto> Designations);

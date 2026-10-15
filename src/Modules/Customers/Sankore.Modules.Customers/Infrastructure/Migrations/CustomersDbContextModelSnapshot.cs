@@ -1806,6 +1806,10 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("source_lead_id");
 
+                    b.Property<Guid?>("SourceOpportunityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_opportunity_id");
+
                     b.Property<string>("Specifics")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

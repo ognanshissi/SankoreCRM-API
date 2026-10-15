@@ -76,6 +76,11 @@ internal sealed class CustomersModuleFacade(
         CreateHoldingFromLeadRequest request, CancellationToken ct)
         => leadConversion.CreateHoldingFromLeadAsync(request, ct);
 
+    /// <summary>La même chose pour une demande gagnée, par le même seam.</summary>
+    public Task<Result<Guid>> CreateHoldingFromOpportunityAsync(
+        CreateHoldingFromOpportunityRequest request, CancellationToken ct)
+        => leadConversion.CreateHoldingFromOpportunityAsync(request, ct);
+
     public async Task<IReadOnlyList<CustomerMatch>> FindMatchesAsync(
         Guid tenantId,
         string? phoneNumber,

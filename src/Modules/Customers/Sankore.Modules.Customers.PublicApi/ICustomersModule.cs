@@ -376,6 +376,31 @@ public interface ICustomersModule
         CreateHoldingFromLeadRequest request, CancellationToken ct);
 
     /// <summary>
+    /// Opens a DRAFT product holding for a client, from a WON commercial request.
+    ///
+    /// <para>
+    /// The twin of <see cref="CreateHoldingFromLeadAsync"/>, for the other way a client ends up
+    /// owed a contract: not a prospect being converted, but an existing client whose request an
+    /// agent has just closed as won. Same draft, same reason — the signature is a separate,
+    /// deliberate act (BNF-B-16), so closing a request must not produce a contract the client has
+    /// not seen.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Idempotent on <c>SourceOpportunityId</c>.</b> A request is won once, but the closing is
+    /// reachable from a retried call, so a second one returns the holding the first produced
+    /// rather than opening a second subscription for the same request.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// The holding's id, or a failure code — the same three as the lead path, and
+    /// <c>HOLDING_ALREADY_HELD</c> is likewise NOT a failure for the caller: the request is won
+    /// either way, and only the draft holding did not open.
+    /// </returns>
+    Task<Result<Guid>> CreateHoldingFromOpportunityAsync(
+        CreateHoldingFromOpportunityRequest request, CancellationToken ct);
+
+    /// <summary>
     /// Everything a back office needs to receive a subscription (BNF-B-16) — the terms, the clause
     /// as it stands, and the signature's existence.
     ///
@@ -530,6 +555,20 @@ public sealed record CreateHoldingFromLeadRequest(
     Guid ProductLineId,
     Guid SourceLeadId,
     Guid ConvertedByUserId);
+
+/// <param name="SourceOpportunityId">
+/// What makes the call idempotent. The holding records it, so a retry finds the existing one.
+/// </param>
+/// <param name="ClosedByUserId">
+/// The agent who closed the request as won — the act that produced the draft, and so the author
+/// the audit trail must name.
+/// </param>
+public sealed record CreateHoldingFromOpportunityRequest(
+    Guid TenantId,
+    Guid ClientId,
+    Guid ProductLineId,
+    Guid SourceOpportunityId,
+    Guid ClosedByUserId);
 
 public sealed record CustomerMatch(
     Guid ClientId,
