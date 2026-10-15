@@ -78,6 +78,46 @@ public sealed class ShippedSdkBuildsTests
     /// dispensation.
     /// </para>
     /// </summary>
+    [Fact]
+    public void Every_shipped_build_also_carries_its_readable_source()
+    {
+        // forms.js est ce qu'un intégrateur lit et ce qu'on corrige ; forms.min.js en est tiré.
+        var missing = SdkRoot().EnumerateDirectories()
+            .Where(d => !File.Exists(Path.Combine(d.FullName, "forms.js")))
+            .Select(d => d.Name)
+            .ToList();
+
+        missing.Should().BeEmpty("every wwwroot/sdk/<version>/ must ship forms.js beside forms.min.js");
+    }
+
+    [Fact]
+    public void The_first_minified_build_is_minified_and_declares_its_version()
+    {
+        var dir = Path.Combine(SdkRoot().FullName, "1.2.1");
+        var source = File.ReadAllText(Path.Combine(dir, "forms.js"));
+        var minified = File.ReadAllText(Path.Combine(dir, RequiredFileName));
+
+        source.Should().Contain("var SDK_VERSION = '1.2.1';");
+        // Terser inline la constante : la version doit survivre sous la forme qu'envoie le SDK.
+        minified.Should().Contain("\"1.2.1\"");
+        minified.Length.Should().BeLessThan(source.Length / 2, "forms.min.js must actually be minified");
+        minified.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length.Should().BeLessThan(5);
+    }
+
+    [Theory]
+    [InlineData("1.0.0")]
+    [InlineData("1.1.0")]
+    [InlineData("1.2.0")]
+    public void Builds_published_before_minification_keep_their_exact_bytes(string version)
+    {
+        // Leur empreinte SRI est épinglée par des sites et enregistrée par le seeder, qui ne la
+        // recalcule jamais. forms.js n'en est qu'une copie lisible : les deux doivent rester égaux,
+        // et une « minification » de ces fichiers casserait chaque site qui les épingle.
+        var dir = Path.Combine(SdkRoot().FullName, version);
+        File.ReadAllBytes(Path.Combine(dir, RequiredFileName))
+            .Should().Equal(File.ReadAllBytes(Path.Combine(dir, "forms.js")));
+    }
+
     private static readonly string[] KnownUnservable = [];
 
     [Fact]

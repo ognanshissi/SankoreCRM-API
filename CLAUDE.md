@@ -2059,6 +2059,15 @@ tree can be unservable with nothing to say so. `ShippedSdkBuildsTests` guards it
 exception list and a second test that fails once an entry is repaired. A new SDK build is always a
 new version directory, never an edit: a site using `integrity` pins the exact version.
 
+**Each version directory holds `forms.js` (readable source) and `forms.min.js` (what sites load and
+pin).** From 1.2.1 on, the minified file is GENERATED: edit `forms.js` in a new version directory,
+bump its `SDK_VERSION`, then `npm run sdk:minify -- <version>` (terser, from the repo root) — it
+prints the SRI hash and refuses to overwrite an existing `forms.min.js`. Builds 1.0.0 to 1.2.0 were
+never minified and must stay byte-for-byte as shipped: their hashes are pinned by sites and
+registered once by `SdkVersionSeeder`, so re-minifying them would make browsers refuse the script
+on every client site. Their `forms.js` is a plain copy, and `ShippedSdkBuildsTests` pins that.
+`/sdk/{version}/forms.js` serves the readable source for debugging; never pin it.
+
 ### Adding a new module
 
 Use `Sankore.Modules.Administration` as the template: PublicApi project (interface only) + main project (DbContext + domain + Features/) + Tests project. Register in `Program.cs` with `builder.Services.Add{Module}Module(...)` and `appVersion1.Map{Module}ModuleEndpoints()`. Initialize in the startup scope if the module needs migration or seeding.

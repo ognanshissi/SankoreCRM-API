@@ -93,6 +93,14 @@ public static class SdkEndpoints
             .ExcludeFromDescription();
 
         // Major alias: /sdk/v{major}/forms.min.js → short cache, resolves to current
+        // La source lisible, pour qu'un intégrateur puisse lire ce qu'il charge et déboguer.
+        // Jamais destinée à être épinglée : seul forms.min.js porte l'empreinte SRI enregistrée.
+        app.MapGet("/sdk/{version}/forms.js", ServeReadableSource)
+            .AllowAnonymous()
+            .WithName("ServeSdkSource")
+            .WithTags("SDK")
+            .ExcludeFromDescription();
+
         app.MapGet("/sdk/v{major:int}/forms.min.js", ServeMajorAlias)
             .AllowAnonymous()
             .RequireCors(PublicCorsPolicy)
@@ -146,6 +154,16 @@ public static class SdkEndpoints
         if (content is null) return Results.NotFound();
 
         // Immutable — exact version never changes
+        httpContext.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        return Results.File(content, "text/javascript");
+    }
+
+    private static async Task<IResult> ServeReadableSource(
+        string version, HttpContext httpContext, ISdkFileStore fileStore, CancellationToken ct)
+    {
+        var content = await fileStore.ReadAsync(version, "forms.js", ct);
+        if (content is null) return Results.NotFound();
+
         httpContext.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
         return Results.File(content, "text/javascript");
     }
