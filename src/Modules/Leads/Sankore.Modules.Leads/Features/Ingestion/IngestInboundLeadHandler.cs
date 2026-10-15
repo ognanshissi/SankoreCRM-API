@@ -1,7 +1,5 @@
 namespace Sankore.Modules.Leads.Features.Ingestion;
 
-using System.Globalization;
-
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
@@ -9,7 +7,6 @@ using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Features.LeadSources.Mapping;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
-using Sankore.Shared.Kernel.ValueObject;
 
 /// <summary>
 /// Unified lead ingestion pipeline (US-F13.37-BE-10).
@@ -52,8 +49,6 @@ internal sealed class IngestInboundLeadHandler(
         if (source.Status is not (LeadSourceStatus.Active or LeadSourceStatus.Testing))
             return Result.Fail<IngestInboundLeadResult>("SOURCE_NOT_ACTIVE");
 
-        var isTest = source.Status == LeadSourceStatus.Testing;
-
         // ── 3. Resolve field mapping and apply ──────────────────────────
         var fieldMapping = source.Settings.FieldMappingsOf();
 
@@ -94,33 +89,14 @@ internal sealed class IngestInboundLeadHandler(
             }
         }
 
-        // ── 4. Extract required fields ──────────────────────────────────
-        mapped.TryGetValue("phoneNumber", out var phone);
-
-        // ── The name, v1 or v2 (BNF-B-18) ───────────────────────────────
+        // ── 4. Required fields ──────────────────────────────────────────
         //
-        // DERIVED and no longer required outright. A v2 form collects a first and a last name
-        // separately, and this route used to answer REQUIRED_FIELDS_MISSING:fullName to a payload
-        // that plainly had the prospect's name — while the same payload pulled from a partner's
-        // API was accepted, because the pull job already derived it. One rule now, in
-        // LeadNameResolver, shared by all four inbound paths.
-        mapped.TryGetValue("fullName", out var suppliedFullName);
-        mapped.TryGetValue("firstName", out var suppliedFirstName);
-        mapped.TryGetValue("lastName", out var suppliedLastName);
-
-        var fullName = Features.CaptureLead.LeadNameResolver.Resolve(
-            suppliedFullName, suppliedFirstName, suppliedLastName);
-
-        if (string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(fullName))
+        // The name is DERIVED and no longer required outright (BNF-B-18): a v2 form collects a
+        // first and a last name separately, and one rule — LeadNameResolver — now serves all
+        // inbound paths.
+        var missing = InboundLeadFactory.MissingRequiredFields(mapped, out var phone, out var fullName);
+        if (missing.Count > 0)
         {
-            var missing = new List<string>();
-            if (string.IsNullOrWhiteSpace(phone)) missing.Add("phoneNumber");
-
-            // Names the three fields any ONE of which would have satisfied it, rather than just
-            // "fullName": an integrator reading the rejection has to know a first and last name
-            // would do.
-            if (string.IsNullOrWhiteSpace(fullName)) missing.Add("fullName|firstName|lastName");
-
             var failedIngestion = LeadIngestion.CreateFailed(
                 cmd.TenantId, cmd.SourceId,
                 $"REQUIRED_FIELDS_MISSING:{string.Join(",", missing)}",
@@ -133,90 +109,25 @@ internal sealed class IngestInboundLeadHandler(
         }
 
         // ── 5. Phone dedup via blind index within DedupWindowDays ───────
-        var phoneIndex = phoneBlindIndexer.Compute(phone);
-        var dedupCutoff = clock.GetUtcNow().AddDays(-source.DedupWindowDays);
+        var phoneIndex = phoneBlindIndexer.Compute(phone!);
+        var duplicateLeadId = await InboundLeadFactory.FindDuplicateAsync(
+            db, cmd.TenantId, phoneIndex, source, clock, ct);
 
-        var duplicateLead = await db.Leads
-            .IgnoreQueryFilters()
-            .Where(l => l.TenantId == cmd.TenantId
-                        && l.PhoneBlindIndex == phoneIndex
-                        && l.Status != LeadStatus.Lost
-                        && l.Status != LeadStatus.Archived
-                        && l.Status != LeadStatus.Disqualified
-                        && l.CapturedAt >= dedupCutoff)
-            .Select(l => new { l.Id })
-            .FirstOrDefaultAsync(ct);
-
-        if (duplicateLead is not null)
+        if (duplicateLeadId is { } dupId)
         {
             var dupIngestion = LeadIngestion.Create(
-                cmd.TenantId, duplicateLead.Id, cmd.SourceId,
+                cmd.TenantId, dupId, cmd.SourceId,
                 clock, cmd.RunId, cmd.RawPayloadJson, cmd.ExternalId);
             dupIngestion.MarkDuplicate();
             db.LeadIngestions.Add(dupIngestion);
             await db.SaveChangesAsync(ct);
             return Result.Ok(new IngestInboundLeadResult(
-                dupIngestion.Id, duplicateLead.Id, dupIngestion.Status));
+                dupIngestion.Id, dupId, dupIngestion.Status));
         }
 
         // ── 6. Create lead ──────────────────────────────────────────────
-        mapped.TryGetValue("firstName", out var firstName);
-        mapped.TryGetValue("lastName", out var lastName);
-        mapped.TryGetValue("email", out var email);
-        mapped.TryGetValue("interestedProduct", out var product);
-        mapped.TryGetValue("preferredLanguage", out var lang);
-        mapped.TryGetValue("nationalId", out var nationalId);
-        mapped.TryGetValue("customerReference", out var custRef);
-        mapped.TryGetValue("comment", out var comment);
-        mapped.TryGetValue("campaign", out var campaign);
-        mapped.TryGetValue("externalReference", out var extRef);
-        mapped.TryGetValue("externalId", out var extId);
-        mapped.TryGetValue("utmSource", out var utmSource);
-        mapped.TryGetValue("utmMedium", out var utmMedium);
-        mapped.TryGetValue("utmCampaign", out var utmCampaign);
-        mapped.TryGetValue("utmContent", out var utmContent);
-        mapped.TryGetValue("utmTerm", out var utmTerm);
-        mapped.TryGetValue("landingPage", out var landingPage);
-        mapped.TryGetValue("referrer", out var referrer);
-
-        var lat = ParseCoordinate(mapped.GetValueOrDefault("latitude"));
-        var lng = ParseCoordinate(mapped.GetValueOrDefault("longitude"));
-
-        var lead = Lead.Capture(
-            tenantId:          cmd.TenantId,
-            fullName:          fullName!,
-            phoneNumber:       phone!,
-            // The coarse enum stays Web for every inbound source: it feeds
-            // LeadScoreCalculator.SourceQualityScore, whose thresholds are measured and
-            // documented, so changing it here would move auto-qualification outcomes. The real
-            // source is leadSourceConfigId below.
-            source:            LeadSource.Web,
-            interestedProduct: product ?? "Unknown",
-            preferredLanguage: lang ?? "FR",
-            location:          new GeoPoint(lat, lng),
-            preferredAgencyId: null,
-            clock:             clock,
-            firstName:         firstName,
-            lastName:          lastName,
-            email:             email,
-            nationalId:        nationalId,
-            customerReference: custRef,
-            comment:           comment,
-            campaign:          campaign,
-            externalReference: extRef,
-            externalId:        extId ?? cmd.ExternalId,
-            phoneBlindIndex:   phoneIndex,
-            utmSource:         utmSource,
-            utmMedium:         utmMedium,
-            utmCampaign:       utmCampaign,
-            utmContent:        utmContent,
-            utmTerm:           utmTerm,
-            landingPage:       landingPage,
-            referrer:          referrer,
-            acquisitionCost:   source.CostPerLead,
-            isTest:            isTest,
-            // Safe to trust: the config was loaded and tenant-checked above.
-            leadSourceConfigId: cmd.SourceId);
+        var lead = InboundLeadFactory.Build(
+            cmd.TenantId, source, mapped, fullName!, phone!, phoneIndex, cmd.ExternalId, clock);
 
         db.Leads.Add(lead);
 
@@ -231,17 +142,4 @@ internal sealed class IngestInboundLeadHandler(
         return Result.Ok(new IngestInboundLeadResult(
             ingestion.Id, lead.Id, ingestion.Status));
     }
-
-    /// <summary>
-    /// A coordinate arrives here as JSON or form text, which always uses a decimal POINT —
-    /// the culture of the host that happens to run the process is irrelevant to it. The
-    /// parameterless <c>double.TryParse</c> used the current culture, so on a fr-FR host
-    /// "5.300489" failed to parse and the lead silently landed on (0, 0); the same value
-    /// parsed correctly on an invariant-culture machine, so no test caught it. This is the
-    /// rule <see cref="Import.LeadRowParser"/> already applies to imported rows.
-    /// </summary>
-    private static double ParseCoordinate(string? raw)
-        => double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-            ? value
-            : 0;
 }

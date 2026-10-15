@@ -8,6 +8,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Ingestions.GetIngestionPayload;
 using Sankore.Modules.Leads.Features.Ingestions.ListIngestions;
 using Sankore.Modules.Leads.Features.Ingestions.ReplayIngestion;
+using Sankore.Modules.Leads.Features.Ingestions.ReprocessIngestion;
 using Sankore.Shared.Kernel;
 
 public static class IngestionsEndpoints
@@ -41,7 +42,30 @@ public static class IngestionsEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        // POST /ingestions/{id}/reprocess — completes a failed ingestion with operator links
+        app.MapPost("ingestions/{id:guid}/reprocess", Reprocess)
+            .WithName("ReprocessIngestion")
+            .WithTags("Ingestions")
+            .RequireAuthorization(Permissions.CanManageLeadSources.Code)
+            .Produces<ReprocessIngestionResult>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         return app;
+    }
+
+    private static async Task<IResult> Reprocess(
+        Guid id, ReprocessIngestionRequest request, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new ReprocessIngestionCommand(id, request.FieldLinks ?? new Dictionary<string, string>()), ct);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error == "INGESTION_NOT_FOUND"
+                ? Results.NotFound()
+                : Results.Problem(detail: result.Error, statusCode: 422);
     }
 
     private static async Task<IResult> ListIngestions(

@@ -85,6 +85,25 @@ public sealed class LeadIngestion : ITenant
     {
         Status = LeadIngestionStatus.Duplicate;
     }
+
+    /// <summary>
+    /// A failed or rejected ingestion completed by hand: the lead now exists, the row says so
+    /// instead of keeping a rejection reason that no longer holds.
+    /// </summary>
+    public void MarkReprocessed(Guid leadId)
+    {
+        LeadId          = leadId;
+        Status          = LeadIngestionStatus.Accepted;
+        RejectionReason = null;
+    }
+
+    /// <summary>The completed payload turned out to match an existing open lead.</summary>
+    public void MarkReprocessedAsDuplicateOf(Guid existingLeadId)
+    {
+        LeadId          = existingLeadId;
+        Status          = LeadIngestionStatus.Duplicate;
+        RejectionReason = null;
+    }
 }
 
 public enum LeadIngestionStatus
