@@ -47,10 +47,15 @@ internal sealed class ListKycRemoteInvitationsHandler(
 
         var verdict = await eligibility.EvaluateAsync(tenantId, query.KycFileId, ct);
 
-        // Only when there IS something to confirm. An agent who cannot issue a link has no use for
-        // the recipient, and this is the one call on the panel that decrypts.
-        var maskedEmail = verdict.CanIssue
+        // Only for a channel that is actually open. An agent who cannot text has no use for the
+        // number, and these are the only two calls on the panel that DECRYPT — doing them for a
+        // channel nobody can use would be decrypting for a screen that will not offer it.
+        var maskedEmail = verdict.CanIssueByEmail
             ? await customers.GetMaskedEmailAsync(tenantId, file.CustomerId, ct)
+            : null;
+
+        var maskedPhone = verdict.CanIssueBySms
+            ? await customers.GetMaskedPhoneAsync(tenantId, file.CustomerId, ct)
             : null;
 
         return Result.Ok(new KycRemoteInvitationListDto(
@@ -58,7 +63,11 @@ internal sealed class ListKycRemoteInvitationsHandler(
             CanIssue: verdict.CanIssue,
             UnavailableReason: verdict.Reason,
             RecipientEmailMasked: maskedEmail,
-            LinkValidityHours: verdict.Policy?.LinkValidityHours));
+            LinkValidityHours: verdict.Policy?.LinkValidityHours,
+            CanIssueByEmail: verdict.CanIssueByEmail,
+            CanIssueBySms: verdict.CanIssueBySms,
+            UnavailableReasonSms: verdict.SmsReason,
+            RecipientPhoneMasked: maskedPhone));
     }
 
     private static KycRemoteInvitationDto ToDto(KycRemoteInvitation i) => new(
@@ -78,5 +87,6 @@ internal sealed class ListKycRemoteInvitationsHandler(
         // Guid.Empty is the SYSTEM account — the conversion. Projected as a flag rather than as a
         // user id the screen would have to resolve for an answer that is almost always "nobody".
         IsSystemIssued: i.CreatedBy == Guid.Empty,
-        IsActive: i.IsActive);
+        IsActive: i.IsActive,
+        Channel: i.Channel.ToString());
 }

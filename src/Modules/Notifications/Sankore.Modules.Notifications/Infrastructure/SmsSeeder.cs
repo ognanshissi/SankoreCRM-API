@@ -27,6 +27,19 @@ internal static class SmsSeeder
     /// </summary>
     internal const string OtpTemplateKey = "kyc.remote-otp";
 
+    /// <summary>
+    /// The remote-collection link, when an agent chooses to text it rather than mail it.
+    ///
+    /// <para>
+    /// <b>The budget is what shapes this one.</b> The link alone is about ninety characters —
+    /// <c>https://{fqdn}/kyc/verification#t={43 characters}</c> — so the sentence around it has
+    /// roughly sixty before the message costs two segments. That is why it says so little, and
+    /// why it names neither the institution nor the customer: the second reason is the same as
+    /// the code's, a text sits unlocked on a lock screen.
+    /// </para>
+    /// </summary>
+    internal const string InvitationTemplateKey = "kyc.remote-invitation";
+
     public static async Task SeedAsync(
         NotificationsDbContext db, ILogger logger, CancellationToken ct = default)
     {
@@ -37,6 +50,12 @@ internal static class SmsSeeder
               + "Ne le communiquez a personne.",
             en: "Your verification code is {{ code }}. It expires in {{ minutes }} minutes. "
               + "Do not share it with anyone.");
+
+        await SeedAsync(
+            db, logger, ct,
+            key: InvitationTemplateKey,
+            fr: "Finalisez votre dossier ({{ hours }}h) : {{ link }}",
+            en: "Complete your file ({{ hours }}h): {{ link }}");
 
         await db.SaveChangesAsync(ct);
     }

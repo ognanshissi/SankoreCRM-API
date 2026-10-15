@@ -42,6 +42,18 @@ public sealed class SendKycRemoteInvitationJob(IServiceScopeFactory scopeFactory
     /// </summary>
     public const string ComplementTemplateKey = "kyc.remote-complement";
 
+    /// <summary>
+    /// The SMS body carrying the link. ONE key for both purposes, unlike the e-mail side: a text
+    /// message has no room to explain what a complement is, so the initial link and the second
+    /// pass say the same short sentence and the page does the explaining.
+    ///
+    /// <para>
+    /// Named here and seeded by M08 under the same key — a mismatch produces a message with no
+    /// body, which the SMS processor dead-letters rather than sending.
+    /// </para>
+    /// </summary>
+    public const string SmsTemplateKey = "kyc.remote-invitation";
+
     public async Task ExecuteAsync(Guid invitationId, Guid tenantId)
     {
         // Set BEFORE the DI scope is created: ITenantContext and ICurrentUser are built from this
@@ -126,31 +138,39 @@ public sealed class SendKycRemoteInvitationJob(IServiceScopeFactory scopeFactory
             var isComplement = invitation.Purpose == KycRemoteInvitationPurpose.Complement;
             var templateKey = isComplement ? ComplementTemplateKey : TemplateKey;
 
-            var queued = await customers.NotifyClientAsync(new NotifyClientRequest(
-                TenantId: tenantId,
-                ClientId: invitation.CustomerId,
-                TemplateKey: templateKey,
-                // Keyed on the INVITATION and not on the file or the customer: a second link is a
-                // second legitimate message, and keying it on either of those would silence every
-                // re-issue. Matches the key KRM-B-03 names.
-                IdempotencyKey: $"{templateKey}-{invitationId}",
-                TemplateData: new Dictionary<string, object>
-                {
-                    // The link, and deliberately NOT the client number. The customer already has
-                    // it from the welcome message, and a mail carrying both the credential and the
-                    // identifier it is checked against would make a single intercepted message
-                    // enough to walk the whole flow.
-                    ["link"] = link,
-                    ["expires_at"] = invitation.ExpiresAt,
-                    ["agency_name"] = agencyName ?? string.Empty,
-                    // What to retake, in the customer's own words rather than as enum names. Empty
-                    // on an initial link, and empty on a complement the agent did not scope — the
-                    // template renders the list only when there is one, so a blank list reads as
-                    // "the whole journey again", which is what an unscoped complement means.
-                    ["items"] = isComplement
-                        ? KycRemoteDocumentLabels.For(invitation.RequestedKinds())
-                        : Array.Empty<string>(),
-                }), CancellationToken.None);
+            // ── Le canal ────────────────────────────────────────────────────
+            //
+            // Lu sur la LIGNE et non passé en argument : la charge utile du job reste deux
+            // identifiants opaques, et un job rejoué ne peut pas envoyer par un canal que
+            // personne n'a choisi.
+            var queued = invitation.Channel == KycRemoteInvitationChannel.Sms
+                ? await SendBySmsAsync(customers, tenantId, invitation, link)
+                : await customers.NotifyClientAsync(new NotifyClientRequest(
+                    TenantId: tenantId,
+                    ClientId: invitation.CustomerId,
+                    TemplateKey: templateKey,
+                    // Keyed on the INVITATION and not on the file or the customer: a second link
+                    // is a second legitimate message, and keying it on either of those would
+                    // silence every re-issue. Matches the key KRM-B-03 names.
+                    IdempotencyKey: $"{templateKey}-{invitationId}",
+                    TemplateData: new Dictionary<string, object>
+                    {
+                        // The link, and deliberately NOT the client number. The customer already
+                        // has it from the welcome message, and a mail carrying both the credential
+                        // and the identifier it is checked against would make a single intercepted
+                        // message enough to walk the whole flow.
+                        ["link"] = link,
+                        ["expires_at"] = invitation.ExpiresAt,
+                        ["agency_name"] = agencyName ?? string.Empty,
+                        // What to retake, in the customer's own words rather than as enum names.
+                        // Empty on an initial link, and empty on a complement the agent did not
+                        // scope — the template renders the list only when there is one, so a blank
+                        // list reads as "the whole journey again", which is what an unscoped
+                        // complement means.
+                        ["items"] = isComplement
+                            ? KycRemoteDocumentLabels.For(invitation.RequestedKinds())
+                            : Array.Empty<string>(),
+                    }), CancellationToken.None);
 
             if (!queued)
             {
@@ -191,6 +211,43 @@ public sealed class SendKycRemoteInvitationJob(IServiceScopeFactory scopeFactory
     /// who cannot enrol.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The link, by text message.
+    ///
+    /// <para>
+    /// <b>It carries the link and the deadline, and names nobody.</b> Same rule as the one-time
+    /// code: a text message is readable on a locked screen, so naming the institution and the
+    /// customer beside a bearer credential is what turns a stolen handset into an enrolment. No
+    /// agency, and no list of documents to retake — a complement sent this way says "finish your
+    /// file", and the page itself shows what is missing.
+    /// </para>
+    ///
+    /// <para>
+    /// The idempotency key is the same shape as the e-mail's, on the INVITATION: a second link is
+    /// a second legitimate message, and keying it on the customer would silence every re-issue.
+    /// The template key differs, because M08 keeps the two sets apart on purpose — sharing one
+    /// would make an e-mail body the accidental fallback of a text message.
+    /// </para>
+    /// </summary>
+    private static Task<bool> SendBySmsAsync(
+        ICustomersModule customers,
+        Guid tenantId,
+        KycRemoteInvitation invitation,
+        string link)
+        => customers.NotifyClientBySmsAsync(new NotifyClientBySmsRequest(
+            TenantId: tenantId,
+            ClientId: invitation.CustomerId,
+            TemplateKey: SmsTemplateKey,
+            IdempotencyKey: $"{SmsTemplateKey}-{invitation.Id}",
+            TemplateData: new Dictionary<string, object>
+            {
+                ["link"] = link,
+                // Hours and not a formatted date: a date rendered into a text message costs
+                // characters that the link has already spent, and "48h" is what a customer acts on.
+                ["hours"] = Math.Max(
+                    1, (int)Math.Round((invitation.ExpiresAt - invitation.CreatedAt).TotalHours)),
+            }), CancellationToken.None);
+
     private static async Task<string?> ResolveAgencyNameAsync(
         IServiceScope scope, Guid tenantId, Guid kycFileId)
     {

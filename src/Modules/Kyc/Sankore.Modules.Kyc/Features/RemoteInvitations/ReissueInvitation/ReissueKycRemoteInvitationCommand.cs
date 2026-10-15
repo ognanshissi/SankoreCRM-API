@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Features.RemoteInvitations.ReissueInvitation;
 
 using MediatR;
+using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.RemoteInvitations.IssueInvitation;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
@@ -25,7 +26,13 @@ using Sankore.Shared.Kernel;
 /// from <c>KycRequestedConsumer</c> alone.
 /// </para>
 /// </summary>
-internal sealed record ReissueKycRemoteInvitationCommand(Guid KycFileId)
+internal sealed record ReissueKycRemoteInvitationCommand(
+    Guid KycFileId,
+    /// <summary>
+    /// The channel the agent picked. E-mail by default, so a caller written before the choice
+    /// existed keeps the behaviour it was written against.
+    /// </summary>
+    KycRemoteInvitationChannel Channel = KycRemoteInvitationChannel.Email)
     : IRequest<Result<IssueKycRemoteInvitationResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "KycRemoteInvitation";

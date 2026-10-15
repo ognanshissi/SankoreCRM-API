@@ -70,6 +70,21 @@ public static class KycErrors
     /// </summary>
     public const string RemoteInvitationNoEmail = "KYC_REMOTE_INVITATION_NO_EMAIL";
 
+    /// <summary>
+    /// The customer record carries no telephone number, so the link cannot be texted. The mirror
+    /// of <see cref="RemoteInvitationNoEmail"/>, and the reason the two are separate codes: an
+    /// agent told "no email" would add an address, which does nothing for the channel they chose.
+    /// </summary>
+    public const string RemoteInvitationNoPhone = "KYC_REMOTE_INVITATION_NO_PHONE";
+
+    /// <summary>
+    /// The INSTITUTION has no usable SMS channel — no provider, no sender identity, no credential
+    /// or no calling code. Distinct from <see cref="RemoteInvitationNoPhone"/> because the fix is
+    /// somebody else's: the customer is reachable, the tenant is not configured, and an agent who
+    /// reads "no phone number" would go editing a file that is perfectly complete.
+    /// </summary>
+    public const string RemoteInvitationSmsUnavailable = "KYC_REMOTE_INVITATION_SMS_UNAVAILABLE";
+
     public const string RemoteInvitationNotFound = "KYC_REMOTE_INVITATION_NOT_FOUND";
 
     /// <summary>

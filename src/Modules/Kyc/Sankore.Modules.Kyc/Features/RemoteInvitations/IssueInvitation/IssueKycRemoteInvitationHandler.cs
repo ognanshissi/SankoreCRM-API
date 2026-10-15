@@ -23,8 +23,14 @@ internal sealed class IssueKycRemoteInvitationHandler(
     {
         var verdict = await eligibility.EvaluateAsync(cmd.TenantId, cmd.KycFileId, ct);
 
-        if (!verdict.CanIssue)
-            return Result.Fail<IssueKycRemoteInvitationResult>(verdict.Reason!);
+        // Le refus du canal CHOISI, et non « l'un des deux marche » : un agent qui demande un SMS
+        // pour un client sans téléphone doit lire « pas de téléphone », et non voir partir un
+        // e-mail qu'il n'a pas demandé.
+        if (verdict.File is null || verdict.ReasonFor(cmd.Channel) is not null)
+        {
+            return Result.Fail<IssueKycRemoteInvitationResult>(
+                verdict.ReasonFor(cmd.Channel) ?? KycErrors.RemoteInvitationNotFound);
+        }
 
         var file = verdict.File!;
         var policy = verdict.Policy!;
@@ -77,7 +83,8 @@ internal sealed class IssueKycRemoteInvitationHandler(
             createdBy: cmd.IssuedBy,
             clock: clock,
             purpose: cmd.Purpose,
-            requestedKinds: cmd.RequestedKinds);
+            requestedKinds: cmd.RequestedKinds,
+            channel: cmd.Channel);
 
         db.KycRemoteInvitations.Add(invitation);
 

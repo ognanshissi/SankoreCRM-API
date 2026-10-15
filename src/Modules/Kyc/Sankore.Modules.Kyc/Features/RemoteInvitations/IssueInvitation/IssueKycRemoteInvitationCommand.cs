@@ -57,7 +57,13 @@ internal sealed record IssueKycRemoteInvitationCommand(
     bool ReplaceActive,
     int? DelayMinutes = null,
     KycRemoteInvitationPurpose Purpose = KycRemoteInvitationPurpose.Initial,
-    IReadOnlyCollection<KycDocumentKind>? RequestedKinds = null
+    IReadOnlyCollection<KycDocumentKind>? RequestedKinds = null,
+    /// <summary>
+    /// How to carry the link. Defaults to e-mail, which is what every automatic path wants and
+    /// what every link issued before the SMS channel existed used — so the conversion consumer and
+    /// the complement path keep working unchanged by saying nothing.
+    /// </summary>
+    KycRemoteInvitationChannel Channel = KycRemoteInvitationChannel.Email
 ) : IRequest<Result<IssueKycRemoteInvitationResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "KycRemoteInvitation";

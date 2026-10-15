@@ -35,10 +35,14 @@ internal static class RemoteInvitationsEndpoints
             .WithSummary("The remote-collection links issued for a KYC file, and their progress")
             .WithDescription(
                 "Carries no token and no hash: there is deliberately no way to learn what a link "
-                + "was. `unavailableReason` says why no new link can be issued — "
-                + "KYC_REMOTE_INVITATION_NO_EMAIL, KYC_REMOTE_INVITATION_PRODUCT_NOT_ELIGIBLE or "
-                + "KYC_REMOTE_INVITATION_FILE_NOT_COLLECTING — and is re-evaluated on every read, "
-                + "so it disappears as soon as the cause is fixed. Requires permission: kyc:read.")
+                + "was. `canIssueByEmail` / `canIssueBySms` say which channels are open and "
+                + "`unavailableReason` / `unavailableReasonSms` say why each is not — "
+                + "KYC_REMOTE_INVITATION_NO_EMAIL, KYC_REMOTE_INVITATION_NO_PHONE, "
+                + "KYC_REMOTE_INVITATION_SMS_UNAVAILABLE, "
+                + "KYC_REMOTE_INVITATION_PRODUCT_NOT_ELIGIBLE or "
+                + "KYC_REMOTE_INVITATION_FILE_NOT_COLLECTING. All are re-evaluated on every read, "
+                + "so they disappear as soon as the cause is fixed. The masked recipient is "
+                + "returned only for a channel that is actually open. Requires permission: kyc:read.")
             .RequireAuthorization(Permissions.CanReadKycFile.Code)
             .Produces<KycRemoteInvitationListDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -54,12 +58,16 @@ internal static class RemoteInvitationsEndpoints
                 "Revokes the link currently in force, if any, and issues a new one — at most one "
                 + "link into a file is ever live. The email goes out immediately (unlike the one "
                 + "the conversion schedules, which waits for the welcome message to land first). "
-                + "Refused with KYC_REMOTE_INVITATION_NO_EMAIL, "
-                + "KYC_REMOTE_INVITATION_PRODUCT_NOT_ELIGIBLE or "
-                + "KYC_REMOTE_INVITATION_FILE_NOT_COLLECTING, and with KYC_FILE_NOT_FOUND for a "
-                + "file outside the caller's agency perimeter — never 403, which would confirm "
-                + "the file exists. Requires permission: kyc:remote-invite.")
+                + "The optional body chooses the channel: `Email` (the default, and what the "
+                + "conversion always uses) or `Sms`. The refusal is the one that applies to the "
+                + "CHOSEN channel — KYC_REMOTE_INVITATION_NO_EMAIL or "
+                + "KYC_REMOTE_INVITATION_NO_PHONE / KYC_REMOTE_INVITATION_SMS_UNAVAILABLE — plus "
+                + "KYC_REMOTE_INVITATION_PRODUCT_NOT_ELIGIBLE and "
+                + "KYC_REMOTE_INVITATION_FILE_NOT_COLLECTING, which close both. KYC_FILE_NOT_FOUND "
+                + "for a file outside the caller's agency perimeter — never 403, which would "
+                + "confirm the file exists. Requires permission: kyc:remote-invite.")
             .RequireAuthorization(Permissions.CanInviteKycRemote.Code)
+            .Accepts<IssueKycRemoteInvitationRequest>("application/json")
             .Produces<IssueKycRemoteInvitationResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -100,12 +108,21 @@ internal static class RemoteInvitationsEndpoints
     }
 
     private static async Task<IResult> IssueAsync(
-        Guid kycFileId, ISender sender, CancellationToken ct)
+        Guid kycFileId,
+        IssueKycRemoteInvitationRequest? req,
+        ISender sender,
+        CancellationToken ct)
     {
         // ReissueKycRemoteInvitationCommand and NOT IssueKycRemoteInvitationCommand: the agent
         // path has to pass the agency perimeter, and the scoped command is the only one this
         // endpoint can reach. See that command for the IDOR this split closes.
-        var result = await sender.Send(new ReissueKycRemoteInvitationCommand(kycFileId), ct);
+        //
+        // A missing body means e-mail, which is what every caller written before the choice
+        // existed meant — so no client has to be updated to keep working.
+        var result = await sender.Send(
+            new ReissueKycRemoteInvitationCommand(
+                kycFileId, req?.Channel ?? KycRemoteInvitationChannel.Email),
+            ct);
 
         if (result.IsFailure)
         {
@@ -154,3 +171,10 @@ public sealed record IssueKycRemoteInvitationResponse(
 
 /// <param name="Reason">Mandatory, 5 to 2000 characters. Read by an agent, never a field value.</param>
 public sealed record RevokeKycRemoteInvitationRequest(string Reason);
+
+/// <param name="Channel">
+/// How to carry the link — <c>Email</c> or <c>Sms</c>. The whole body is optional and so is this:
+/// absent means e-mail.
+/// </param>
+public sealed record IssueKycRemoteInvitationRequest(
+    KycRemoteInvitationChannel Channel = KycRemoteInvitationChannel.Email);

@@ -37,6 +37,7 @@ public sealed class SendKycRemoteInvitationJobTests : IDisposable
     private readonly IAdministrationModule _administration = Substitute.For<IAdministrationModule>();
     private readonly ITenantStore _tenants = Substitute.For<ITenantStore>();
     private readonly List<NotifyClientRequest> _sent = [];
+    private readonly List<NotifyClientBySmsRequest> _texted = [];
 
     public SendKycRemoteInvitationJobTests()
     {
@@ -49,6 +50,10 @@ public sealed class SendKycRemoteInvitationJobTests : IDisposable
 
         _customers.NotifyClientAsync(
                 Arg.Do<NotifyClientRequest>(_sent.Add), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        _customers.NotifyClientBySmsAsync(
+                Arg.Do<NotifyClientBySmsRequest>(_texted.Add), Arg.Any<CancellationToken>())
             .Returns(true);
 
         _administration.GetAgencyAsync(_tenantId, _agencyId, Arg.Any<CancellationToken>())
@@ -75,7 +80,8 @@ public sealed class SendKycRemoteInvitationJobTests : IDisposable
         return new SendKycRemoteInvitationJob(new FixedScopeFactory(services.BuildServiceProvider()));
     }
 
-    private async Task<(KycFile File, KycRemoteInvitation Invitation)> SeedAsync()
+    private async Task<(KycFile File, KycRemoteInvitation Invitation)> SeedAsync(
+        KycRemoteInvitationChannel channel = KycRemoteInvitationChannel.Email)
     {
         var file = KycFile.Open(
             _tenantId, _customerId, KycChannel.LeadConversion, Guid.NewGuid(), TimeProvider.System,
@@ -83,7 +89,7 @@ public sealed class SendKycRemoteInvitationJobTests : IDisposable
 
         var invitation = KycRemoteInvitation.Issue(
             _tenantId, file.Id, _customerId, validityHours: 72, createdBy: Guid.Empty,
-            clock: TimeProvider.System);
+            clock: TimeProvider.System, channel: channel);
 
         _db.KycFiles.Add(file);
         _db.KycRemoteInvitations.Add(invitation);
@@ -257,5 +263,71 @@ public sealed class SendKycRemoteInvitationJobTests : IDisposable
 
         var mail = _sent.Should().ContainSingle().Subject;
         mail.TemplateData!["agency_name"].Should().Be(string.Empty);
+    }
+
+    // ── Le canal SMS ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_link_marked_for_SMS_is_TEXTED_and_never_mailed()
+    {
+        var (_, invitation) = await SeedAsync(KycRemoteInvitationChannel.Sms);
+
+        await Job().ExecuteAsync(invitation.Id, _tenantId);
+
+        _texted.Should().ContainSingle();
+
+        // L'inverse compte autant : un canal choisi qui part quand même par e-mail est une
+        // promesse rompue que personne ne voit, le client ayant bien reçu quelque chose.
+        _sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task The_text_message_carries_the_link_and_names_NOBODY()
+    {
+        var (_, invitation) = await SeedAsync(KycRemoteInvitationChannel.Sms);
+
+        await Job().ExecuteAsync(invitation.Id, _tenantId);
+
+        var sms = _texted.Single();
+        var data = sms.TemplateData!;
+
+        data["link"].ToString().Should().Contain("/kyc/verification#t=");
+        data["hours"].Should().Be(72);
+
+        // Un texto se lit sur un écran verrouillé : ni l'agence, ni la liste des pièces, ni quoi
+        // que ce soit qui désigne l'établissement ou la personne à côté du porteur de créance.
+        data.Should().NotContainKey("agency_name");
+        data.Should().NotContainKey("items");
+        data.Should().NotContainKey("expires_at");
+    }
+
+    [Fact]
+    public async Task The_text_message_is_keyed_on_the_invitation_so_a_re_issue_is_not_silenced()
+    {
+        var (_, invitation) = await SeedAsync(KycRemoteInvitationChannel.Sms);
+
+        await Job().ExecuteAsync(invitation.Id, _tenantId);
+
+        _texted.Single().IdempotencyKey.Should().Contain(invitation.Id.ToString());
+    }
+
+    [Fact]
+    public async Task A_text_that_cannot_be_queued_still_leaves_a_working_link()
+    {
+        _customers.NotifyClientBySmsAsync(
+                Arg.Any<NotifyClientBySmsRequest>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var (_, invitation) = await SeedAsync(KycRemoteInvitationChannel.Sms);
+
+        await Job().ExecuteAsync(invitation.Id, _tenantId);
+
+        var stored = await _db.KycRemoteInvitations.SingleAsync(
+            i => i.Id == invitation.Id, CancellationToken.None);
+
+        stored.Status.Should().Be(KycRemoteInvitationStatus.Sent);
+        stored.TokenHash.Should().NotBeNull(
+            "le lien fonctionne : seul l'acheminement a échoué, et le défaire rendrait inutilisable "
+            + "un lien qui a peut-être été reçu");
     }
 }

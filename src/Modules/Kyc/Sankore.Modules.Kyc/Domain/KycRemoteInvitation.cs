@@ -42,6 +42,28 @@ public enum KycRemoteInvitationStatus
     Locked,
 }
 
+/// <summary>
+/// How the link was carried to the customer.
+///
+/// <para>
+/// Recorded on the row rather than inferred, because an agent looking at a customer who never
+/// opened their link needs to know which address or number it went to before deciding what to try
+/// next — and because an institution answering "how did this person receive their credential" a
+/// year later cannot reconstruct it from anywhere else.
+/// </para>
+/// </summary>
+public enum KycRemoteInvitationChannel
+{
+    /// <summary>The default, and the only one the conversion ever uses.</summary>
+    Email,
+
+    /// <summary>
+    /// A text message. Only ever chosen by an agent: a text costs money per unit, and spending it
+    /// on every conversion is a decision an institution takes deliberately, not a fallback.
+    /// </summary>
+    Sms,
+}
+
 /// <summary>Why a link was issued.</summary>
 public enum KycRemoteInvitationPurpose
 {
@@ -152,6 +174,12 @@ public sealed class KycRemoteInvitation : AggregateRoot
 
     public KycRemoteInvitationStatus Status { get; private set; }
     public KycRemoteInvitationPurpose Purpose { get; private set; }
+
+    /// <summary>
+    /// Which way the link was sent. <c>Email</c> for every row written before the SMS channel
+    /// existed, which is the truth about them rather than a default standing in for an unknown.
+    /// </summary>
+    public KycRemoteInvitationChannel Channel { get; private set; }
 
     public DateTimeOffset ExpiresAt { get; private set; }
     public DateTimeOffset? SentAt { get; private set; }
@@ -268,6 +296,7 @@ public sealed class KycRemoteInvitation : AggregateRoot
         TimeProvider clock,
         KycRemoteInvitationPurpose purpose = KycRemoteInvitationPurpose.Initial,
         IReadOnlyCollection<KycDocumentKind>? requestedKinds = null,
+        KycRemoteInvitationChannel channel = KycRemoteInvitationChannel.Email,
         Guid? id = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
@@ -291,6 +320,7 @@ public sealed class KycRemoteInvitation : AggregateRoot
             // attempted.
             Status = KycRemoteInvitationStatus.Scheduled,
             Purpose = purpose,
+            Channel = channel,
             // Only meaningful on a complement. An initial link that carried a scope would be a
             // link that collects less than the product asks for, which no caller wants and which
             // the journey would have to second-guess.

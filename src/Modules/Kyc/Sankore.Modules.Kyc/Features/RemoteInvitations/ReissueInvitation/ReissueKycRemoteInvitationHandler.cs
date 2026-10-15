@@ -39,7 +39,10 @@ internal sealed class ReissueKycRemoteInvitationHandler(
                 ReplaceActive: true,
                 // And they want the new one now. The tenant delay exists to order two messages at
                 // a conversion; the welcome mail is long gone by the time anybody re-issues.
-                DelayMinutes: 0),
+                DelayMinutes: 0,
+                // Le canal que l'agent a choisi. Tout le reste de cette commande est imposé ;
+                // celui-ci est le seul geste qui lui appartient.
+                Channel: cmd.Channel),
             ct);
     }
 }

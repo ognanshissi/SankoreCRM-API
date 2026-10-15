@@ -27,6 +27,15 @@ internal sealed class KycRemoteInvitationConfiguration : IEntityTypeConfiguratio
         b.Property(i => i.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
         b.Property(i => i.Purpose).HasConversion<string>().HasMaxLength(16).IsRequired();
 
+        // DEFAULT 'Email' in the database and not only in the CLR: the rows written before this
+        // column existed all travelled by email, and the default is what makes that a recorded
+        // fact rather than a null every reader has to interpret.
+        b.Property(i => i.Channel)
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .HasDefaultValue(KycRemoteInvitationChannel.Email)
+            .IsRequired();
+
         // bytea, fixed at the digest width. Not a hex string: a 64-character column invites
         // somebody to compare it with LIKE, and the only comparison that is ever correct here is
         // equality on the full digest.

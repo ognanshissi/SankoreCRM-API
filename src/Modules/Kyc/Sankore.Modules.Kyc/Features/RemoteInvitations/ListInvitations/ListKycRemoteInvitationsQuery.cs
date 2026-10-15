@@ -31,12 +31,22 @@ internal sealed record ListKycRemoteInvitationsQuery(Guid KycFileId)
 /// so the agent can tell the customer, and so the number on the screen is the one the server will
 /// actually use rather than a hard-coded 72.
 /// </param>
+/// <param name="CanIssue">
+/// Whether a link can be sent by EITHER channel. What the panel's banner reads — the per-channel
+/// flags are what its two buttons read.
+/// </param>
+/// <param name="UnavailableReason">Why e-mail is closed, null when it is open.</param>
+/// <param name="UnavailableReasonSms">Why SMS is closed, null when it is open.</param>
 public sealed record KycRemoteInvitationListDto(
     IReadOnlyList<KycRemoteInvitationDto> Invitations,
     bool CanIssue,
     string? UnavailableReason,
     string? RecipientEmailMasked,
-    int? LinkValidityHours);
+    int? LinkValidityHours,
+    bool CanIssueByEmail = false,
+    bool CanIssueBySms = false,
+    string? UnavailableReasonSms = null,
+    string? RecipientPhoneMasked = null);
 
 /// <summary>
 /// One link, as an agent sees it.
@@ -72,4 +82,6 @@ public sealed record KycRemoteInvitationDto(
     int FailedAttempts,
     DateTimeOffset? LockedAt,
     bool IsSystemIssued,
-    bool IsActive);
+    bool IsActive,
+    /// <summary><c>Email</c> | <c>Sms</c> — how this particular link was carried.</summary>
+    string Channel = "Email");

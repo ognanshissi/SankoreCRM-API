@@ -56,6 +56,51 @@ public sealed class ClientSmsNotifier(
                 ct);
 
     /// <summary>
+    /// The client's active telephone number masked, or null when there is none — the projection an
+    /// agent's send dialog shows before a link goes out by SMS.
+    /// </summary>
+    /// <remarks>
+    /// The same <c>SensitiveValueMasker.MaskPhone</c> M01's own contact-point list already applies,
+    /// so this reveals nothing a screen in this product does not already show. It DECRYPTS, which
+    /// is why <see cref="HasPhoneAsync"/> exists separately for the gate — exactly the split the
+    /// email path makes, and for the same reason.
+    ///
+    /// <para>
+    /// Masked from the STORED value rather than from the E.164 form: the agent recognises the
+    /// number they typed into the file, and showing them a +225 prefix they never entered reads
+    /// as somebody else's number.
+    /// </para>
+    /// </remarks>
+    public async Task<string?> GetMaskedPhoneAsync(
+        Guid tenantId, Guid clientId, CancellationToken ct)
+    {
+        var encrypted = await db.ClientContactPoints
+            .IgnoreQueryFilters()
+            .Where(cp => cp.TenantId == tenantId
+                      && cp.ClientId == clientId
+                      && cp.Type == ContactPointType.Phone
+                      && cp.ValidTo == null)
+            .OrderByDescending(cp => cp.IsPrimary)
+            .Select(cp => cp.EncryptedValue)
+            .FirstOrDefaultAsync(ct);
+
+        if (encrypted is null) return null;
+
+        try
+        {
+            return SensitiveValueMasker.MaskPhone(encryptor.Decrypt(encrypted));
+        }
+        catch (Exception ex)
+        {
+            // A KEY problem, not a missing number. Null rather than throwing: this feeds a
+            // confirmation dialog, and a screen that cannot name the destination must still open.
+            logger.LogError(ex,
+                "Could not decrypt the telephone of client {ClientId} for display.", clientId);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Queues one templated text message to a client. Answers whether it was queued, and never
     /// throws — every caller is a consumer, a job or an anonymous endpoint whose own work must
     /// stand whether or not the message went out.

@@ -283,6 +283,17 @@ public interface ICustomersModule
     Task<bool> NotifyClientBySmsAsync(NotifyClientBySmsRequest request, CancellationToken ct);
 
     /// <summary>
+    /// The client's active telephone number, masked — <c>+225 07 ** ** 01</c>. Null when they have
+    /// none, or when the stored value cannot be decrypted.
+    /// </summary>
+    /// <remarks>
+    /// The twin of <see cref="GetMaskedEmailAsync"/>, and the same split from its gate: this one
+    /// DECRYPTS, <see cref="HasPhoneAsync"/> does not. A screen asking an agent to confirm that a
+    /// one-time link is about to be texted somewhere has to be able to name where.
+    /// </remarks>
+    Task<string?> GetMaskedPhoneAsync(Guid tenantId, Guid clientId, CancellationToken ct);
+
+    /// <summary>
     /// Clients holding a live product whose CONTRACT ANNIVERSARY falls on
     /// <paramref name="onDay"/> — the day the CIMA LBC/FT text says the file's information is to
     /// be brought up to date (« les informations sont mises à jour à la date anniversaire du

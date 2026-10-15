@@ -701,6 +701,14 @@ namespace Sankore.Modules.Kyc.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Email")
+                        .HasColumnName("channel");
+
                     b.Property<DateTimeOffset?>("ConsentGivenAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("consent_given_at");

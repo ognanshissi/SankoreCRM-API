@@ -386,6 +386,10 @@ internal sealed class CustomersModuleFacade(
     public Task<bool> HasPhoneAsync(Guid tenantId, Guid clientId, CancellationToken ct)
         => clientSms.HasPhoneAsync(tenantId, clientId, ct);
 
+    public Task<string?> GetMaskedPhoneAsync(
+        Guid tenantId, Guid clientId, CancellationToken ct)
+        => clientSms.GetMaskedPhoneAsync(tenantId, clientId, ct);
+
     public Task<bool> NotifyClientBySmsAsync(
         NotifyClientBySmsRequest request, CancellationToken ct)
         => clientSms.NotifyAsync(request, ct);
