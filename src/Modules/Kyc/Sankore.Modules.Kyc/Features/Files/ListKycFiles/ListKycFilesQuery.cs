@@ -26,7 +26,8 @@ internal sealed record ListKycFilesQuery(
     DateTimeOffset? From,
     DateTimeOffset? To,
     int Page,
-    int PageSize) : IRequest<Result<KycFileListPage>>;
+    int PageSize,
+    bool Mine = false) : IRequest<Result<KycFileListPage>>;
 
 /// <param name="AwaitingMeCount">
 /// Files anywhere in the caller's perimeter whose next pending rung is one their ROLES can sign —

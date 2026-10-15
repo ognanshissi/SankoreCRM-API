@@ -22,7 +22,8 @@ internal static class ListKycFilesEndpoint
                 + "whose next approval rung the caller's roles can sign come first, and "
                 + "awaitingMeCount counts those across the whole perimeter rather than the page. "
                 + "customerName is resolved from the clients module for the returned rows and is "
-                + "null when that module no longer knows the id. Requires kyc:read.")
+                + "null when that module no longer knows the id. mine=true narrows to the files the "
+                + "caller is the responsible agent of, inside the same perimeter. Requires kyc:read.")
             .RequireAuthorization(Permissions.CanReadKycFile.Code)
             .Produces<KycFileListPage>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -43,10 +44,11 @@ internal static class ListKycFilesEndpoint
         ISender sender,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] bool mine = false,
         CancellationToken ct = default)
     {
         var result = await sender.Send(
-            new ListKycFilesQuery(status, agencyId, vigilanceLevel, from, to, page, pageSize), ct);
+            new ListKycFilesQuery(status, agencyId, vigilanceLevel, from, to, page, pageSize, mine), ct);
 
         // 400, not 404: an unparsable status or vigilance level is a malformed request, and the
         // message names the accepted values. Nothing here can be "not found" — an empty perimeter

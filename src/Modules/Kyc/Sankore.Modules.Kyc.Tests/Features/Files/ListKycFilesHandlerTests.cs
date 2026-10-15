@@ -106,8 +106,9 @@ public sealed class ListKycFilesHandlerTests : IDisposable
 
     private static ListKycFilesQuery Query(
         string? status = null, Guid? agencyId = null, string? vigilance = null,
-        DateTimeOffset? from = null, DateTimeOffset? to = null, int page = 1, int pageSize = 20)
-        => new(status, agencyId, vigilance, from, to, page, pageSize);
+        DateTimeOffset? from = null, DateTimeOffset? to = null, int page = 1, int pageSize = 20,
+        bool mine = false)
+        => new(status, agencyId, vigilance, from, to, page, pageSize, mine);
 
     /// <param name="withoutAgency">
     /// A file M01 could not place. Separate from <paramref name="agency"/> on purpose: a nullable
@@ -126,14 +127,16 @@ public sealed class ListKycFilesHandlerTests : IDisposable
         KycVigilanceLevel vigilance = KycVigilanceLevel.Standard,
         KycApprovalLevel? pendingAt = null,
         KycApprovalLevel? alreadySigned = null,
-        string? customerName = null)
+        string? customerName = null,
+        Guid? responsibleAgent = null)
     {
         var customerId = Guid.NewGuid();
         if (customerName is not null) _knownCustomers[customerId] = customerName;
 
         var file = KycFile.Open(
             _tenantId, customerId, KycChannel.Agency, Guid.NewGuid(), _clock,
-            vigilanceLevel: vigilance, agencyId: withoutAgency ? null : agency ?? MyAgency);
+            vigilanceLevel: vigilance, agencyId: withoutAgency ? null : agency ?? MyAgency,
+            responsibleAgentId: responsibleAgent);
 
         // The status is set through reflection-free means only as far as the domain allows; this
         // list is a read, so the state is what matters, not how it was reached.
@@ -161,6 +164,31 @@ public sealed class ListKycFilesHandlerTests : IDisposable
         var result = await handler.Handle(query ?? Query(), default);
         result.IsSuccess.Should().BeTrue();
         return result.Value!;
+    }
+
+    // ------------------------------------------------------------------ mine
+
+    [Fact]
+    public async Task Mine_keeps_only_the_files_the_caller_is_responsible_for()
+    {
+        var mine = Seed(responsibleAgent: _userId);
+        Seed(responsibleAgent: Guid.NewGuid());
+        Seed();
+
+        var page = await ReadAsync(Handler(), Query(mine: true));
+
+        page.Rows.Should().ContainSingle().Which.KycFileId.Should().Be(mine.Id);
+        page.TotalCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Mine_cannot_reach_a_file_outside_the_perimeter()
+    {
+        Seed(agency: OtherAgency, responsibleAgent: _userId);
+
+        var page = await ReadAsync(Handler(), Query(mine: true));
+
+        page.Rows.Should().BeEmpty("the responsible-agent filter narrows the perimeter, it never widens it");
     }
 
     // ------------------------------------------------------------------ perimeter

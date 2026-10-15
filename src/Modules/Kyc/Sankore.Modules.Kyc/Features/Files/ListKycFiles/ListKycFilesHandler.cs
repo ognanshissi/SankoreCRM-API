@@ -31,6 +31,14 @@ internal sealed class ListKycFilesHandler(
 
         var query = await ApplyPerimeterAsync(db.KycFiles.AsQueryable(), request.AgencyId, ct);
 
+        // « Mes dossiers » : ceux dont l'appelant est l'agent responsable. Appliqué APRÈS le
+        // périmètre, donc il ne peut que restreindre — jamais rouvrir un dossier hors périmètre.
+        if (request.Mine)
+        {
+            var me = currentUser.Id;
+            query = query.Where(f => f.ResponsibleAgentId == me);
+        }
+
         if (status is not null) query = query.Where(f => f.Status == status);
         if (vigilance is not null) query = query.Where(f => f.VigilanceLevel == vigilance);
         if (request.From is { } from) query = query.Where(f => f.UpdatedAt >= from);
