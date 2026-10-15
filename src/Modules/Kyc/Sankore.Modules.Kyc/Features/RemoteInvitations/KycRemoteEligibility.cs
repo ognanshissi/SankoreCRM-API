@@ -112,16 +112,24 @@ internal sealed class KycRemoteEligibility(
             return new Verdict(file, KycErrors.RemoteInvitationFileNotCollecting, null,
                 KycErrors.RemoteInvitationFileNotCollecting);
 
-        // No product means no policy, and no policy means no link. The restrictive reading of a
-        // missing reference, as everywhere else in this module — and the agent is told it is the
-        // PRODUCT that is the problem, because the fix is to convert on a catalogue line that
-        // allows remote collection, not to chase an email address.
-
-        var customer = await customers.GetCustomerAsync(tenantId, file.CustomerId, ct);
-        
+        // ── Pas de ligne produit : la politique par défaut, et non un refus ──
+        //
+        // Deux des trois façons d'ouvrir un dossier n'en portent aucune — l'endpoint du
+        // back-office et ClientCreatedKycConsumer — parce qu'à cet instant personne n'a choisi de
+        // produit. Refuser ici faisait répondre « le produit souscrit n'autorise pas » à propos
+        // d'un produit qui n'existe pas, et fermait la collecte à distance à tout dossier ouvert
+        // depuis l'écran KYC. Voir KycRemoteDefaultPolicy pour ce que cette politique concède,
+        // et surtout pour ce qu'elle refuse : la validation automatique.
         if (file.ProductLineId is not { } productLineId)
-            return new Verdict(file, KycErrors.RemoteInvitationProductNotEligible, null,
-                KycErrors.RemoteInvitationProductNotEligible);
+        {
+            var emailOnlyReason = await ResolveEmailReasonAsync(tenantId, file.CustomerId, ct);
+
+            return new Verdict(
+                file,
+                emailOnlyReason,
+                KycRemoteDefaultPolicy.Instance,
+                await ResolveSmsReasonAsync(tenantId, file.CustomerId, ct));
+        }
 
         var policy = await administration.GetKycRemotePolicyAsync(tenantId, productLineId, ct);
 
@@ -140,14 +148,18 @@ internal sealed class KycRemoteEligibility(
         // EVALUATED PER CHANNEL, and both are evaluated even when the first passes: the panel
         // offers two buttons and has to be able to grey out one of them with its own cause. A
         // single answer would make "no email" close the SMS route too.
-        var emailReason = await customers.HasEmailAsync(tenantId, file.CustomerId, ct)
-            ? null
-            : KycErrors.RemoteInvitationNoEmail;
-
+        var emailReason = await ResolveEmailReasonAsync(tenantId, file.CustomerId, ct);
         var smsReason = await ResolveSmsReasonAsync(tenantId, file.CustomerId, ct);
 
         return new Verdict(file, emailReason, policy, smsReason);
     }
+
+    /// <summary>Why the e-mail channel is closed, or null when it is open.</summary>
+    private async Task<string?> ResolveEmailReasonAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct)
+        => await customers.HasEmailAsync(tenantId, customerId, ct)
+            ? null
+            : KycErrors.RemoteInvitationNoEmail;
 
     /// <summary>
     /// Why the SMS channel is closed, or null when it is open.

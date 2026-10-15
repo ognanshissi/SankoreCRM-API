@@ -3,6 +3,7 @@ namespace Sankore.Modules.Kyc.Features.PublicRemote;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Features.RemoteInvitations;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Kyc.Infrastructure.Storage;
@@ -89,9 +90,13 @@ internal sealed class KycRemoteJourney(
             .Select(f => f.ProductLineId)
             .FirstOrDefaultAsync(ct);
 
-        if (productLineId is not { } lineId) return null;
+        // Pas de ligne produit : la même politique par défaut que celle sur laquelle le lien a
+        // été émis. Les deux doivent lire la même règle — renvoyer null ici enverrait le client
+        // sur une page qui refuse de s'ouvrir alors qu'on vient de lui promettre un lien.
+        var policy = productLineId is { } lineId
+            ? await administration.GetKycRemotePolicyAsync(invitation.TenantId, lineId, ct)
+            : KycRemoteDefaultPolicy.Instance;
 
-        var policy = await administration.GetKycRemotePolicyAsync(invitation.TenantId, lineId, ct);
         if (policy is null || !policy.Enabled) return null;
 
         var allowedTypes = policy.AllowedDocumentTypes

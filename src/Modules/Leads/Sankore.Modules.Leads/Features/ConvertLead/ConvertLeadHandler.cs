@@ -4,6 +4,7 @@ using System.Transactions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Leads.Domain;
@@ -19,6 +20,7 @@ internal sealed class ConvertLeadHandler(
     LeadsDbContext db,
     ICurrentUser currentUser,
     ICustomersModule customersModule,
+    IAdministrationModule administration,
     ILeadEmailIndexer emailIndexer,
     Features.Enrichment.LeadCompletenessCalculator completeness,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
@@ -53,6 +55,17 @@ internal sealed class ConvertLeadHandler(
                 ConvertedAt:     lead.ConvertedAt ?? default,
                 AlreadyConverted: true));
         }
+
+        // ── The product line, if capture could not resolve it ────────────
+        //
+        // Capture resolves the label once, and only on CaptureLeadHandler's path: a lead from a web
+        // form, a webhook or a hand-completed ingestion is built without the lookup, and a label
+        // fixed by an agent afterwards was never looked up again. The line then stayed null through
+        // the conversion, so KycRequested carried none — and the KYC file read "no product", fell
+        // back to the default remote policy and to manual validation, while the client's draft
+        // holding was not opened at all. Resolving here, before the completeness gate, closes all
+        // those paths at the one place the line is finally consumed.
+        await TryResolveMissingProductLineAsync(lead, ct);
 
         // ── The file must be complete (BNF-B-04, BNF-B-08, BNF-B-11) ─────
         //
@@ -314,6 +327,36 @@ internal sealed class ConvertLeadHandler(
     /// <c>System.Transactions</c> scope promotes it to a distributed transaction Npgsql cannot do.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Same rule as at capture — exact on the code or the name, active lines only, "Unknown"
+    /// resolves to nothing — and the same posture: best-effort. A conversion is not refused
+    /// because the catalogue could not be read; the lead converts without a line, as it did before.
+    /// </summary>
+    private async Task TryResolveMissingProductLineAsync(Lead lead, CancellationToken ct)
+    {
+        if (lead.ProductLineId is not null || string.IsNullOrWhiteSpace(lead.InterestedProduct))
+            return;
+
+        try
+        {
+            using var suppressed = new TransactionScope(
+                TransactionScopeOption.Suppress,
+                TransactionScopeAsyncFlowOption.Enabled);
+
+            var resolved = await administration.ResolveProductLineAsync(
+                lead.TenantId, lead.InterestedProduct, ct);
+
+            suppressed.Complete();
+
+            if (resolved is { } lineId)
+                lead.SetProductLine(lineId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _ = ex;
+        }
+    }
+
     private async Task<Guid?> TryOpenHoldingAsync(Lead lead, Guid customerId, CancellationToken ct)
     {
         if (lead.ProductLineId is not { } lineId)

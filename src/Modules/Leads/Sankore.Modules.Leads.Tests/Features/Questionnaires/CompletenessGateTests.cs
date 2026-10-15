@@ -87,7 +87,7 @@ public sealed class CompletenessGateTests : IDisposable
         user.TenantId.Returns(_tenant);
 
         return new ConvertLeadHandler(
-            db, user, _customers, TestLeadEmailIndexer.Instance,
+            db, user, _customers, Substitute.For<Sankore.Modules.Administration.PublicApi.IAdministrationModule>(), TestLeadEmailIndexer.Instance,
             TestCompleteness.Calculator(db, _admin, _customers), Substitute.For<IEventPublisher>());
     }
 

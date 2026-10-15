@@ -201,15 +201,26 @@ public sealed class IssueKycRemoteInvitationHandlerTests : IDisposable
     // ── The three refusals ────────────────────────────────────────────────
 
     [Fact]
-    public async Task A_file_with_no_product_is_refused_as_not_eligible()
+    public async Task A_file_with_no_product_falls_back_to_the_default_policy()
     {
         // A counter enrolment, or a lead whose free-text product label matched no catalogue entry.
+        //
+        // This REPLACES a case that pinned the opposite — a refusal — and the reversal is the
+        // point: two of the three ways a file is opened carry no product line, including the
+        // back-office endpoint, so refusing here told an agent that "the product does not allow
+        // it" about a product nobody had chosen, and closed remote collection to every file
+        // opened from the KYC screen. See KycRemoteDefaultPolicy for what the fallback concedes.
         var file = await SeedFileAsync(productLineId: Guid.Empty);
 
         var result = await Handler().Handle(Command(file.Id), CancellationToken.None);
 
-        result.Error.Should().Be(KycErrors.RemoteInvitationProductNotEligible);
-        (await _db.KycRemoteInvitations.CountAsync(CancellationToken.None)).Should().Be(0);
+        result.IsSuccess.Should().BeTrue();
+
+        var issued = await _db.KycRemoteInvitations.SingleAsync(CancellationToken.None);
+        issued.KycFileId.Should().Be(file.Id);
+
+        // La durée vient de la politique par défaut, pas d'un produit : 72 heures.
+        (issued.ExpiresAt - issued.CreatedAt).TotalHours.Should().BeApproximately(72, 0.01);
     }
 
     [Fact]

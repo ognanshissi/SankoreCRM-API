@@ -229,11 +229,20 @@ public sealed class KycRemoteJourneyTests : IDisposable
     // ── A product that stops allowing it mid-journey ─────────────────────────
 
     [Fact]
-    public async Task A_file_with_no_product_has_no_journey()
+    public async Task A_file_with_no_product_walks_the_DEFAULT_journey()
     {
+        // Remplace un cas qui épinglait l'inverse. Les deux côtés doivent lire la même règle :
+        // l'invitation est maintenant émise sur la politique par défaut, et un parcours qui
+        // refuserait de s'ouvrir enverrait le client sur une page morte après lui avoir promis
+        // un lien — exactement la panne que ce repli existe pour supprimer.
         var invitation = await SeedAsync(productLineId: Guid.Empty);
 
-        (await Journey().ReadAsync(invitation, CancellationToken.None)).Should().BeNull();
+        var journey = await Journey().ReadAsync(invitation, CancellationToken.None);
+
+        journey.Should().NotBeNull();
+
+        // Et il demande ce qu'un enrôlement à distance EST, sans rien inventer de plus.
+        journey!.AllowedDocumentTypes.Should().NotBeEmpty();
     }
 
     [Fact]

@@ -57,7 +57,7 @@ public sealed class ConvertLeadHandlerTests : IDisposable
         var db = _factory.CreateContext();
 
         return new ConvertLeadHandler(
-            db, currentUser, _customers, TestSupport.TestLeadEmailIndexer.Instance,
+            db, currentUser, _customers, Substitute.For<Sankore.Modules.Administration.PublicApi.IAdministrationModule>(), TestSupport.TestLeadEmailIndexer.Instance,
             TestCompleteness.Calculator(db, customers: _customers), _publisher);
     }
 

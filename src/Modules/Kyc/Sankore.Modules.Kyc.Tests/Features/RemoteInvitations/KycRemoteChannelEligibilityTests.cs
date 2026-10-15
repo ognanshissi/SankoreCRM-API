@@ -160,11 +160,14 @@ public sealed class KycRemoteChannelEligibilityTests : IDisposable
                 CurrentMonthUsageCount: 0));
 
     private async Task<KycRemoteEligibility.Verdict> EvaluateAsync(
-        KycFileStatus status = KycFileStatus.Collecting)
+        KycFileStatus status = KycFileStatus.Collecting,
+        bool withProductLine = true)
     {
         var file = KycFile.Open(
             _tenantId, _customerId, KycChannel.LeadConversion, Guid.NewGuid(), TimeProvider.System,
-            agencyId: Guid.NewGuid(), productLineId: _productLineId,
+            agencyId: Guid.NewGuid(),
+            // Null reproduit ce qu'ouvrent `POST kyc-files` et ClientCreatedKycConsumer.
+            productLineId: withProductLine ? _productLineId : null,
             responsibleAgentId: Guid.NewGuid());
 
         // Soumis pour vérification : le dossier quitte la collecte, ce qui est le seul état
@@ -178,5 +181,72 @@ public sealed class KycRemoteChannelEligibilityTests : IDisposable
         var eligibility = new KycRemoteEligibility(_db, _administration, _customers);
 
         return await eligibility.EvaluateAsync(_tenantId, file.Id, CancellationToken.None);
+    }
+
+    // ── Un dossier sans ligne produit ──────────────────────────────────────
+
+    [Fact]
+    public async Task A_file_with_NO_product_line_can_still_be_collected_remotely()
+    {
+        // Le cas signalé : deux des trois façons d'ouvrir un dossier n'attachent aucun produit,
+        // et l'écran KYC est l'une d'elles. Le refus parlait « du produit souscrit » à propos
+        // d'un produit inexistant, et fermait la collecte à distance à tous ces dossiers.
+        var verdict = await EvaluateAsync(withProductLine: false);
+
+        verdict.CanIssue.Should().BeTrue();
+        verdict.Reason.Should().BeNull();
+        verdict.SmsReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task The_fallback_policy_NEVER_allows_an_automatic_approval()
+    {
+        var verdict = await EvaluateAsync(withProductLine: false);
+
+        // Lu par KycAutoApprovalPolicy comme « pas automatique » : aucune règle n'a été choisie
+        // pour ce dossier, donc la machine n'a rien à décider à la place de personne.
+        verdict.Policy!.ValidationMode.Should().NotBe("Automatic");
+        verdict.Policy.RequiredTier.Should().Be("Simplified");
+        verdict.Policy.Enabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task The_fallback_policy_offers_every_document_type()
+    {
+        var verdict = await EvaluateAsync(withProductLine: false);
+
+        // Une liste vide laisserait le parcours sans type à proposer, ce qui se lit comme une
+        // page cassée et non comme une règle.
+        verdict.Policy!.AllowedDocumentTypes.Should().NotBeEmpty();
+
+        // Et rien d'inventé au-delà de ce qu'un enrôlement à distance EST : la liste des pièces
+        // exigées s'ajoute au recto et au selfie que le parcours impose déjà de lui-même.
+        verdict.Policy.RequiredDocuments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_file_WITH_a_product_that_forbids_remote_collection_is_still_refused()
+    {
+        // Le repli ne doit pas avaler la vraie règle : un produit qui refuse la collecte à
+        // distance la refuse toujours, et c'est tout l'intérêt de la politique par produit.
+        _administration
+            .GetKycRemotePolicyAsync(_tenantId, _productLineId, Arg.Any<CancellationToken>())
+            .Returns(new KycRemotePolicyDto(
+                _productLineId, "SANTE-01", "Assurance santé", "Insurance", true,
+                false, "Manual", "Simplified", 85, [], ["Cni"], LinkValidityHours: 72));
+
+        var verdict = await EvaluateAsync();
+
+        verdict.CanIssue.Should().BeFalse();
+        verdict.Reason.Should().Be(KycErrors.RemoteInvitationProductNotEligible);
+    }
+
+    [Fact]
+    public async Task A_file_with_no_product_is_still_refused_when_it_has_left_collection()
+    {
+        var verdict = await EvaluateAsync(status: KycFileStatus.Verifying, withProductLine: false);
+
+        verdict.CanIssue.Should().BeFalse();
+        verdict.Reason.Should().Be(KycErrors.RemoteInvitationFileNotCollecting);
     }
 }
