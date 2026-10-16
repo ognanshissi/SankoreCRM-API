@@ -31,6 +31,18 @@ public sealed class IntegrationPermissionsTests
         "CoreBanking.Balance.ViewLive",
     ];
 
+    /// <summary>The seven codes of TEL-B-18's table, verbatim.</summary>
+    private static readonly string[] TelephonyCodes =
+    [
+        "Telephony.Call.Make",
+        "Telephony.Call.View",
+        "Telephony.Call.Link",
+        "Telephony.Recording.Listen",
+        "Telephony.Recording.Export",
+        "Telephony.Stats.View",
+        "Telephony.Settings.Manage",
+    ];
+
     /// <summary>The seven codes of ASS-11's table, verbatim, plus the two departures.</summary>
     private static readonly string[] InsuranceCodes =
     [
@@ -82,6 +94,15 @@ public sealed class IntegrationPermissionsTests
     }
 
     [Fact]
+    public void The_seven_telephony_permissions_are_registered_in_Permissions_All()
+    {
+        var registered = Permissions.All.Select(p => p.Code).ToList();
+
+        foreach (var code in TelephonyCodes)
+            registered.Should().Contain(code, $"endpoints call RequireAuthorization(\"{code}\")");
+    }
+
+    [Fact]
     public void The_eleven_insurance_permissions_are_registered_in_Permissions_All()
     {
         var registered = Permissions.All.Select(p => p.Code).ToList();
@@ -91,7 +112,7 @@ public sealed class IntegrationPermissionsTests
     }
 
     [Fact]
-    public void The_module_declares_no_permission_beyond_the_two_specification_tables()
+    public void The_module_declares_no_permission_beyond_the_three_specification_tables()
     {
         var declared = Permissions.All
             .Where(p => p.Module == ApplicationModules.Integration)
@@ -100,7 +121,7 @@ public sealed class IntegrationPermissionsTests
 
         // Guards the other direction: a permission invented in passing would widen the surface
         // an administrator has to reason about, and nothing else would report it.
-        declared.Should().BeEquivalentTo([.. IntegrationCodes, .. InsuranceCodes]);
+        declared.Should().BeEquivalentTo([.. IntegrationCodes, .. InsuranceCodes, .. TelephonyCodes]);
     }
 
     [Fact]

@@ -33,6 +33,15 @@ internal sealed class IntegrationConnectionConfiguration : IEntityTypeConfigurat
             .HasFilter("is_active AND family = 'CoreBanking'")
             .HasDatabaseName("ux_integration_connection_active_core_banking");
 
+        // Même asymétrie, deuxième famille concernée : un établissement a un système
+        // téléphonique, comme il a un core banking. Son propre index plutôt qu'un filtre élargi
+        // en `IN (...)` : chacun dit la règle de sa famille, et celle de l'assurance — plusieurs
+        // connexions actives — reste lisible par l'absence d'index.
+        b.HasIndex(c => c.TenantId)
+            .IsUnique()
+            .HasFilter("is_active AND family = 'Telephony'")
+            .HasDatabaseName("ux_integration_connection_active_telephony");
+
         b.HasIndex(c => new { c.TenantId, c.Family, c.IsActive })
             .HasDatabaseName("ix_integration_connection_tenant_family_active");
 

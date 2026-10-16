@@ -46,6 +46,14 @@ public static class FakeAdapterOperations
     public const string GetClaims = "get-claims";
     public const string GetClaim = "get-claim";
     public const string AddClaimDocument = "add-claim-document";
+
+    // ── Telephony (TEL-B-21) ─────────────────────────────────────────────
+    public const string ListUsers = "list-users";
+    public const string StartCallback = "start-callback";
+    public const string GetCall = "get-call";
+    public const string ListCalls = "list-calls";
+    public const string DownloadRecording = "download-recording";
+    public const string DeleteRecording = "delete-recording";
 }
 
 /// <summary>

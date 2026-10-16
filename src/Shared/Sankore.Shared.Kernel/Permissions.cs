@@ -621,6 +621,51 @@ public static class Permissions
         new("CoreBanking.Balance.ViewLive", "Trigger a direct balance call on the core banking system",
             ApplicationModules.Integration, "Balance.ViewLive");
 
+    // ── Telephony family (TEL-B-18) ───────────────────────────────────────
+    //
+    // Four audiences, deliberately split rather than folded into one "telephony" right: an agent
+    // places calls, a supervisor listens to them, a compliance officer exports them, and an
+    // administrator configures the links. Collapsing listening into supervision would hand
+    // everyone who watches a team the voice of every customer they ever spoke to.
+
+    public static readonly PermissionItem CanMakeTelephonyCall =
+        new("Telephony.Call.Make", "Place a click-to-call from a lead or client record",
+            ApplicationModules.Integration, "Call.Make");
+
+    public static readonly PermissionItem CanViewTelephonyCall =
+        new("Telephony.Call.View", "View the calls of one's own perimeter",
+            ApplicationModules.Integration, "Call.View");
+
+    public static readonly PermissionItem CanLinkTelephonyCall =
+        new("Telephony.Call.Link", "Attach a call to a record, or correct an attachment",
+            ApplicationModules.Integration, "Call.Link");
+
+    /// <summary>
+    /// Listening to a recorded call. Its own permission because a recording is a person's VOICE —
+    /// personal data that may carry health or financial facts — and because it is the one
+    /// telephony right an institution may want to grant for a week through a
+    /// <c>PermissionAttribution</c> rather than by role.
+    /// </summary>
+    public static readonly PermissionItem CanListenTelephonyRecording =
+        new("Telephony.Recording.Listen", "Listen to a call recording",
+            ApplicationModules.Integration, "Recording.Listen");
+
+    /// <summary>
+    /// Taking a recording OUT of the platform. Separate from listening because the audit trail
+    /// stops at the door: once a file is exported, nothing here can say who opened it afterwards.
+    /// </summary>
+    public static readonly PermissionItem CanExportTelephonyRecording =
+        new("Telephony.Recording.Export", "Export a call recording out of the platform",
+            ApplicationModules.Integration, "Recording.Export");
+
+    public static readonly PermissionItem CanViewTelephonyStats =
+        new("Telephony.Stats.View", "View telephony indicators by agent and agency",
+            ApplicationModules.Integration, "Stats.View");
+
+    public static readonly PermissionItem CanManageTelephonySettings =
+        new("Telephony.Settings.Manage", "Manage user links, call outcomes and telephony settings",
+            ApplicationModules.Integration, "Settings.Manage");
+
     // ── Insurance family (ASS-11) ─────────────────────────────────────────
 
     public static readonly PermissionItem CanManageInsuranceProduct =
@@ -873,6 +918,15 @@ public static class Permissions
         CanViewIntegrationReconciliation,
         CanResolveIntegrationReconciliation,
         CanViewLiveBalance,
+
+        // Telephony family (TEL-B-18)
+        CanMakeTelephonyCall,
+        CanViewTelephonyCall,
+        CanLinkTelephonyCall,
+        CanListenTelephonyRecording,
+        CanExportTelephonyRecording,
+        CanViewTelephonyStats,
+        CanManageTelephonySettings,
 
         // Insurance family (ASS-11), plus Ins.Product.View, Ins.Statement.Finalise and the
         // complaints pair — see their own remarks for why the specification's table of seven

@@ -1482,8 +1482,8 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
 
                     b.HasIndex("TenantId")
                         .IsUnique()
-                        .HasDatabaseName("ux_integration_connection_active_core_banking")
-                        .HasFilter("is_active AND family = 'CoreBanking'");
+                        .HasDatabaseName("ux_integration_connection_active_telephony")
+                        .HasFilter("is_active AND family = 'Telephony'");
 
                     b.HasIndex("TenantId", "Family", "IsActive")
                         .HasDatabaseName("ix_integration_connection_tenant_family_active");
@@ -2362,6 +2362,499 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasDatabaseName("ix_ins_premium_instalment_tenant_status");
 
                     b.ToTable("ins_premium_instalment", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelCall", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AnsweredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("answered_at");
+
+                    b.Property<Guid?>("ClickToCallId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("click_to_call_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<Guid?>("CrmUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_user_id");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("direction");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("ExternalCallId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_call_id");
+
+                    b.Property<string>("ExternalUserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_user_id");
+
+                    b.Property<byte[]>("FromNumberBi")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("from_number_bi");
+
+                    b.Property<byte[]>("FromNumberEnc")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("from_number_enc");
+
+                    b.Property<bool>("KeepRecording")
+                        .HasColumnType("boolean")
+                        .HasColumnName("keep_recording");
+
+                    b.Property<string>("MatchMethod")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("match_method");
+
+                    b.Property<string>("MatchStatus")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("match_status");
+
+                    b.Property<byte[]>("NoteEnc")
+                        .HasColumnType("bytea")
+                        .HasColumnName("note_enc");
+
+                    b.Property<string>("OutcomeCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("outcome_code");
+
+                    b.Property<string>("RecordingStatus")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("recording_status");
+
+                    b.Property<int?>("RingSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("ring_seconds");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("status");
+
+                    b.Property<int?>("TalkSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("talk_seconds");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<byte[]>("ToNumberBi")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("to_number_bi");
+
+                    b.Property<byte[]>("ToNumberEnc")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("to_number_enc");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset?>("WrappedUpAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("wrapped_up_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tel_call");
+
+                    b.HasIndex("TenantId", "FromNumberBi")
+                        .HasDatabaseName("ix_tel_call_from_number");
+
+                    b.HasIndex("TenantId", "ConnectionId", "ExternalCallId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tel_call_external");
+
+                    b.HasIndex("TenantId", "CrmUserId", "StartedAt")
+                        .HasDatabaseName("ix_tel_call_user");
+
+                    b.HasIndex("TenantId", "EntityType", "EntityId", "StartedAt")
+                        .HasDatabaseName("ix_tel_call_entity");
+
+                    b.ToTable("tel_call", "integration", t =>
+                        {
+                            t.HasCheckConstraint("ck_tel_call_entity", "(entity_type IS NULL) = (entity_id IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelCallOutcome", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("code");
+
+                    b.Property<bool>("CountsAsContact")
+                        .HasColumnType("boolean")
+                        .HasColumnName("counts_as_contact");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("display_order");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_system");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("label");
+
+                    b.Property<bool>("RequiresCallbackDate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_callback_date");
+
+                    b.HasKey("TenantId", "Code")
+                        .HasName("pk_tel_call_outcome");
+
+                    b.ToTable("tel_call_outcome", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelClickToCall", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<Guid>("CrmUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_user_id");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("error_code");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("ExternalRef")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_ref");
+
+                    b.Property<string>("PhoneSlot")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone_slot");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("status");
+
+                    b.Property<byte[]>("TargetNumberBi")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("target_number_bi");
+
+                    b.Property<byte[]>("TargetNumberEnc")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("target_number_enc");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tel_click_to_call");
+
+                    b.HasIndex("TenantId", "CrmUserId", "RequestedAt")
+                        .HasDatabaseName("ix_tel_click_to_call_user");
+
+                    b.ToTable("tel_click_to_call", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelRecording", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CallId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("call_id");
+
+                    b.Property<int?>("DurationSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_seconds");
+
+                    b.Property<DateTimeOffset?>("FetchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fetched_at");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("legal_basis");
+
+                    b.Property<bool>("LegalHold")
+                        .HasColumnType("boolean")
+                        .HasColumnName("legal_hold");
+
+                    b.Property<string>("LegalHoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("legal_hold_reason");
+
+                    b.Property<DateTimeOffset?>("ProviderDeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("provider_deleted_at");
+
+                    b.Property<DateTimeOffset?>("PurgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("purged_at");
+
+                    b.Property<DateTimeOffset>("RetentionUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retention_until");
+
+                    b.Property<byte[]>("Sha256")
+                        .HasColumnType("bytea")
+                        .HasColumnName("sha256");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StorageRef")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("storage_ref");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tel_recording");
+
+                    b.HasIndex("TenantId", "CallId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tel_recording_call");
+
+                    b.HasIndex("TenantId", "RetentionUntil")
+                        .HasDatabaseName("ix_tel_recording_due")
+                        .HasFilter("status = 'Available' AND legal_hold = false");
+
+                    b.ToTable("tel_recording", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelUserLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<Guid>("CrmUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_user_id");
+
+                    b.Property<string>("DefaultCallerNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("default_caller_number");
+
+                    b.Property<string>("ExternalEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("external_email");
+
+                    b.Property<string>("ExternalUserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_user_id");
+
+                    b.Property<DateTimeOffset>("LinkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("linked_at");
+
+                    b.Property<Guid>("LinkedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("status_reason");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tel_user_link");
+
+                    b.HasIndex("TenantId", "ConnectionId", "CrmUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tel_user_link_crm_user");
+
+                    b.HasIndex("TenantId", "ConnectionId", "ExternalUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tel_user_link_external_user");
+
+                    b.ToTable("tel_user_link", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelWebhookEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("DedupKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("dedup_key");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("outcome");
+
+                    b.Property<byte[]>("PayloadEnc")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("payload_enc");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id", "ReceivedAt")
+                        .HasName("pk_tel_webhook_event");
+
+                    b.HasIndex("TenantId", "ConnectionId", "DedupKey", "ReceivedAt")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tel_webhook_event_dedup");
+
+                    b.ToTable("tel_webhook_event", "integration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Integration.Infrastructure.IntegrationInboxMessage", b =>

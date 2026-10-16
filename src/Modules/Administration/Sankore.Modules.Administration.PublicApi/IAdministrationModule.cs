@@ -103,6 +103,33 @@ public interface IAdministrationModule
         Guid tenantId, IReadOnlyCollection<Guid> userIds, CancellationToken ct);
 
     /// <summary>
+    /// The tenant's users whose address is one of these — the reverse of
+    /// <see cref="GetUserNamesAsync"/>, for pairing an external directory against CRM accounts
+    /// (TEL-B-05).
+    ///
+    /// <para>
+    /// A user's e-mail is NOT encrypted in this module (Identity owns it, and sign-in matches it
+    /// in SQL), so this is an ordinary indexed lookup and not the clear-in/ids-out arrangement
+    /// M01's <c>FindMatchesAsync</c> needs. Comparison is case-insensitive, because a provider's
+    /// directory capitalises an address however the person typed it when they signed up.
+    /// </para>
+    ///
+    /// <para>
+    /// <see cref="UserEmailMatch.IsActive"/> travels with each row rather than being filtered out
+    /// here: a caller proposing a pairing has to be able to say "that account is disabled" instead
+    /// of showing the external user as unmatched, which reads as a missing CRM account and sends
+    /// an administrator to create a second one.
+    /// </para>
+    ///
+    /// <para>
+    /// An address nobody holds is simply absent, and so is a blank one. Empty when nothing
+    /// matches, never null.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<UserEmailMatch>> FindUsersByEmailAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken ct);
+
+    /// <summary>
     /// Returns the product category (Loan, Savings, Tontine) for a given product code.
     /// Used by Leads module for qualification template resolution.
     /// Returns null if the product code is not found.
@@ -495,6 +522,17 @@ public sealed record AgencySummary(
 /// Deliberately NOT the same type as the Users module's internal User
 /// entity — this decouples Leads from any future change to that entity.
 /// </summary>
+/// <summary>
+/// One CRM account matched by its address (TEL-B-05). <paramref name="Email"/> comes back as the
+/// column holds it, not as the caller spelled it, so a screen shows the account's own address.
+/// </summary>
+public sealed record UserEmailMatch(
+    Guid UserId,
+    string Email,
+    string FullName,
+    Guid? AgencyId,
+    bool IsActive);
+
 public sealed record AgentSummary(
     Guid Id,
     string FullName,

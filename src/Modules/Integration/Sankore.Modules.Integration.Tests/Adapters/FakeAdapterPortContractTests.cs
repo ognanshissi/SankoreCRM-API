@@ -126,3 +126,26 @@ internal static class FakeAdapterWrites
         ? fake.Calls.Count(c => c.IdempotencyKey is not null)
         : null;
 }
+
+/// <summary>
+/// The telephony contract against the double (TEL-B-21). The seeded call and user are the
+/// double's own fixtures, named here rather than re-declared so a change to either moves one
+/// place.
+/// </summary>
+public sealed class FakeAdapterTelephonyPortTests : TelephonyPortContractTests
+{
+    protected override ITelephonyPort CreatePort() => new FakeAdapter();
+
+    protected override ITelephonyPort CreateTimingOutPort() => FakeAdapter.TimingOut();
+
+    protected override ExternalId KnownUserId => FakeAdapter.SeededUser.Id;
+
+    protected override ExistingCall KnownCall
+    {
+        get
+        {
+            var seeded = new FakeAdapter().CallsById["fake-call-1"];
+            return new ExistingCall(seeded.Id, seeded.Direction, seeded.Status, seeded.StartedAt);
+        }
+    }
+}

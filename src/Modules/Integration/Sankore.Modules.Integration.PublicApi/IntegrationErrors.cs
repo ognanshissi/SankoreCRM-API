@@ -106,6 +106,13 @@ public static class IntegrationErrors
     public const string ConnectionNotFound = "INTEGRATION_CONNECTION_NOT_FOUND";
     public const string ConnectionNotHealthy = "INTEGRATION_CONNECTION_NOT_HEALTHY";
     public const string CoreBankingConnectionAlreadyActive = "INTEGRATION_CORE_BANKING_ALREADY_ACTIVE";
+
+    /// <summary>
+    /// A second telephony connection was activated while one is already in force (TEL-B-01).
+    /// Its own code rather than a shared "family already active": an administrator reads the
+    /// message, and the two families are configured on different screens by different people.
+    /// </summary>
+    public const string TelephonyConnectionAlreadyActive = "INTEGRATION_TELEPHONY_ALREADY_ACTIVE";
     public const string CommandNotFound = "INTEGRATION_COMMAND_NOT_FOUND";
     public const string CommandNotReplayable = "INTEGRATION_COMMAND_NOT_REPLAYABLE";
     public const string CommandNotCancellable = "INTEGRATION_COMMAND_NOT_CANCELLABLE";

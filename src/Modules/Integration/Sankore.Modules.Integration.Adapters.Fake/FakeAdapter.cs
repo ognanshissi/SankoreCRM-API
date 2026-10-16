@@ -47,7 +47,8 @@ public sealed class FakeAdapter :
     ICbsLoanPort,
     IInsuranceProductPort,
     IInsurancePolicyPort,
-    IInsuranceClaimPort
+    IInsuranceClaimPort,
+    ITelephonyPort
 {
     /// <summary>Currency of every seeded figure. XOF because the deployments are UEMOA ones.</summary>
     public const string SeededCurrency = "XOF";
@@ -209,7 +210,15 @@ public sealed class FakeAdapter :
     /// test asserts on, and reading a clock would make those assertions depend on when the suite
     /// ran. Move it in a test to exercise staleness, don't let it tick.
     /// </summary>
-    public DateTimeOffset FixedInstant { get; set; } = new(2024, 1, 15, 9, 30, 0, TimeSpan.Zero);
+    public DateTimeOffset FixedInstant { get; set; } = DefaultInstant;
+
+    /// <summary>
+    /// The default of <see cref="FixedInstant"/>, named so a property INITIALISER can use it — a
+    /// C# initialiser cannot read another instance member. Moving <see cref="FixedInstant"/> in a
+    /// test therefore does not move the seeded call below, which is the honest behaviour: the
+    /// seed is a fixture, the knob is for the answers computed per call.
+    /// </summary>
+    private static readonly DateTimeOffset DefaultInstant = new(2024, 1, 15, 9, 30, 0, TimeSpan.Zero);
 
     /// <summary>Latency the health check reports. Not measured — measuring it would be a clock.</summary>
     public TimeSpan HealthLatency { get; set; } = TimeSpan.FromMilliseconds(42);
@@ -1027,6 +1036,171 @@ public sealed class FakeAdapter :
         if (result.IsSuccess) _answeredWrites[StoreKey(operation, key)] = string.Empty;
 
         return result;
+    }
+
+    // ── Telephony (TEL-B-21) ────────────────────────────────────────────────────────────────
+    //
+    // Deterministic like everything else here: the same request answers the same thing every
+    // time, so a test asserts on a value instead of on a shape. The seeded user is the one a
+    // development tenant links its own account to, and the seeded call is the one the webhook
+    // simulator replays — see the simulator for how an end-to-end screen pop is produced without
+    // a provider.
+
+    /// <summary>The provider's directory, as the double reports it.</summary>
+    public static readonly ProviderUser SeededUser = new(
+        new ExternalId("fake-user-1"),
+        "agent@example.test",
+        "Agent de test",
+        IsActive: true,
+        Numbers: ["+22507000001"]);
+
+    /// <summary>The call every read answers with, unless a test seeded another.</summary>
+    public Dictionary<string, ProviderCall> CallsById { get; } = new(StringComparer.Ordinal)
+    {
+        ["fake-call-1"] = new ProviderCall(
+            new ExternalId("fake-call-1"),
+            TelCallDirection.Inbound,
+            TelCallStatus.Completed,
+            FromNumber: "+22507111111",
+            ToNumber: "+22507000001",
+            StartedAt: DefaultInstant,
+            AnsweredAt: DefaultInstant.AddSeconds(6),
+            EndedAt: DefaultInstant.AddSeconds(96),
+            RingSeconds: 6,
+            TalkSeconds: 90,
+            ProviderUserId: new ExternalId("fake-user-1"),
+            HasRecording: true),
+    };
+
+    /// <summary>
+    /// The directory this instance reports. An instance list and not the static
+    /// <see cref="SeededUser"/> alone, so a test can say what the provider's console says: an
+    /// account removed (clear it), one disabled (replace it with <c>IsActive: false</c>), or a
+    /// second agent added. The nightly link check has no other way to be exercised — nothing in
+    /// the platform learns about a directory change except by reading it.
+    /// </summary>
+    public List<ProviderUser> TelephonyUsers { get; } = [SeededUser];
+
+    public Task<IntegrationResult<IReadOnlyList<ProviderUser>>> ListUsersAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        return Task.FromResult(Read<IReadOnlyList<ProviderUser>>(
+            FakeAdapterOperations.ListUsers, target: null,
+            () => IntegrationResult.Ok<IReadOnlyList<ProviderUser>>([.. TelephonyUsers])));
+    }
+
+    /// <summary>
+    /// Placing a call. Counted as a READ by the failure-injection knobs, and that is not an
+    /// oversight: <c>ForcedWriteOutcome</c> exists so a double can refuse the writes a rejection
+    /// queue is inspected through, and a call is not one of those — it leaves no record to
+    /// reconcile. A test that wants calls to fail sets <c>ForcedOutcome</c>.
+    /// </summary>
+    public Task<IntegrationResult<ExternalId>> StartCallbackAsync(
+        ExternalId providerUserId, string targetNumber, string? callerNumber, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        return Task.FromResult(Read(
+            FakeAdapterOperations.StartCallback, providerUserId.Value,
+            () => IntegrationResult.Ok(new ExternalId($"fake-callback-{providerUserId.Value}"))));
+    }
+
+    public Task<IntegrationResult<ProviderCall>> GetCallAsync(
+        ExternalId providerCallId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        return Task.FromResult(Read(
+            FakeAdapterOperations.GetCall, providerCallId.Value,
+            () => CallsById.TryGetValue(providerCallId.Value, out var call)
+                ? IntegrationResult.Ok(call)
+                : IntegrationResult.Functional<ProviderCall>(
+                    IntegrationErrors.ExternalEntityNotFound,
+                    $"No call {providerCallId.Value} at the provider.")));
+    }
+
+    public Task<IntegrationResult<ProviderCallPage>> ListCallsAsync(
+        DateTimeOffset from, string? cursor, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        return Task.FromResult(Read(
+            FakeAdapterOperations.ListCalls, cursor,
+            () => IntegrationResult.Ok(new ProviderCallPage(
+                // One page and no next cursor: the sweep's paging is exercised by seeding a
+                // second page explicitly, not by a double that invents one.
+                [.. CallsById.Values.Where(c => c.StartedAt >= from).OrderBy(c => c.StartedAt)],
+                NextCursor: null))));
+    }
+
+    public Task<IntegrationResult<ProviderRecording>> DownloadRecordingAsync(
+        ExternalId providerCallId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        return Task.FromResult(Read(
+            FakeAdapterOperations.DownloadRecording, providerCallId.Value,
+            () => CallsById.TryGetValue(providerCallId.Value, out var call) && call.HasRecording
+                ? IntegrationResult.Ok(new ProviderRecording(
+                    // Bytes that are obviously not audio: a double that produced a playable file
+                    // would invite somebody to wire a player against it and believe the result.
+                    "fake-recording"u8.ToArray(), "audio/mpeg", call.TalkSeconds))
+                : IntegrationResult.Functional<ProviderRecording>(
+                    IntegrationErrors.ExternalEntityNotFound,
+                    $"No recording for call {providerCallId.Value}.")));
+    }
+
+    public Task<IntegrationResult> DeleteRecordingAsync(
+        ExternalId providerCallId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        return Task.FromResult(VoidRead(
+            FakeAdapterOperations.DeleteRecording, providerCallId.Value, IntegrationResult.Ok()));
+    }
+
+    /// <summary>
+    /// Parses a simulated webhook. PURE, like the contract demands: it reads the body it was
+    /// given and touches nothing else, which is what lets it run on an anonymous request before
+    /// anything has been verified.
+    /// </summary>
+    public ProviderWebhookEvent ParseWebhook(TelephonyWebhookRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // The simulator posts "<eventType>:<callId>", which is enough to drive a screen pop and
+        // keeps the double free of a JSON shape no real provider uses.
+        var parts = request.Body.Split(':', 2);
+        var eventType = parts[0].Trim();
+        var callId = parts.Length > 1 ? parts[1].Trim() : null;
+
+        var status = eventType switch
+        {
+            "ringing" => TelCallStatus.Ringing,
+            "answered" => TelCallStatus.InProgress,
+            "ended" => TelCallStatus.Completed,
+            "missed" => TelCallStatus.Missed,
+            "voicemail" => TelCallStatus.Voicemail,
+            _ => (TelCallStatus?)null,
+        };
+
+        return new ProviderWebhookEvent(
+            // Composed rather than read: this double has no event id, and the contract says an
+            // adapter without one builds the key from the call, the type and the instant.
+            DedupKey: $"fake|{eventType}|{callId}|{FixedInstant:O}",
+            EventType: eventType,
+            CallId: string.IsNullOrWhiteSpace(callId) ? null : new ExternalId(callId),
+            Status: status,
+            OccurredAt: FixedInstant);
+    }
+
+    /// <summary>A read with no value, for the one telephony operation that returns nothing.</summary>
+    private IntegrationResult VoidRead(string operation, string? target, IntegrationResult answer)
+    {
+        Record(operation, target, key: null);
+
+        return Forced(isWrite: false) ?? answer;
     }
 
     private IntegrationResult<T> Read<T>(

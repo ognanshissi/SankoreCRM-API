@@ -84,6 +84,14 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
     public Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)
         => Task.FromResult<LeadSummary?>(null);
 
+    /// <summary>
+    /// TEL-B-09's reverse caller-id lookup. Nothing in the timeline uses it; empty, because the
+    /// contract says empty and never null.
+    /// </summary>
+    public Task<IReadOnlyList<LeadPhoneMatch>> FindOpenLeadsByPhoneAsync(
+        Guid tenantId, string phoneNumber, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<LeadPhoneMatch>>([]);
+
     public Task<IReadOnlyList<LeadHistoryItem>> GetLeadHistoryAsync(
         Guid tenantId, Guid leadId, CancellationToken ct)
     {

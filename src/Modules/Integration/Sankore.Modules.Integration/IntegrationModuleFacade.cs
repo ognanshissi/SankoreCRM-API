@@ -127,11 +127,14 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
 
         CoreBanking = new CoreBankingGateway(this);
         Insurance = new InsuranceGateway(this);
+        Telephony = new TelephonyGateway(this);
     }
 
     public ICoreBankingGateway CoreBanking { get; }
 
     public IInsuranceGateway Insurance { get; }
+
+    public ITelephonyGateway Telephony { get; }
 
     // ── The heart of INT-05: enqueueing inside the caller's transaction ─────
 
@@ -1128,4 +1131,57 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     }
 
     private sealed record PolicyOwner(IntegrationConnection Connection, Guid CrmCustomerId);
+
+    /// <summary>
+    /// Telephony (TEL-B-02).
+    ///
+    /// <para>
+    /// <b>Deliberately thin in this lot.</b> Only <see cref="GetCapabilities"/> can answer
+    /// honestly today: the journal, the click-to-call and the attachment are the next two lots,
+    /// and a gateway that pretended to serve them would be a contract the front could bind to
+    /// before anything behind it worked. Every other member answers the refusal that says exactly
+    /// that, which is also what lets the screens be written against a real shape now.
+    /// </para>
+    /// </summary>
+    internal sealed class TelephonyGateway(IntegrationModuleFacade facade) : ITelephonyGateway
+    {
+        public Task<ClickToCallResult> RequestClickToCallAsync(
+            Guid crmUserId, TelephonyEntityRef target, TelephonyPhoneSlot slot, CancellationToken ct)
+            => Task.FromResult(ClickToCallResult.Refused(IntegrationErrors.CapabilityNotSupported));
+
+        public Task<TelephonyCallContext?> GetCallContextAsync(Guid callId, CancellationToken ct)
+            => Task.FromResult<TelephonyCallContext?>(null);
+
+        public Task<Result> LinkCallAsync(
+            Guid callId, TelephonyEntityRef target, string reason, CancellationToken ct)
+            => Task.FromResult(Result.Fail(IntegrationErrors.CapabilityNotSupported));
+
+        public Task<IReadOnlyList<TelephonyCallSummary>> GetCallsForEntityAsync(
+            TelephonyEntityRef entity, int page, int pageSize, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<TelephonyCallSummary>>([]);
+
+        /// <summary>
+        /// What the tenant's telephony installation can do. <see cref="IntegrationCapabilities.None"/>
+        /// when there is no connection or no adapter — a screen then hides the call button rather
+        /// than offering one that answers a technical error.
+        /// </summary>
+        public IntegrationCapabilities GetCapabilities()
+        {
+            // Synchronous EF for the same reason as the core banking twin: the interface method
+            // is synchronous, and blocking on an async query inside a request starves the pool.
+            var connection = facade._db.Connections
+                .IgnoreQueryFilters()
+                .Where(c => c.TenantId == facade.TenantId
+                            && c.Family == IntegrationFamily.Telephony
+                            && c.IsActive)
+                .OrderBy(c => c.CreatedAt)
+                .FirstOrDefault();
+
+            if (connection is null) return IntegrationCapabilities.None;
+
+            var adapter = facade._resolver.ResolveFor(connection);
+
+            return adapter.IsSuccess ? adapter.Value.Capabilities : IntegrationCapabilities.None;
+        }
+    }
 }

@@ -5,15 +5,25 @@ namespace Sankore.Modules.Integration.PublicApi;
 /// relay agent, reconciliation) is shared by both; only the ports differ.
 ///
 /// <para>
-/// A tenant has at most ONE active <see cref="CoreBanking"/> connection and may have several
-/// active <see cref="Insurance"/> ones — the partial unique index on
-/// <c>integration_connection</c> enforces exactly that asymmetry (ASS-01).
+/// A tenant has at most ONE active <see cref="CoreBanking"/> connection and at most one active
+/// <see cref="Telephony"/> one, and may have several active <see cref="Insurance"/> ones — the
+/// partial unique indexes on <c>integration_connection</c> enforce exactly that asymmetry
+/// (ASS-01, TEL-B-01). The asymmetry is per family and spelled out per family, because the
+/// reasons differ: an IMF has one core banking system and one telephone system, and distributes
+/// for several insurers.
 /// </para>
 /// </summary>
 public enum IntegrationFamily
 {
     CoreBanking,
-    Insurance
+    Insurance,
+
+    /// <summary>
+    /// The tenant's telephone system (TEL-B-01). SANKORE does not replace it — routing, IVR,
+    /// groups and opening hours stay configured at the provider; what this family adds is
+    /// click-to-call, a call journal attached to leads and clients, and the screen pop.
+    /// </summary>
+    Telephony
 }
 
 /// <summary>
@@ -32,6 +42,9 @@ public enum IntegrationKind
     Sab,
     PerfectVision,
     Orass,
+
+    /// <summary>The first telephony provider (TEL-B-04), on its public API v2.</summary>
+    Ringover,
     Fake
 }
 
@@ -119,7 +132,32 @@ public enum IntegrationCapability
     DeclareClaim,
     ReadClaims,
     PriceProduct,
-    CheckEligibility
+    CheckEligibility,
+
+    // ── Telephony (TEL-B-02) ─────────────────────────────────────────────
+    //
+    // Declared per capability like every other family, and for the same reason: two providers
+    // of the same kind of system answer differently. A provider that cannot delete a recording
+    // at its end is an ordinary provider, not a broken one — it simply does not claim
+    // RecordingDeletion, and the retention stays ours alone.
+
+    /// <summary>Placing an outbound call by making the agent's own handset ring first.</summary>
+    ClickToCall,
+
+    /// <summary>Pushing call events to a webhook. Without it the journal is sync-only.</summary>
+    CallEvents,
+
+    /// <summary>Reading calls back — what verifies a webhook and what the catch-up sync uses.</summary>
+    CallHistory,
+
+    /// <summary>Making a call's recording available for download.</summary>
+    Recordings,
+
+    /// <summary>Deleting a recording at the provider once SANKORE holds it.</summary>
+    RecordingDeletion,
+
+    /// <summary>Listing the provider's own users, so CRM accounts can be linked to them.</summary>
+    UserDirectory
 }
 
 /// <summary>KYC tier as the external system understands it. Mapped from M02's own tiers.</summary>

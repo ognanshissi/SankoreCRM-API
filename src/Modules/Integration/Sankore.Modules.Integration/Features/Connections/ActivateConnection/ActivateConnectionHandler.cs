@@ -21,6 +21,18 @@ internal sealed class ActivateConnectionHandler(
     /// instead of being reported as "a core banking connection is already active".
     /// </summary>
     private const string ActiveCoreBankingIndex = "ux_integration_connection_active_core_banking";
+    private const string ActiveTelephonyIndex = "ux_integration_connection_active_telephony";
+
+    /// <summary>
+    /// The families of which a tenant may hold at most one active connection, and the code each
+    /// answers with. Insurance is deliberately absent: an IMF distributes for several insurers.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<IntegrationFamily, string> ExclusiveFamilies =
+        new Dictionary<IntegrationFamily, string>
+        {
+            [IntegrationFamily.CoreBanking] = IntegrationErrors.CoreBankingConnectionAlreadyActive,
+            [IntegrationFamily.Telephony] = IntegrationErrors.TelephonyConnectionAlreadyActive,
+        };
 
     public async Task<Result> Handle(ActivateConnectionCommand cmd, CancellationToken ct)
     {
@@ -49,17 +61,19 @@ internal sealed class ActivateConnectionHandler(
         // both pass it, which is why the partial unique index exists and why its violation is
         // caught below. Both are needed: the index alone would answer a bare 500 in the ordinary
         // case, and the read alone would let a race through.
-        if (connection.Family == IntegrationFamily.CoreBanking)
+        if (ExclusiveFamilies.TryGetValue(connection.Family, out var alreadyActiveError))
         {
+            var family = connection.Family;
+
             var anotherIsActive = await db.Connections
                 .AnyAsync(
-                    c => c.Family == IntegrationFamily.CoreBanking
+                    c => c.Family == family
                       && c.IsActive
                       && c.Id != connection.Id,
                     ct);
 
             if (anotherIsActive)
-                return Result.Fail(IntegrationErrors.CoreBankingConnectionAlreadyActive);
+                return Result.Fail(alreadyActiveError);
         }
 
         // Activation requires a passed health check. The aggregate owns the rule; the handler
@@ -78,13 +92,13 @@ internal sealed class ActivateConnectionHandler(
             // Caught before the DbUpdateException below: it derives from it.
             return Result.Fail(IntegrationErrors.ConcurrencyConflict);
         }
-        catch (DbUpdateException ex) when (IsActiveCoreBankingViolation(ex))
+        catch (DbUpdateException ex) when (ViolatedExclusiveIndex(ex) is not null)
         {
             logger.LogWarning(
-                "Lost the race to activate core banking connection {ConnectionId} for tenant {TenantId}",
-                connection.Id, currentUser.TenantId);
+                "Lost the race to activate {Family} connection {ConnectionId} for tenant {TenantId}",
+                connection.Family, connection.Id, currentUser.TenantId);
 
-            return Result.Fail(IntegrationErrors.CoreBankingConnectionAlreadyActive);
+            return Result.Fail(ViolatedExclusiveIndex(ex)!);
         }
 
         logger.LogInformation(
@@ -94,7 +108,20 @@ internal sealed class ActivateConnectionHandler(
         return Result.Ok();
     }
 
-    private static bool IsActiveCoreBankingViolation(DbUpdateException ex)
-        => ex.InnerException?.Message.Contains(ActiveCoreBankingIndex, StringComparison.OrdinalIgnoreCase) == true
-           || ex.Message.Contains(ActiveCoreBankingIndex, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// The error code of the exclusivity index this violation names, or null when the failure is
+    /// something else. Matched BY INDEX NAME, as before: a bare unique-violation check would
+    /// swallow any other constraint this table grows.
+    /// </summary>
+    private static string? ViolatedExclusiveIndex(DbUpdateException ex)
+    {
+        if (Names(ex, ActiveCoreBankingIndex)) return IntegrationErrors.CoreBankingConnectionAlreadyActive;
+        if (Names(ex, ActiveTelephonyIndex)) return IntegrationErrors.TelephonyConnectionAlreadyActive;
+
+        return null;
+
+        static bool Names(DbUpdateException ex, string index)
+            => ex.InnerException?.Message.Contains(index, StringComparison.OrdinalIgnoreCase) == true
+               || ex.Message.Contains(index, StringComparison.OrdinalIgnoreCase);
+    }
 }

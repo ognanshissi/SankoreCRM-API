@@ -28,6 +28,32 @@ public interface ILeadsModule
     Task<IReadOnlyList<LeadHistoryItem>> GetLeadHistoryAsync(Guid tenantId, Guid leadId, CancellationToken ct);
 
     /// <summary>
+    /// The OPEN leads whose telephone number is this one (TEL-B-09).
+    ///
+    /// <para>
+    /// <b>The number arrives in CLEAR, and that is not an oversight.</b> Each module holds its own
+    /// blind-index key, so no caller can compute an index this module would match — asking it to
+    /// is the only way a reverse lookup can work at all, and it is the same arrangement
+    /// <c>ICustomersModule.FindMatchesAsync</c> already makes. What comes back is identifiers and
+    /// a display name, never the number, so the clear value travels one way only.
+    /// </para>
+    ///
+    /// <para>
+    /// OPEN leads only. A converted lead belongs to a client and is found through M01; a lost,
+    /// disqualified or archived one is a conversation that ended, and attaching today's call to it
+    /// would file the exchange against a record nobody is working.
+    /// </para>
+    ///
+    /// <para>
+    /// Several matches is an ORDINARY answer, not an ambiguity to resolve here: a family handset
+    /// or a shop line is common, and the caller — who alone knows the agent's perimeter — decides.
+    /// Empty when nothing matches, never null.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<LeadPhoneMatch>> FindOpenLeadsByPhoneAsync(
+        Guid tenantId, string phoneNumber, CancellationToken ct);
+
+    /// <summary>
     /// The requests a known customer currently has in progress (BNF-B-22) — what the client record
     /// shows so an advisor opening it can see "this client is already asking for a loan" instead of
     /// starting a second one.
@@ -71,6 +97,18 @@ public sealed record CustomerOpenLead(
     Guid? AssignedAgentId,
     DateTimeOffset CapturedAt,
     DateTimeOffset? LastActivityAt);
+
+/// <param name="AgencyId">
+/// The lead's agency, so the caller can apply its own perimeter. Null when the lead carries none
+/// — which M13 documents as ordinary, and which the caller must treat as "outside every
+/// restricted perimeter" rather than as "inside all of them".
+/// </param>
+public sealed record LeadPhoneMatch(
+    Guid LeadId,
+    string FullName,
+    string Status,
+    Guid? AgencyId,
+    Guid? AssignedAgentId);
 
 public sealed record LeadSummary(
     Guid Id,

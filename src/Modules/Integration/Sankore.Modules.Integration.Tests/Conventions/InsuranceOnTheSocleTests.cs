@@ -62,13 +62,19 @@ public sealed class InsuranceOnTheSocleTests : IDisposable
         // deliberate decision, which is what this assertion forces.
         cbsTables.Should().BeEquivalentTo(["cbs_customer_snapshot"]);
 
-        // Every other table is either the shared socle or a declared family. `outbox_messages` and
-        // `inbox_messages` are shared infrastructure and carry no prefix by the repo's own
-        // convention — M01 and M02 name them identically in their own schemas.
+        // Every other table is either the shared socle or a declared family — `ins_` insurance
+        // (ASS-01), `tel_` telephony (TEL-B-03). `outbox_messages` and `inbox_messages` are shared
+        // infrastructure and carry no prefix by the repo's own convention: M01 and M02 name them
+        // identically in their own schemas.
+        //
+        // A family added without its line here lands in `unclassified` and fails, which is the
+        // point: the prefix is how the next reader tells a shared table from a family's, and a
+        // family that forgot to declare one would teach them the socle is family-specific.
         var unclassified = tables
             .Where(t => !t.StartsWith("cbs_", StringComparison.Ordinal))
             .Where(t => !t.StartsWith("integration_", StringComparison.Ordinal))
             .Where(t => !t.StartsWith("ins_", StringComparison.Ordinal))
+            .Where(t => !t.StartsWith("tel_", StringComparison.Ordinal))
             .ToList();
 
         unclassified.Should().BeEquivalentTo(["outbox_messages", "inbox_messages"]);

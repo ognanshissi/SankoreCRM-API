@@ -75,6 +75,11 @@ public abstract record ConnectionSettings
             [SyncStream.Loans] = 240,
             [SyncStream.Policies] = 60,
             [SyncStream.Claims] = 60,
+            // Quinze minutes, bien plus serré que les autres : ce balayage n'est pas la source
+            // des appels, c'est le filet sous les webhooks. Un appel dont l'événement s'est perdu
+            // est un appel qu'aucun agent ne voit, et le rattraper quatre heures plus tard
+            // n'aurait plus d'usage.
+            [SyncStream.Calls] = 15,
         };
 
     /// <summary>
@@ -231,6 +236,34 @@ public enum OrassBranch
 {
     Iard,
     Vie
+}
+
+/// <summary>
+/// Ringover — the first telephony provider (TEL-B-01, TEL-B-04).
+///
+/// <para>
+/// No field here names a credential: the API key goes to the vault under
+/// <c>IntegrationSecrets.CredentialKey</c> and the webhook token under
+/// <c>IntegrationSecrets.WebhookSecretKey</c>, both keyed per CONNECTION. What stays in the
+/// column is what an administrator reads back on their own settings screen.
+/// </para>
+/// </summary>
+public sealed record RingoverSettings : ConnectionSettings
+{
+    public override IntegrationKind ExpectedKind => IntegrationKind.Ringover;
+
+    /// <summary>
+    /// The API host for the tenant's region, e.g. <c>public-api.ringover.com</c>. Configurable
+    /// rather than constant because the provider serves regions on distinct hosts, and a tenant
+    /// whose data must stay in one of them cannot be pointed at another.
+    /// </summary>
+    public string? ApiHost { get; init; }
+
+    /// <summary>
+    /// The number outbound calls present when the agent's own link names none. Stored as the
+    /// provider spells it, in E.164.
+    /// </summary>
+    public string? DefaultCallerNumber { get; init; }
 }
 
 /// <summary>

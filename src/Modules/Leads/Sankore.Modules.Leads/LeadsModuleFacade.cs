@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads;
 
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Leads.PublicApi;
 
@@ -14,7 +15,8 @@ using Sankore.Modules.Leads.PublicApi;
 /// callers may be MassTransit consumers or Hangfire jobs where the ambient
 /// <see cref="Sankore.Shared.Kernel.ITenantContext"/> is not the tenant being read.
 /// </summary>
-public sealed class LeadsModuleFacade(LeadsDbContext db) : ILeadsModule
+public sealed class LeadsModuleFacade(LeadsDbContext db, IPhoneBlindIndexer phoneBlindIndexer)
+    : ILeadsModule
 {
     public async Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)
     {
@@ -73,6 +75,65 @@ public sealed class LeadsModuleFacade(LeadsDbContext db) : ILeadsModule
                 l.CurrentAssignedId,
                 l.CapturedAt,
                 l.LastActivityAt))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Two predicates for one question, and the second one is transitional. The index is the
+    /// indexed, exact half; <c>PhoneBlindIndex == null</c> marks a lead captured before the
+    /// protection migration, matched on the suffix of the clear column the way
+    /// <c>CaptureLeadHandler</c>'s duplicate gate does. Dropping the fallback would make the
+    /// caller-id lookup miss exactly the oldest leads, which is where the longest-running
+    /// conversations are.
+    /// </para>
+    /// <para>
+    /// The index is computed HERE, from the clear number, and that is the only arrangement that
+    /// can work: <c>Leads:BlindIndexKey</c> is this module's, so a caller computing it would
+    /// compute it under its own key and match nothing — silently, since an index comparison
+    /// that finds no row is indistinguishable from a number nobody called from.
+    /// </para>
+    /// <para>
+    /// <c>IsAnonymized</c> is excluded explicitly although the anonymisation already clears the
+    /// index and writes a marker into the clear column, so neither predicate could match one: a
+    /// retention rule is not something to leave resting on two implementation details in another
+    /// file.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<LeadPhoneMatch>> FindOpenLeadsByPhoneAsync(
+        Guid tenantId, string phoneNumber, CancellationToken ct)
+    {
+        if (tenantId == Guid.Empty || string.IsNullOrWhiteSpace(phoneNumber))
+            return [];
+
+        var trimmed = phoneNumber.Trim();
+        var phoneIndex = phoneBlindIndexer.Compute(trimmed);
+        var phoneDigits = IdentityMatchScorer.NormalizePhone(trimmed);
+
+        // A number that normalises to nothing — punctuation, a provider's "anonymous" marker —
+        // would make the legacy branch an EndsWith("") that matches every un-backfilled lead in
+        // the tenant. An incoming call with no caller id is ordinary, so it answers empty.
+        if (phoneDigits.Length == 0)
+            return [];
+
+        return await db.Leads
+            .IgnoreQueryFilters()
+            .Where(l => l.TenantId == tenantId
+                     && !l.IsAnonymized
+                     && l.Status != LeadStatus.Converted
+                     && l.Status != LeadStatus.Lost
+                     && l.Status != LeadStatus.Disqualified
+                     && l.Status != LeadStatus.Archived
+                     && ((l.PhoneBlindIndex != null && l.PhoneBlindIndex == phoneIndex)
+                      || (l.PhoneBlindIndex == null && l.PhoneNumber.EndsWith(phoneDigits))))
+            .OrderByDescending(l => l.LastActivityAt ?? l.CapturedAt)
+            .Select(l => new LeadPhoneMatch(
+                l.Id,
+                l.FullName,
+                l.Status.ToString(),
+                l.AgencyId,
+                l.CurrentAssignedId))
             .ToListAsync(ct);
     }
 

@@ -31,6 +31,11 @@ internal static class CallLogServiceRegistration
         // requiring a public parameterless constructor.
         services.AddTransient<EnsureCallLogPartitionsJob>();
 
+        // Son jumeau pour la téléphonie (TEL-B-03). Deux jobs et non un seul : les deux tables
+        // relèvent de préoccupations différentes, et les fusionner ferait de l'incident d'une
+        // famille celui de l'autre.
+        services.AddTransient<Telephony.EnsureTelephonyPartitionsJob>();
+
         return services;
     }
 }

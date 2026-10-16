@@ -24,6 +24,14 @@ public sealed class IntegrationDbContext(
     public DbSet<IntegrationReference> References => Set<IntegrationReference>();
     public DbSet<IntegrationBatchFile> BatchFiles => Set<IntegrationBatchFile>();
     public DbSet<IntegrationSyncCursor> SyncCursors => Set<IntegrationSyncCursor>();
+
+    // ── Telephony (TEL-B-03) ────────────────────────────────────────────────
+    public DbSet<TelUserLink> TelUserLinks => Set<TelUserLink>();
+    public DbSet<TelCall> TelCalls => Set<TelCall>();
+    public DbSet<TelClickToCall> TelClickToCalls => Set<TelClickToCall>();
+    public DbSet<TelWebhookEvent> TelWebhookEvents => Set<TelWebhookEvent>();
+    public DbSet<TelRecording> TelRecordings => Set<TelRecording>();
+    public DbSet<TelCallOutcome> TelCallOutcomes => Set<TelCallOutcome>();
     public DbSet<IntegrationMapping> Mappings => Set<IntegrationMapping>();
     public DbSet<IntegrationReconciliationRun> ReconciliationRuns => Set<IntegrationReconciliationRun>();
     public DbSet<IntegrationReconciliationGap> ReconciliationGaps => Set<IntegrationReconciliationGap>();
@@ -136,6 +144,16 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<InsurerStatement>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<InsurerStatementLine>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<InsuranceComplaint>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+
+        // The telephony family (TEL-B-03). Every one of these is tenant-scoped, and the same
+        // convention test pins the list: a tel_* entity added without a line here fails it rather
+        // than showing one institution the calls, numbers and recordings of another.
+        modelBuilder.Entity<TelUserLink>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<TelCall>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<TelClickToCall>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<TelWebhookEvent>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<TelRecording>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<TelCallOutcome>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
     }
 }
 

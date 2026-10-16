@@ -53,7 +53,7 @@ internal abstract class ConnectionSettingsValidator<TCommand> : AbstractValidato
             .OverridePropertyName("settings")
             .WithMessage(
                 "settings is required and must carry a \"$kind\" naming the connection kind "
-                + "(Temenos, Amplitude, Sab, PerfectVision, Orass, Fake).");
+                + "(Temenos, Amplitude, Sab, PerfectVision, Orass, Ringover, Fake).");
 
         // Mode and settings shape must agree: Batch means files over SFTP, and a kind whose
         // settings carry no SFTP coordinates cannot run that way at all.
@@ -201,6 +201,34 @@ internal abstract class ConnectionSettingsValidator<TCommand> : AbstractValidato
                 .OverridePropertyName("settings.intermediaryCode");
         });
 
+        // ── Ringover (TEL-B-01) ───────────────────────────────────────────
+        When(x => x.Settings is RingoverSettings, () =>
+        {
+            RuleFor(x => ((RingoverSettings)x.Settings!).ApiHost)
+                .NotEmpty()
+                .OverridePropertyName("settings.apiHost")
+                .WithMessage(
+                    "settings.apiHost is required for a Ringover connection — the provider "
+                    + "serves regions on distinct hosts.");
+
+            // A HOST and not a URL: the adapter builds the scheme and the version prefix itself,
+            // and a caller who pastes a full URL would otherwise carry the version twice.
+            RuleFor(x => ((RingoverSettings)x.Settings!).ApiHost)
+                .Must(BeABareHost)
+                .When(x => x.Settings is RingoverSettings { ApiHost.Length: > 0 })
+                .OverridePropertyName("settings.apiHost")
+                .WithMessage(
+                    "settings.apiHost must be a bare host name, without a scheme or a path "
+                    + "(for example public-api.ringover.com).");
+
+            RuleFor(x => ((RingoverSettings)x.Settings!).DefaultCallerNumber)
+                .Must(BeE164)
+                .When(x => x.Settings is RingoverSettings { DefaultCallerNumber.Length: > 0 })
+                .OverridePropertyName("settings.defaultCallerNumber")
+                .WithMessage(
+                    "settings.defaultCallerNumber must be in E.164 form (+ then 8 to 15 digits).");
+        });
+
         // ── Every file-based kind (INT-24/INT-25) ─────────────────────────
         When(x => x.Settings is BatchCapableSettings, () =>
         {
@@ -255,6 +283,27 @@ internal abstract class ConnectionSettingsValidator<TCommand> : AbstractValidato
     /// https only, as INT-03 requires. An on-premise CBS is still reachable over TLS, and a
     /// plain-http base URL would carry a bearer token across the IMF's own LAN.
     /// </summary>
+    /// <summary>
+    /// A bare host: no scheme, no path, no port. The adapter composes the URL, so anything more
+    /// here ends up duplicated in the request line.
+    /// </summary>
+    private static bool BeABareHost(string? value)
+        => !string.IsNullOrWhiteSpace(value)
+           && !value.Contains("://", StringComparison.Ordinal)
+           && !value.Contains('/', StringComparison.Ordinal)
+           && !value.Contains(':', StringComparison.Ordinal)
+           && Uri.CheckHostName(value.Trim()) != UriHostNameType.Unknown;
+
+    /// <summary>
+    /// E.164: a plus and 8 to 15 digits. Validated here rather than at dial time, because a
+    /// caller id the provider refuses turns every outbound call into a failure nobody can read.
+    /// </summary>
+    private static bool BeE164(string? value)
+        => value is not null
+           && value.Length is >= 9 and <= 16
+           && value[0] == '+'
+           && value.AsSpan(1).ToString().All(char.IsAsciiDigit);
+
     private static bool BeAnHttpsUrl(string? url)
         => !string.IsNullOrWhiteSpace(url)
            && Uri.TryCreate(url, UriKind.Absolute, out var uri)

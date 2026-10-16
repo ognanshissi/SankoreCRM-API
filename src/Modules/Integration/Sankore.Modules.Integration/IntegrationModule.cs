@@ -24,6 +24,8 @@ using Sankore.Modules.Integration.Features.RelayAgents;
 using Sankore.Modules.Integration.Features.KycLimits;
 using Sankore.Modules.Integration.Features.Snapshot;
 using Sankore.Modules.Integration.Features.Sync;
+using Sankore.Modules.Integration.Features.Telephony;
+using Sankore.Modules.Integration.Features.Telephony.Webhook;
 using Sankore.Modules.Integration.Features.References;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.Infrastructure.CallLog;
@@ -43,6 +45,15 @@ public static class IntegrationModule
 {
     /// <summary>Configuration section of the module's own switches.</summary>
     public const string SectionName = "Integration";
+
+    /// <summary>
+    /// The named rate-limit policy the telephony webhook requires (TEL-B-07). Re-exported here
+    /// because the route's own class is internal and the HOST is what declares the policy — and a
+    /// policy named on a route but never declared limits nothing, silently. One constant, so the
+    /// two cannot drift.
+    /// </summary>
+    public const string TelephonyWebhookRateLimitPolicy =
+        Features.Telephony.Webhook.TelephonyWebhookEndpoints.RateLimitPolicy;
 
     public static IServiceCollection AddIntegrationModule(
         this IServiceCollection services, IConfiguration config)
@@ -95,6 +106,7 @@ public static class IntegrationModule
         services.AddReconciliationServices();
         services.AddInboundBatchServices();
         services.AddRelayAgentsServices();
+        services.AddTelephonyServices();
 
         // The insurance family (ASS-03 →). On the SAME socle: no second DbContext, no second
         // outbox, no second dispatcher — which is the whole claim of ASS-01.
@@ -134,6 +146,7 @@ public static class IntegrationModule
         app.MapRelayAgentsEndpoints();
         app.MapReconciliationEndpoints();
         app.MapInsuranceEndpoints();
+        app.MapTelephonyEndpoints();
 
         return app;
     }
@@ -162,6 +175,12 @@ public static class IntegrationModule
         ArgumentNullException.ThrowIfNull(app);
 
         app.MapIntegrationWebhookEndpoints();
+
+        // TEL-B-07. Its own route and its own rate-limit policy, not a branch of the one above:
+        // a telephony provider emits several events per call per agent, and sharing a 60/min
+        // window with a core banking system's notifications would throttle whichever family
+        // happened to be busier — invisibly, since a throttled webhook looks like a quiet line.
+        app.MapTelephonyWebhookEndpoints();
 
         // The relay agent's own two routes (INT-27): the enrolment exchange and the heartbeat.
         // Public because the caller is a service on the IMF's hardware with no user and no JWT —

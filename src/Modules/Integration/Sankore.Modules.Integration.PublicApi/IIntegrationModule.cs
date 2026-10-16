@@ -1,7 +1,10 @@
 namespace Sankore.Modules.Integration.PublicApi;
 
+using Sankore.Shared.Kernel;
+
 /// <summary>
-/// The module's whole public surface: two gateways, one per family of back-office (INT-02).
+/// The module's whole public surface: three gateways, one per family of back-office (INT-02,
+/// ASS-02, TEL-B-02).
 ///
 /// <para>
 /// A consumer module (M01, M02, M13, and the insurance screens) depends on THIS and never on an
@@ -15,6 +18,13 @@ public interface IIntegrationModule
     ICoreBankingGateway CoreBanking { get; }
 
     IInsuranceGateway Insurance { get; }
+
+    /// <summary>
+    /// Telephony (TEL-B-02). Never null, like its siblings: a tenant with no telephony connection
+    /// gets a gateway that answers "no active connection", rather than a null property every
+    /// caller would have to test before using.
+    /// </summary>
+    ITelephonyGateway Telephony { get; }
 }
 
 /// <summary>
@@ -131,6 +141,119 @@ public interface IInsuranceGateway
 
     IntegrationCapabilities GetCapabilities(Guid connectionId);
 }
+
+/// <summary>
+/// Telephony, as the rest of the platform sees it (TEL-B-02).
+///
+/// <para>
+/// <b>It does not look like the other two gateways, and the difference is the point.</b> A write
+/// to a back office is queued as a command and answered later; a telephone call is not. An agent
+/// clicking "call" waits for their own handset to ring, so <see cref="RequestClickToCallAsync"/>
+/// answers now or fails now — there is no command id to follow, and a retry would make a phone
+/// ring twice in somebody's hand.
+/// </para>
+///
+/// <para>
+/// No method here takes or returns a telephone NUMBER. The caller names a record and which of its
+/// numbers to use; the number is decrypted inside this module and never crosses back out. That is
+/// what keeps a number out of a browser, a log and an audit payload at once.
+/// </para>
+/// </summary>
+public interface ITelephonyGateway
+{
+    /// <summary>Asks the provider to ring this user, then dial one of the record's numbers.</summary>
+    Task<ClickToCallResult> RequestClickToCallAsync(
+        Guid crmUserId, TelephonyEntityRef target, TelephonyPhoneSlot slot, CancellationToken ct);
+
+    /// <summary>
+    /// What is known about one call, for the screen that opens while a telephone is ringing.
+    /// Null when the call does not exist for this tenant.
+    /// </summary>
+    Task<TelephonyCallContext?> GetCallContextAsync(Guid callId, CancellationToken ct);
+
+    /// <summary>
+    /// Attaches a call to a record, or corrects an attachment. The reason is mandatory and kept:
+    /// a conversation filed against the wrong person is something a later reader must be able to
+    /// understand.
+    /// </summary>
+    Task<Result> LinkCallAsync(
+        Guid callId, TelephonyEntityRef target, string reason, CancellationToken ct);
+
+    /// <summary>The calls of one record, newest first.</summary>
+    Task<IReadOnlyList<TelephonyCallSummary>> GetCallsForEntityAsync(
+        TelephonyEntityRef entity, int page, int pageSize, CancellationToken ct);
+
+    /// <summary>
+    /// What the tenant's provider can do. <c>None</c> when no telephony connection is active,
+    /// which is how a caller tells "switched off" from "cannot do that".
+    /// </summary>
+    IntegrationCapabilities GetCapabilities();
+}
+
+/// <summary>
+/// Which record a call is about. An opaque pair — the type as a string, the id as a Guid — so no
+/// module has to reference another's domain to name one.
+/// </summary>
+public sealed record TelephonyEntityRef(string Type, Guid Id);
+
+/// <summary>
+/// Which of a record's numbers to dial. <b>A slot and not a number</b>: the front names the slot,
+/// the server decrypts the number. A contract taking a number would be a contract a browser can
+/// be made to post somebody else's number to.
+/// </summary>
+public enum TelephonyPhoneSlot
+{
+    Primary,
+    Secondary,
+}
+
+/// <param name="RequestId">
+/// The click-to-call request, for the screen to follow until the agent's handset rings.
+/// </param>
+/// <param name="ErrorCode">
+/// Null on success. A stable code — the agent's screen turns it into a sentence, and the set is
+/// closed so a new refusal cannot read as a generic failure.
+/// </param>
+public sealed record ClickToCallResult(Guid? RequestId, string? ErrorCode)
+{
+    public bool IsSuccess => ErrorCode is null;
+
+    public static ClickToCallResult Ok(Guid requestId) => new(requestId, null);
+
+    public static ClickToCallResult Refused(string errorCode) => new(null, errorCode);
+}
+
+/// <param name="Candidates">
+/// Who the remote number might be. Several is an ordinary answer — a family handset, a shop line
+/// — and the screen asks the agent rather than guessing.
+/// </param>
+public sealed record TelephonyCallContext(
+    Guid CallId,
+    string Direction,
+    string Status,
+    string MatchStatus,
+    IReadOnlyList<TelephonyCandidate> Candidates,
+    DateTimeOffset StartedAt);
+
+/// <param name="OutOfPerimeter">
+/// True when the record exists but belongs to another agency. The name is then withheld and the
+/// screen says only that the caller is known elsewhere — the perimeter hides the record, not the
+/// fact that the number is known, which is what stops an agent searching for nothing.
+/// </param>
+public sealed record TelephonyCandidate(
+    string EntityType,
+    Guid EntityId,
+    string? DisplayName,
+    bool OutOfPerimeter);
+
+public sealed record TelephonyCallSummary(
+    Guid CallId,
+    string Direction,
+    string Status,
+    DateTimeOffset StartedAt,
+    int? TalkSeconds,
+    string? OutcomeCode,
+    Guid? CrmUserId);
 
 /// <param name="SubscriptionId">
 /// The subscription this premium belongs to. It is the idempotency anchor AND what the command

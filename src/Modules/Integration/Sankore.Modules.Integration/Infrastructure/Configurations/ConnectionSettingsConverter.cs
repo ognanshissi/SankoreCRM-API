@@ -57,6 +57,7 @@ internal sealed class ConnectionSettingsConverter()
         "Sab" => typeof(SabSettings),
         "PerfectVision" => typeof(PerfectVisionSettings),
         "Orass" => typeof(OrassSettings),
+        "Ringover" => typeof(RingoverSettings),
         "Fake" => typeof(FakeSettings),
         _ => null,
     };

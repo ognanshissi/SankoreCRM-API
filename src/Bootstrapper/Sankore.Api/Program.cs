@@ -264,6 +264,32 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    // Téléphonie (TEL-B-07). Sa propre politique, et pas une branche de celle ci-dessus : un
+    // fournisseur de téléphonie émet plusieurs événements PAR APPEL et par agent — sonnerie,
+    // décroché, raccroché — donc une centaine d'agents en journée dépasse 60/min sans que rien
+    // n'aille mal. Partager la fenêtre de la banque centrale étranglerait la famille la plus
+    // active des deux, et un webhook étranglé ressemble à une ligne silencieuse.
+    //
+    // 600/min par (IP, connexion). C'est une borne contre un partenaire qui déraille, pas une
+    // autorisation : ce qui autorise, c'est la signature, vérifiée avant que le corps soit lu, et
+    // ce qui empêche un rejeu de travailler deux fois, c'est l'index unique de tel_webhook_event.
+    options.AddPolicy(
+        Sankore.Modules.Integration.IntegrationModule.TelephonyWebhookRateLimitPolicy,
+        ctx =>
+        {
+            var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var connection = ctx.Request.RouteValues["connectionId"]?.ToString() ?? "none";
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: $"telephony-webhook:{ip}:{connection}",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromMinutes(1),
+                    PermitLimit = 600,
+                    QueueLimit = 0,
+                });
+        });
+
     // Remote KYC public surface (KRM-B-05, §8). Per IP.
     //
     // 30/min: a customer walking the journey makes a handful of calls, and each photograph is one
@@ -872,6 +898,27 @@ if (emitOpenApiTo is null) {
             "integration-call-log-partitions",
             job => job.ExecuteAsync(CancellationToken.None),
             "0 2 * * *");
+
+        // Même raisonnement et même créneau pour la table des événements de téléphonie : sans
+        // partition au premier du mois, le journal des appels se tait à minuit et le fournisseur
+        // continue de livrer des événements refusés un par un (TEL-B-03).
+        AddOrUpdate<Sankore.Modules.Integration.Infrastructure.Telephony.EnsureTelephonyPartitionsJob>(
+            "integration-telephony-partitions",
+            job => job.ExecuteAsync(CancellationToken.None),
+            "0 2 * * *");
+
+        // 02:40 : le contrôle quotidien des liaisons utilisateur/fournisseur (TEL-B-05). Après le
+        // job de partitions de 02:00, pour qu'un contrôle qui écrit écrive dans une partition qui
+        // existe. Rien ne nous prévient qu'un compte a été retiré de l'annuaire du fournisseur —
+        // c'est une modification faite dans la console d'une autre société — et le seul symptôme
+        // visible autrement est l'historique d'un agent qui cesse de se remplir.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Telephony.UserLinks.CheckUserLinks
+            .CheckTelephonyUserLinksOrchestrator>(
+            Sankore.Modules.Integration.Features.Telephony.UserLinks.CheckUserLinks
+                .CheckTelephonyUserLinksOrchestrator.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Telephony.UserLinks.CheckUserLinks
+                .CheckTelephonyUserLinksOrchestrator.CronExpression);
 
         // Every minute is the RESOLUTION of the schedule, not the sweep period: each (connection,
         // stream) pair carries its own interval in the connection's settings, and a slower cron

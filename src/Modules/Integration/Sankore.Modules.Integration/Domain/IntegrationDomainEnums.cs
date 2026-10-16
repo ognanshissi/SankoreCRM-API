@@ -106,7 +106,8 @@ public enum GapResolution
 
 /// <summary>
 /// The data streams a connection can synchronise (INT-20). The first four are core banking, the
-/// last two insurance — one enum, because the cursor table and the orchestrator are shared.
+/// next two insurance, the last telephony — one enum, because the cursor table and the
+/// orchestrator are shared.
 /// </summary>
 public enum SyncStream
 {
@@ -115,7 +116,14 @@ public enum SyncStream
     Transactions,
     Loans,
     Policies,
-    Claims
+    Claims,
+
+    /// <summary>
+    /// Calls read back from the telephony provider (TEL-B-14). Its purpose is not to be the
+    /// primary source — webhooks are — but to catch the calls whose event was lost, which is why
+    /// it is swept far more often than the other streams.
+    /// </summary>
+    Calls
 }
 
 /// <summary>

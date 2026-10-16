@@ -795,6 +795,44 @@ internal sealed class AdministrationModuleFacade(
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Normalised on BOTH sides. <c>AppUser.Email</c> is Identity's column and holds the address
+    /// as the person typed it, so a provider's directory listing <c>A.Kouassi@imf.ci</c> would
+    /// miss a CRM account stored as <c>a.kouassi@imf.ci</c> — and the symptom of that miss is an
+    /// administrator being shown an external user as unmatched, which reads as a missing account.
+    /// <c>NormalizedEmail</c> exists for exactly this and is the column Identity indexes, so the
+    /// comparison is both correct and cheap.
+    /// </remarks>
+    public async Task<IReadOnlyList<UserEmailMatch>> FindUsersByEmailAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(emails);
+
+        if (tenantId == Guid.Empty) return [];
+
+        var wanted = emails
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e => e.Trim().ToUpperInvariant())
+            .Distinct()
+            .ToList();
+
+        if (wanted.Count == 0) return [];
+
+        return await db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.TenantId == tenantId
+                     && u.NormalizedEmail != null
+                     && wanted.Contains(u.NormalizedEmail))
+            .Select(u => new UserEmailMatch(
+                u.Id,
+                u.Email!,
+                u.FullName,
+                u.AgencyId,
+                u.Status == UserStatus.Active))
+            .ToListAsync(ct);
+    }
+
     /// <summary>
     /// KRM-B-09's recipient cascade. Two queries at most, and it answers null rather than
     /// guessing — see the contract for why the specification's third rung does not exist here.

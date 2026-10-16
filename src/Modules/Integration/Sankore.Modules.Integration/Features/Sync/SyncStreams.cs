@@ -22,6 +22,8 @@ internal static class SyncStreams
     private static readonly SyncStream[] InsuranceStreams =
         [SyncStream.Policies, SyncStream.Claims];
 
+    private static readonly SyncStream[] TelephonyStreams = [SyncStream.Calls];
+
     /// <summary>
     /// The streams a connection of this family is swept on.
     ///
@@ -36,6 +38,7 @@ internal static class SyncStreams
     {
         IntegrationFamily.CoreBanking => CoreBankingStreams,
         IntegrationFamily.Insurance => InsuranceStreams,
+        IntegrationFamily.Telephony => TelephonyStreams,
         _ => throw new ArgumentOutOfRangeException(
             nameof(family), family,
             "No sync streams are declared for this integration family. Declare them in "

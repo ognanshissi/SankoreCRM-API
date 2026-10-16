@@ -62,6 +62,7 @@ public sealed class ConnectionSettingsJsonConverter : JsonConverter<ConnectionSe
             [nameof(IntegrationKind.Sab)] = typeof(SabSettings),
             [nameof(IntegrationKind.PerfectVision)] = typeof(PerfectVisionSettings),
             [nameof(IntegrationKind.Orass)] = typeof(OrassSettings),
+            [nameof(IntegrationKind.Ringover)] = typeof(RingoverSettings),
             [nameof(IntegrationKind.Fake)] = typeof(FakeSettings),
         };
 

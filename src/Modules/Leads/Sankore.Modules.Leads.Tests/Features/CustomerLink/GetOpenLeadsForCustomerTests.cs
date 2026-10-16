@@ -1,7 +1,9 @@
 namespace Sankore.Modules.Leads.Tests.Features.CustomerLink;
 
 using FluentAssertions;
+using NSubstitute;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Tests.TestSupport;
 using Sankore.Shared.Kernel.ValueObject;
 using Xunit;
@@ -43,8 +45,8 @@ public sealed class GetOpenLeadsForCustomerTests : IDisposable
     private async Task<IReadOnlyList<PublicApi.CustomerOpenLead>> ReadAsync(Guid? customerId = null)
     {
         await using var db = _factory.CreateContext();
-        return await new LeadsModuleFacade(db).GetOpenLeadsForCustomerAsync(
-            _tenant, customerId ?? _customer, CancellationToken.None);
+        return await new LeadsModuleFacade(db, Substitute.For<IPhoneBlindIndexer>())
+            .GetOpenLeadsForCustomerAsync(_tenant, customerId ?? _customer, CancellationToken.None);
     }
 
     [Fact]

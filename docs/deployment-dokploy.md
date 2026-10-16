@@ -1,8 +1,9 @@
 # SankoreCRM — Deployment runbook (Dokploy)
 
-Verified against this repository on 2026-09-30. Every image in §0 was built locally from the
-Dockerfiles committed here before this document was written; every environment variable below
-was traced to the line of code that reads it.
+Verified against this repository on 2026-09-30, and revised on 2026-10-16 for every commit up to
+`f191067` (see §13 for what changed). Every image in §0 was built locally from the Dockerfiles
+committed here before this document was written; every environment variable below was traced to
+the line of code that reads it. No Dockerfile, compose file or Aspire host changed in the revision.
 
 Dokploy runs Docker Swarm behind Traefik: each *Application* is a Swarm service built from a
 Dockerfile, each *Database* is a managed container with an internal hostname, and Traefik
@@ -43,6 +44,7 @@ terminates TLS and forwards plain HTTP to your container port.
 | **Redis** | **yes** | `builder.AddRedisDistributedCache("redis")`; the tenant cache, lead dispatch and the email-provider resolver all inject `IDistributedCache` |
 | **RabbitMQ** | no (see §7) | only if you move off the in-memory transport |
 | **Seq** | no | `builder.AddSeqEndpoint("seq")` is skipped when `ConnectionStrings__seq` is absent |
+| **clamd** (ClamAV daemon) | only if you distribute insurance | scans claim pieces before they are sent to an insurer; without it **nothing is transmitted** (§4) |
 
 Postgres needs no extension beyond `citext`, which the tenant-registry migration creates itself
 (`AlterDatabase().Annotation("Npgsql:PostgresExtension:citext")`). The repo's
@@ -68,12 +70,18 @@ openssl rand -base64 32   # → Leads__BlindIndexKey          (lead phone dedup)
 openssl rand -base64 32   # → Kyc__FieldEncryptionKey       (M02 document numbers at rest)
 openssl rand -base64 32   # → Kyc__BlindIndexKey            (M02 duplicate-document lookups)
 openssl rand -base64 32   # → Kyc__Storage__EncryptionKey   (M02 identity-document IMAGES)
+openssl rand -base64 32   # → Administration__FieldEncryptionKey (M12 professional-card numbers)
+openssl rand -base64 32   # → Administration__BlindIndexKey      (M12 lookups on those numbers)
+openssl rand -base64 32   # → Integration__FieldEncryptionKey    (integration command payloads)
+openssl rand -base64 32   # → Integration__BlindIndexKey
+openssl rand -base64 32   # → Integration__Batch__Storage__EncryptionKey          (outbound CBS batch files)
+openssl rand -base64 32   # → Integration__Insurance__ClaimStorage__EncryptionKey (insurance claim pieces)
 openssl rand -base64 48   # → Jwt__SigningKey               (any string ≥ 32 bytes)
 openssl rand -hex 32      # → ApiKey / TenantStore__ApiKey   (the SAME value on both apps)
 openssl rand -base64 24   # → Hangfire__Dashboard__Password
 ```
 
-Seven of these are **encryption keys, not settings**. Losing `Secrets__EncryptionKey` makes every
+Every base64 value above is an **encryption key, not a setting**. Losing `Secrets__EncryptionKey` makes every
 stored SMTP password and provider API key permanently undecryptable; losing a `Customers__*` key
 does the same to client PII, and losing a `Kyc__*` key does it to the KYC evidence a regulator
 can demand — `Kyc__Storage__EncryptionKey` in particular is the only thing that can turn the
@@ -85,7 +93,16 @@ The three `Kyc__*` keys are deliberately distinct from the `Customers__*` ones a
 other: a KYC document number and a client's phone must not be decryptable with the same key, the
 column key and the image key protect data with different lifetimes, and each pair must be
 rotatable without the other. Generating one value and pasting it into all three defeats the point
-of having three.
+of having three. The same reasoning applies to the `Administration__*` and `Integration__*`
+keys: one compromised key must open one concern, so generate each separately.
+
+`Jwt__SigningKey` now protects more than the platform's own tokens. Two further secrets are
+**derived** from it with HKDF rather than configured: the signing key of the customer's remote-KYC
+session, and the per-tenant token in the Brevo SMS delivery-callback URL. Rotating
+`Jwt__SigningKey` therefore also ends every remote-KYC session in progress and changes every
+tenant's Brevo callback URL, which then has to be pasted into Brevo again. Set
+`Kyc__RemoteSession__SigningKey` (base64, ≥ 32 bytes) if you want the remote sessions rotated
+independently.
 
 ---
 
@@ -194,6 +211,31 @@ Kyc__Storage__EncryptionKey=<base64 32 bytes>
 # answers BIOMETRY_NOT_CONFIGURED without touching the network, and a file stays in
 # Verifying instead of being wrongly rejected.
 Kyc__Biometry__BaseUrl=
+# Optional. Unset, the remote-KYC session key is derived from Jwt__SigningKey (§1).
+# Kyc__RemoteSession__SigningKey=<base64 ≥ 32 bytes>
+
+# ── Administration (M12) — professional-card numbers (CIMA art. 510) ────
+# Read on first use, not at boot: a missing key breaks the first distribution-
+# credential write, not the start-up.
+Administration__FieldEncryptionKey=<base64 32 bytes>
+Administration__BlindIndexKey=<base64 32 bytes>
+
+# ── Integration — CBS commands, batch files, insurance ──────────────────
+Integration__FieldEncryptionKey=<base64 32 bytes>
+Integration__BlindIndexKey=<base64 32 bytes>
+# Read on the first batch generation; only needed if a tenant's core banking
+# system takes its customers in batches.
+Integration__Batch__Storage__EncryptionKey=<base64 32 bytes>
+# Insurance claim pieces (pièces de sinistre). Read on the first upload: without
+# it the boot succeeds and the first upload fails.
+Integration__Insurance__ClaimStorage__EncryptionKey=<base64 32 bytes>
+# host:port of a clamd. UNSET = fail-closed: every claim piece is recorded
+# ScanFailed and NOTHING is transmitted to an insurer. Required for any tenant
+# that distributes insurance. Decided once, at start-up: restart after setting it.
+Integration__Insurance__Antivirus__Address=<clamd-internal-host>:3310
+# Destruction of insurance evidence past its retention period is OFF unless this
+# is true (default retention: 10 years, Integration__Insurance__Retention__EvidenceYears).
+# Integration__Insurance__Retention__PurgeEnabled=false
 
 # ── tenant registry ─────────────────────────────────────────────────────
 TenantStore__BaseUrl=http://<admin-internal-host>:8080/
@@ -215,6 +257,8 @@ Notifications__Smtp__FromName=Sankore
 FileStore__BasePath=/data/imports
 Leads__SdkStoragePath=/data/sdk
 Kyc__Storage__BasePath=/data/kyc-documents
+Integration__Insurance__ClaimStorage__BasePath=/data/insurance-claim-documents
+Integration__Batch__Storage__BasePath=/data/integration-batch-files
 
 # ── object storage: Cloudflare R2 instead of the volumes above (optional) ─
 # Leave the whole block out and the three paths above are used — which is a
@@ -230,10 +274,12 @@ Kyc__Storage__BasePath=/data/kyc-documents
 # redeploy discards, and nothing would report it.
 #
 # Create ONE BUCKET PER CONCERN, named exactly:
-#   kyc-documents   identity-document scans and selfies (already AES-256-GCM
-#                   encrypted by the application BEFORE upload — R2 never sees an
-#                   image, and server-side encryption does not replace that)
-#   imports         import spreadsheets and generated client exports
+#   kyc-documents              identity-document scans and selfies (already AES-256-GCM
+#                              encrypted by the application BEFORE upload — R2 never sees
+#                              an image, and server-side encryption does not replace that)
+#   imports                    import spreadsheets and generated client exports
+#   insurance-claim-documents  insurance claim pieces (encrypted before upload, like KYC)
+#   integration-batch-files    outbound core-banking batch files (encrypted before upload)
 # Both must be PRIVATE. The API streams every KYC document through an authenticated,
 # audited endpoint; there are no public or presigned URLs, deliberately, because a
 # signed link would audit only its issuance and not the read.
@@ -258,13 +304,15 @@ service-to-service and does not need to leave the overlay network.
 | `/data/imports` | uploaded client/user/lead import files, read later by the Hangfire job | an import queued before a redeploy fails with `Stored file not found` |
 | `/data/sdk` | lead-capture SDK versions published through the API | published SDK versions vanish on redeploy; `/sdk/v1/forms.min.js` 404s for every embedded form in the wild |
 | `/data/kyc-documents` | KYC evidence — identity-document scans and selfies, each AES-256-GCM encrypted | **a redeploy destroys evidence a regulator can demand.** This is the one mount whose absence is not recoverable by re-running something |
+| `/data/insurance-claim-documents` | insurance claim pieces, encrypted | same as above for claims: the default is a folder under the content root, which a redeploy destroys (a warning is logged at start-up) |
+| `/data/integration-batch-files` | outbound batch files deposited for a core banking system | a batch generated before a redeploy is lost before it is collected; only needed for a CBS that works in batches |
 
 `LocalFileStore` defaults to the container's `/tmp`, so without the first mount an import that
 outlives one container is lost. `LocalSdkFileStore` defaults to the image's own
 `wwwroot/sdk` — `1.0.0/forms.min.js` ships inside the image and keeps working, but anything
 published afterwards does not survive.
 
-With the `ObjectStorage__R2__*` block filled in, the first two rows of this table become
+With the `ObjectStorage__R2__*` block filled in, every row except `/data/sdk` becomes
 unnecessary — those files live in buckets and the mounts hold nothing. `/data/sdk` is still
 required either way: the SDK files are public-read and are served from the filesystem on purpose.
 Moving an existing installation is covered in §8.
@@ -291,12 +339,42 @@ would, on every deploy:
 
 - run all seven module migrations concurrently against the same database;
 - run a second copy of every outbox processor (`OutboxProcessor<T>` per module, plus
-  `EmailOutboxProcessor`, `SlaCheckerJob` and `WorkflowScheduleTriggerJob`) with no leader
-  election, so messages get processed twice;
+  `EmailOutboxProcessor`, `SmsOutboxProcessor`, `SlaCheckerJob` and
+  `WorkflowScheduleTriggerJob`) with no leader election, so messages get processed twice — for
+  SMS that means a customer receives, and the tenant pays for, every text message twice;
 - with `Messaging__UseRabbitMq=false`, publish integration events to an in-memory bus that the
   other replica cannot see, so consumers fire on whichever instance happened to publish.
 
 Scale vertically here. See §7 before scaling out.
+
+### Public routes the proxy must let through
+
+Everything below is anonymous by design and served by the same container on port 8080; Traefik
+needs no extra router. What it does need is to **pass the forwarded headers through untouched**.
+
+| Route | Who calls it | Notes |
+|---|---|---|
+| `/api/v1/public/kyc/link/*`, `/api/v1/public/kyc/session/*` | the customer's browser, during remote KYC | exempt from tenant resolution; rate-limited by `kyc-public` (30 requests/min per IP, in memory). The session endpoints use their own JWT scheme |
+| `POST /api/v1/public/sms-webhooks/twilio` | Twilio delivery callbacks | signature verified over the **external** URL, rebuilt from `X-Forwarded-Proto` and `X-Forwarded-Host`. Strip either and every callback is refused with `403`. Rate limiter `sms-webhooks`, 300/min per IP |
+| `POST /api/v1/public/sms-webhooks/brevo?tenant=…&token=…` | Brevo delivery callbacks | Brevo signs nothing; the token is derived from `Jwt__SigningKey` (§1). Copy the exact URL from the tenant's SMS settings screen |
+| `/sdk/{version}/forms.min.js`, `/sdk/v{major}/forms.min.js` | customers' own websites | served under the any-origin `sankore-sdk-public` CORS policy, **not** `Cors__AllowedOrigins`. `/sdk/{version}/forms.js` is the readable source, for debugging only |
+
+**The remote-KYC link is built from the tenant's FQDN**:
+`https://{tenant fqdn}/kyc/verification#t=…`. It must therefore point at the **front-end** and be
+reachable over HTTPS — a browser refuses the camera on plain HTTP, so the capture step never
+starts. A tenant registered without an FQDN gets no link at all; the failure is only logged.
+
+The front-end's nginx configuration (`SankoreFront/docker/nginx/default.conf`) defines a log
+format without request body or `Referer` for `^~ /api/v1/public/kyc`, because those requests carry a
+client number, a date of birth and an SMS code. If you put another proxy in front, keep that
+property: do not log request bodies or `Referer` on that prefix.
+
+### SDK versions on the `/data/sdk` volume
+
+`SdkVersionSeeder` registers, at every boot, the SDK builds it finds under `Leads__SdkStoragePath`
+and promotes the highest one per major (`/sdk/v1/` now resolves to **1.2.1**). The image ships
+`wwwroot/sdk/1.0.0` to `1.2.1`, but with the volume mounted the seeder reads the **volume**:
+copy any version directory missing from it, otherwise that version is never registered.
 
 ---
 
@@ -394,6 +472,27 @@ credential; it is written to the vault, never to a column. Then
 `POST /api/v1/notification-settings/test-send` — it answers **HTTP 200 even on failure**, so
 read `delivered`, not the status code. See the "Secrets vault" section of `CLAUDE.md`.
 
+**5 — configure SMS for the tenant** (optional, but required for the remote-KYC one-time code).
+`Settings → Notifications → SMS` in the CRM: provider (`Brevo` or `Twilio`), sender identity,
+default calling code (e.g. `+225`, needed to convert locally stored numbers), monthly quota and the
+credential. The credential goes to the vault under its own name, separate from the email one.
+There is **no platform fallback for SMS**: no provider means no text message. Paste the callback
+URL the screen shows into the provider's console.
+
+**6 — review the tenant settings that ship with conservative defaults.** None of them needs
+changing to boot, but each one changes behaviour:
+
+| Setting | Default | Effect |
+|---|---|---|
+| Compliance: PEP vigilance | on | turned on for every tenant by migration |
+| Compliance: KYC automatic approval | off | no remote file is approved without a human until switched on |
+| KYC `remote-otp` | off | cannot be switched on until the tenant's SMS channel can send |
+| KYC `remote-email-delay-minutes` | 5 | delay between the welcome email and the remote-KYC link |
+| KYC `remote-review-sla-hours` | 24 | when an unreviewed remote file is chased |
+| KYC `proof-of-address-max-age-days` | 90 | CIMA 13.6 window for remote files |
+| Leads `sla-compliance-target-percent` | 90 | the objective shown on the leads dashboard |
+| Product lines: remote-KYC policy | empty | remote collection is off for a product until configured |
+
 ---
 
 ## 7. If you need to scale out later
@@ -419,8 +518,9 @@ since the API migrates it at start-up.
 
 ## 8. Redeploys, migrations and rollback
 
-Every deploy runs migrations at start-up, in this order: the audit schema, the secrets vault,
-then Leads, Administration, Workflow, Notifications and Customers. A failing migration takes the
+Every deploy runs migrations at start-up, in this order: the audit schema, the Data Protection key
+ring, the secrets vault, then Leads, Administration, Workflow, Notifications, Customers, Kyc and
+Integration. A failing migration takes the
 boot down, so Swarm keeps the previous task serving traffic until the new one is healthy — which
 is exactly what you want, and why the health check must point at `/health`.
 
@@ -431,6 +531,20 @@ code tolerates the newer schema. Take a dump before any deploy that carries a mi
 ```bash
 pg_dump --format=custom -h <pg-host> -U <user> -d <db> > pre-deploy-$(date +%F).dump
 ```
+
+**The 2026-10-16 revision carries 25 migrations — take that dump.** Three of them rewrite data and
+cannot be undone by their `Down` method:
+
+| Migration | Module | What it changes |
+|---|---|---|
+| `20261012162634_AddMyProfile` | Administration | backfills `app_users.created_at` |
+| `20261012235056_UserInvitationAndImpersonation` | Administration | assigns an `AGT-nnnn` employee number to every user without one |
+| `20261012225139_BackfillKycInProgress` | Customers | sets `kyc_status = 'InProgress'` on clients that have an open KYC file (no-op on a fresh database) |
+
+The others only add tables and columns: user sessions, agent settings, distribution credentials,
+compliance switches, the KYC remote-collection tables, SMS settings and outbox, the insurance
+complaint register and purge trace, workflow step kinds, and an impersonator column on the audit
+trail. The Leads module has none in this revision.
 
 `docs/backup-runbook.md` has the scheduled, encrypted version of this, and
 `docs/postgres-recovery.md` the restore drill. Point the backup container at the Dokploy
@@ -513,6 +627,13 @@ Also worth knowing, though not blocking:
 - Rate limits are per-instance in-memory (`auth`: 5/min/IP). With one replica that is the real
   limit; behind a proxy it counts the *proxy's* IP unless forwarded headers are enabled, which
   is the other reason `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` matters.
+- **Administrators can impersonate users.** `RoleSeeder` grants every permission to the System and
+  Administrator roles at each boot, so the new `user:impersonate` permission reaches every
+  Administrator automatically. An impersonation lasts 30 minutes and is recorded in the audit
+  trail with the impersonator. Remove the permission from the role if your institution does not
+  want it.
+- **Platform tokens are now tied to a session.** A JWT carrying a session id is checked on every
+  request, so revoking a session in the CRM logs that device out immediately.
 - `Notifications__Smtp__Password` and the API key sit in Dokploy's environment, visible to
   anyone with access to the panel. That is the same exposure as any PaaS; the per-tenant
   credentials are not exposed this way — they live encrypted in the vault.
@@ -554,6 +675,14 @@ cannot record one fails the request it was recording.
 | curl works, the browser does not, console says the CORS policy blocked it | the calling origin is not in `Cors__AllowedOrigins`; the start-up log lists what is allowed | add the front-end origin, scheme included, no trailing slash |
 | Boot: `Cors:AllowedOrigins contains "*"` | a wildcard was configured; it is incompatible with credentialed requests | list the exact origins |
 | Activation or reset link 400s with "expired or already been used" for a link that is neither | either the lifespan is too short for how the link is used (`Identity__ActivationTokenLifespan`), or the deployment predates the persisted Data Protection key ring, which reset the signing keys on every redeploy | raise the lifespan, and redeploy from a commit containing `SankoreDataProtection`; links issued before that deploy must be re-sent |
+| Insurance claim pieces stay `ScanFailed`, nothing reaches the insurer | `Integration__Insurance__Antivirus__Address` unset (fail-closed) or clamd unreachable | point it at a running clamd and restart the API — the scanner is chosen at start-up |
+| First claim-piece upload fails with a 500 | `Integration__Insurance__ClaimStorage__EncryptionKey` missing — read on first use, not at boot | set it and redeploy |
+| Saving a distribution credential (professional card) fails with a 500 | `Administration__FieldEncryptionKey` / `Administration__BlindIndexKey` missing — read on first use | set both and redeploy |
+| Every Twilio SMS callback answers `403` | the proxy strips `X-Forwarded-Proto` or `X-Forwarded-Host`, so the signed URL cannot be rebuilt | keep forwarded headers; `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` |
+| Brevo SMS delivery statuses stopped arriving after a key rotation | the callback token is derived from `Jwt__SigningKey` | copy the new callback URL from the SMS settings screen into Brevo |
+| A converted customer never receives the remote-KYC link | the tenant has no FQDN, the client has no email, or the product's remote policy is off — the link is skipped and only logged | set the tenant FQDN; check the KYC file's « Dépôt à distance » panel, which names the reason |
+| The remote-KYC page opens but the camera never starts | the link's host is served over HTTP | serve the front-end over HTTPS on the tenant FQDN |
+| `remote-otp` cannot be switched on | the tenant's SMS channel cannot send yet | finish the SMS settings (§6 step 5) first |
 | `create-root` returns `503` | `ApiKey` is not configured and the environment is not Development — deliberate: the endpoint provisions a super-user and refuses to run unprotected | set `ApiKey` |
 
 ---
@@ -647,3 +776,58 @@ Test suites after both changes: Shared.Infrastructure 69, Administration 230, Le
 Notifications 81, Customers 762 — all green. Workflow fails 1 of 33
 (`ActivateTemplateHandlerTests.Activates_template_with_steps`: `ExecuteDeleteAsync` is
 unsupported by the EF InMemory provider), which is pre-existing and unrelated.
+
+---
+
+## 13. What changed in the 2026-10-16 revision
+
+Operator-facing changes only, from commit `3e2fbcd` to `f191067`. Nothing changed in the images,
+the ports or the topology.
+
+**New configuration** (all optional at boot; each fails on first use or fails closed — §4):
+`Administration__FieldEncryptionKey`, `Administration__BlindIndexKey`,
+`Integration__Insurance__ClaimStorage__*`, `Integration__Insurance__Antivirus__*`,
+`Integration__Insurance__Retention__*`, `Kyc__RemoteSession__*`,
+`Notifications__SmsOutboxProcessor__*` (batch 20, every 10 s, 2 attempts — defaults are fine). The
+`Integration__FieldEncryptionKey`, `Integration__BlindIndexKey` and `Integration__Batch__Storage__*`
+keys predate this revision but were missing from this runbook.
+
+**New external service:** clamd, for insurance claim pieces.
+
+**New storage:** `insurance-claim-documents` and `integration-batch-files`, as volumes or buckets.
+
+**New public routes:** remote KYC (`/api/v1/public/kyc/*`), SMS delivery callbacks
+(`/api/v1/public/sms-webhooks/*`), and the any-origin CORS policy on the SDK files. See the
+"Public routes" part of §4.
+
+**New background work:**
+- hosted service `SmsOutboxProcessor`;
+- per-tenant Hangfire jobs `kyc-contract-anniversary-*` (02:15 daily), `insurance-policy-sync-*`
+  (03:30), `insurance-premium-collection-*` (03:45), `insurance-claim-sync-*` (04:00),
+  `insurance-statement-generation-*` (05:00 on the 1st), `insurance-evidence-retention-*` (02:30
+  Sundays, purges only if enabled), `insurance-complaint-deadlines-*` (07:00),
+  `insurance-claim-document-scan-*` (every 10 minutes);
+- global jobs `kyc-remote-invitation-expiry` (02:30 daily) and `kyc-remote-review-sla` (hourly at
+  :20);
+- new MassTransit consumers in Kyc, Notifications, Leads, Integration and Customers. They run on
+  the in-memory bus like the others; nothing to configure.
+
+**New permissions**, granted at boot to System and Administrator: `user:impersonate`,
+`user:credential:manage`, `kyc:remote-invite`, `kyc:auto-approval:control`,
+`Ins.Statement.Finalise`, `Ins.Complaint.View`, `Ins.Complaint.Handle`. Grant them to other roles
+by hand.
+
+**Seeded at boot:** platform SMS templates (`kyc.remote-otp`, `kyc.remote-invitation`, fr and
+en) and new email templates. Idempotent.
+
+**25 migrations**, three of them data rewrites — see §8 before deploying.
+
+**Behaviour changes worth announcing to tenants:**
+- A KYC complement asked on a remotely collected file now sends the customer a new link limited
+  to the pieces the approver listed.
+- A failed lead reception (web form, webhook) can be completed and turned into a lead from the
+  reception's detail panel, by users holding `lead:source:manage`; each reading of the raw payload
+  is audited.
+- The KYC file list accepts `mine=true`, used by the « Mes dossiers » view.
+- A scheduled-pull lead source can be saved without an endpoint while in Draft or Testing; going
+  live without one is refused with `LIVE_SOURCE_ENDPOINT_REQUIRED`.

@@ -194,3 +194,32 @@ public sealed record ReconciliationCompletedEvent(
     int ClosedGapCount,
     IReadOnlyDictionary<string, int> GapsByType,
     DateTimeOffset FinishedAt) : IntegrationEventBase;
+
+/// <summary>
+/// A CRM user's telephony account stopped being usable (TEL-B-05).
+///
+/// <para>
+/// An event and not a log line, for the reason <c>IntegrationCommandRejectedEvent</c> gives about
+/// the rejection queue: nobody reads a settings screen unprompted, and the symptom an agent
+/// reports is "my calls are not in my history any more" — which reads as a journal bug and is a
+/// link somebody has to repair. Consumed by M08 to tell an administrator.
+/// </para>
+///
+/// <para>
+/// Published only on the TRANSITION to broken, never on each nightly confirmation that it is
+/// still broken: the opposite would mail an administrator every morning about a provider account
+/// that is not coming back.
+/// </para>
+/// </summary>
+/// <param name="Reason">
+/// Operator-facing and short — the account is gone from the directory, or the provider lists it
+/// as disabled. The two are different repairs.
+/// </param>
+public sealed record TelephonyUserLinkBrokenEvent(
+    Guid TenantId,
+    Guid ConnectionId,
+    Guid LinkId,
+    Guid CrmUserId,
+    string ExternalUserId,
+    string Reason,
+    DateTimeOffset DetectedAt) : IntegrationEventBase;
