@@ -43,6 +43,14 @@ internal sealed class TelCallJournalWriter(
     /// </para>
     ///
     /// <para>
+    /// <b>It reports whether the STATUS changed on this reading</b>, which the caller needs and
+    /// cannot work out for itself: it never saw the previous status. The realtime pushes of
+    /// TEL-B-10 fire on a change and not on a reading — a provider that redelivers the same
+    /// event, or a catch-up sweep passing over a call it already knows, would otherwise re-open
+    /// an agent's call panel for a conversation that ended an hour ago.
+    /// </para>
+    ///
+    /// <para>
     /// <b>Attachment is attempted on every reading until it succeeds</b>, not only at creation: a
     /// ring arrives before anything is known, and the lead that number belongs to may be captured
     /// thirty seconds later by the agent who just answered. A row already attached is left alone,
@@ -50,7 +58,7 @@ internal sealed class TelCallJournalWriter(
     /// refusal is read here as "nothing to do" rather than as a failure.
     /// </para>
     /// </summary>
-    internal async Task<TelCall> RecordAsync(
+    internal async Task<TelCallReading> RecordAsync(
         Guid tenantId, Guid connectionId, ProviderCall call, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(call);
@@ -70,9 +78,19 @@ internal sealed class TelCallJournalWriter(
 
         var row = existing ?? await OpenAsync(tenantId, connectionId, call, ct);
 
+        // A row that did not exist a moment ago has, by definition, just reached the status the
+        // provider reports — there was no previous status for it to differ from. Said explicitly
+        // rather than left implicit, because the realtime push downstream fires on a CHANGE and a
+        // newly opened ringing call is the most important change there is.
+        var statusChanged = existing is null;
+
         if (existing is not null)
         {
-            if (!row.TryMoveTo(call.Status, call.EndedAt ?? call.AnsweredAt ?? call.StartedAt))
+            if (row.TryMoveTo(call.Status, call.EndedAt ?? call.AnsweredAt ?? call.StartedAt))
+            {
+                statusChanged = true;
+            }
+            else
             {
                 // Not an error, and not silent either: an operator chasing a call stuck in
                 // Ringing needs to see that the provider reported something the table refused.
@@ -105,7 +123,7 @@ internal sealed class TelCallJournalWriter(
 
         await TryAttachAsync(tenantId, row, call, ct);
 
-        return row;
+        return new TelCallReading(row, statusChanged);
     }
 
     private async Task<TelCall> OpenAsync(
@@ -312,3 +330,19 @@ internal sealed class TelCallJournalWriter(
         }
     }
 }
+
+
+/// <summary>
+/// One reading of one call: the row, and whether this reading MOVED it.
+///
+/// <para>
+/// A record and not a tuple, so the boolean has a name at every call site — <c>if (changed)</c>
+/// reads as a condition about the call, where <c>if (result.Item2)</c> reads as nothing at all.
+/// </para>
+/// </summary>
+/// <param name="StatusChanged">
+/// True when the row was created, or when <c>TryMoveTo</c> accepted a new status. False when the
+/// provider reported the status the row already had, or one the transition table refuses — both
+/// of which are ordinary and neither of which is news for a browser.
+/// </param>
+internal sealed record TelCallReading(TelCall Call, bool StatusChanged);

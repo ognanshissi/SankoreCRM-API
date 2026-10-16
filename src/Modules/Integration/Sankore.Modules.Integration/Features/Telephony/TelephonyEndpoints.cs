@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.Telephony.CallContext;
 using Sankore.Modules.Integration.Features.Telephony.ClickToCall;
+using Sankore.Modules.Integration.Features.Telephony.Journal;
 using Sankore.Modules.Integration.Features.Telephony.LinkCall;
 using Sankore.Modules.Integration.Features.Telephony.Missed;
+using Sankore.Modules.Integration.Features.Telephony.MyStatus;
 using Sankore.Modules.Integration.Features.Telephony.Outcomes;
 using Sankore.Modules.Integration.Features.Telephony.Recordings;
 using Sankore.Modules.Integration.Features.Telephony.Stats;
@@ -41,6 +43,11 @@ internal static class TelephonyEndpoints
         // The directory is read live from the provider; everything else writes this module's own
         // rows and keeps working while the provider is down — which matters, because a provider
         // change is exactly what breaks a link somebody has to repair.
+        // ── The agent's own state (TEL-F-11) ────────────────────────────────
+        // First in the group because it is the first thing a shell reads, and because it is the
+        // only telephony route an ordinary agent can call without a Telephony.* permission.
+        group.MapMyTelephonyStatus();
+
         group.MapGetTelephonyDirectory();
         group.MapListTelephonyUserLinks();
         group.MapLinkTelephonyUser();
@@ -58,8 +65,13 @@ internal static class TelephonyEndpoints
         // ── Exploitation (TEL-B-11, TEL-B-13) ───────────────────────────────
         // The wrap-up is what turns a journalled call into the lead's own history and stops its
         // first-contact SLA; the missed-call list is the other end of the same day's work.
+        // ── The journal (TEL-B-08, TEL-F-07/08) ─────────────────────────────
+        group.MapListTelephonyCalls();
+        group.MapExportTelephonyCalls();
+
         group.MapWrapUpCall();
         group.MapListMissedCalls();
+        group.MapDismissMissedCall();
         group.MapCreateLeadFromCall();
 
         // The outcome referential the wrap-up validates against. Seeded per tenant at start-up —

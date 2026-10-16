@@ -27,7 +27,11 @@ internal static class WrapUpCallEndpoint
                 + "The note is kept ENCRYPTED and never leaves this module: it is excluded from "
                 + "the event M13 consumes and from every timeline summary. "
                 + "Wrapping up twice is allowed — an agent may correct an outcome — and M13 is "
-                + "idempotent on the call. Audited. "
+                + "idempotent on the call. "
+                + "keepRecording asks for the conversation to be kept, and is the ONLY way a "
+                + "recording is kept under the OnDemand policy. It is ignored under AllCalls "
+                + "(redundant) and under Disabled (it would be a way around the policy), and it "
+                + "cannot be un-asked by a second wrap-up. Audited. "
                 + "Requires permission: Telephony.Call.View.")
             .RequireAuthorization(Permissions.CanViewTelephonyCall.Code)
             .Produces(StatusCodes.Status204NoContent)
@@ -47,7 +51,13 @@ internal static class WrapUpCallEndpoint
         ArgumentNullException.ThrowIfNull(request);
 
         var result = await sender.Send(
-            new WrapUpCallCommand(callId, request.OutcomeCode, request.Note, request.CallbackAt), ct);
+            new WrapUpCallCommand(
+                callId,
+                request.OutcomeCode,
+                request.Note,
+                request.CallbackAt,
+                request.KeepRecording ?? false),
+            ct);
 
         if (result.IsSuccess) return Results.NoContent();
 
@@ -59,5 +69,11 @@ internal static class WrapUpCallEndpoint
     }
 }
 
+/// <param name="KeepRecording">
+/// Ask for this conversation to be kept. Only meaningful when the tenant's recording policy is
+/// <c>OnDemand</c> — see GET telephony/recording-policy — and silently ignored otherwise, because
+/// under <c>AllCalls</c> it is redundant and under <c>Disabled</c> honouring it would be a way
+/// around the policy.
+/// </param>
 internal sealed record WrapUpCallRequest(
-    string OutcomeCode, string? Note, DateTimeOffset? CallbackAt);
+    string OutcomeCode, string? Note, DateTimeOffset? CallbackAt, bool? KeepRecording = null);

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Features.Telephony.Outcomes;
+using Sankore.Modules.Integration.Features.Telephony.Recordings;
 using Sankore.Modules.Integration.Features.Telephony.WrapUp;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Modules.Integration.Tests.TestSupport;
@@ -234,7 +235,7 @@ public sealed class WrapUpCallTests : IDisposable
     [Fact]
     public async Task A_call_attributed_to_nobody_may_be_wrapped_up()
     {
-        var call = await SeedCallAsync(TelCallStatus.Missed, crmUserId: null);
+        var call = await SeedCallAsync(TelCallStatus.Missed, attributed: false);
 
         // The agency's "to attribute" queue.
         var (result, _) = await WrapUpAsync(call.Id, TelCallOutcomeDefaults.NotReached);
@@ -260,9 +261,114 @@ public sealed class WrapUpCallTests : IDisposable
         db.TelCalls.Single().OutcomeCode.Should().Be("NOT_INTERESTED");
     }
 
+    // ── Keeping the recording (TEL-B-15, OnDemand) ───────────────────────────
+
+    [Fact]
+    public async Task Asking_to_keep_the_recording_marks_the_call_under_ON_DEMAND()
+    {
+        await SetPolicyAsync(TelRecordingMode.OnDemand);
+
+        var callId = (await SeedCallAsync(TelCallStatus.Completed)).Id;
+
+        (await WrapUpAsync(callId, "REACHED", keepRecording: true)).Result
+            .IsSuccess.Should().BeTrue();
+
+        // The ONLY route by which a recording is ever kept under OnDemand. Before this, the mode
+        // was selectable and unreachable: TelRecordingPolicy.Keeps reads KeepRecording and
+        // MarkForRecording had no caller, so a compliance officer could choose "à la demande",
+        // believe recording was on, and get nothing.
+        (await ReloadAsync(callId)).KeepRecording.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(TelRecordingMode.Disabled)]
+    [InlineData(TelRecordingMode.AllCalls)]
+    public async Task The_request_is_IGNORED_under_any_other_mode(TelRecordingMode mode)
+    {
+        await SetPolicyAsync(mode);
+
+        var callId = (await SeedCallAsync(TelCallStatus.Completed)).Id;
+
+        var (result, _) = await WrapUpAsync(callId, "REACHED", keepRecording: true);
+
+        // Ignored and not refused: the box is rendered from a policy the browser read earlier, so
+        // a tab older than a policy change is ordinary and must not cost the agent their
+        // qualification. Under AllCalls the flag is redundant; under Disabled, honouring it would
+        // be a way around the policy.
+        result.IsSuccess.Should().BeTrue();
+
+        (await ReloadAsync(callId)).KeepRecording.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task With_no_policy_at_all_the_request_is_ignored()
+    {
+        var callId = (await SeedCallAsync(TelCallStatus.Completed)).Id;
+
+        // No policy row: the reader answers Disabled, which is what an institution that has never
+        // stated a legal basis must get.
+        (await WrapUpAsync(callId, "REACHED", keepRecording: true)).Result
+            .IsSuccess.Should().BeTrue();
+
+        (await ReloadAsync(callId)).KeepRecording.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_second_wrap_up_cannot_UN_ask_for_the_recording()
+    {
+        await SetPolicyAsync(TelRecordingMode.OnDemand);
+
+        var callId = (await SeedCallAsync(TelCallStatus.Completed)).Id;
+
+        await WrapUpAsync(callId, "REACHED", keepRecording: true);
+        await WrapUpAsync(callId, "NOT_INTERESTED", keepRecording: false);
+
+        // By the second wrap-up the fetch job may already hold the audio, and "forget it" is a
+        // retention decision for the purge or for an anonymisation — not for a correction of an
+        // outcome.
+        (await ReloadAsync(callId)).KeepRecording.Should().BeTrue();
+    }
+
+    private async Task SetPolicyAsync(TelRecordingMode mode)
+    {
+        await using var db = _factory.CreateContext();
+
+        var policy = TelRecordingPolicy.Create(_tenant, _agent, TelephonyTestHarness.Now);
+
+        policy.Apply(
+            mode,
+            legalBasis: mode == TelRecordingMode.Disabled ? null : "Obligation légale CIMA",
+            purpose: mode == TelRecordingMode.Disabled ? null : "Contrôle qualité",
+            retentionDays: 90,
+            deleteAtProvider: false,
+            maxDurationSeconds: 3600,
+            updatedBy: _agent,
+            now: TelephonyTestHarness.Now)
+            .IsSuccess.Should().BeTrue();
+
+        db.TelRecordingPolicies.Add(policy);
+        await db.SaveChangesAsync(CancellationToken.None);
+    }
+
+    private async Task<TelCall> ReloadAsync(Guid callId)
+    {
+        await using var db = _factory.CreateContext();
+
+        return await db.TelCalls.FirstAsync(c => c.Id == callId, CancellationToken.None);
+    }
+
     // ── Harness ───────────────────────────────────────────────────────────────
 
-    private async Task<TelCall> SeedCallAsync(TelCallStatus status, Guid? crmUserId = default)
+    /// <param name="attributed">
+    /// Whether the call belongs to the acting agent. A BOOLEAN and not a nullable Guid, because
+    /// the nullable form was a trap this harness had fallen into: it read
+    /// <c>crmUserId == default ? _agent : crmUserId</c>, and <c>default</c> for a
+    /// <c>Guid?</c> IS null — so the one test that passed <c>crmUserId: null</c> to exercise the
+    /// unattributed branch seeded the call attributed to the agent and passed without ever
+    /// reaching it.
+    /// </param>
+    private async Task<TelCall> SeedCallAsync(
+        TelCallStatus status, Guid? crmUserId = null, bool attributed = true)
     {
         await using var db = _factory.CreateContext();
 
@@ -276,7 +382,9 @@ public sealed class WrapUpCallTests : IDisposable
             from.Encrypted, from.BlindIndex, to.Encrypted, to.BlindIndex,
             TelephonyTestHarness.Now.AddMinutes(-20),
             externalUserId: null,
-            crmUserId: crmUserId == default ? _agent : crmUserId);
+            // attributed decides, and crmUserId only names WHICH agent. There is no sentinel to
+            // get wrong.
+            crmUserId: attributed ? crmUserId ?? _agent : null);
 
         // Through the transitions rather than opened on a terminal status: a call reaches
         // Completed by being answered, and the wrap-up's own rule reads EndedAt.
@@ -297,7 +405,11 @@ public sealed class WrapUpCallTests : IDisposable
     }
 
     private async Task<(Result Result, List<object> Events)> WrapUpAsync(
-        Guid callId, string outcomeCode, string? note = null, DateTimeOffset? callbackAt = null)
+        Guid callId,
+        string outcomeCode,
+        string? note = null,
+        DateTimeOffset? callbackAt = null,
+        bool keepRecording = false)
     {
         await using var db = _factory.CreateContext();
 
@@ -305,12 +417,14 @@ public sealed class WrapUpCallTests : IDisposable
 
         var result = await new WrapUpCallHandler(
                 db,
+                new TelephonyRecordingPolicyReader(db),
                 TelephonyTestHarness.Encryptor(),
                 publisher,
                 TelephonyTestHarness.User(_tenant, _agent),
                 TelephonyTestHarness.Clock,
                 NullLogger<WrapUpCallHandler>.Instance)
-            .Handle(new WrapUpCallCommand(callId, outcomeCode, note, callbackAt),
+            .Handle(
+                new WrapUpCallCommand(callId, outcomeCode, note, callbackAt, keepRecording),
                 CancellationToken.None);
 
         return (result, publisher.Published);

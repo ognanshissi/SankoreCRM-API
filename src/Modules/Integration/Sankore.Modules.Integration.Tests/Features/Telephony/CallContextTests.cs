@@ -56,7 +56,7 @@ public sealed class CallContextTests : IDisposable
 
         var call = await SeedCallAsync(TelCallStatus.Ringing, crmUserId: _agent);
 
-        await pop.PushRingingAsync(call, CancellationToken.None);
+        await pop.PushTransitionAsync(call, statusChanged: true, CancellationToken.None);
 
         var push = notifier.Pushes.Should().ContainSingle().Subject;
 
@@ -67,24 +67,74 @@ public sealed class CallContextTests : IDisposable
         // The payload's whole shape. A websocket frame is delivered to whoever holds the
         // connection, with no permission check and no perimeter per frame — so a name here would
         // be personal data leaving the building on a connection nobody re-authorises.
-        push.Payload.Should().BeOfType<TelephonyRingingPush>()
+        push.Payload.Should().BeOfType<TelephonyCallPush>()
             .Which.CallId.Should().Be(call.Id);
 
         push.Payload.GetType().GetProperties().Should().HaveCount(1);
     }
 
     [Theory]
-    [InlineData(TelCallStatus.InProgress)]
-    [InlineData(TelCallStatus.Completed)]
-    [InlineData(TelCallStatus.Missed)]
-    public async Task Only_a_RING_is_pushed(TelCallStatus status)
+    [InlineData(TelCallStatus.InProgress, "telephony.call.answered")]
+    [InlineData(TelCallStatus.Completed, "telephony.call.ended")]
+    [InlineData(TelCallStatus.Missed, "telephony.call.ended")]
+    [InlineData(TelCallStatus.Voicemail, "telephony.call.ended")]
+    [InlineData(TelCallStatus.Failed, "telephony.call.ended")]
+    public async Task Answering_and_ending_are_pushed_too(TelCallStatus status, string expected)
     {
         var (pop, notifier) = TelephonyTestHarness.ScreenPop();
 
         var call = await SeedCallAsync(status, crmUserId: _agent);
 
-        // The agent is holding the handset by then and knows perfectly well what happened.
-        await pop.PushRingingAsync(call, CancellationToken.None);
+        await pop.PushTransitionAsync(call, statusChanged: true, CancellationToken.None);
+
+        // TEL-B-10 shipped with the ring alone, on the reasoning that the agent is holding the
+        // handset by then. True of the agent, false of the SCREEN: the panel has to start a timer
+        // when the call is answered and swap itself for the qualification form when it ends, and
+        // with a ring as its only signal it has nothing to do either on.
+        var push = notifier.Pushes.Should().ContainSingle().Subject;
+
+        push.EventName.Should().Be(expected);
+
+        // And the payload does NOT grow with the number of events: one field, for all three.
+        push.Payload.GetType().GetProperties().Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task The_four_terminal_statuses_share_ONE_event()
+    {
+        var (pop, notifier) = TelephonyTestHarness.ScreenPop();
+
+        foreach (var status in new[]
+        {
+            TelCallStatus.Completed, TelCallStatus.Missed,
+            TelCallStatus.Voicemail, TelCallStatus.Failed,
+        })
+        {
+            var call = await SeedCallAsync(status, crmUserId: _agent);
+            await pop.PushTransitionAsync(call, statusChanged: true, CancellationToken.None);
+        }
+
+        // The panel's reaction is identical for the four — stop, offer the qualification — and
+        // which of them it was is on the row the screen reads next. Four events would be four
+        // handlers doing the same thing, and one of them would eventually differ.
+        notifier.Pushes.Select(p => p.EventName).Distinct()
+            .Should().ContainSingle().Which.Should().Be(TelephonyScreenPop.EndedEvent);
+    }
+
+    [Theory]
+    [InlineData(TelCallStatus.Ringing)]
+    [InlineData(TelCallStatus.InProgress)]
+    [InlineData(TelCallStatus.Completed)]
+    public async Task A_reading_that_moved_NOTHING_pushes_nothing(TelCallStatus status)
+    {
+        var (pop, notifier) = TelephonyTestHarness.ScreenPop();
+
+        var call = await SeedCallAsync(status, crmUserId: _agent);
+
+        // The provider redelivered an event, or the transition table refused one. Neither is news
+        // for a browser — and re-pushing a ring would re-open the panel of a conversation that
+        // ended an hour ago, which is exactly what the catch-up sweep would cause on every run.
+        await pop.PushTransitionAsync(call, statusChanged: false, CancellationToken.None);
 
         notifier.Pushes.Should().BeEmpty();
     }
@@ -98,7 +148,7 @@ public sealed class CallContextTests : IDisposable
 
         // There is no agent to tell. The call is journalled and appears in "calls to attribute",
         // which is the honest outcome.
-        await pop.PushRingingAsync(call, CancellationToken.None);
+        await pop.PushTransitionAsync(call, statusChanged: true, CancellationToken.None);
 
         notifier.Pushes.Should().BeEmpty();
     }
@@ -112,7 +162,8 @@ public sealed class CallContextTests : IDisposable
         var call = await SeedCallAsync(TelCallStatus.Ringing, crmUserId: _agent);
 
         // An agent with no open tab is the ordinary case for most of the day.
-        var act = async () => await pop.PushRingingAsync(call, CancellationToken.None);
+        var act = async () =>
+            await pop.PushTransitionAsync(call, statusChanged: true, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
     }

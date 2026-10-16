@@ -38,6 +38,15 @@ internal static class TelephonyServiceRegistration
         services.AddScoped<TelephonyAgencyResolver>();
         services.AddScoped<TelephonyCallPerimeter>();
 
+        // The journal's lister is resolved by the CSV export as a collaborator, so it has to be
+        // a registered service and not only a MediatR handler: the export reuses its query so the
+        // file and the screen cannot disagree about the filters or the perimeter.
+        services.AddScoped<Journal.ListTelephonyCallsHandler>();
+
+        // The export's row ceiling. TryAdd, so a host that wanted to override it could, and a
+        // singleton because it is an immutable record of one integer.
+        services.TryAddSingleton(new Journal.TelephonyExportOptions());
+
         // Scoped although it holds no DbContext: IRealtimeNotifier is a singleton and this is a
         // two-field wrapper, so a singleton would work — scoped keeps every service of this area
         // on one lifetime, which is the thing a reader checks rather than re-derives.

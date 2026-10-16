@@ -186,7 +186,8 @@ public sealed class ProcessTelephonyWebhookJob(IServiceScopeFactory scopeFactory
             return;
         }
 
-        var row = await journal.RecordAsync(tenantId, connectionId, call.Value, ct);
+        var reading = await journal.RecordAsync(tenantId, connectionId, call.Value, ct);
+        var row = reading.Call;
 
         stored.MarkProcessed($"CALL:{row.Status}", clock.GetUtcNow());
 
@@ -196,7 +197,7 @@ public sealed class ProcessTelephonyWebhookJob(IServiceScopeFactory scopeFactory
         // pushing first would send it to read something that does not exist yet — and the read
         // would answer 404 for a call that is about to be perfectly fine. It also means a push is
         // never sent for work that then rolled back.
-        await screenPop.PushRingingAsync(row, ct);
+        await screenPop.PushTransitionAsync(row, reading.StatusChanged, ct);
 
         logger.LogInformation(
             "Telephony webhook event {EventId} of tenant {TenantId} journalled call "

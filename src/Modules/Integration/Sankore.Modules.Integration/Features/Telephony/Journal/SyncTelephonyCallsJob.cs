@@ -203,6 +203,14 @@ public sealed class SyncTelephonyCallsJob(IServiceScopeFactory scopeFactory)
                     // which transitions are allowed and of who may overwrite whose attachment. A
                     // sweep with its own copy is a sweep that eventually undoes an agent's
                     // correction.
+                    //
+                    // The reading's StatusChanged is DISCARDED here, and that is a decision
+                    // rather than an oversight: this sweep does not push the realtime events of
+                    // TEL-B-10. It runs every quarter of an hour, so a transition it discovers is
+                    // up to fifteen minutes old — and opening an agent's call panel for a
+                    // conversation that finished a quarter of an hour ago is worse than not
+                    // opening it at all. The webhook is the live path; this one is the journal's
+                    // net, and its job is that the row exists, not that a screen reacted.
                     await journal.RecordAsync(tenantId, connectionId, call, ct);
                     report.Journalled++;
                 }

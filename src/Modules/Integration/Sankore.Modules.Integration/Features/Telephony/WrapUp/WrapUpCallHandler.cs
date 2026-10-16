@@ -40,6 +40,7 @@ using Sankore.Shared.Kernel;
 /// </summary>
 internal sealed class WrapUpCallHandler(
     IntegrationDbContext db,
+    Recordings.TelephonyRecordingPolicyReader policies,
     [FromKeyedServices(Infrastructure.Crypto.IntegrationFieldProtection.Key)] IFieldEncryptor encryptor,
     [FromKeyedServices(nameof(IntegrationDbContext))] IEventPublisher publisher,
     ICurrentUser currentUser,
@@ -96,6 +97,34 @@ internal sealed class WrapUpCallHandler(
 
         if (wrapped.IsFailure)
             return wrapped;
+
+        // TEL-B-15's OnDemand, which had no caller until now. The POLICY decides whether the
+        // agent's request means anything — asked here and not trusted from the request, because
+        // the box is rendered from a policy the browser read earlier and a policy can change
+        // between the ring and the wrap-up.
+        //
+        // Read OUTSIDE the ambient transaction: the policy lives in this schema, so this is not a
+        // cross-module read, but it is a read on a path where failing would lose a qualification
+        // an agent has already typed. A missing policy answers Disabled, so the flag is dropped.
+        if (cmd.KeepRecording)
+        {
+            var policy = await policies.ReadAsync(currentUser.TenantId, ct);
+
+            if (policy.Mode == TelRecordingMode.OnDemand)
+            {
+                call.MarkForRecording();
+            }
+            else
+            {
+                // Information and not a warning: a tab older than the policy change is ordinary,
+                // and the agent's qualification still succeeded. It is logged because "I asked to
+                // keep that call and there is no recording" is a question somebody will ask.
+                logger.LogInformation(
+                    "Call {CallId} of tenant {TenantId}: the agent asked to keep the recording, "
+                    + "but the policy is {Mode} — the request is ignored.",
+                    call.Id, currentUser.TenantId, policy.Mode);
+            }
+        }
 
         // Identifiers and structured labels only. The note is NOT on the event: it is free text an
         // agent typed about a person, and M13's own timeline projection excludes free-text bodies

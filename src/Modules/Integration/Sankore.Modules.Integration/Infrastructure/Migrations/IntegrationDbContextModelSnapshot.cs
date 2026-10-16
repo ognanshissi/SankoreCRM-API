@@ -2396,6 +2396,14 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("direction");
 
+                    b.Property<DateTimeOffset?>("DismissedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dismissed_at");
+
+                    b.Property<Guid?>("DismissedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dismissed_by");
+
                     b.Property<DateTimeOffset?>("EndedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ended_at");

@@ -107,6 +107,31 @@ public sealed class TelCall : AggregateRoot
 
     public DateTimeOffset? WrappedUpAt { get; private set; }
 
+    /// <summary>
+    /// When an agent closed this missed call without calling back (TEL-B-13, TEL-F-09).
+    ///
+    /// <para>
+    /// <b>It exists because wrapping up was the only way out of the follow-up list, and that is
+    /// the wrong instrument.</b> A wrap-up demands an active outcome code and publishes an event
+    /// that becomes a lead activity and may stop an SLA clock — all of which describes a
+    /// CONVERSATION. "I looked at this and nobody needs calling back" is not a conversation, and
+    /// forcing it through a wrap-up would have an institution invent an outcome code for
+    /// "nothing", then see it counted in its contact figures.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The REASON is deliberately not a column here.</b> It travels on the command and lands
+    /// in the audit row, which is where <c>LinkCallHandler</c> puts its own correction reason and
+    /// for the same argument: a column holds the last reason only, while what a later reader
+    /// needs is the sequence — an entry closed, reopened by a call back, and closed again is a
+    /// different story from one closed once.
+    /// </para>
+    /// </summary>
+    public DateTimeOffset? DismissedAt { get; private set; }
+
+    /// <summary>Who closed it. The audit row carries why.</summary>
+    public Guid? DismissedBy { get; private set; }
+
     /// <summary>The agent asked for this one to be kept, under the <c>OnDemand</c> mode.</summary>
     public bool KeepRecording { get; private set; }
 
@@ -225,6 +250,35 @@ public sealed class TelCall : AggregateRoot
     }
 
     /// <summary>
+    /// Closes this call's entry in the follow-up list, without a call back (TEL-F-09).
+    ///
+    /// <para>
+    /// <b>Refuses a call that was never missed.</b> Dismissal is an answer to "this missed call
+    /// needs no action", so a completed conversation has nothing to dismiss — and allowing it
+    /// would give an agent a way to make a call disappear from a colleague's queue without
+    /// qualifying it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Idempotent, and the second call is a success rather than a conflict.</b> A
+    /// double-clicked button must not read as the rule firing; the first closure's instant and
+    /// author are the ones kept, because they are the ones the audit row explains.
+    /// </para>
+    /// </summary>
+    public Result Dismiss(Guid actorUserId, DateTimeOffset at)
+    {
+        if (Status is not (TelCallStatus.Missed or TelCallStatus.Voicemail))
+            return Result.Fail(TelephonyErrors.CallNotMissed);
+
+        if (DismissedAt is not null) return Result.Ok();
+
+        DismissedAt = at;
+        DismissedBy = actorUserId;
+
+        return Result.Ok();
+    }
+
+    /// <summary>
     /// Fills in the agency when it could not be resolved at creation (TEL-B-19).
     ///
     /// <para>
@@ -335,8 +389,9 @@ public sealed class TelCall : AggregateRoot
     /// </summary>
     public void Anonymise()
     {
-        // AgencyId, Direction, the durations and the outcome all STAY — see the summary. The
-        // agency is a property of the institution, not of the person.
+        // AgencyId, Direction, the durations, the outcome and the dismissal all STAY — see the
+        // summary. The agency is a property of the institution, not of the person, and so is the
+        // decision not to call somebody back.
         FromNumberEnc = [];
         FromNumberBi = [];
         ToNumberEnc = [];

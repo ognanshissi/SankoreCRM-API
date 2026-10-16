@@ -175,4 +175,19 @@ public static class TelephonyErrors
     /// the answer as complete.
     /// </summary>
     public const string StatsPeriodTooLong = "TELEPHONY_STATS_PERIOD_TOO_LONG";
+
+    /// <summary>
+    /// Closing a follow-up entry for a call that was never missed (TEL-F-09). Dismissal answers
+    /// "this missed call needs no action", so a conversation that took place has nothing to
+    /// dismiss — and allowing it would be a way to clear a call out of a colleague's queue
+    /// without qualifying it.
+    /// </summary>
+    public const string CallNotMissed = "TELEPHONY_CALL_NOT_MISSED";
+
+    /// <summary>
+    /// A journal export matching more than the row ceiling (TEL-F-08). Refused rather than
+    /// truncated or streamed: a truncated file read as complete is worse than no file, and this
+    /// is the one telephony read that materialises every matching row in one response.
+    /// </summary>
+    public const string ExportTooLarge = "TELEPHONY_EXPORT_TOO_LARGE";
 }

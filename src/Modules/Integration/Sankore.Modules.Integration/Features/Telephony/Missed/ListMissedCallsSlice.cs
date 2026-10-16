@@ -71,7 +71,12 @@ internal sealed class ListMissedCallsHandler(IntegrationDbContext db, ICurrentUs
                      && (c.CrmUserId == me || c.CrmUserId == null)
                      // A call already wrapped up has been dealt with, whatever its status: an
                      // agent who called back and noted the outcome must not keep seeing it.
-                     && c.WrappedUpAt == null)
+                     && c.WrappedUpAt == null
+
+                     // And one an agent closed on purpose, with a reason, without calling back
+                     // (TEL-F-09). The second way out of this list, and the one that does NOT
+                     // claim a conversation happened.
+                     && c.DismissedAt == null)
             .Select(c => new
             {
                 c.Id, c.StartedAt, c.EntityType, c.EntityId, c.CrmUserId, c.FromNumberBi,
@@ -121,7 +126,8 @@ internal static class ListMissedCallsEndpoint
                 + "Grouped on a 30-minute gap between consecutive attempts, so somebody who tried "
                 + "three times in ten minutes is one entry with attemptCount=3 — and the callId is "
                 + "their LAST attempt, which carries the most recent reading of who they are. "
-                + "Calls already wrapped up are excluded. Voicemail counts as missed (somebody "
+                + "Calls already wrapped up are excluded, and so are the ones closed with "
+                + "POST calls/{callId}/dismiss. Voicemail counts as missed (somebody "
                 + "left a message); a FAILED call does not (an operator refusal has nobody waiting "
                 + "to be called back). "
                 + "No name and no number: read GET calls/{callId}/context for a name, which "

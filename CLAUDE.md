@@ -2134,6 +2134,87 @@ exclude: that is the designed fallback, not a gap. `StatDate` is a **UTC** day, 
 hidden — a per-tenant time zone applied there would make yesterday's figures move when somebody
 edited a setting.
 
+### What the front end needed and TEL-B-20 had not exposed (TEL-F)
+
+Four endpoints added once the Angular work started and found the surface short. Each one is here
+because the alternative was worse than the endpoint.
+
+**`GET telephony/calls` is the journal, and it is PERIMETER-FILTERED — that is the whole point.**
+Until it existed the only call lists were "my missed calls" and "the calls of this record", each
+scoped by construction. A list over every call of a tenant is a different kind of surface: without
+a perimeter it hands any holder of `Telephony.Call.View` the complete telephone activity of every
+branch — who spoke to whom, when, for how long, with what outcome. Three things are visible: your
+own calls, the ones attributed to **nobody**, and the agencies you cover. The second is deliberate
+— it is the "to attribute" queue the missed-call list already shows everyone, because a call from
+an unlinked account is the one most likely to be forgotten. A `null` scope from
+`IAgencyScopeProvider` is UNRESTRICTED, never "no access".
+
+**The three queues are rules, not filter combinations**, and that is why `TelephonyCallQueue` is an
+enum on the backend rather than something the front assembles: `ToQualify` is *ended AND not
+wrapped up AND not dismissed*, and the day a fourth condition joins it, a front end that had
+rebuilt the rule would be the one that disagreed. `entityType` + `entityId` together give the calls
+of one record, which is what a lead's or a client's history asks for.
+
+**`CanListen` is computed, not probed.** Because the list is already perimeter-filtered, the
+question reduces to "is there audio and does this caller hold `Telephony.Recording.Listen`" — read
+off the token's claims the way `AuthorizationPolicies` renders them. The alternative was a front end
+discovering the answer from a 404 per row.
+
+**`GET telephony/calls/export.csv` reuses `ListTelephonyCallsHandler.BuildAsync`**, and that reuse is
+what makes it trustworthy: a second copy of the filters and the perimeter would be a second opinion
+about who may see what, and the copy that drifts would drift into a file somebody mails outside the
+institution. It sits behind `Telephony.Stats.View` rather than `Telephony.Call.View` — reading a
+screen of calls and carrying a year of them out of the building are different acts — with the
+perimeter still applying on top. UTF-8 **with** a BOM and semicolon-separated, like the mapping
+export, because a French Excel opens a comma-separated file as one column and mangles accents
+without the BOM. Over 20 000 rows is refused rather than truncated.
+
+**`GET telephony/me` exists because every other read that could answer it is gated behind an
+administrator.** `telephony/user-links` needs `Telephony.Settings.Manage` and the connection list
+needs `Integration.Connection.Manage`, so the one user who needs to know why their Appeler button is
+missing was the one user who could not look. It needs no permission beyond being signed in: the
+subject is always `ICurrentUser.Id`, never a parameter. `linkStatus` has four values and not a
+boolean because the repairs differ, and a **Broken** link still allows calls — the provider stopped
+listing the account, which is a settings row to repair, not a reason to stop an agent mid-shift.
+Only `Disabled`, where somebody stated a reason, stops the button.
+
+**`POST telephony/calls/{id}/dismiss` exists because wrapping up was the only way out of the
+follow-up list, and it is the wrong instrument.** A wrap-up demands an active outcome code,
+publishes an event that becomes a lead activity, and may stop an SLA clock — all of which describes
+a *conversation*. "I looked at this and nobody needs calling back" is not one, and forcing it
+through a wrap-up would have an institution invent an outcome code for "nothing" and then see it
+counted in its contact figures. The **reason is mandatory and lives in the audit row**, not in a
+column, for the reason `LinkCallHandler` already states: a column holds the last reason only, while
+a reviewer needs the sequence.
+
+**`WrapUpCallRequest.keepRecording` is the only route by which a recording is ever kept under
+`OnDemand`** — and there was none, which made the mode selectable and unreachable:
+`TelRecordingPolicy.Keeps` reads `TelCall.KeepRecording` and `MarkForRecording` had no caller, so a
+compliance officer could choose "à la demande", believe recording was on, and get nothing. The
+**policy** decides whether the agent's request means anything, asked at wrap-up time and not
+trusted from the request, because the box is rendered from a policy the browser read earlier. It is
+*ignored* rather than refused under the other modes — a tab older than a policy change must not
+cost an agent their qualification — and a second wrap-up cannot un-ask it, because by then the
+fetch job may hold the audio and "forget it" is a retention decision.
+
+**The realtime push now has THREE events, where TEL-B-10 shipped with one.** The original reasoning
+— later transitions need no push because "the agent is holding the handset by then" — is true of the
+AGENT and false of the SCREEN: the panel has to start a timer when the call is answered and swap
+itself for the qualification form when it ends, and with a ring as its only signal it had nothing to
+do either on. So `telephony.call.answered` and `telephony.call.ended` join
+`telephony.call.ringing`, the four terminal statuses share the one `ended` event, and **the payload
+is still a single `callId`** — the argument was about *when* to push, never about what to put in a
+frame. Pushes fire on a **change** of status, which `TelCallReading.StatusChanged` is what makes
+possible: without it a redelivered webhook, or the catch-up sweep walking twenty pages, would
+re-open an agent's panel for a conversation that ended an hour ago. The sweep deliberately pushes
+nothing at all — a transition it discovers is up to fifteen minutes old.
+
+**Still missing, and known:** telephony SLA rules, calling hours and the mandatory-qualification
+toggle (TEL-F-03's other half) have no endpoint of any kind, so that screen ships with its outcomes
+and recording-policy sections only. There is no webhook-URL endpoint and no server-side secret
+regeneration (TEL-F-01), and nothing discovers which phone slots a record has filled (TEL-F-04's
+number menu is blind to `Primary`/`Secondary`).
+
 ### The Ringover adapter is blocked on a test ACCOUNT, not a document (TEL-B-04)
 
 Same shape as `OrassAdapter`, `AmplitudeAdapter`, `SabAdapter` and `PerfectVisionAdapter` —
