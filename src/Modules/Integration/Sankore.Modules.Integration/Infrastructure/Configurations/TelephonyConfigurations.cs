@@ -78,6 +78,13 @@ internal sealed class TelCallConfiguration : IEntityTypeConfiguration<TelCall>
         b.HasIndex(c => new { c.TenantId, c.CrmUserId, c.StartedAt })
             .HasDatabaseName("ix_tel_call_user");
 
+        // The recomputation of one day (TEL-B-19): every call of a tenant whose StartedAt falls in
+        // a 24-hour range, read in one pass. Tenant and instant only — the grouping keys are not
+        // in the index because the whole day is scanned anyway, and putting CrmUserId before
+        // StartedAt would make the range a scan per agent instead of one.
+        b.HasIndex(c => new { c.TenantId, c.StartedAt })
+            .HasDatabaseName("ix_tel_call_started");
+
         // The reverse caller-id lookup. On the blind index, the only thing a query may match on.
         b.HasIndex(c => new { c.TenantId, c.FromNumberBi })
             .HasDatabaseName("ix_tel_call_from_number");
@@ -234,5 +241,39 @@ internal sealed class TelRecordingAccessLogConfiguration
             .HasDatabaseName("ix_tel_recording_access_actor");
 
         b.Ignore(l => l.DomainEvents);
+    }
+}
+
+
+/// <summary>
+/// The indicators' read model (TEL-B-19). <b>Nothing points at it and it points at nothing</b> —
+/// no foreign key, no row version, no audit: it is derived, so the only honest reaction to a
+/// disagreement with <c>tel_call</c> is to derive it again.
+/// </summary>
+internal sealed class TelCallDailyStatConfiguration : IEntityTypeConfiguration<TelCallDailyStat>
+{
+    public void Configure(EntityTypeBuilder<TelCallDailyStat> b)
+    {
+        b.ToTable("tel_call_daily_stat");
+        b.HasKey(s => s.Id);
+
+        // date, not timestamptz: the column IS a day, and storing it as an instant would invite a
+        // reader to apply a time zone to something that no longer has one.
+        b.Property(s => s.StatDate).HasColumnType("date").IsRequired();
+
+        // One row per bucket, enforced and not merely intended. Both grouping columns are
+        // non-nullable with Guid.Empty for "none" precisely so this index constrains every row —
+        // a nullable column here would let PostgreSQL treat each unattributed bucket as distinct
+        // and the recomputation would stack duplicates one run at a time.
+        b.HasIndex(s => new { s.TenantId, s.StatDate, s.CrmUserId, s.AgencyId })
+            .IsUnique()
+            .HasDatabaseName("ux_tel_call_daily_stat_bucket");
+
+        // "This agency, over this period" — the per-agency view, and the sweep that deletes a
+        // range before recomputing it.
+        b.HasIndex(s => new { s.TenantId, s.AgencyId, s.StatDate })
+            .HasDatabaseName("ix_tel_call_daily_stat_agency");
+
+        b.Ignore(s => s.DomainEvents);
     }
 }

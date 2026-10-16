@@ -33,6 +33,7 @@ public sealed class TelUserLink : AggregateRoot
     /// </summary>
     public string? DefaultCallerNumber { get; private set; }
 
+
     public TelUserLinkStatus Status { get; private set; }
 
     /// <summary>Why the link stopped working, when it did. Read by an administrator.</summary>
@@ -74,6 +75,7 @@ public sealed class TelUserLink : AggregateRoot
             LinkedAt = now,
         };
     }
+
 
     /// <summary>
     /// Confirms this pairing again — the repair path, and the reason unlinking may be logical.

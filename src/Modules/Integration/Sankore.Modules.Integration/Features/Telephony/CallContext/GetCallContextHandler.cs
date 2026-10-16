@@ -160,9 +160,11 @@ internal sealed class GetCallContextHandler(
         byte[] toNumberEnc,
         CancellationToken ct)
     {
-        // The REMOTE end — the caller for an inbound call, the callee for an outbound one. The
-        // other end is the institution's own line and would resolve to nobody, or worse to
-        // whichever client happens to share a number with a branch.
+        // The REMOTE end — the caller for an inbound call, the callee for an outbound or an
+        // internal one. The other end is the institution's own line and would resolve to nobody,
+        // or worse to whichever client happens to share a number with a branch. For an internal
+        // call both ends are the institution's, so this resolves to nobody and the screen shows a
+        // call with no candidate: correct, and the only honest answer for a colleague's extension.
         var remote = numbers.Reveal(
             direction == TelCallDirection.Inbound ? fromNumberEnc : toNumberEnc);
 

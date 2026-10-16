@@ -57,6 +57,11 @@
          the bordereau carrier, because criterion 2 gives it two carriers that authenticate against
          different things. It journals nothing and translates nothing, because it makes no call. -->
     <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Orass" />
+    <!-- Ringover (TEL-B-04) reaches IntegrationSecrets only, and reaches TWO of its keys: the API
+         credential and the webhook token, both per connection — the telephony family is the one
+         that authenticates in both directions, because the provider calls US back. It journals
+         nothing and translates nothing, because it makes no call. -->
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Ringover" />
     <!-- NSubstitute proxies internal interfaces. -->
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>

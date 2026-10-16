@@ -28,6 +28,7 @@ internal sealed class TelCallJournalWriter(
     IntegrationDbContext db,
     TelephonyNumberProtector numbers,
     TelephonyCallMatcher matcher,
+    TelephonyAgencyResolver agencies,
     ILogger<TelCallJournalWriter> logger)
 {
     /// <summary>
@@ -90,6 +91,13 @@ internal sealed class TelCallJournalWriter(
         row.RecordInstants(call.AnsweredAt, call.EndedAt);
         row.RecordDurations(call.RingSeconds, call.TalkSeconds);
 
+        // TEL-B-19's repair pass. Only for a row that has an agent and no agency — which is
+        // either a call opened while M12 was unreachable, or one whose agent was attributed later
+        // by a click-to-call correlation. StampAgency refuses to overwrite, so a row that already
+        // has one costs nothing but the null check.
+        if (row.CrmUserId is { } attributed && row.AgencyId is null)
+            row.StampAgency(await agencies.ResolveAsync(tenantId, attributed, ct));
+
         // The recording FLAG, not a recording. Whether SANKORE keeps a copy is TEL-B-15's policy
         // and TEL-B-16's store; all this says is that the provider has one to fetch.
         if (call.HasRecording && row.RecordingStatus == TelRecordingStatus.NotRecorded)
@@ -124,6 +132,11 @@ internal sealed class TelCallJournalWriter(
         // unattributed even though this module started it.
         crmUserId ??= request?.CrmUserId;
 
+        // After the two attributions and not before either of them: the agency is a property OF
+        // the agent, so resolving it earlier would miss the call that only the click-to-call
+        // correlation knows the owner of.
+        var agencyId = await agencies.ResolveAsync(tenantId, crmUserId, ct);
+
         var row = TelCall.Open(
             tenantId,
             connectionId,
@@ -137,7 +150,8 @@ internal sealed class TelCallJournalWriter(
             call.StartedAt,
             call.ProviderUserId?.Value,
             crmUserId,
-            request?.Id);
+            request?.Id,
+            agencyId);
 
         db.TelCalls.Add(row);
 

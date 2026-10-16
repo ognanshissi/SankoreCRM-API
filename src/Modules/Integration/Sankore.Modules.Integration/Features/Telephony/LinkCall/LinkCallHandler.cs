@@ -17,7 +17,8 @@ using Sankore.Shared.Kernel;
 /// <b>Both SIDES are authorized, and neither check is optional.</b> The permission says this
 /// caller may attach calls; it says nothing about WHICH calls or to WHOSE records — and the two
 /// gaps are different leaks. An unauthorized CALL would let an agent re-file a colleague's
-/// conversation, so only the caller's own call or one nobody owns may be moved. An unauthorized
+/// conversation, so a call is movable only by its own agent, by whoever supervises the agency it
+/// belonged to, or by anybody when nobody owns it. An unauthorized
 /// TARGET is the worse of the two: the call then appears in that record's history, which
 /// <c>GetCallsForEntityAsync</c> projects with no perimeter of its own, so an agent of one branch
 /// could file their conversation into another branch's client file — or pull another branch's
@@ -27,11 +28,14 @@ using Sankore.Shared.Kernel;
 /// </para>
 ///
 /// <para>
-/// <b>What is deliberately NOT supported: a supervisor correcting somebody else's call.</b> It is
-/// a real need and there is nothing here to check it against — <c>tel_call</c> carries an agent
-/// and no agency, so "is this call inside my perimeter" has no answer yet. Guessing one by
-/// resolving the agent's branch per request would be a policy invented in a handler. It wants a
-/// column and a decision, and Lot 4's activity and SLA work is where these rows are next opened.
+/// <b>A supervisor MAY correct their team's call, which they could not until TEL-B-19.</b> The
+/// call side was "mine, or nobody's" and nothing else, because <c>tel_call</c> carried an agent
+/// and no agency — so "is this call inside my perimeter" had no answer, and inventing one by
+/// resolving the agent's branch per request would have been a policy written in a handler. The
+/// agency is now on the row, stamped with the branch its agent was in AT THE TIME, so the manager
+/// who may fix a mis-filed conversation is the one who was answerable for it when it happened.
+/// The target side is unchanged and still decides on its own: covering the call grants no right
+/// over the record it is being filed into.
 /// </para>
 ///
 /// <para>
@@ -46,6 +50,7 @@ using Sankore.Shared.Kernel;
 internal sealed class LinkCallHandler(
     IntegrationDbContext db,
     TelephonyRecordAccess recordAccess,
+    TelephonyCallPerimeter perimeter,
     ICurrentUser currentUser,
     ILogger<LinkCallHandler> logger,
     IDistributedCache? cache = null)
@@ -66,11 +71,18 @@ internal sealed class LinkCallHandler(
         // The caller's own call, or one nobody owns — which is the "calls to attribute" queue a
         // whole agency works, and the case that needs attaching most. Folded into "not found"
         // rather than answered 403: a 403 would confirm that a colleague spoke to somebody.
-        if (call.CrmUserId is { } owner && owner != currentUser.Id)
+        //
+        // A colleague's call falls to the agency perimeter: a branch manager correcting their own
+        // team's mis-filing is the case this exists for, and it is asked of the agency the call
+        // belonged to at the time rather than of where its agent sits today.
+        if (call.CrmUserId is { } owner
+            && owner != currentUser.Id
+            && !await perimeter.CoversAsync(
+                currentUser.TenantId, currentUser.Id, call.AgencyId, ct))
         {
             logger.LogWarning(
                 "User {UserId} of tenant {TenantId} tried to re-attach call {CallId}, which "
-                + "belongs to another agent.",
+                + "belongs to another agent and is outside their perimeter.",
                 currentUser.Id, currentUser.TenantId, call.Id);
 
             return Result.Fail(TelephonyErrors.CallNotFound);

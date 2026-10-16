@@ -25,6 +25,29 @@ public interface IAdministrationModule
     Task<AgentSummary?> GetAgentAsync(Guid agentId, CancellationToken ct);
 
     /// <summary>
+    /// The agency one user belongs to, or <c>null</c> (TEL-B-19).
+    ///
+    /// <para>
+    /// <paramref name="tenantId"/> is explicit, and that is the whole reason this exists next to
+    /// <see cref="GetAgentAsync"/>: the caller is a webhook handler or a Hangfire job, where the
+    /// ambient tenant context is not the tenant being operated on — the telephony webhook route
+    /// is deliberately exempt from host resolution, so it derives its tenant from the connection
+    /// and carries it by hand. <c>GetAgentAsync</c> leans on the ambient filter and would answer
+    /// nothing, or the wrong tenant's user, from there.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Three situations answer <c>null</c> and the caller must treat them identically:</b> the
+    /// user does not exist, the user belongs to another tenant, or the user genuinely has no
+    /// agency — which M12 permits and documents as ordinary for a head-office account. The
+    /// meaning the caller may rely on is "outside every restricted perimeter", never "inside all
+    /// of them". <c>Guid.Empty</c> is never returned, unlike <c>AgentSummary.AgencyId</c> which
+    /// flattens the absent case to it.
+    /// </para>
+    /// </summary>
+    Task<Guid?> GetUserAgencyAsync(Guid tenantId, Guid userId, CancellationToken ct);
+
+    /// <summary>
     /// Non-sensitive projection of one agency, or <c>null</c> when it does not exist
     /// (or has been soft-deleted) in that tenant.
     ///

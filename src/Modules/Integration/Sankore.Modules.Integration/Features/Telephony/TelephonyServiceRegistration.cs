@@ -35,6 +35,8 @@ internal static class TelephonyServiceRegistration
         services.AddScoped<Journal.TelCallJournalWriter>();
         services.AddScoped<ClickToCall.DialableNumberResolver>();
         services.AddScoped<TelephonyRecordAccess>();
+        services.AddScoped<TelephonyAgencyResolver>();
+        services.AddScoped<TelephonyCallPerimeter>();
 
         // Scoped although it holds no DbContext: IRealtimeNotifier is a singleton and this is a
         // two-field wrapper, so a singleton would work — scoped keeps every service of this area
@@ -52,6 +54,11 @@ internal static class TelephonyServiceRegistration
         services.AddTransient<Recordings.PurgeTelephonyRecordingsJob>();
         services.AddTransient<Recordings.FetchTelephonyRecordingsOrchestrator>();
         services.AddTransient<Recordings.PurgeTelephonyRecordingsOrchestrator>();
+
+        // ── Indicators (TEL-B-19) ───────────────────────────────────────────
+        services.AddTransient<Stats.RecomputeTelephonyStatsJob>();
+        services.AddTransient<Stats.RecomputeTelephonyStatsHourlyOrchestrator>();
+        services.AddTransient<Stats.RecomputeTelephonyStatsNightlyOrchestrator>();
 
         services.Configure<RecordingStorageOptions>(
             configuration.GetSection(RecordingStorageOptions.SectionName));

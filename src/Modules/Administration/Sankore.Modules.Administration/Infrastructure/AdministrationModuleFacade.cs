@@ -891,6 +891,21 @@ internal sealed class AdministrationModuleFacade(
         return agent is null ? null : ToSummary(agent);
     }
 
+    /// <inheritdoc />
+    public async Task<Guid?> GetUserAgencyAsync(Guid tenantId, Guid userId, CancellationToken ct)
+    {
+        if (tenantId == Guid.Empty || userId == Guid.Empty) return null;
+
+        // IgnoreQueryFilters with the tenant written out: the callers run outside a request, so
+        // the ambient filter would be empty or somebody else's. The predicate names the tenant
+        // AND the user, which is what makes this safe to call from a webhook.
+        return await db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.TenantId == tenantId && u.Id == userId)
+            .Select(u => u.AgencyId)
+            .FirstOrDefaultAsync(ct);
+    }
+
     private static AgentSummary ToSummary(AppUser u) => new(
         Id: u.Id,
         FullName: u.FullName,

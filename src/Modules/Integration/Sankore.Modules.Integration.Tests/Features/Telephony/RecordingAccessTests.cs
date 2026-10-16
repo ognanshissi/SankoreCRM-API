@@ -110,13 +110,46 @@ public sealed class RecordingAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task A_COLLEAGUES_UNATTACHED_call_is_refused_even_inside_my_perimeter()
+    public async Task A_COLLEAGUES_UNATTACHED_call_with_no_agency_is_refused()
     {
-        var callId = await SeedAsync(crmUserId: _colleague, entityId: null);
+        var callId = await SeedAsync(crmUserId: _colleague, entityId: null, agencyId: null);
 
-        // There is no record to ask about, and the call has an owner who is not me. A perimeter
-        // that answered "yes" here would be answering about nothing.
-        await AssertNotFoundAsync(await ListenAsync(callId, recordAllowed: true));
+        // No record to ask about and no agency to place it in. It has an owner who is not me, so
+        // nothing grants a route — and a call inside no restricted perimeter must not be granted
+        // to every branch rather than to none.
+        await AssertNotFoundAsync(
+            await ListenAsync(callId, recordAllowed: true, perimeterAgencies: [Guid.NewGuid()]));
+    }
+
+    [Fact]
+    public async Task A_SUPERVISOR_may_hear_a_colleagues_UNATTACHED_call_of_their_own_agency()
+    {
+        var branch = Guid.NewGuid();
+
+        var callId = await SeedAsync(
+            crmUserId: _colleague, entityId: null, agencyId: branch);
+
+        // The gap TEL-B-19 closes. Before the call carried an agency the only route to a
+        // colleague's conversation was the record it was attached to, so an UNATTACHED one was
+        // audible to compliance alone — strict enough that a branch manager investigating a
+        // complaint about their own agent's call had no way to hear it.
+        //
+        // recordAllowed is false on purpose: this must pass on the agency arm alone.
+        var result = await ListenAsync(
+            callId, recordAllowed: false, perimeterAgencies: [branch]);
+
+        result.Should().BeAssignableTo<IFileHttpResult>();
+    }
+
+    [Fact]
+    public async Task A_supervisor_of_ANOTHER_branch_may_not()
+    {
+        var callId = await SeedAsync(
+            crmUserId: _colleague, entityId: null, agencyId: Guid.NewGuid());
+
+        await AssertNotFoundAsync(
+            await ListenAsync(
+                callId, recordAllowed: false, perimeterAgencies: [Guid.NewGuid()]));
     }
 
     [Fact]
@@ -191,7 +224,7 @@ public sealed class RecordingAccessTests : IDisposable
     // ── Harness ───────────────────────────────────────────────────────────────
 
     private async Task<Guid> SeedAsync(
-        Guid? crmUserId, Guid? entityId = null, bool withRecording = true)
+        Guid? crmUserId, Guid? entityId = null, bool withRecording = true, Guid? agencyId = null)
     {
         await using var db = _factory.CreateContext();
 
@@ -203,7 +236,8 @@ public sealed class RecordingAccessTests : IDisposable
             _tenant, _connection, $"prov-{Guid.NewGuid()}",
             TelCallDirection.Inbound, TelCallStatus.Completed,
             from.Encrypted, from.BlindIndex, to.Encrypted, to.BlindIndex,
-            Now.AddHours(-1), externalUserId: null, crmUserId: crmUserId);
+            Now.AddHours(-1), externalUserId: null, crmUserId: crmUserId,
+            clickToCallId: null, agencyId: agencyId);
 
         if (entityId is { } id)
         {
@@ -239,8 +273,13 @@ public sealed class RecordingAccessTests : IDisposable
         NullLogger<EncryptedRecordingStore>.Instance);
 
     private Task<IResult> ListenAsync(
-        Guid callId, bool recordAllowed = true, bool compliance = false)
-        => ServeAsync(callId, null, TelRecordingAccessKind.Listen, recordAllowed, compliance);
+        Guid callId,
+        bool recordAllowed = true,
+        bool compliance = false,
+        Guid[]? perimeterAgencies = null)
+        => ServeAsync(
+            callId, null, TelRecordingAccessKind.Listen, recordAllowed, compliance,
+            perimeterAgencies);
 
     private Task<IResult> ExportAsync(
         Guid callId, string? reason, bool recordAllowed = true, bool compliance = false)
@@ -255,7 +294,8 @@ public sealed class RecordingAccessTests : IDisposable
         string? reason,
         TelRecordingAccessKind kind,
         bool recordAllowed,
-        bool compliance)
+        bool compliance,
+        Guid[]? perimeterAgencies = null)
     {
         await using var db = _factory.CreateContext();
 
@@ -273,15 +313,19 @@ public sealed class RecordingAccessTests : IDisposable
 
         var store = Store();
         var access = TelephonyTestHarness.RecordAccess(recordAllowed);
+
+        // Empty by default — a listener who supervises nothing — so every case written before
+        // TEL-B-19 keeps asserting what it was written to assert.
+        var perimeter = TelephonyTestHarness.Perimeter(perimeterAgencies ?? []);
         var user = TelephonyTestHarness.User(_tenant, _me);
         var clock = new TelephonyTestHarness.FixedClock(Now);
 
         return kind == TelRecordingAccessKind.Listen
             ? await RecordingAccessEndpoints.ListenAsync(
-                callId, reason, db, store, access, user, accessor, clock,
+                callId, reason, db, store, access, perimeter, user, accessor, clock,
                 NullLoggerFactory.Instance, CancellationToken.None)
             : await RecordingAccessEndpoints.ExportAsync(
-                callId, reason, db, store, access, user, accessor, clock,
+                callId, reason, db, store, access, perimeter, user, accessor, clock,
                 NullLoggerFactory.Instance, CancellationToken.None);
     }
 

@@ -4,6 +4,7 @@ using Sankore.Modules.Integration.Adapters.Amplitude;
 using Sankore.Modules.Integration.Adapters.Fake;
 using Sankore.Modules.Integration.Adapters.Orass;
 using Sankore.Modules.Integration.Adapters.PerfectVision;
+using Sankore.Modules.Integration.Adapters.Ringover;
 using Sankore.Modules.Integration.Adapters.Sab;
 using Sankore.Modules.Integration.Adapters.Temenos;
 using Sankore.Modules.Integration.PublicApi;
@@ -82,6 +83,17 @@ internal static class IntegrationAdapterComposition
         // specification is a procurement conversation. Needs AddSecretsVault to have run — it
         // probes the vault for whichever credential its carrier needs and registers none itself.
         services.AddOrassAdapter(config);
+
+        // Ringover (TEL-B-04), the telephony family's first adapter, blocked on a TEST ACCOUNT
+        // rather than on a document — which is the difference from the four above, and the reason
+        // it cannot be unblocked by reading anything. Its refusals separate four owners: settings
+        // of the wrong shape, a missing API host, a missing API key or webhook token are the
+        // tenant administrator's own; only the account is a procurement conversation. Unlike the
+        // others it also has one member that genuinely works through this registration —
+        // ParseWebhook is pure and produces a real deduplication key — so a webhook arriving at a
+        // configured connection is recorded rather than lost. Needs AddSecretsVault to have run:
+        // it probes the vault for its two per-connection secrets and registers none itself.
+        services.AddRingoverAdapter(config);
 
         // The in-memory double (INT-10), Development only. Guarded HERE as well as inside
         // AddFakeAdapter, which throws outside Development: the host decides whether to offer the

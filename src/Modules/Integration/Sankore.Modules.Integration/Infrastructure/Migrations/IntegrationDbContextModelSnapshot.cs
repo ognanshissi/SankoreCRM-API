@@ -2370,6 +2370,10 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("AgencyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agency_id");
+
                     b.Property<DateTimeOffset?>("AnsweredAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("answered_at");
@@ -2504,6 +2508,9 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.HasIndex("TenantId", "FromNumberBi")
                         .HasDatabaseName("ix_tel_call_from_number");
 
+                    b.HasIndex("TenantId", "StartedAt")
+                        .HasDatabaseName("ix_tel_call_started");
+
                     b.HasIndex("TenantId", "ConnectionId", "ExternalCallId")
                         .IsUnique()
                         .HasDatabaseName("ux_tel_call_external");
@@ -2518,6 +2525,81 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_tel_call_entity", "(entity_type IS NULL) = (entity_id IS NULL)");
                         });
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelCallDailyStat", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AgencyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agency_id");
+
+                    b.Property<int>("AnsweredCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("answered_count");
+
+                    b.Property<DateTimeOffset>("ComputedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("computed_at");
+
+                    b.Property<int>("ContactCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("contact_count");
+
+                    b.Property<Guid>("CrmUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_user_id");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_count");
+
+                    b.Property<int>("InboundCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("inbound_count");
+
+                    b.Property<int>("MissedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("missed_count");
+
+                    b.Property<int>("OutboundCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("outbound_count");
+
+                    b.Property<int>("RingSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("ring_seconds");
+
+                    b.Property<DateOnly>("StatDate")
+                        .HasColumnType("date")
+                        .HasColumnName("stat_date");
+
+                    b.Property<int>("TalkSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("talk_seconds");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("WrappedUpCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("wrapped_up_count");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tel_call_daily_stat");
+
+                    b.HasIndex("TenantId", "AgencyId", "StatDate")
+                        .HasDatabaseName("ix_tel_call_daily_stat_agency");
+
+                    b.HasIndex("TenantId", "StatDate", "CrmUserId", "AgencyId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tel_call_daily_stat_bucket");
+
+                    b.ToTable("tel_call_daily_stat", "integration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelCallOutcome", b =>

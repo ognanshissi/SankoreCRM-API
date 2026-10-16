@@ -392,12 +392,7 @@ public sealed class TelCallJournalTests : IDisposable
     {
         await using var db = _factory.CreateContext();
 
-        var writer = new TelCallJournalWriter(
-            db,
-            TelephonyTestHarness.Numbers(),
-            new TelephonyCallMatcher(
-                _customers, _leads, NullLogger<TelephonyCallMatcher>.Instance),
-            NullLogger<TelCallJournalWriter>.Instance);
+        var writer = TelephonyTestHarness.Writer(db, _customers, _leads);
 
         await writer.RecordAsync(_tenant, _connection, call, CancellationToken.None);
 

@@ -309,6 +309,68 @@ public sealed class CallContextTests : IDisposable
     }
 
     [Fact]
+    public async Task A_SUPERVISOR_may_correct_a_call_of_the_agency_it_belonged_to()
+    {
+        var colleague = Guid.NewGuid();
+        var branch = Guid.NewGuid();
+
+        var call = await SeedCallAsync(
+            TelCallStatus.Completed, crmUserId: colleague, agencyId: branch);
+
+        var chosen = Guid.NewGuid();
+
+        // TEL-B-19's column is what makes this possible: until the call carried an agency, the
+        // only answer to "is this call mine to correct" was "is its agent me", and a branch
+        // manager could not fix their own team's mis-filing.
+        var result = await TryLinkAsync(
+            call.Id, chosen, recordAllowed: true, perimeterAgencies: [branch]);
+
+        result.IsSuccess.Should().BeTrue();
+
+        await using var db = _factory.CreateContext();
+        db.TelCalls.Single().EntityId.Should().Be(chosen);
+    }
+
+    [Fact]
+    public async Task A_supervisor_of_ANOTHER_branch_still_cannot()
+    {
+        var colleague = Guid.NewGuid();
+
+        var call = await SeedCallAsync(
+            TelCallStatus.Completed, crmUserId: colleague, agencyId: Guid.NewGuid());
+
+        var result = await TryLinkAsync(
+            call.Id, Guid.NewGuid(), recordAllowed: true,
+            perimeterAgencies: [Guid.NewGuid()]);
+
+        result.Error.Should().Be(TelephonyErrors.CallNotFound);
+    }
+
+    [Fact]
+    public async Task A_colleagues_call_with_NO_agency_is_refused_to_a_scoped_caller()
+    {
+        var colleague = Guid.NewGuid();
+
+        // A call opened while M12 was unreachable, or by an unlinked account. It is inside no
+        // restricted perimeter — which refuses, rather than granting it to every branch.
+        var call = await SeedCallAsync(
+            TelCallStatus.Completed, crmUserId: colleague, agencyId: null);
+
+        var result = await TryLinkAsync(
+            call.Id, Guid.NewGuid(), recordAllowed: true,
+            perimeterAgencies: [Guid.NewGuid()]);
+
+        result.Error.Should().Be(TelephonyErrors.CallNotFound);
+
+        // And an UNRESTRICTED caller — a super-user, which IAgencyScopeProvider signals with a
+        // null set — reaches it, because somebody has to.
+        (await TryLinkAsync(
+                call.Id, Guid.NewGuid(), recordAllowed: true, perimeterAgencies: null,
+                unrestricted: true))
+            .IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task A_record_the_caller_may_not_work_is_refused_and_nothing_is_written()
     {
         var call = await SeedCallAsync(TelCallStatus.Completed, crmUserId: _agent);
@@ -343,6 +405,9 @@ public sealed class CallContextTests : IDisposable
                 db,
                 new TelephonyRecordAccess(
                     customers, _leads, NullLogger<TelephonyRecordAccess>.Instance),
+                // Covering nothing: this case is about the TARGET side, and a caller who
+                // supervised the call's agency would pass the call side for a different reason.
+                TelephonyTestHarness.Perimeter([]),
                 TelephonyTestHarness.User(_tenant, _agent),
                 NullLogger<LinkCallHandler>.Instance)
             .Handle(
@@ -393,7 +458,7 @@ public sealed class CallContextTests : IDisposable
         id, "CRM-000123", "Aya Kouassi", agencyId, null, "Active", "Approved", ["phone"]);
 
     private async Task<TelCall> SeedCallAsync(
-        TelCallStatus status, Guid? crmUserId, bool anonymised = false)
+        TelCallStatus status, Guid? crmUserId, bool anonymised = false, Guid? agencyId = null)
     {
         await using var db = _factory.CreateContext();
 
@@ -405,7 +470,8 @@ public sealed class CallContextTests : IDisposable
             _tenant, _connection, $"prov-{Guid.NewGuid()}",
             TelCallDirection.Inbound, status,
             from.Encrypted, from.BlindIndex, to.Encrypted, to.BlindIndex,
-            TelephonyTestHarness.Now, externalUserId: null, crmUserId: crmUserId);
+            TelephonyTestHarness.Now, externalUserId: null, crmUserId: crmUserId,
+            clickToCallId: null, agencyId: agencyId);
 
         if (anonymised) call.Anonymise();
 
@@ -420,14 +486,29 @@ public sealed class CallContextTests : IDisposable
         (await TryLinkAsync(callId, entityId, recordAllowed: true)).IsSuccess.Should().BeTrue();
     }
 
+    /// <param name="perimeterAgencies">
+    /// The agencies the caller supervises (TEL-B-19). Empty by default, so a case that says
+    /// nothing about a perimeter gets the pre-TEL-B-19 answer: a colleague's call is refused.
+    /// </param>
+    /// <param name="unrestricted">
+    /// Pass true for a super-user. Separate from a null <paramref name="perimeterAgencies"/>
+    /// because null there means "the default", and conflating the two would make every case that
+    /// omits a perimeter accidentally unrestricted — which is exactly the mistake
+    /// <c>IAgencyScopeProvider</c>'s contract warns about.
+    /// </param>
     private async Task<Sankore.Shared.Kernel.Result> TryLinkAsync(
-        Guid callId, Guid entityId, bool recordAllowed)
+        Guid callId,
+        Guid entityId,
+        bool recordAllowed,
+        Guid[]? perimeterAgencies = null,
+        bool unrestricted = false)
     {
         await using var db = _factory.CreateContext();
 
         return await new LinkCallHandler(
                 db,
                 TelephonyTestHarness.RecordAccess(recordAllowed),
+                TelephonyTestHarness.Perimeter(unrestricted ? null : perimeterAgencies ?? []),
                 TelephonyTestHarness.User(_tenant, _agent),
                 NullLogger<LinkCallHandler>.Instance)
             .Handle(

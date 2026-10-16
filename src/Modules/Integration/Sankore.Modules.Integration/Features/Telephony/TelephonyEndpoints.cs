@@ -9,6 +9,7 @@ using Sankore.Modules.Integration.Features.Telephony.LinkCall;
 using Sankore.Modules.Integration.Features.Telephony.Missed;
 using Sankore.Modules.Integration.Features.Telephony.Outcomes;
 using Sankore.Modules.Integration.Features.Telephony.Recordings;
+using Sankore.Modules.Integration.Features.Telephony.Stats;
 using Sankore.Modules.Integration.Features.Telephony.WrapUp;
 using Sankore.Modules.Integration.Features.Telephony.UserLinks.GetDirectory;
 using Sankore.Modules.Integration.Features.Telephony.UserLinks.LinkUser;
@@ -70,6 +71,9 @@ internal static class TelephonyEndpoints
         // policy read says Disabled with nobody named, and the player says "not available".
         group.MapRecordingPolicy();
         group.MapRecordingAccess();
+
+        // ── Indicators (TEL-B-19) ───────────────────────────────────────────
+        group.MapTelephonyStats();
 
         // ── The webhook simulator (TEL-B-18, §9) ────────────────────────────
         // Mapped in Development only. There is no Ringover account in this deployment, so this is

@@ -206,12 +206,7 @@ public sealed class TelephonyCatchUpTests : IDisposable
         return await SyncTelephonyCallsJob.RunAsync(
             db,
             TelephonyTestHarness.Access(db, noAdapter ? null : adapter ?? new FakeAdapter()),
-            new TelCallJournalWriter(
-                db,
-                TelephonyTestHarness.Numbers(),
-                new TelephonyCallMatcher(
-                    customers, leads, NullLogger<TelephonyCallMatcher>.Instance),
-                NullLogger<TelCallJournalWriter>.Instance),
+            TelephonyTestHarness.Writer(db, customers, leads),
             new TelephonyTestHarness.FixedClock(now),
             NullLogger<SyncTelephonyCallsJob>.Instance,
             _tenant,

@@ -450,6 +450,13 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Integration.Features.Telephony.Recordings
         .ClientAnonymizedRecordingConsumer>();
 
+    // TEL-B-19 : la qualification d'un appel rafraîchit le jour de cet appel dans le modèle de
+    // lecture des indicateurs. Ce n'est PAS un incrément — l'événement dit quel jour a changé, et
+    // le recalcul recompte ce jour depuis le journal — donc un message redélivré, deux agents qui
+    // qualifient en même temps et un appel qualifié deux fois donnent les mêmes chiffres.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Telephony.Stats
+        .TelephonyStatsConsumer>();
+
     // Notification module consumers
     x.AddConsumer<TenantNotificationSettingsChangedConsumer>();
 
@@ -967,6 +974,33 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(),
             Sankore.Modules.Integration.Features.Telephony.Recordings
                 .PurgeTelephonyRecordingsOrchestrator.CronExpression);
+
+        // TEL-B-19 : les indicateurs, recalculés depuis le journal. Deux horaires pour un seul
+        // job, et le second n'est pas redondant.
+        //
+        // L'horaire horaire (:20) couvre les deux jours que quelqu'un regarde, pour qu'un appel
+        // manqué apparaisse dans l'heure sans faire payer un recalcul à chaque webhook. L'horaire
+        // nocturne (04:10) couvre une semaine, parce que ce qui change un chiffre APRÈS coup n'est
+        // pas un événement que ce module voit à temps : un superviseur qui corrige une
+        // attribution, un client anonymisé, une issue dont l'indicateur « compte comme contact »
+        // était faux depuis le début. 04:10 vient APRÈS l'anonymisation des leads de M13 à 03:45
+        // et la purge des enregistrements à 03:15 — tous deux modifient des appels, et un recalcul
+        // qui passerait avant recalculerait l'état qu'ils sont sur le point de laisser derrière.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Telephony.Stats
+            .RecomputeTelephonyStatsHourlyOrchestrator>(
+            Sankore.Modules.Integration.Features.Telephony.Stats
+                .RecomputeTelephonyStatsHourlyOrchestrator.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Telephony.Stats
+                .RecomputeTelephonyStatsHourlyOrchestrator.CronExpression);
+
+        AddOrUpdate<Sankore.Modules.Integration.Features.Telephony.Stats
+            .RecomputeTelephonyStatsNightlyOrchestrator>(
+            Sankore.Modules.Integration.Features.Telephony.Stats
+                .RecomputeTelephonyStatsNightlyOrchestrator.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Telephony.Stats
+                .RecomputeTelephonyStatsNightlyOrchestrator.CronExpression);
 
         // 02:40 : le contrôle quotidien des liaisons utilisateur/fournisseur (TEL-B-05). Après le
         // job de partitions de 02:00, pour qu'un contrôle qui écrit écrive dans une partition qui

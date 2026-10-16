@@ -60,6 +60,7 @@
     <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration.Adapters.Amplitude\Sankore.Modules.Integration.Adapters.Amplitude.csproj" />
     <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration.Adapters.Sab\Sankore.Modules.Integration.Adapters.Sab.csproj" />
     <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration.Adapters.Orass\Sankore.Modules.Integration.Adapters.Orass.csproj" />
+    <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration.Adapters.Ringover\Sankore.Modules.Integration.Adapters.Ringover.csproj" />
   </ItemGroup>
 
   <ItemGroup>

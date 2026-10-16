@@ -316,11 +316,7 @@ public sealed class ClickToCallCorrelationTests : IDisposable
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns([]);
 
-        var writer = new TelCallJournalWriter(
-            db,
-            TelephonyTestHarness.Numbers(),
-            new TelephonyCallMatcher(customers, leads, NullLogger<TelephonyCallMatcher>.Instance),
-            NullLogger<TelCallJournalWriter>.Instance);
+        var writer = TelephonyTestHarness.Writer(db, customers, leads);
 
         await writer.RecordAsync(_tenant, _connection, call, CancellationToken.None);
 

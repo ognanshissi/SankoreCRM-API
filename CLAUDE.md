@@ -2078,6 +2078,112 @@ registered once by `SdkVersionSeeder`, so re-minifying them would make browsers 
 on every client site. Their `forms.js` is a plain copy, and `ShippedSdkBuildsTests` pins that.
 `/sdk/{version}/forms.js` serves the readable source for debugging; never pin it.
 
+### Telephony indicators and the agency on a call (TEL-B-19)
+
+**`tel_call.agency_id` is a COPY, not a join, and that is a correctness decision before it is a
+performance one.** It records the agency the call's agent sat in *at the time*, asked of M12 when
+the row is opened. A join to the agent's current agency would answer a different question: an agent
+transferred in March would move February's figures into their new branch, and February's
+conversations with them — so last month's numbers would change after the fact, which is the one
+thing a manager reading a report cannot forgive. `TelCall.StampAgency` is therefore **write-once**,
+and is retried on every journal reading of a row that still has none, so an M12 blip during a ring
+is repaired by the next webhook rather than leaving the call outside every agency for ever.
+
+**`IAdministrationModule.GetUserAgencyAsync(tenantId, userId, ct)` exists beside `GetAgentAsync`
+because its callers run outside a request.** The telephony webhook route is deliberately exempt
+from host resolution, so it derives its tenant from the connection and carries it by hand;
+`GetAgentAsync` leans on the ambient filter and would answer nothing there, or the wrong tenant's
+user. It answers `null` for three situations the caller must treat identically — unknown user,
+other tenant, genuinely no agency — and never `Guid.Empty`, unlike `AgentSummary.AgencyId`.
+
+**That column is what finally answers "is this call inside my perimeter", via
+`TelephonyCallPerimeter`** — the question `tel_call` could not answer, and which two surfaces had
+been living without. A supervisor may now correct a mis-filed call of their own branch (TEL-B-09's
+call side was "mine, or nobody's" and nothing else), and may listen to a colleague's **unattached**
+call of their branch (TEL-B-17 could only ask about the attached record, so an unattached one was
+audible to compliance alone). The helper answers **only** the agency question: "my own call" and
+"nobody's call" stay with the callers, because the two surfaces mean different things by an
+unattributed call. A `null` agency is inside no *restricted* perimeter — never inside all of them —
+and a `null` scope from `IAgencyScopeProvider` is UNRESTRICTED, never "no access".
+
+**`tel_call_daily_stat` is recomputed and never incremented.** TEL-B-19 requires the model to be
+recalculable, and an incremented counter cannot be: the moment it disagrees with the journal there
+is no way back, because resetting and replaying needs a replayable history and the outbox is not an
+event store. `TelCallStatsRecomputer` counts a day from `tel_call` and **replaces** the bucket, so a
+second run is a no-op rather than a doubling — which is what lets three triggers share one code
+path: the wrap-up consumer (the day of the call, so yesterday's missed call qualified this morning
+moves yesterday), an hourly job over two days, and a nightly one over seven. The nightly one is not
+redundant: what changes a figure *after* the day — a corrected attribution, an anonymisation, an
+outcome whose "counts as contact" flag was wrong — is not an event this module sees in time. There
+is also `POST telephony/stats/recompute`, because "recalculable" is worth nothing if only a schedule
+can exercise it.
+
+**Both grouping columns are non-nullable with `Guid.Empty` for "none".** PostgreSQL treats each
+null as distinct, so a nullable agency in `ux_tel_call_daily_stat_bucket` would constrain nothing
+and one run would stack a duplicate bucket on the last one's — the same rule the per-person
+questionnaires settled. The sentinel does not leave the module: the API edge turns it back into
+`null`. A **scoped** caller does not see that bucket at all; showing an unplaceable call inside one
+branch's figures would attribute another branch's work to it, and showing it to everybody would have
+every manager count the same calls.
+
+**`TelCallDirection.Internal` is written only by a provider, never inferred from the numbers.** The
+remote end resolving to no client is the ordinary case for a prospect nobody has captured yet, so
+guessing would reclassify — and hide — exactly the calls TEL-B-13 exists to surface. A provider that
+does not report internal calls simply never produces the value, and the exclusion has nothing to
+exclude: that is the designed fallback, not a gap. `StatDate` is a **UTC** day, stated rather than
+hidden — a per-tenant time zone applied there would make yesterday's figures move when somebody
+edited a setting.
+
+### The Ringover adapter is blocked on a test ACCOUNT, not a document (TEL-B-04)
+
+Same shape as `OrassAdapter`, `AmplitudeAdapter`, `SabAdapter` and `PerfectVisionAdapter` —
+registered to refuse by name with `IntegrationErrors.AdapterSpecificationPending`, every pure part
+implemented and tested, open questions in `RingoverSpecification.OpenQuestions` so procurement and
+the class quote the same list — with three differences worth knowing before touching it.
+
+**It cannot be unblocked by reading anything.** The four others wait on a vendor deliverable; this
+one waits on a live account, because what has to be right is a vocabulary of statuses and error
+bodies that only observed traffic produces. `RingoverStatusTranslation.Known` and
+`RingoverErrorClassification.FunctionalCodes` are therefore **empty, with tests that fail the day
+somebody adds an entry** — that failure is the prompt to justify the entry from traffic rather than
+from a public page.
+
+**Only three of the six open points block anything.** Points 4, 5 and 6 — webhook signing,
+click-to-call reference, deletion at the provider — each have a fallback that is already the
+production behaviour of lots 2, 3 and 5, recorded in `RingoverFallbacks` with the type that
+implements it. Their answers can only replace a working mechanism with a cheaper or more exact one.
+The reading "six open points, so six things do not work" is wrong and would have somebody rebuild
+what exists.
+
+**One member genuinely works: `ParseWebhook`.** The contract specifies it as pure and tells an
+adapter to leave null whatever it cannot determine locally, for the handler to resolve by re-reading
+the call — which the journal does unconditionally. The only member with no fallback is the dedup
+key, and a SHA-256 of the body is a correct one rather than a placeholder: it needs no field name,
+and an identical redelivery produces the same key, which is exactly what `tel_webhook_event` needs.
+It deliberately does not look for a call id, a status or a timestamp.
+
+**`RecordingDeletion` is deliberately absent from the capability matrix** while `Recordings` is
+present — they are not the same claim. A capability declared on a guess would be *worse* than the
+fallback: the retention job would call `DeleteRecordingAsync` on every expiring recording, and a
+compliance officer reading the list would believe the provider's copy was being destroyed. Not
+declaring it makes the retention's reach exactly what it is, which `RingoverFallbacks.RecordingDeletion`
+states in a sentence that can be forwarded to a regulator. That method answers
+`CapabilityNotSupported`, never the pending account.
+
+**A guessed status is the worst thing in this repository to get wrong**, and the reason none is
+guessed. A wrong endpoint answers 404 and the failure is seen; a wrong status *succeeds* — the
+journal takes it, the row changes, nothing reports it. A conversation recorded as missed has
+somebody rung to apologise for a call that already happened; a missed call recorded as completed
+stops the lead's first-contact clock (TEL-B-12), so the SLA says the branch responded and the
+prospect is never called.
+
+**`IntegrationAdapterCompositionTests` declares `[IntegrationKind.Ringover] = true` since lot 7.**
+It was `false` with the note that a registration which refused would let an administrator activate a
+telephony connection whose every call fails. That is answered by the adapter instead:
+`CheckHealthAsync` always answers unhealthy and `ActivateConnectionHandler` requires a passing
+check, so the connection still cannot be activated — and the refusal now names the test account
+instead of claiming the deployment shipped without the assembly.
+
 ### Adding a new module
 
 Use `Sankore.Modules.Administration` as the template: PublicApi project (interface only) + main project (DbContext + domain + Features/) + Tests project. Register in `Program.cs` with `builder.Services.Add{Module}Module(...)` and `appVersion1.Map{Module}ModuleEndpoints()`. Initialize in the startup scope if the module needs migration or seeding.

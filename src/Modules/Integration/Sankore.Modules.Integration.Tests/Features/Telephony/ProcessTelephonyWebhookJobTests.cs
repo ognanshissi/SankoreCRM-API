@@ -201,12 +201,7 @@ public sealed class ProcessTelephonyWebhookJobTests : IDisposable
         await ProcessTelephonyWebhookJob.RunAsync(
             db,
             TelephonyTestHarness.Access(db, adapter),
-            new TelCallJournalWriter(
-                db,
-                TelephonyTestHarness.Numbers(),
-                new TelephonyCallMatcher(
-                    customers, leads, NullLogger<TelephonyCallMatcher>.Instance),
-                NullLogger<TelCallJournalWriter>.Instance),
+            TelephonyTestHarness.Writer(db, customers, leads),
             TelephonyTestHarness.Payloads(),
             _screenPop,
             TelephonyTestHarness.Clock,

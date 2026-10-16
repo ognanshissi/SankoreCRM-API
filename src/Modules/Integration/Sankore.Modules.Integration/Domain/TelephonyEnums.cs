@@ -9,6 +9,26 @@ public enum TelCallDirection
 {
     Inbound,
     Outbound,
+
+    /// <summary>
+    /// Between two handsets of the institution — one colleague ringing another (TEL-B-19).
+    ///
+    /// <para>
+    /// <b>It exists so the indicators can leave it out.</b> An internal call is work, but it is
+    /// not commercial activity: counted in, an agent spending the morning consulting their branch
+    /// manager would outrank one spending it on clients, and "calls handled per agent" would stop
+    /// measuring the thing anybody opens the screen for.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Only a provider ever writes it.</b> It is never inferred from the numbers — the remote
+    /// end resolving to no client is the ordinary case for a prospect nobody has captured yet, so
+    /// guessing here would quietly reclassify, and so hide, exactly the calls TEL-B-13 exists to
+    /// surface. A provider that does not report internal calls simply never produces this value,
+    /// and everything downstream keeps working: that is the designed fallback, not a gap.
+    /// </para>
+    /// </summary>
+    Internal,
 }
 
 /// <summary>

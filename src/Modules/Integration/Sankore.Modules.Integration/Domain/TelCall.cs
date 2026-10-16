@@ -52,6 +52,26 @@ public sealed class TelCall : AggregateRoot
     public Guid? CrmUserId { get; private set; }
 
     /// <summary>
+    /// The agency this call belonged to — the one its agent sat in AT THE TIME, copied from
+    /// asked of M12 when the row was opened (TEL-B-19).
+    ///
+    /// <para>
+    /// <b>A copy and not a join, deliberately.</b> It is the axis the per-agency indicators
+    /// aggregate on, and it is also what finally gives "is this call inside my perimeter" an
+    /// answer — the question the supervisor correction of TEL-B-09 and the recording player of
+    /// TEL-B-17 both needed and neither could ask. A join to the agent's CURRENT agency would
+    /// answer a different question: an agent moving branch in March would move February's figures
+    /// and February's conversations with them.
+    /// </para>
+    ///
+    /// <para>
+    /// Null for a call nobody is attributed, and for an agent with no agency. Null means "outside
+    /// every restricted perimeter".
+    /// </para>
+    /// </summary>
+    public Guid? AgencyId { get; private set; }
+
+    /// <summary>
     /// The record this call is about — <c>Lead</c> or <c>Customer</c>. An opaque pair with no
     /// foreign key; both members are null together, which a check constraint enforces.
     /// </summary>
@@ -115,7 +135,8 @@ public sealed class TelCall : AggregateRoot
         DateTimeOffset startedAt,
         string? externalUserId = null,
         Guid? crmUserId = null,
-        Guid? clickToCallId = null)
+        Guid? clickToCallId = null,
+        Guid? agencyId = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
         if (connectionId == Guid.Empty) throw new DomainException("ConnectionId is required.");
@@ -138,6 +159,7 @@ public sealed class TelCall : AggregateRoot
             StartedAt = startedAt,
             ExternalUserId = string.IsNullOrWhiteSpace(externalUserId) ? null : externalUserId.Trim(),
             CrmUserId = crmUserId,
+            AgencyId = agencyId == Guid.Empty ? null : agencyId,
             ClickToCallId = clickToCallId,
             MatchStatus = TelMatchStatus.Unknown,
         };
@@ -198,6 +220,31 @@ public sealed class TelCall : AggregateRoot
         {
             EndedAt ??= at;
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Fills in the agency when it could not be resolved at creation (TEL-B-19).
+    ///
+    /// <para>
+    /// <b>Write-once, and that is the point.</b> M12 being unreachable during a ring would
+    /// otherwise leave the call outside every agency for ever — so it is retried on EVERY journal
+    /// reading of a row that still has none, and a call gets two to four of those, which means
+    /// the next webhook repairs it. Once a value is in, no later reading may change it: the row
+    /// records the agency the conversation belonged to, and an agent transferred next month must
+    /// not take this call with them.
+    /// </para>
+    /// </summary>
+    public bool StampAgency(Guid? agencyId)
+    {
+        if (AgencyId is not null) return false;
+
+        var resolved = agencyId == Guid.Empty ? null : agencyId;
+
+        if (resolved is null) return false;
+
+        AgencyId = resolved;
 
         return true;
     }
@@ -288,6 +335,8 @@ public sealed class TelCall : AggregateRoot
     /// </summary>
     public void Anonymise()
     {
+        // AgencyId, Direction, the durations and the outcome all STAY — see the summary. The
+        // agency is a property of the institution, not of the person.
         FromNumberEnc = [];
         FromNumberBi = [];
         ToNumberEnc = [];

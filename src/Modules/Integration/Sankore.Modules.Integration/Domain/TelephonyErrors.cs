@@ -168,4 +168,11 @@ public static class TelephonyErrors
     /// exception nobody wrote down is one nobody can lift with confidence years later.
     /// </summary>
     public const string RecordingHoldReasonRequired = "TELEPHONY_RECORDING_HOLD_REASON_REQUIRED";
+
+    /// <summary>
+    /// A period of indicators longer than the ceiling (TEL-B-19). Refused rather than truncated:
+    /// a caller who asked for ten years and silently got the first four hundred days would read
+    /// the answer as complete.
+    /// </summary>
+    public const string StatsPeriodTooLong = "TELEPHONY_STATS_PERIOD_TOO_LONG";
 }

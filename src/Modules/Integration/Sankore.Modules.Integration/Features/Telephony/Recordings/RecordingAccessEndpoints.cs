@@ -161,6 +161,7 @@ internal static class RecordingAccessEndpoints
         // invisible to the build and to every test.
         [FromServices] IRecordingStore? store,
         TelephonyRecordAccess recordAccess,
+        TelephonyCallPerimeter perimeter,
         ICurrentUser currentUser,
         IHttpContextAccessor httpContextAccessor,
         TimeProvider clock,
@@ -168,7 +169,8 @@ internal static class RecordingAccessEndpoints
         CancellationToken ct)
         => ServeAsync(
             callId, reason, TelRecordingAccessKind.Listen,
-            db, store, recordAccess, currentUser, httpContextAccessor, clock, loggerFactory, ct);
+            db, store, recordAccess, perimeter, currentUser, httpContextAccessor, clock,
+            loggerFactory, ct);
 
     /// <inheritdoc cref="ListenAsync" />
     internal static async Task<IResult> ExportAsync(
@@ -183,6 +185,7 @@ internal static class RecordingAccessEndpoints
         // invisible to the build and to every test.
         [FromServices] IRecordingStore? store,
         TelephonyRecordAccess recordAccess,
+        TelephonyCallPerimeter perimeter,
         ICurrentUser currentUser,
         IHttpContextAccessor httpContextAccessor,
         TimeProvider clock,
@@ -199,7 +202,8 @@ internal static class RecordingAccessEndpoints
 
         return await ServeAsync(
             callId, reason, TelRecordingAccessKind.Export,
-            db, store, recordAccess, currentUser, httpContextAccessor, clock, loggerFactory, ct);
+            db, store, recordAccess, perimeter, currentUser, httpContextAccessor, clock,
+            loggerFactory, ct);
     }
 
     /// <summary>
@@ -213,6 +217,7 @@ internal static class RecordingAccessEndpoints
         IntegrationDbContext db,
         IRecordingStore? store,
         TelephonyRecordAccess recordAccess,
+        TelephonyCallPerimeter perimeter,
         ICurrentUser currentUser,
         IHttpContextAccessor httpContextAccessor,
         TimeProvider clock,
@@ -235,14 +240,14 @@ internal static class RecordingAccessEndpoints
         // and the two 404s are indistinguishable: the existence of a conversation must not leak.
         var call = await db.TelCalls
             .Where(c => c.Id == callId)
-            .Select(c => new { c.CrmUserId, c.EntityType, c.EntityId })
+            .Select(c => new { c.CrmUserId, c.EntityType, c.EntityId, c.AgencyId })
             .FirstOrDefaultAsync(ct);
 
         if (call is null)
             return Results.NotFound(new { error = TelephonyErrors.RecordingNotFound });
 
-        if (!await MayHearAsync(call.CrmUserId, call.EntityType, call.EntityId,
-                recordAccess, currentUser, httpContextAccessor, ct))
+        if (!await MayHearAsync(call.CrmUserId, call.EntityType, call.EntityId, call.AgencyId,
+                recordAccess, perimeter, currentUser, httpContextAccessor, ct))
         {
             // The refusal is logged — this surface is the one where a disproportionate listener
             // matters, and an attempt is as much a signal as an access. The access LOG is for
@@ -324,16 +329,34 @@ internal static class RecordingAccessEndpoints
     /// <para>
     /// Ordered cheapest first, and that is also the order of certainty: your own call is a field
     /// comparison, the compliance permission is a claim already on the token, and only the last
-    /// arm costs a cross-module call. An unattached, unattributed call falls to the second arm —
-    /// the agency's "to attribute" queue, which the missed-call list shows everyone for the same
+    /// two arms cost a lookup. An unattached, unattributed call falls to the first arm — the
+    /// agency's "to attribute" queue, which the missed-call list shows everyone for the same
     /// reason.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The agency arm is TEL-B-19's and it closes a real gap.</b> Until the call carried an
+    /// agency, the only route to a colleague's conversation was the record it was attached to —
+    /// so a colleague's call that was never attached was audible to compliance alone. Correct, but
+    /// strict enough that a branch manager investigating a complaint about a call their own agent
+    /// made had no way to hear it. The agency on the row is the one its agent was in at the time,
+    /// so the manager who may listen is the one who was answerable then.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>It is an arm and not a replacement.</b> The attached-record arm stays, because a call
+    /// filed against a client of another branch is a conversation that branch may legitimately
+    /// need — and because a call with no agency (one opened while M12 was unreachable, or by an
+    /// unlinked account) would otherwise lose its only route.
     /// </para>
     /// </summary>
     private static async Task<bool> MayHearAsync(
         Guid? crmUserId,
         string? entityType,
         Guid? entityId,
+        Guid? agencyId,
         TelephonyRecordAccess recordAccess,
+        TelephonyCallPerimeter perimeter,
         ICurrentUser currentUser,
         IHttpContextAccessor httpContextAccessor,
         CancellationToken ct)
@@ -350,8 +373,14 @@ internal static class RecordingAccessEndpoints
             return true;
         }
 
-        // A colleague's call: the record it is about decides. An unattached one does not reach
-        // here — it has an owner, and that owner is not this caller.
+        // A colleague's call inside the perimeter this caller supervises — the branch the call
+        // belonged to when it happened, not the one its agent sits in today.
+        if (await perimeter.CoversAsync(currentUser.TenantId, currentUser.Id, agencyId, ct))
+            return true;
+
+        // Last: the record it is about decides. An unattached call with no agency does not reach
+        // here with a route — it has an owner, that owner is not this caller, and nothing else
+        // places it.
         return entityType is not null
             && entityId is { } id
             && await recordAccess.CanActOnAsync(

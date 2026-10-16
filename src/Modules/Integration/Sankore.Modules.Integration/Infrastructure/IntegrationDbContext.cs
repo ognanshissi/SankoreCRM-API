@@ -34,6 +34,7 @@ public sealed class IntegrationDbContext(
     public DbSet<TelCallOutcome> TelCallOutcomes => Set<TelCallOutcome>();
     public DbSet<TelRecordingPolicy> TelRecordingPolicies => Set<TelRecordingPolicy>();
     public DbSet<TelRecordingAccessLog> TelRecordingAccessLogs => Set<TelRecordingAccessLog>();
+    public DbSet<TelCallDailyStat> TelCallDailyStats => Set<TelCallDailyStat>();
     public DbSet<IntegrationMapping> Mappings => Set<IntegrationMapping>();
     public DbSet<IntegrationReconciliationRun> ReconciliationRuns => Set<IntegrationReconciliationRun>();
     public DbSet<IntegrationReconciliationGap> ReconciliationGaps => Set<IntegrationReconciliationGap>();
@@ -158,6 +159,7 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<TelCallOutcome>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TelRecordingPolicy>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TelRecordingAccessLog>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<TelCallDailyStat>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
     }
 }
 

@@ -129,6 +129,81 @@ internal static class TelephonyTestHarness
     }
 
     /// <summary>
+    /// The agency resolver over a substituted M12 (TEL-B-19).
+    ///
+    /// <para>
+    /// <paramref name="agencyId"/> null means M12 answers "no agency", which is also what a
+    /// substitute answers by default — so a suite that does not care about the agency gets the
+    /// same behaviour as before the column existed.
+    /// </para>
+    /// </summary>
+    internal static TelephonyAgencyResolver Agencies(Guid? agencyId = null)
+    {
+        var administration = Substitute.For<Administration.PublicApi.IAdministrationModule>();
+
+        administration.GetUserAgencyAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(agencyId);
+
+        return new TelephonyAgencyResolver(
+            administration, NullLogger<TelephonyAgencyResolver>.Instance);
+    }
+
+    /// <summary>
+    /// The journal writer, assembled. A helper because five suites build one and the constructor
+    /// has now grown twice — each growth having been five identical edits.
+    /// </summary>
+    internal static TelCallJournalWriter Writer(
+        IntegrationDbContext db,
+        Customers.PublicApi.ICustomersModule customers,
+        Leads.PublicApi.ILeadsModule leads,
+        Guid? agencyId = null)
+        => new(
+            db,
+            Numbers(),
+            new TelephonyCallMatcher(customers, leads, NullLogger<TelephonyCallMatcher>.Instance),
+            Agencies(agencyId),
+            NullLogger<TelCallJournalWriter>.Instance);
+
+    /// <summary>
+    /// The call-side perimeter check (TEL-B-19).
+    ///
+    /// <para>
+    /// <b>No parameterless default.</b> Pass <c>null</c> for an unrestricted caller — a
+    /// super-user, which <c>IAgencyScopeProvider</c> signals with a null set — or the agencies the
+    /// caller supervises. Spelling it at every call site is the point: a default would make every
+    /// supervisor case pass without anybody having said what perimeter they were in.
+    /// </para>
+    /// </summary>
+    internal static TelephonyCallPerimeter Perimeter(Guid[]? accessibleAgencies)
+        => new(AgencyScope(accessibleAgencies), NullLogger<TelephonyCallPerimeter>.Instance);
+
+    /// <summary>
+    /// A perimeter as <c>IAgencyScopeProvider</c> hands one back. <c>null</c> is UNRESTRICTED — a
+    /// super-user — and an empty array is a caller who sees nothing; a collection expression
+    /// cannot build an <c>IReadOnlySet&lt;Guid&gt;</c> directly, which is the other reason this
+    /// is a helper.
+    /// </summary>
+    internal static Shared.Kernel.Authorization.IAgencyScopeProvider AgencyScope(
+        Guid[]? accessibleAgencies)
+    {
+        var scope = Substitute.For<Shared.Kernel.Authorization.IAgencyScopeProvider>();
+
+        scope.GetAccessibleAgencyIdsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(accessibleAgencies is null
+                ? (IReadOnlySet<Guid>?)null
+                : accessibleAgencies.ToHashSet());
+
+        scope.CanAccessAgencyAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => accessibleAgencies is null
+                || accessibleAgencies.Contains(call.ArgAt<Guid>(2)));
+
+        return scope;
+    }
+
+    /// <summary>
     /// The screen pop over a notifier that records what it was asked to push.
     ///
     /// <para>
