@@ -167,3 +167,22 @@ public enum KycLevel
     Simplified,
     Full
 }
+
+/// <summary>
+/// Which kind of record a call is attached to (TEL-B-09), as the CONTRACT spells it.
+///
+/// <para>
+/// In the PublicApi and not only in the module's domain because a consumer has to compare against
+/// it: <c>TelephonyCallWrappedUpEvent.EntityType</c> is a string, and M13's consumer branching on
+/// a literal <c>"Lead"</c> would be a second spelling of this list in another assembly — the kind
+/// of drift that makes a consumer silently stop recognising its own events. The module's
+/// <c>TelEntityTypes</c> derives its values from here, so there is one definition.
+/// </para>
+/// </summary>
+public static class TelephonyEntityTypes
+{
+    public const string Lead = "Lead";
+    public const string Customer = "Customer";
+
+    public static bool IsKnown(string? value) => value is Lead or Customer;
+}

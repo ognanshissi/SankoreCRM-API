@@ -56,6 +56,31 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
   </ItemGroup>
+  <ItemGroup Label="SignalR">
+    <!-- The hub SERVER is in the ASP.NET Core shared framework and costs nothing. This is the
+         BACKPLANE, referenced only by Sankore.Shared.Realtime.
+
+         Without it a deployment running more than one instance pushes an incoming-call
+         notification to the agents connected to the instance that happened to receive the
+         provider's webhook, and to nobody else — a screen pop that works for half the agency and
+         reads as a flaky browser. Redis is already provisioned for IDistributedCache; the
+         backplane opens a SECOND multiplexer on the same connection string. -->
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.12" />
+
+    <!-- Pinned FORWARD and listed explicitly although nothing references it directly: the
+         backplane pulls MessagePack transitively, and every version it would otherwise resolve
+         (2.5.x, 3.0.x) carries a dozen advisories including two HIGH ones in the deserialisation
+         family (GHSA-382j-8mxh-c7x2, GHSA-vh6j-jc39-fggf). 3.1.12 carries none; `dotnet restore`
+         reports NU1902/NU1903 if it ever slips back, which is the point of the pin.
+
+         Worth knowing when weighing it: MessagePack here serialises hub messages BETWEEN OUR OWN
+         instances over Redis, not client input — the browser protocol is JSON
+         (Microsoft.AspNetCore.SignalR.Protocols.Json, framework). The deserialisation advisories
+         are about untrusted payloads, so the exposure was never on the public surface. The pin is
+         still the right answer: a dependency nobody can explain away is a dependency somebody
+         later uses for something else. Same practice as the SSH.NET entry below. -->
+    <PackageVersion Include="MessagePack" Version="3.1.12" />
+  </ItemGroup>
   <ItemGroup Label="Scriban">
     <PackageVersion Include="Scriban" Version="7.2.6" />
   </ItemGroup>

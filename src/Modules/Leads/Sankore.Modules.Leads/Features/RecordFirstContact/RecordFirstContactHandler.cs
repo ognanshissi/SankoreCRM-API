@@ -31,7 +31,11 @@ internal sealed class RecordFirstContactHandler(LeadsDbContext db)
             return Result.Fail("FIRST_CONTACT_ALREADY_RECORDED");
 
         var contactedAt = cmd.ContactedAt ?? DateTimeOffset.UtcNow;
-        assignment.RecordFirstContact(contactedAt);
+
+        // AgentDeclared: this endpoint IS an agent pressing "I called them". The telephony path
+        // records TelephonyCall, and a manager reading a contact rate can then tell a claim from
+        // evidence — see FirstContactSource.
+        assignment.RecordFirstContact(contactedAt, Domain.FirstContactSource.AgentDeclared);
         // No db.Leads.Update(lead): the lead is already tracked, and calling Update marks the
         // OWNED PrincipalPep's identifying key as modified — EF then refuses the save with
         // "part of a key and so cannot be modified".

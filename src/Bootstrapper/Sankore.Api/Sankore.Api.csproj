@@ -35,6 +35,10 @@
     <!-- The S3/R2 client. Referenced HERE and nowhere else: this is the only host that puts
          an object in a bucket, so Sankore.Admin and Sankore.Hangfire ship no AWS client. -->
     <ProjectReference Include="..\..\Shared\Sankore.Shared.ObjectStorage.S3\Sankore.Shared.ObjectStorage.S3.csproj" />
+    <!-- TEL-B-10: the SignalR hub and its Redis backplane. Referenced by this host ONLY —
+         Sankore.Admin and Sankore.Hangfire push nothing to a browser and must not ship a second
+         Redis multiplexer. -->
+    <ProjectReference Include="..\..\Shared\Sankore.Shared.Realtime\Sankore.Shared.Realtime.csproj" />
     <ProjectReference Include="..\..\Modules\Administration\Sankore.Modules.Administration\Sankore.Modules.Administration.csproj" />
     <ProjectReference Include="..\..\Modules\Leads\Sankore.Modules.Leads\Sankore.Modules.Leads.csproj" />
     <ProjectReference Include="..\..\Modules\Workflow\Sankore.Modules.Workflow\Sankore.Modules.Workflow.csproj" />

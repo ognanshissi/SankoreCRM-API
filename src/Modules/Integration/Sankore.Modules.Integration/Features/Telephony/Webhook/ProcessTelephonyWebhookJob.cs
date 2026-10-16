@@ -67,6 +67,7 @@ public sealed class ProcessTelephonyWebhookJob(IServiceScopeFactory scopeFactory
             sp.GetRequiredService<TelephonyAccess>(),
             sp.GetRequiredService<TelCallJournalWriter>(),
             sp.GetRequiredService<TelephonyPayloadProtector>(),
+            sp.GetRequiredService<TelephonyScreenPop>(),
             sp.GetRequiredService<TimeProvider>(),
             logger,
             tenantId,
@@ -92,6 +93,7 @@ public sealed class ProcessTelephonyWebhookJob(IServiceScopeFactory scopeFactory
         TelephonyAccess access,
         TelCallJournalWriter journal,
         TelephonyPayloadProtector payloads,
+        TelephonyScreenPop screenPop,
         TimeProvider clock,
         ILogger logger,
         Guid tenantId,
@@ -104,6 +106,7 @@ public sealed class ProcessTelephonyWebhookJob(IServiceScopeFactory scopeFactory
         ArgumentNullException.ThrowIfNull(access);
         ArgumentNullException.ThrowIfNull(journal);
         ArgumentNullException.ThrowIfNull(payloads);
+        ArgumentNullException.ThrowIfNull(screenPop);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -188,6 +191,12 @@ public sealed class ProcessTelephonyWebhookJob(IServiceScopeFactory scopeFactory
         stored.MarkProcessed($"CALL:{row.Status}", clock.GetUtcNow());
 
         await db.SaveChangesAsync(ct);
+
+        // AFTER the commit, deliberately. The push tells a browser to come and read this row, so
+        // pushing first would send it to read something that does not exist yet — and the read
+        // would answer 404 for a call that is about to be perfectly fine. It also means a push is
+        // never sent for work that then rolled back.
+        await screenPop.PushRingingAsync(row, ct);
 
         logger.LogInformation(
             "Telephony webhook event {EventId} of tenant {TenantId} journalled call "

@@ -85,6 +85,33 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
         => Task.FromResult<LeadSummary?>(null);
 
     /// <summary>
+    /// TEL-B-13's missed-call capture. Refused, like the two below: a stub that created a lead
+    /// would make a timeline test quietly write into the lead schema.
+    /// </summary>
+    public Task<Sankore.Shared.Kernel.Result<MissedCallLeadResult>> CaptureFromMissedCallAsync(
+        Guid tenantId, string phoneNumber, Guid ownerId, Guid? agencyId,
+        DateTimeOffset missedAt, CancellationToken ct)
+        => Task.FromResult(
+            Sankore.Shared.Kernel.Result.Fail<MissedCallLeadResult>("LEAD_NOT_FOUND"));
+
+    /// <summary>
+    /// TEL-B-09's authorization question. False, like the reveal below: a stub that answered true
+    /// would let a future caller of this double look as though a perimeter check had passed.
+    /// </summary>
+    public Task<bool> CanActorWorkLeadAsync(
+        Guid tenantId, Guid leadId, Guid actorUserId, CancellationToken ct)
+        => Task.FromResult(false);
+
+    /// <summary>
+    /// TEL-B-06's dialling reveal. Nothing in the timeline dials anybody; refused, which is the
+    /// safe answer for a stub — a stub that returned a number would let a future caller of this
+    /// double look as though it had passed a perimeter check.
+    /// </summary>
+    public Task<Sankore.Shared.Kernel.Result<string>> ResolvePhoneForCallAsync(
+        Guid tenantId, Guid leadId, PhoneSlot slot, Guid actorUserId, CancellationToken ct)
+        => Task.FromResult(Sankore.Shared.Kernel.Result.Fail<string>("LEAD_NOT_FOUND"));
+
+    /// <summary>
     /// TEL-B-09's reverse caller-id lookup. Nothing in the timeline uses it; empty, because the
     /// contract says empty and never null.
     /// </summary>

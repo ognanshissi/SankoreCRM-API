@@ -146,6 +146,17 @@ public interface IInsuranceGateway
 /// Telephony, as the rest of the platform sees it (TEL-B-02).
 ///
 /// <para>
+/// <b>Reads only, and the two agent ACTS are deliberately absent.</b> Placing a call and
+/// correcting an attachment were on this contract when the family was scaffolded; they are gone
+/// because both need an authenticated actor whose perimeter the owning module verifies — the
+/// number resolution of TEL-B-06 refuses an actor that is not the ambient one, precisely so that
+/// nothing can ask for a perimeter check it then does not make. A module calling on an agent's
+/// behalf has no such actor to offer, and no caller ever wanted to: the two live on the HTTP
+/// surface, under <c>Telephony.Call.Make</c> and <c>Telephony.Call.Link</c>, where the permission
+/// and the audit row are.
+/// </para>
+///
+/// <para>
 /// <b>It does not look like the other two gateways, and the difference is the point.</b> A write
 /// to a back office is queued as a command and answered later; a telephone call is not. An agent
 /// clicking "call" waits for their own handset to ring, so <see cref="RequestClickToCallAsync"/>
@@ -161,25 +172,19 @@ public interface IInsuranceGateway
 /// </summary>
 public interface ITelephonyGateway
 {
-    /// <summary>Asks the provider to ring this user, then dial one of the record's numbers.</summary>
-    Task<ClickToCallResult> RequestClickToCallAsync(
-        Guid crmUserId, TelephonyEntityRef target, TelephonyPhoneSlot slot, CancellationToken ct);
-
     /// <summary>
     /// What is known about one call, for the screen that opens while a telephone is ringing.
     /// Null when the call does not exist for this tenant.
+    ///
+    /// <para>
+    /// Carries NO telephone number, by construction: it names people. The realtime push that
+    /// precedes it carries a call id and nothing else, which is the half of TEL-B-10 that keeps a
+    /// customer's name out of a websocket frame nobody re-authorises.
+    /// </para>
     /// </summary>
     Task<TelephonyCallContext?> GetCallContextAsync(Guid callId, CancellationToken ct);
 
-    /// <summary>
-    /// Attaches a call to a record, or corrects an attachment. The reason is mandatory and kept:
-    /// a conversation filed against the wrong person is something a later reader must be able to
-    /// understand.
-    /// </summary>
-    Task<Result> LinkCallAsync(
-        Guid callId, TelephonyEntityRef target, string reason, CancellationToken ct);
-
-    /// <summary>The calls of one record, newest first.</summary>
+    /// <summary>The calls of one record, newest first. Feeds a client's or a lead's history.</summary>
     Task<IReadOnlyList<TelephonyCallSummary>> GetCallsForEntityAsync(
         TelephonyEntityRef entity, int page, int pageSize, CancellationToken ct);
 
@@ -205,22 +210,6 @@ public enum TelephonyPhoneSlot
 {
     Primary,
     Secondary,
-}
-
-/// <param name="RequestId">
-/// The click-to-call request, for the screen to follow until the agent's handset rings.
-/// </param>
-/// <param name="ErrorCode">
-/// Null on success. A stable code — the agent's screen turns it into a sentence, and the set is
-/// closed so a new refusal cannot read as a generic failure.
-/// </param>
-public sealed record ClickToCallResult(Guid? RequestId, string? ErrorCode)
-{
-    public bool IsSuccess => ErrorCode is null;
-
-    public static ClickToCallResult Ok(Guid requestId) => new(requestId, null);
-
-    public static ClickToCallResult Refused(string errorCode) => new(null, errorCode);
 }
 
 /// <param name="Candidates">

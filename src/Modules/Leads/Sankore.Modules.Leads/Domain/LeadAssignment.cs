@@ -93,7 +93,38 @@ public sealed class LeadAssignment
             SlaDeadline = slaDeadline
         };
 
-    public void RecordFirstContact(DateTimeOffset at) => FirstContactAt ??= at;
+    /// <summary>
+    /// How <see cref="FirstContactAt"/> was established (TEL-B-12). Null for an assignment
+    /// contacted before the source was tracked — see <see cref="FirstContactSource"/> for why that
+    /// is not backfilled.
+    /// </summary>
+    public FirstContactSource? FirstContactSource { get; private set; }
+
+    /// <summary>
+    /// Records the first contact, once and for ever.
+    ///
+    /// <para>
+    /// Still <c>??=</c> in effect, so the guarantee "never rewritten" is unchanged — a second
+    /// call is a no-op. What changed with TEL-B-12 is that the instant and its SOURCE move
+    /// TOGETHER: a source written on its own, or kept when the instant was refused, would say
+    /// that a telephony call established a contact an agent had already declared.
+    /// </para>
+    ///
+    /// <para>
+    /// Answers whether it recorded anything, so a caller can tell "I stopped the clock" from
+    /// "somebody already had" — which a consumer needs, because for it the second is a success
+    /// and not a failure.
+    /// </para>
+    /// </summary>
+    public bool RecordFirstContact(DateTimeOffset at, FirstContactSource source)
+    {
+        if (FirstContactAt is not null) return false;
+
+        FirstContactAt = at;
+        FirstContactSource = source;
+
+        return true;
+    }
 
     /// <summary>
     /// Closes this assignment as superseded. Idempotent, and it does NOT touch

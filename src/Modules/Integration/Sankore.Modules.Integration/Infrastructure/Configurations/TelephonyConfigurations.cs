@@ -178,3 +178,61 @@ internal sealed class TelCallOutcomeConfiguration : IEntityTypeConfiguration<Tel
         b.Ignore(o => o.DomainEvents);
     }
 }
+
+internal sealed class TelRecordingPolicyConfiguration : IEntityTypeConfiguration<TelRecordingPolicy>
+{
+    public void Configure(EntityTypeBuilder<TelRecordingPolicy> b)
+    {
+        b.ToTable("tel_recording_policy");
+
+        // The TENANT is the key: one policy per institution, and a surrogate id would let two rows
+        // claim to be it. Same shape as tel_call_outcome's composite key, one segment shorter.
+        b.HasKey(p => p.TenantId);
+
+        b.Property(p => p.Mode).HasConversion<string>().HasMaxLength(15).IsRequired();
+
+        // Free text in the compliance officer's own words, and long: a lawful basis cites a text
+        // and an institution's own reading of it. 1000 is what the KYC consent wording uses.
+        b.Property(p => p.LegalBasis).HasMaxLength(1000);
+        b.Property(p => p.Purpose).HasMaxLength(1000);
+
+        b.Property(p => p.Version).IsRowVersion();
+
+        b.Ignore(p => p.DomainEvents);
+    }
+}
+
+/// <summary>
+/// Who opened a recording, and why (TEL-B-17).
+///
+/// <para>
+/// Its own table rather than a column on <c>tel_recording</c>, for the reason M01's
+/// <c>SensitiveDataAccessLog</c> is its own: a recording is listened to many times by many people,
+/// and a column would hold the last one. What a regulator asks is who has heard this, and only a
+/// row per access can answer it.
+/// </para>
+/// </summary>
+internal sealed class TelRecordingAccessLogConfiguration
+    : IEntityTypeConfiguration<TelRecordingAccessLog>
+{
+    public void Configure(EntityTypeBuilder<TelRecordingAccessLog> b)
+    {
+        b.ToTable("tel_recording_access_log");
+        b.HasKey(l => l.Id);
+
+        b.Property(l => l.Kind).HasConversion<string>().HasMaxLength(10).IsRequired();
+        b.Property(l => l.Reason).HasMaxLength(500);
+        b.Property(l => l.CorrelationId).HasMaxLength(120);
+
+        // "Who has heard this recording", which is the question the table exists for.
+        b.HasIndex(l => new { l.TenantId, l.RecordingId, l.AccessedAt })
+            .HasDatabaseName("ix_tel_recording_access_recording");
+
+        // And its mirror: "what has this person listened to", which is how a disproportionate
+        // listener is found. Without it that question is a scan of every access ever recorded.
+        b.HasIndex(l => new { l.TenantId, l.ActorUserId, l.AccessedAt })
+            .HasDatabaseName("ix_tel_recording_access_actor");
+
+        b.Ignore(l => l.DomainEvents);
+    }
+}

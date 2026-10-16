@@ -60,36 +60,62 @@ internal sealed class TelephonyCallMatcher(
     internal async Task<TelephonyMatch> ResolveAsync(
         Guid tenantId, string? remoteNumber, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(remoteNumber))
-            return TelephonyMatch.None;
+        var candidates = await ResolveCandidatesAsync(tenantId, remoteNumber, ct);
+
+        if (candidates.Count == 0) return TelephonyMatch.None;
+        if (candidates.Count > 1) return TelephonyMatch.Ambiguous;
+
+        var only = candidates[0];
+
+        return new TelephonyMatch(TelMatchStatus.Matched, only.EntityType, only.EntityId);
+    }
+
+    /// <summary>
+    /// Everyone the number resolves to, with the names and the agencies a screen needs
+    /// (TEL-B-10).
+    ///
+    /// <para>
+    /// The same lookup <see cref="ResolveAsync"/> reduces to a verdict, so the two cannot
+    /// disagree about who a number belongs to — which they would the day one of them learned
+    /// about a new kind of record and the other did not. The journal stores the verdict; the
+    /// screen-pop read needs the list, because <c>Ambiguous</c> is only useful to an agent who
+    /// can see the two names it is between.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>A client found makes the leads irrelevant, and the order is not an optimisation.</b> A
+    /// converted lead is excluded by M13's own query, so a number answering on both sides means a
+    /// client record AND an open request from somebody already on file — one human, listed once,
+    /// as the client they are.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>No perimeter here.</b> The caller applies it: this method is also reached from the
+    /// SYSTEM webhook path, which has no perimeter, and narrowing in here would make what is
+    /// STORED depend on whose job ran.
+    /// </para>
+    /// </summary>
+    internal async Task<IReadOnlyList<ResolvedCandidate>> ResolveCandidatesAsync(
+        Guid tenantId, string? remoteNumber, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(remoteNumber)) return [];
 
         var clients = await SafeAsync(
             () => customers.FindMatchesAsync(tenantId, remoteNumber, null, null, ct),
             "M01 client lookup", tenantId);
 
-        if (clients.Count > 1)
-            return TelephonyMatch.Ambiguous;
-
-        if (clients.Count == 1)
+        if (clients.Count > 0)
         {
-            return new TelephonyMatch(
-                TelMatchStatus.Matched, TelEntityTypes.Customer, clients[0].ClientId);
+            return [.. clients.Select(c => new ResolvedCandidate(
+                TelEntityTypes.Customer, c.ClientId, c.DisplayName, c.AgencyId))];
         }
 
         var openLeads = await SafeAsync(
             () => leads.FindOpenLeadsByPhoneAsync(tenantId, remoteNumber, ct),
             "M13 lead lookup", tenantId);
 
-        if (openLeads.Count > 1)
-            return TelephonyMatch.Ambiguous;
-
-        if (openLeads.Count == 1)
-        {
-            return new TelephonyMatch(
-                TelMatchStatus.Matched, TelEntityTypes.Lead, openLeads[0].LeadId);
-        }
-
-        return TelephonyMatch.None;
+        return [.. openLeads.Select(l => new ResolvedCandidate(
+            TelEntityTypes.Lead, l.LeadId, l.FullName, l.AgencyId))];
     }
 
     private async Task<IReadOnlyList<T>> SafeAsync<T>(
@@ -114,6 +140,17 @@ internal sealed class TelephonyCallMatcher(
         }
     }
 }
+
+/// <summary>
+/// One record a number resolves to, as the owning module describes it.
+/// </summary>
+/// <param name="AgencyId">
+/// Null for a lead that carries none, which M13 documents as ordinary. The caller must read null
+/// as "outside every restricted perimeter" rather than "inside all of them" — the opposite
+/// reading would show an unassigned lead's name to every agent of the tenant.
+/// </param>
+internal sealed record ResolvedCandidate(
+    string EntityType, Guid EntityId, string DisplayName, Guid? AgencyId);
 
 /// <summary>
 /// The matcher's verdict. The entity pair is all-or-nothing, which <c>TelCall.Attach</c> and a

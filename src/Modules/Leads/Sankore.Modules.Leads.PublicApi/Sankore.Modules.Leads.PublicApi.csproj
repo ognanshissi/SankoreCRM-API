@@ -7,4 +7,13 @@
     <RootNamespace>Sankore.Modules.Leads.PublicApi</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- For Result<T>, which ResolvePhoneForCallAsync answers with (TEL-B-06): a refusal there is
+         a perimeter decision the caller must be able to tell from "this slot is empty", and a
+         nullable string cannot say which. The Kernel has zero third-party dependencies, so this
+         keeps the contract assembly as light as it was — the same reference M01's PublicApi
+         already carries. -->
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+  </ItemGroup>
+
 </Project>

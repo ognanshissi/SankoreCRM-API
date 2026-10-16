@@ -17,6 +17,11 @@ public class LeadAssignmentConfiguration: IEntityTypeConfiguration<LeadAssignmen
         // assignments, and those accumulate — one per reassignment, for ever.
         builder.HasIndex(a => new { a.SlaDeadline, a.FirstContactAt })
             .HasFilter("superseded_at IS NULL");
+        // As a STRING, like every other enum of this solution: a contact rate is read off this
+        // column for years, and an enum stored as an integer is a column whose meaning changes the
+        // day somebody inserts a value in the middle of the declaration.
+        builder.Property(a => a.FirstContactSource).HasConversion<string>().HasMaxLength(20);
+
         builder.Property(a => a.CompatibilityFactorsJson).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
 
         builder.HasOne<Lead>()

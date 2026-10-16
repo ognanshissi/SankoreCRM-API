@@ -69,6 +69,13 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     private readonly Features.Balance.LiveBalanceGate? _balanceGate;
 
     /// <summary>
+    /// For the one gateway member that delegates to a query rather than re-projecting it —
+    /// <c>GetCallContextAsync</c>, so the perimeter rule of TEL-B-10 has one definition.
+    /// Nullable because this module's own tests construct the facade directly.
+    /// </summary>
+    private readonly MediatR.ISender? _sender;
+
+    /// <summary>
     /// The constructor the container uses.
     ///
     /// <para>
@@ -99,7 +106,12 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             // GetService, not GetRequiredService: see the field. A deployment whose container has
             // no Redis, or a host that has not called AddBalanceServices, still gets live
             // balances — straight from the CBS, uncached.
-            services.GetService<Features.Balance.LiveBalanceGate>())
+            services.GetService<Features.Balance.LiveBalanceGate>(),
+            // GetService for the same reason as the balance gate: this module's own tests build
+            // the facade directly and almost none of them dispatch a query. The one gateway
+            // member that needs it throws rather than answering null — a context read that
+            // silently said "nobody is on this call" would be read as a resolution failure.
+            services.GetService<MediatR.ISender>())
     {
     }
 
@@ -113,7 +125,8 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         ICurrentUser currentUser,
         TimeProvider clock,
         ILogger<IntegrationModuleFacade> logger,
-        Features.Balance.LiveBalanceGate? balanceGate = null)
+        Features.Balance.LiveBalanceGate? balanceGate = null,
+        MediatR.ISender? sender = null)
     {
         _db = db;
         _resolver = resolver;
@@ -124,6 +137,7 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         _clock = clock;
         _logger = logger;
         _balanceGate = balanceGate;
+        _sender = sender;
 
         CoreBanking = new CoreBankingGateway(this);
         Insurance = new InsuranceGateway(this);
@@ -1133,32 +1147,72 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     private sealed record PolicyOwner(IntegrationConnection Connection, Guid CrmCustomerId);
 
     /// <summary>
-    /// Telephony (TEL-B-02).
-    ///
-    /// <para>
-    /// <b>Deliberately thin in this lot.</b> Only <see cref="GetCapabilities"/> can answer
-    /// honestly today: the journal, the click-to-call and the attachment are the next two lots,
-    /// and a gateway that pretended to serve them would be a contract the front could bind to
-    /// before anything behind it worked. Every other member answers the refusal that says exactly
-    /// that, which is also what lets the screens be written against a real shape now.
-    /// </para>
+    /// Telephony (TEL-B-02). Reads only — see <see cref="ITelephonyGateway"/> for why the two
+    /// agent acts are not on this contract.
     /// </summary>
     internal sealed class TelephonyGateway(IntegrationModuleFacade facade) : ITelephonyGateway
     {
-        public Task<ClickToCallResult> RequestClickToCallAsync(
-            Guid crmUserId, TelephonyEntityRef target, TelephonyPhoneSlot slot, CancellationToken ct)
-            => Task.FromResult(ClickToCallResult.Refused(IntegrationErrors.CapabilityNotSupported));
+        /// <summary>
+        /// Delegates to the screen-pop query, so there is ONE definition of "who is on this call"
+        /// and of the perimeter it applies. A second projection here would be a second place the
+        /// name of an out-of-perimeter record could be allowed through.
+        /// </summary>
+        public async Task<TelephonyCallContext?> GetCallContextAsync(
+            Guid callId, CancellationToken ct)
+        {
+            // Required here and nowhere else — see the field. Throwing beats answering null: a
+            // null reads as "no such call", and a screen pop that quietly showed nobody would be
+            // diagnosed as a matching problem rather than a wiring one.
+            ArgumentNullException.ThrowIfNull(facade._sender);
 
-        public Task<TelephonyCallContext?> GetCallContextAsync(Guid callId, CancellationToken ct)
-            => Task.FromResult<TelephonyCallContext?>(null);
+            var result = await facade._sender.Send(
+                new Features.Telephony.CallContext.GetCallContextQuery(callId), ct);
 
-        public Task<Result> LinkCallAsync(
-            Guid callId, TelephonyEntityRef target, string reason, CancellationToken ct)
-            => Task.FromResult(Result.Fail(IntegrationErrors.CapabilityNotSupported));
+            return result.IsSuccess ? result.Value : null;
+        }
 
-        public Task<IReadOnlyList<TelephonyCallSummary>> GetCallsForEntityAsync(
+        /// <summary>
+        /// The calls of one record, newest first.
+        ///
+        /// <para>
+        /// <b>No agency perimeter and no permission here, deliberately.</b> The caller is another
+        /// module projecting this into a record it has already decided the user may see — M01's
+        /// client 360, M13's lead timeline — and those screens carry their own gate. Applying a
+        /// second one here would hide an agency's own calls from the client file that agency owns.
+        /// The summary carries no number and no note for the same reason the timeline projection
+        /// of M13 carries none: this crosses into a store with no reveal audit.
+        /// </para>
+        /// </summary>
+        public async Task<IReadOnlyList<TelephonyCallSummary>> GetCallsForEntityAsync(
             TelephonyEntityRef entity, int page, int pageSize, CancellationToken ct)
-            => Task.FromResult<IReadOnlyList<TelephonyCallSummary>>([]);
+        {
+            ArgumentNullException.ThrowIfNull(entity);
+
+            if (!Domain.TelEntityTypes.IsKnown(entity.Type) || entity.Id == Guid.Empty)
+                return [];
+
+            var size = Math.Clamp(pageSize, 1, 200);
+            var skip = (Math.Max(1, page) - 1) * size;
+
+            return await facade._db.TelCalls
+                .IgnoreQueryFilters()
+                .Where(c => c.TenantId == facade.TenantId
+                         && c.EntityType == entity.Type
+                         && c.EntityId == entity.Id)
+                .OrderByDescending(c => c.StartedAt)
+                .ThenBy(c => c.Id)
+                .Skip(skip)
+                .Take(size)
+                .Select(c => new TelephonyCallSummary(
+                    c.Id,
+                    c.Direction.ToString(),
+                    c.Status.ToString(),
+                    c.StartedAt,
+                    c.TalkSeconds,
+                    c.OutcomeCode,
+                    c.CrmUserId))
+                .ToListAsync(ct);
+        }
 
         /// <summary>
         /// What the tenant's telephony installation can do. <see cref="IntegrationCapabilities.None"/>

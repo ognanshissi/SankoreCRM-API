@@ -45,7 +45,7 @@ public sealed class GetOpenLeadsForCustomerTests : IDisposable
     private async Task<IReadOnlyList<PublicApi.CustomerOpenLead>> ReadAsync(Guid? customerId = null)
     {
         await using var db = _factory.CreateContext();
-        return await new LeadsModuleFacade(db, Substitute.For<IPhoneBlindIndexer>())
+        return await TestLeadsFacade.Build(db)
             .GetOpenLeadsForCustomerAsync(_tenant, customerId ?? _customer, CancellationToken.None);
     }
 

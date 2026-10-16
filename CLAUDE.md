@@ -72,6 +72,16 @@ dotnet user-secrets set "Integration:Batch:Storage:EncryptionKey" "$(openssl ran
 # than the start-up.
 dotnet user-secrets set "Integration:Insurance:ClaimStorage:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 
+# Call recordings (TEL-B-16) — the FIFTH encrypted store. Deliberately NOT given a dev value in
+# appsettings.Development.json, unlike the four above: the recording policy ships `Disabled` and
+# the store is registered ONLY when this key is present, so a deployment that never records calls
+# has no key, no bucket and no player. Set it only to work on the feature — and note that losing
+# it makes every stored recording unopenable, while the provider may already have deleted its own
+# copy at our request.
+dotnet user-secrets set "Telephony:Recordings:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+# Point Telephony:Recordings:BasePath at a mounted volume too, or configure a bucket — the default
+# lands under the content root, which a redeploy destroys.
+
 # Antivirus for claim pieces — host:port of a clamd. UNSET by default and that is the fail-closed
 # default: with no scanner, every piece is recorded ScanFailed and NOTHING is transmitted to an
 # insurer. A deployment that distributes insurance must set it.

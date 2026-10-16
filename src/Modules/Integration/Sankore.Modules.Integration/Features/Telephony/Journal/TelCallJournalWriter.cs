@@ -106,12 +106,23 @@ internal sealed class TelCallJournalWriter(
         var from = numbers.Protect(call.FromNumber);
         var to = numbers.Protect(call.ToNumber);
 
-        // The CRM user comes from tel_user_link and from nothing else. A call from an account
-        // nobody linked is journalled with a null user and listed under "calls to attribute" —
-        // an ordinary state, not an error, and the reason the nightly link check exists.
+        // The CRM user comes from tel_user_link. A call from an account nobody linked is
+        // journalled with a null user and listed under "calls to attribute" — an ordinary state,
+        // not an error, and the reason the nightly link check exists.
         var crmUserId = call.ProviderUserId is { } providerUserId
             ? await ResolveCrmUserAsync(tenantId, connectionId, providerUserId.Value, ct)
             : null;
+
+        // TEL-B-06's correlation, and it happens HERE rather than on a later reading because
+        // ClickToCallId is set at creation: a call opened without it would have to be re-matched
+        // by a sweep, and by then the two-minute window has closed.
+        var request = await CorrelateAsync(tenantId, connectionId, call, crmUserId, ct);
+
+        // A correlated request is ALSO an answer to "whose call was this", and a better one than
+        // the link lookup: the agent pressed the button. It fills the gap for a provider that
+        // reports no user id on the call itself — without it such a call would be journalled
+        // unattributed even though this module started it.
+        crmUserId ??= request?.CrmUserId;
 
         var row = TelCall.Open(
             tenantId,
@@ -125,11 +136,113 @@ internal sealed class TelCallJournalWriter(
             to.BlindIndex,
             call.StartedAt,
             call.ProviderUserId?.Value,
-            crmUserId);
+            crmUserId,
+            request?.Id);
 
         db.TelCalls.Add(row);
 
+        if (request is not null)
+        {
+            // The agent said which record they were calling, which is the ONLY certain attachment
+            // this module ever gets — every other one is a number resolving to somebody. It is
+            // written as Manual-grade evidence under its own method so a later sweep cannot
+            // quietly replace it with a number match.
+            var attached = row.Attach(
+                TelMatchStatus.Matched, TelMatchMethod.ClickToCall,
+                request.EntityType, request.EntityId);
+
+            if (attached.IsSuccess)
+                request.MarkConnected();
+        }
+
         return row;
+    }
+
+    /// <summary>
+    /// The click-to-call request this provider call answers, or null (TEL-B-06, §4.2).
+    ///
+    /// <para>
+    /// <b>By the provider's own reference first, and by (user, number, window) only as a
+    /// fallback.</b> A reference is an identity the provider gave us and is exact; the fallback is
+    /// a guess that is right almost always and would be wrong in the one case that matters — an
+    /// agent who clicked twice on two different records within two minutes. Which is why the
+    /// window is two minutes and not ten, and why <c>ITelephonyPort.StartCallbackAsync</c>'s
+    /// contract asks every adapter for a reference even though the contract suite allows one that
+    /// cannot produce a useful one.
+    /// </para>
+    ///
+    /// <para>
+    /// Only OUTBOUND calls correlate. An inbound call is somebody ringing us, and a click-to-call
+    /// in flight at the same moment is a coincidence — attaching it would file an incoming
+    /// conversation against whatever record the agent happened to be looking at.
+    /// </para>
+    ///
+    /// <para>
+    /// The number is compared on its BLIND INDEX, never in clear and never by decrypting the
+    /// stored one: the index is the only comparison that is correct here, and it is also the only
+    /// one that does not put a number in this method's memory.
+    /// </para>
+    /// </summary>
+    private async Task<TelClickToCall?> CorrelateAsync(
+        Guid tenantId, Guid connectionId, ProviderCall call, Guid? crmUserId, CancellationToken ct)
+    {
+        if (call.Direction != TelCallDirection.Outbound) return null;
+
+        var externalRef = call.Id.Value;
+
+        // AsTracking on both reads: a correlated request is marked Connected, which is a write.
+        var byReference = await db.TelClickToCalls
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .FirstOrDefaultAsync(
+                r => r.TenantId == tenantId
+                  && r.ConnectionId == connectionId
+                  && r.ExternalRef == externalRef,
+                ct);
+
+        if (byReference is not null) return byReference;
+
+        var remoteIndex = numbers.IndexOf(call.ToNumber);
+
+        var query = db.TelClickToCalls
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .Where(r => r.TenantId == tenantId
+                     && r.ConnectionId == connectionId
+                     && r.TargetNumberBi == remoteIndex);
+
+        // Narrowed by user when the provider told us which account placed the call, and NOT
+        // narrowed when it did not. Both halves matter. A provider that reports the user gives us
+        // a cheap exact filter; one that reports nothing — and a callback API that returns neither
+        // a reference nor a user id is a real shape — would otherwise make this fallback
+        // unreachable, so the agent's own call would be journalled as an outbound to a number
+        // nobody recognises while the request that started it sat two rows away.
+        if (crmUserId is { } userId)
+            query = query.Where(r => r.CrmUserId == userId);
+
+        var candidates = await query.OrderByDescending(r => r.RequestedAt).ToListAsync(ct);
+
+        // IsCorrelatableAt is the aggregate's own rule — status plus the window — evaluated in
+        // memory because it is not a predicate EF can translate.
+        var correlatable = candidates
+            .Where(r => r.IsCorrelatableAt(call.StartedAt))
+            .ToList();
+
+        if (correlatable.Count == 0) return null;
+
+        // Ambiguity is measured in AGENTS, not in requests, and the distinction is the whole rule.
+        //
+        // Two agents of one branch ringing the same shop within two minutes is ordinary, and
+        // crediting one with the other's conversation is not a small error — so two distinct
+        // agents means no click-to-call attachment at all, and the number match takes over. That
+        // attaches the right RECORD and leaves the agent unattributed, which is the honest of the
+        // two wrong answers.
+        //
+        // Two requests from ONE agent, on the other hand, is a double-click: they meant the
+        // second, which the ordering above has already put first.
+        return correlatable.DistinctBy(r => r.CrmUserId).Count() == 1
+            ? correlatable[0]
+            : null;
     }
 
     private async Task<Guid?> ResolveCrmUserAsync(

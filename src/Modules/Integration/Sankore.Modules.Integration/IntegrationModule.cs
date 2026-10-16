@@ -106,7 +106,7 @@ public static class IntegrationModule
         services.AddReconciliationServices();
         services.AddInboundBatchServices();
         services.AddRelayAgentsServices();
-        services.AddTelephonyServices();
+        services.AddTelephonyServices(config);
 
         // The insurance family (ASS-03 →). On the SAME socle: no second DbContext, no second
         // outbox, no second dispatcher — which is the whole claim of ASS-01.
@@ -116,12 +116,17 @@ public static class IntegrationModule
     }
 
     /// <summary>
-    /// Runs the module's migration. Called from the startup scope in <c>Program.cs</c>.
+    /// Runs the module's migration and seeds the one referential that has a platform baseline.
+    /// Called from the startup scope in <c>Program.cs</c>.
     ///
     /// <para>
-    /// No seeder: a connection is something an administrator configures, and a mapping table
-    /// depends on the CBS at the other end. There is nothing this module could seed that would
-    /// be true for every tenant.
+    /// <b>Almost nothing is seeded, and the exception is worth naming.</b> A connection is
+    /// something an administrator configures and a mapping table depends on the CBS at the other
+    /// end, so neither has a value that would be true for every tenant. Call outcomes (TEL-B-11)
+    /// do: two of their columns carry behaviour the rest of the telephony family depends on —
+    /// one stops a lead's SLA clock, another makes a callback date mandatory — so an empty table
+    /// is not an unconfigured feature, it is a wrap-up screen with no options and therefore no
+    /// qualification, no SLA stop and no follow-up.
     /// </para>
     /// </summary>
     public static async Task InitializeAsync(IServiceProvider sp)
@@ -130,6 +135,11 @@ public static class IntegrationModule
 
         var db = sp.GetRequiredService<IntegrationDbContext>();
         await db.Database.MigrateAsync();
+
+        await Features.Telephony.Outcomes.TelCallOutcomeSeeder.SeedAsync(
+            db,
+            sp.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>(),
+            sp.GetRequiredService<ILogger<IntegrationDbContext>>());
     }
 
     /// <summary>Mounted by the bootstrapper under <c>api/v1</c>.</summary>

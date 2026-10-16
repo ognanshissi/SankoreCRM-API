@@ -2,6 +2,7 @@ namespace Sankore.Api.Features.ObjectStorage;
 
 using Sankore.Modules.Integration.Infrastructure.BatchStorage;
 using Sankore.Modules.Integration.Infrastructure.ClaimStorage;
+using Sankore.Modules.Integration.Infrastructure.RecordingStorage;
 
 using Sankore.Modules.Kyc;
 using Sankore.Shared.Infrastructure.FileStore;
@@ -23,6 +24,11 @@ internal static class ObjectStorageConcerns
         // Encrypted above the backend by EncryptedClaimDocumentStore, so what lands here is
         // ciphertext whichever medium backs it.
         new(ClaimDocumentStorage.Concern, ClaimDocumentStorage.ResolveBasePath),
+        // Call recordings (TEL-B-16). A FIFTH concern, and the one whose contents are a person's
+        // own voice: its own key, its own retention (frozen per file at retrieval rather than per
+        // dossier) and its own audience. Encrypted above the backend by EncryptedRecordingStore,
+        // so what lands here is ciphertext whichever medium backs it.
+        new(RecordingStorage.Concern, RecordingStorage.ResolveBasePath),
     ];
 
     internal static Concern? Find(string? name) =>

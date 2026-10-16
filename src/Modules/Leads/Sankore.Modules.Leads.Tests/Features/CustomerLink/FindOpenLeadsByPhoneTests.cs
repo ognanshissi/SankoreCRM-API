@@ -175,7 +175,7 @@ public sealed class FindOpenLeadsByPhoneTests : IDisposable
         string phone, Guid? tenantId = null)
     {
         await using var db = _factory.CreateContext();
-        return await new LeadsModuleFacade(db, _indexer)
+        return await TestLeadsFacade.Build(db, _indexer)
             .FindOpenLeadsByPhoneAsync(tenantId ?? _tenant, phone, CancellationToken.None);
     }
 

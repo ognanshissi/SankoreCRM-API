@@ -142,9 +142,50 @@ public enum TelUserLinkStatus
 /// </summary>
 public static class TelEntityTypes
 {
-    public const string Lead = "Lead";
-    public const string Customer = "Customer";
+    /// <summary>
+    /// Both values come from <c>PublicApi.TelephonyEntityTypes</c> and are re-exported here so
+    /// this module's domain reads without a PublicApi prefix. ONE definition: a consumer in
+    /// another assembly compares against the contract's copy, and two lists that drifted would
+    /// make it stop recognising its own events.
+    /// </summary>
+    public const string Lead = PublicApi.TelephonyEntityTypes.Lead;
+
+    public const string Customer = PublicApi.TelephonyEntityTypes.Customer;
 
     public static bool IsKnown(string? value)
-        => value is Lead or Customer;
+        => PublicApi.TelephonyEntityTypes.IsKnown(value);
+}
+
+/// <summary>
+/// Whether, and which, calls this institution keeps a recording of (TEL-B-15).
+///
+/// <para>
+/// <b><see cref="Disabled"/> is the default and it is the default on purpose.</b> A call recording
+/// is a person's VOICE — biometric-adjacent personal data under every reading of the UEMOA and
+/// GDPR-derived regimes these institutions work under — and the lawful basis for keeping one
+/// differs by country, by what the customer was told before the tone, and by what the institution
+/// actually needs it for. None of that is knowable from code, so the platform ships the feature
+/// built and switched OFF: an institution turns it on once a compliance officer has stated a legal
+/// basis and a purpose, which the policy refuses to be saved without.
+/// </para>
+/// </summary>
+public enum TelRecordingMode
+{
+    /// <summary>
+    /// Nothing is kept. The PROVIDER may still record — that is its own configuration and its own
+    /// contract — but SANKORE fetches nothing, stores nothing and offers no player, so there is
+    /// nothing here for a subject access request to reach or for a leak to take.
+    /// </summary>
+    Disabled,
+
+    /// <summary>Every call the provider recorded is fetched and kept.</summary>
+    AllCalls,
+
+    /// <summary>
+    /// Only the calls an agent asked to keep, during or after the call
+    /// (<c>TelCall.MarkForRecording</c>). The mode a compliance officer picks when the legal basis
+    /// is the customer's consent rather than a legal obligation: consent is given per conversation
+    /// and the agent is the only one who knows it was.
+    /// </summary>
+    OnDemand,
 }

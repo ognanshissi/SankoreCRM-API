@@ -1054,6 +1054,13 @@ public sealed class FakeAdapter :
         IsActive: true,
         Numbers: ["+22507000001"]);
 
+    /// <summary>
+    /// When the seeded call started. Public because the catch-up sweep of TEL-B-14 reads a window
+    /// relative to its clock, so a test of it has to place its clock relative to this — and a test
+    /// that hard-coded the instant would break the day the seed moved.
+    /// </summary>
+    public static DateTimeOffset SeededCallStartedAt => DefaultInstant;
+
     /// <summary>The call every read answers with, unless a test seeded another.</summary>
     public Dictionary<string, ProviderCall> CallsById { get; } = new(StringComparer.Ordinal)
     {

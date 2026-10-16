@@ -131,7 +131,48 @@ public sealed class IntegrationSyncOrchestrator(
             var connectionId = item.ConnectionId;
             var stream = item.Stream;
 
-            hangfire.Enqueue<IntegrationSyncJob>(job => job.ExecuteAsync(tenantId, connectionId, stream));
+            // Which JOB a stream goes to, and the branch is not cosmetic.
+            //
+            // IntegrationSyncJob reads integration_reference filtered on CUSTOMERS and hands each
+            // one to the snapshot projector — that is the whole of what it does. A telephony
+            // connection has no customer references, so until TEL-B-14 the Calls stream was
+            // dispatched there, found nothing, and advanced its cursor having done no work: fifteen
+            // minutes of nothing, every fifteen minutes, for every tenant with telephony.
+            //
+            // A switch with every value named and a default that THROWS, rather than a default
+            // that falls back to the customer sweep. See the default arm.
+            switch (stream)
+            {
+                case SyncStream.Calls:
+                    hangfire.Enqueue<Telephony.Journal.SyncTelephonyCallsJob>(
+                        job => job.ExecuteAsync(tenantId, connectionId));
+                    break;
+
+                // The five core-banking and insurance streams, named one by one rather than left
+                // to a default. It costs five lines and buys the throw below.
+                case SyncStream.Customers:
+                case SyncStream.Accounts:
+                case SyncStream.Transactions:
+                case SyncStream.Loans:
+                case SyncStream.Policies:
+                case SyncStream.Claims:
+                    hangfire.Enqueue<IntegrationSyncJob>(
+                        job => job.ExecuteAsync(tenantId, connectionId, stream));
+                    break;
+
+                default:
+                    // A new SyncStream nobody routed. It THROWS, and the per-tenant catch above
+                    // turns that into one logged error for the tenant that declared it — loud,
+                    // bounded, and visible on the first minute after the deploy. A fallback to the
+                    // customer sweep would instead hand the new stream to a job that reads
+                    // integration_reference for CUSTOMERS, find nothing, and advance its cursor
+                    // having done no work: fifteen minutes of nothing, for ever, with nothing to
+                    // say so. That is not hypothetical — it is exactly what the Calls stream did
+                    // between Lot 1 and TEL-B-14.
+                    throw new InvalidOperationException(
+                        $"Sync stream {stream} has no job. Route it in "
+                        + $"{nameof(IntegrationSyncOrchestrator)}.");
+            }
         }
 
         return due.Count;

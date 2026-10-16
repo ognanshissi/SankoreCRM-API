@@ -32,6 +32,23 @@ internal sealed class LeadActivityConfiguration : IEntityTypeConfiguration<LeadA
         // CTI (US-M13-101)
         builder.Property(a => a.CtiCallReference).HasMaxLength(200);
 
+        // UNIQUE per tenant, and the uniqueness is the idempotency of TEL-B-11.
+        //
+        // The telephony module publishes a wrap-up event through an outbox with at-least-once
+        // delivery, and an agent may legitimately wrap the same call up twice to correct an
+        // outcome. Without this index both produce a second activity, so a lead's history shows
+        // one conversation as two — and the agent performance figures that count activities show
+        // it as two as well. The consumer's read is the friendly answer; this is the guarantee.
+        //
+        // FILTERED, because the column is null for every activity that is not a call and
+        // PostgreSQL treats each null as distinct only in a non-unique index — a plain unique
+        // index over a nullable column is fine in PostgreSQL, but the filter also keeps the index
+        // the size of the calls rather than of the whole history.
+        builder.HasIndex(a => new { a.TenantId, a.CtiCallReference })
+            .IsUnique()
+            .HasFilter("cti_call_reference IS NOT NULL")
+            .HasDatabaseName("ux_lead_activity_cti_call");
+
         // Visit location — owned GeoPoint (US-M13-102)
         builder.OwnsOne(a => a.VisitLocation, loc =>
         {

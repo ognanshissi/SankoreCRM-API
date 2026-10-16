@@ -27,7 +27,19 @@ public sealed class LeadActivity
     /// <summary>When the activity was scheduled (for calls/meetings; null for ad-hoc notes).</summary>
     public DateTimeOffset? ScheduledAt { get; private set; }
 
-    /// <summary>When the activity was actually performed / logged.</summary>
+    /// <summary>
+    /// When the activity was actually performed.
+    ///
+    /// <para>
+    /// <b>It used to be forced to <c>UtcNow</c>, and TEL-B-11 is what made that wrong.</b> A call
+    /// is qualified minutes after it ends — the agent finishes the conversation, then types — so
+    /// an activity stamped at the moment of the save is dated by the length of the agent's
+    /// paperwork rather than by the call. Every SLA measured from it, and every "when did we last
+    /// speak to this person", inherits that drift. The <c>performedAt</c> parameter of
+    /// <see cref="Create"/> therefore accepts the real instant, and defaults to <c>UtcNow</c> so
+    /// every existing caller — an agent logging an activity as they do it — is unchanged.
+    /// </para>
+    /// </summary>
     public DateTimeOffset PerformedAt { get; private set; }
 
     /// <summary>Duration in minutes (relevant for calls and meetings).</summary>
@@ -91,7 +103,8 @@ public sealed class LeadActivity
         bool isSystemGenerated = false,
         GeoPoint? visitLocation = null,
         string? visitPhotoReference = null,
-        DateTimeOffset? retentionExpiresAt = null)
+        DateTimeOffset? retentionExpiresAt = null,
+        DateTimeOffset? performedAt = null)
         => new()
         {
             Id                  = Guid.NewGuid(),
@@ -102,7 +115,7 @@ public sealed class LeadActivity
             Notes               = notes?.Trim(),
             PerformedBy         = performedBy,
             ScheduledAt         = scheduledAt,
-            PerformedAt         = DateTimeOffset.UtcNow,
+            PerformedAt         = performedAt ?? DateTimeOffset.UtcNow,
             DurationMinutes     = durationMinutes,
             Outcome             = outcome,
             AttachmentsJson     = attachmentsJson,

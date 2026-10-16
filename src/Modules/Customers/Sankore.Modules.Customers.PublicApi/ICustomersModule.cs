@@ -362,6 +362,70 @@ public interface ICustomersModule
         CancellationToken ct);
 
     /// <summary>
+    /// The clear telephone number of one of a client's phone slots, <b>for dialling and for
+    /// nothing else</b> (TEL-B-06).
+    ///
+    /// <para>
+    /// <b>This is the one method on this contract that returns a sensitive value, and the shape is
+    /// what keeps it honest.</b> The caller is the click-to-call slice, which hands the number
+    /// straight to a telephony provider's API and never to a response, a log, an event or a
+    /// column. The alternative was for the front end to send a number — and a contract taking a
+    /// number is a contract a browser can be made to post somebody else's number to, which is
+    /// precisely what TEL-B-06 forbids. So the browser names a RECORD and a SLOT, and the
+    /// decryption happens here, where the key and the perimeter are.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The perimeter is checked against <paramref name="actorUserId"/>, not against the ambient
+    /// identity.</b> The caller is another module, and a number is exactly the thing an agent of
+    /// one branch must not be able to dial on another branch's client. A client outside the
+    /// perimeter answers <c>CLIENT_NOT_FOUND</c> like every other read in M01 — never a 403,
+    /// which would confirm the record exists.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>It does NOT count against the reveal quota of US-M01-BE-11, and it does not write a
+    /// <c>SensitiveDataAccessLog</c> row.</b> That quota exists to catch harvesting — one field
+    /// pulled from many clients — and it can do so because a reveal hands the value to a person.
+    /// This one hands it to a provider's API: the caller cannot read it, so there is nothing to
+    /// harvest, and counting dials would make an agent's ordinary morning exhaust the budget their
+    /// colleague needs to read a document number. What traces the act instead is the telephony
+    /// module's own <c>tel_click_to_call</c> row — which agent, which record, which slot, at which
+    /// instant, and whether the provider accepted — plus the audit row its command writes.
+    /// </para>
+    /// </summary>
+    /// <param name="slot">
+    /// <c>Primary</c> is the client's primary active phone contact point; <c>Secondary</c> is the
+    /// next most recent active one. A slot and not a contact-point id, so the browser needs to
+    /// know nothing about M01's internals — and so a slot that resolves to nothing is an ordinary
+    /// "this client has no second number" rather than a reference somebody can probe.
+    /// </param>
+    /// <summary>
+    /// Whether <paramref name="actorUserId"/> may act on this client — the agency perimeter, asked
+    /// as a question instead of applied to a query (TEL-B-09).
+    ///
+    /// <para>
+    /// <b>Why a contract member rather than the caller reading an agency off a summary.</b> A
+    /// caller that fetched <see cref="CustomerSummary.AgencyId"/> and compared it itself would be
+    /// a second implementation of the perimeter, in another module, that nobody updates when the
+    /// rule changes — and the rule is not a comparison: an unrestricted caller has a null scope,
+    /// which means "apply no filter" and not "no access". M01 already answers this question in
+    /// five handlers and answers it the same way here.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>False for a client that does not exist</b>, deliberately folded in: a caller holding an
+    /// arbitrary identifier learns nothing from the difference, and the one caller that needs to
+    /// tell them apart does not exist.
+    /// </para>
+    /// </summary>
+    Task<bool> CanActorAccessClientAsync(
+        Guid tenantId, Guid clientId, Guid actorUserId, CancellationToken ct);
+
+    Task<Result<string>> ResolvePhoneForCallAsync(
+        Guid tenantId, Guid clientId, PhoneSlot slot, Guid actorUserId, CancellationToken ct);
+
+    /// <summary>
     /// Opens a DRAFT product holding for a client, from a converted lead (BNF-B-24).
     ///
     /// <para>
@@ -580,6 +644,18 @@ public sealed record CreateHoldingFromOpportunityRequest(
     Guid ProductLineId,
     Guid SourceOpportunityId,
     Guid ClosedByUserId);
+
+/// <summary>
+/// Which of a record's numbers to dial (TEL-B-06). Declared in each module that owns numbers
+/// rather than shared through the Kernel: the two meanings differ — M01's slots are contact
+/// points, M13's are the prospect's own number and their company's — and one enum would invite a
+/// caller to assume they map.
+/// </summary>
+public enum PhoneSlot
+{
+    Primary,
+    Secondary,
+}
 
 public sealed record CustomerMatch(
     Guid ClientId,

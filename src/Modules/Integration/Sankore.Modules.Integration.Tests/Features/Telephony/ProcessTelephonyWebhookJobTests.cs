@@ -8,6 +8,7 @@ using NSubstitute;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Integration.Adapters.Fake;
 using Sankore.Modules.Integration.Domain;
+using Sankore.Modules.Integration.Features.Telephony;
 using Sankore.Modules.Integration.Features.Telephony.Journal;
 using Sankore.Modules.Integration.Features.Telephony.Webhook;
 using Sankore.Modules.Integration.Infrastructure;
@@ -30,10 +31,14 @@ public sealed class ProcessTelephonyWebhookJobTests : IDisposable
     private readonly Guid _tenant = Guid.NewGuid();
     private readonly Guid _connection = Guid.NewGuid();
     private readonly TestIntegrationDbContextFactory _factory;
+    private readonly TelephonyScreenPop _screenPop;
+    private readonly TelephonyTestHarness.RecordingNotifier _pushes;
 
     public ProcessTelephonyWebhookJobTests()
     {
         _factory = new TestIntegrationDbContextFactory(_tenant);
+
+        (_screenPop, _pushes) = TelephonyTestHarness.ScreenPop();
 
         using var db = _factory.CreateContext();
         db.Connections.Add(TelephonyTestHarness.ActiveTelephonyConnection(_tenant, _connection));
@@ -203,6 +208,7 @@ public sealed class ProcessTelephonyWebhookJobTests : IDisposable
                     customers, leads, NullLogger<TelephonyCallMatcher>.Instance),
                 NullLogger<TelCallJournalWriter>.Instance),
             TelephonyTestHarness.Payloads(),
+            _screenPop,
             TelephonyTestHarness.Clock,
             NullLogger<ProcessTelephonyWebhookJob>.Instance,
             _tenant,

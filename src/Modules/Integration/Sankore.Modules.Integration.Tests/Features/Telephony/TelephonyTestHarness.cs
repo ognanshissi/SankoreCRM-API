@@ -2,6 +2,7 @@ namespace Sankore.Modules.Integration.Tests.Features.Telephony;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Sankore.Modules.Integration.Adapters.Fake;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Features.Telephony;
@@ -10,7 +11,9 @@ using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.Ports;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sankore.Shared.Infrastructure.Crypto;
+using Sankore.Shared.Kernel.Realtime;
 
 /// <summary>
 /// What every telephony suite needs: an ACTIVE telephony connection, a real adapter resolver over
@@ -98,6 +101,64 @@ internal static class TelephonyTestHarness
 
     internal static TelephonyAccess Access(IntegrationDbContext db, ICbsAdapter? adapter)
         => new(Resolver(db, adapter));
+
+    /// <summary>
+    /// The record-access check over substituted module contracts.
+    ///
+    /// <para>
+    /// <paramref name="allowed"/> is explicit at every call site rather than defaulted, because a
+    /// default of true would make every attachment case pass without anybody having checked a
+    /// perimeter — which is precisely the defect this service was added for.
+    /// </para>
+    /// </summary>
+    internal static TelephonyRecordAccess RecordAccess(bool allowed)
+    {
+        var customers = Substitute.For<Customers.PublicApi.ICustomersModule>();
+        var leads = Substitute.For<Leads.PublicApi.ILeadsModule>();
+
+        customers.CanActorAccessClientAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(allowed);
+
+        leads.CanActorWorkLeadAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(allowed);
+
+        return new TelephonyRecordAccess(
+            customers, leads, NullLogger<TelephonyRecordAccess>.Instance);
+    }
+
+    /// <summary>
+    /// The screen pop over a notifier that records what it was asked to push.
+    ///
+    /// <para>
+    /// A recorder and not <c>NullRealtimeNotifier</c>, because the property worth asserting is
+    /// what the payload DOES NOT contain: TEL-B-10 says a push carries a call id and nothing
+    /// else, and a no-op double could never show that.
+    /// </para>
+    /// </summary>
+    internal static (TelephonyScreenPop Pop, RecordingNotifier Notifier) ScreenPop()
+    {
+        var notifier = new RecordingNotifier();
+
+        return (new TelephonyScreenPop(notifier, NullLogger<TelephonyScreenPop>.Instance), notifier);
+    }
+
+    internal sealed class RecordingNotifier : IRealtimeNotifier
+    {
+        public List<(Guid TenantId, Guid UserId, string EventName, object Payload)> Pushes { get; } = [];
+
+        /// <summary>Set to false to exercise "nobody was listening".</summary>
+        public bool Delivers { get; set; } = true;
+
+        public Task<bool> PushToUserAsync(
+            Guid tenantId, Guid userId, string eventName, object payload, CancellationToken ct)
+        {
+            Pushes.Add((tenantId, userId, eventName, payload));
+
+            return Task.FromResult(Delivers);
+        }
+    }
 
     internal sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {

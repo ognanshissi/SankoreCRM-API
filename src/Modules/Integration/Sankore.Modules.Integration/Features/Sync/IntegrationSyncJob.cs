@@ -163,7 +163,7 @@ public sealed class IntegrationSyncJob(IServiceScopeFactory scopeFactory)
             return report;
         }
 
-        var cursor = await LoadOrCreateCursorAsync(db, tenantId, connectionId, stream, ct);
+        var cursor = await SyncCursorGate.LoadOrCreateAsync(db, tenantId, connectionId, stream, ct);
 
         cursor.BeginRun(clock);
         await db.SaveChangesAsync(ct);
@@ -215,7 +215,8 @@ public sealed class IntegrationSyncJob(IServiceScopeFactory scopeFactory)
 
             try
             {
-                await RecordFailureAsync(db, clock, tenantId, connectionId, stream, ex.Message, ct);
+                await SyncCursorGate.RecordFailureAsync(
+                    db, clock, tenantId, connectionId, stream, ex.Message, ct);
             }
             catch (Exception recordingEx)
             {
@@ -232,65 +233,6 @@ public sealed class IntegrationSyncJob(IServiceScopeFactory scopeFactory)
         return report;
     }
 
-    /// <summary>
-    /// The cursor for this triple, created on first use.
-    ///
-    /// <para>
-    /// There is no seeder and there cannot usefully be one: a cursor belongs to a (tenant,
-    /// connection, stream) and a connection is something an administrator creates at any time. The
-    /// row appears the first time its stream is swept, which also means adding a stream to
-    /// <see cref="SyncStream"/> needs no migration and no backfill.
-    /// </para>
-    /// </summary>
-    private static async Task<IntegrationSyncCursor> LoadOrCreateCursorAsync(
-        IntegrationDbContext db, Guid tenantId, Guid connectionId, SyncStream stream,
-        CancellationToken ct)
-    {
-        var cursor = await db.SyncCursors
-            .AsTracking()
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(
-                c => c.TenantId == tenantId
-                  && c.ConnectionId == connectionId
-                  && c.Stream == stream, ct);
-
-        if (cursor is not null) return cursor;
-
-        cursor = IntegrationSyncCursor.Create(tenantId, connectionId, stream);
-        db.SyncCursors.Add(cursor);
-
-        return cursor;
-    }
-
-    /// <summary>
-    /// Records a failed run against the COMMITTED cursor row, re-read after the change tracker was
-    /// cleared. Re-reading rather than reusing the instance is the point: the cleared instance is
-    /// detached, and attaching it would carry the staged <c>Advance</c> back in.
-    /// </summary>
-    private static async Task RecordFailureAsync(
-        IntegrationDbContext db, TimeProvider clock, Guid tenantId, Guid connectionId,
-        SyncStream stream, string error, CancellationToken ct)
-    {
-        var cursor = await db.SyncCursors
-            .AsTracking()
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(
-                c => c.TenantId == tenantId
-                  && c.ConnectionId == connectionId
-                  && c.Stream == stream, ct);
-
-        // The first run of a stream can fail before its cursor was ever committed. Create the row
-        // so the failure is recorded somewhere: a stream that has failed every time since it was
-        // configured is otherwise indistinguishable from one that has never been due.
-        if (cursor is null)
-        {
-            cursor = IntegrationSyncCursor.Create(tenantId, connectionId, stream);
-            db.SyncCursors.Add(cursor);
-        }
-
-        cursor.RecordFailure(error, clock);
-        await db.SaveChangesAsync(ct);
-    }
 }
 
 /// <summary>What one sweep did, for the log line and for the tests.</summary>

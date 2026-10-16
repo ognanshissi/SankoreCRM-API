@@ -456,6 +456,33 @@ public sealed class TelRecording : AggregateRoot
         return true;
     }
 
+    /// <summary>
+    /// Destroys the recording for an ANONYMISATION, which a legal hold does not veto (TEL-B-17).
+    ///
+    /// <para>
+    /// Its own method rather than a boolean on <see cref="Purge"/>, because the two acts answer
+    /// different instructions and a flag is one a call site eventually passes the wrong way round.
+    /// <see cref="Purge"/> is a routine expiry, which a live dispute should be able to stop; this
+    /// is a right-to-erasure request or a retention rule the institution has already applied to
+    /// the whole person, and letting a hold placed years ago veto it would make the erasure a
+    /// statement nobody revisits.
+    /// </para>
+    ///
+    /// <para>
+    /// The hold is LIFTED rather than left standing: a held recording that no longer exists would
+    /// read, to whoever placed the hold, as evidence still being kept for them.
+    /// </para>
+    /// </summary>
+    public void PurgeForAnonymisation(DateTimeOffset at)
+    {
+        LegalHold = false;
+        LegalHoldReason = null;
+
+        Status = TelRecordingStatus.Purged;
+        StorageRef = null;
+        PurgedAt = at;
+    }
+
     public void PlaceLegalHold(string reason) => (LegalHold, LegalHoldReason) = (true, reason.Trim());
 
     public void LiftLegalHold() => (LegalHold, LegalHoldReason) = (false, null);
@@ -519,6 +546,9 @@ public sealed class TelCallOutcome : AggregateRoot
     }
 
     public void Rename(string label) => Label = label.Trim();
+
+    /// <summary>Moves it in the wrap-up list. Negative orders are refused by the validator.</summary>
+    public void MoveTo(int displayOrder) => DisplayOrder = displayOrder;
 
     public void Deactivate() => IsActive = false;
 

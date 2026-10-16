@@ -223,3 +223,58 @@ public sealed record TelephonyUserLinkBrokenEvent(
     string ExternalUserId,
     string Reason,
     DateTimeOffset DetectedAt) : IntegrationEventBase;
+
+/// <summary>
+/// An agent qualified a call (TEL-B-11). Consumed by M13, which turns it into the lead's
+/// <c>Call</c> activity and — when the outcome counts as a contact — stops the SLA clock
+/// (TEL-B-12).
+///
+/// <para>
+/// <b>Identifiers and structured labels only, and the absence of the NOTE is the rule, not an
+/// oversight.</b> An agent's note is free text about a person; M13's own timeline projection
+/// excludes free-text bodies because they cross into the client timeline, a store with no reveal
+/// audit. The outcome LABEL does travel: it is operator-chosen text from a referential M13 does
+/// not own, and sending the code alone would make every consumer look it up or print an
+/// identifier at an agent.
+/// </para>
+///
+/// <para>
+/// <b><see cref="ExternalCallId"/> is the idempotency anchor</b>, not <see cref="CallId"/>, and
+/// the two differ in what they survive: the provider's identifier is what M13 stores in
+/// <c>LeadActivity.CtiCallReference</c>, so a redelivered event finds the activity already
+/// written whatever this module's own row id happens to be. Nothing stops a call being wrapped up
+/// twice — an agent may correct an outcome — so the consumer must be idempotent on the CALL and
+/// not on the message.
+/// </para>
+/// </summary>
+/// <param name="EntityType">
+/// <c>Lead</c>, <c>Customer</c>, or null for a call nobody attached. Null is ordinary: most
+/// inbound calls are from somebody not on file, and the consumer has nothing to do for one.
+/// </param>
+/// <param name="CountsAsContact">
+/// From the tenant's own referential. It is what TEL-B-12 reads to decide whether this call stops
+/// a lead's first-contact clock — so leaving a message is not reaching somebody, and the
+/// institution decides which of its outcomes mean what.
+/// </param>
+/// <param name="StartedAt">
+/// When the CALL happened, not when it was qualified. An agent wrapping up at 14:05 a call that
+/// ran at 13:45 must produce an activity dated 13:45, or every SLA measured from it is wrong by
+/// the length of the agent's paperwork.
+/// </param>
+public sealed record TelephonyCallWrappedUpEvent(
+    Guid TenantId,
+    Guid CallId,
+    Guid ConnectionId,
+    string ExternalCallId,
+    string? EntityType,
+    Guid? EntityId,
+    Guid? CrmUserId,
+    string Direction,
+    string Status,
+    string OutcomeCode,
+    string OutcomeLabel,
+    bool CountsAsContact,
+    DateTimeOffset StartedAt,
+    int? TalkSeconds,
+    DateTimeOffset? CallbackAt,
+    DateTimeOffset WrappedUpAt) : IntegrationEventBase;

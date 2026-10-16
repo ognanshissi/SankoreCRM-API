@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Infrastructure;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Shared.Infrastructure.Crypto;
@@ -29,7 +30,10 @@ internal sealed class CustomersModuleFacade(
     Notifications.ClientEmailNotifier clientEmails,
     RemoteIdentity.RemoteIdentityVerifier remoteIdentity,
     RemoteIdentity.ReadIdentityComparer readIdentity,
-    Notifications.ClientSmsNotifier clientSms)
+    Notifications.ClientSmsNotifier clientSms,
+    Sankore.Shared.Infrastructure.Crypto.IFieldEncryptor? encryptor = null,
+    Sankore.Shared.Kernel.Authorization.IAgencyScopeProvider? agencyScope = null,
+    Microsoft.Extensions.Logging.ILogger<CustomersModuleFacade>? logger = null)
     : ICustomersModule
 {
     /// <summary>
@@ -80,6 +84,107 @@ internal sealed class CustomersModuleFacade(
     public Task<Result<Guid>> CreateHoldingFromOpportunityAsync(
         CreateHoldingFromOpportunityRequest request, CancellationToken ct)
         => leadConversion.CreateHoldingFromOpportunityAsync(request, ct);
+
+    /// <inheritdoc />
+    public async Task<bool> CanActorAccessClientAsync(
+        Guid tenantId, Guid clientId, Guid actorUserId, CancellationToken ct)
+    {
+        if (tenantId == Guid.Empty || clientId == Guid.Empty || actorUserId == Guid.Empty)
+            return false;
+
+        ArgumentNullException.ThrowIfNull(agencyScope);
+
+        // The agency only — nothing else of the client is read, because nothing else is needed and
+        // a projection that grew would be a projection a caller starts depending on.
+        var agencyId = await db.Clients
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId && c.Id == clientId)
+            .Select(c => (Guid?)c.AgencyId)
+            .FirstOrDefaultAsync(ct);
+
+        return agencyId is { } agency
+            && await agencyScope.CanAccessAgencyAsync(tenantId, actorUserId, agency, ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The whole of it is four steps, and the order is the point: find the client, check the
+    /// caller's perimeter, pick the slot's contact point, decrypt. Nothing is written — see the
+    /// contract for why this act is traced by the telephony module's own row rather than by a
+    /// <c>SensitiveDataAccessLog</c> entry.
+    /// </remarks>
+    public async Task<Result<string>> ResolvePhoneForCallAsync(
+        Guid tenantId, Guid clientId, PhoneSlot slot, Guid actorUserId, CancellationToken ct)
+    {
+        if (tenantId == Guid.Empty || clientId == Guid.Empty)
+            return Result.Fail<string>(CustomerErrors.ClientNotFound);
+
+        // IgnoreQueryFilters with an explicit tenant predicate, like every method here: the
+        // caller is another module's handler and the ambient tenant is not guaranteed to be this
+        // one. AttachableStatuses is deliberately NOT applied — an agent may well have to ring a
+        // client whose file is suspended, and that is a commercial decision rather than this
+        // method's.
+        var client = await db.Clients
+            .IgnoreQueryFilters()
+            .Include(c => c.ContactPoints)
+            .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.Id == clientId, ct);
+
+        if (client is null)
+            return Result.Fail<string>(CustomerErrors.ClientNotFound);
+
+        // Required here and nowhere else on this facade — see the constructor's remarks. Throwing
+        // beats degrading: a perimeter check that silently did not happen is the one failure this
+        // method must not have.
+        ArgumentNullException.ThrowIfNull(agencyScope);
+        ArgumentNullException.ThrowIfNull(encryptor);
+
+        // Folded into "not found", never a 403: a 403 confirms that another branch's client
+        // exists, which is the one thing the perimeter is there to hide.
+        if (!await agencyScope.CanAccessAgencyAsync(tenantId, actorUserId, client.AgencyId, ct))
+            return Result.Fail<string>(CustomerErrors.ClientNotFound);
+
+        // Primary first, then most recently valid — the same ordering RevealSensitiveFieldHandler
+        // uses to pick "the" phone, so the number an agent sees on the screen is the number the
+        // Primary slot dials.
+        var phones = client.ContactPoints
+            .Where(cp => cp.IsActive && cp.Type == ContactPointType.Phone)
+            .OrderByDescending(cp => cp.IsPrimary)
+            .ThenByDescending(cp => cp.ValidFrom)
+            .ToList();
+
+        var contactPoint = slot switch
+        {
+            PhoneSlot.Primary => phones.ElementAtOrDefault(0),
+            PhoneSlot.Secondary => phones.ElementAtOrDefault(1),
+            _ => null,
+        };
+
+        if (contactPoint?.EncryptedValue is not { } ciphertext)
+            return Result.Fail<string>(CustomerErrors.UnknownSensitiveField);
+
+        string? clear;
+
+        try
+        {
+            clear = encryptor.Decrypt(ciphertext);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidOperationException
+                                      or System.Security.Cryptography.CryptographicException
+                                      or ArgumentException)
+        {
+            // A rotated key or data copied between environments. The caller learns "this slot has
+            // no dialable number" and nothing about the stored bytes.
+            logger?.LogError(
+                ex, "Could not decrypt the {Slot} phone of client {ClientId} in tenant {TenantId} "
+                  + "for a click-to-call.", slot, clientId, tenantId);
+
+            return Result.Fail<string>(CustomerErrors.UnknownSensitiveField);
+        }
+
+        return string.IsNullOrWhiteSpace(clear)
+            ? Result.Fail<string>(CustomerErrors.UnknownSensitiveField)
+            : Result.Ok(clear.Trim());
+    }
 
     public async Task<IReadOnlyList<CustomerMatch>> FindMatchesAsync(
         Guid tenantId,

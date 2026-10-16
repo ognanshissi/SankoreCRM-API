@@ -2730,6 +2730,114 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("tel_recording", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelRecordingAccessLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AccessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accessed_at");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<Guid>("CallId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("call_id");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RecordingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recording_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tel_recording_access_log");
+
+                    b.HasIndex("TenantId", "ActorUserId", "AccessedAt")
+                        .HasDatabaseName("ix_tel_recording_access_actor");
+
+                    b.HasIndex("TenantId", "RecordingId", "AccessedAt")
+                        .HasDatabaseName("ix_tel_recording_access_recording");
+
+                    b.ToTable("tel_recording_access_log", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelRecordingPolicy", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<bool>("DeleteAtProvider")
+                        .HasColumnType("boolean")
+                        .HasColumnName("delete_at_provider");
+
+                    b.Property<string>("LegalBasis")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("legal_basis");
+
+                    b.Property<int>("MaxDurationSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_duration_seconds");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("mode");
+
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("purpose");
+
+                    b.Property<int>("RetentionDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("retention_days");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("TenantId")
+                        .HasName("pk_tel_recording_policy");
+
+                    b.ToTable("tel_recording_policy", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelUserLink", b =>
                 {
                     b.Property<Guid>("Id")

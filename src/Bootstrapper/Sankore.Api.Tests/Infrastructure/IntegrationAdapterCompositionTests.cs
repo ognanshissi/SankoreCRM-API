@@ -67,6 +67,15 @@ public sealed class IntegrationAdapterCompositionTests
         // and on the insurer's agreement; registered to refuse by name, like the other three.
         [IntegrationKind.Orass] = true,
 
+        // The telephony provider (TEL-B-04). NOT served, and the only entry in this table that is
+        // false for a reason other than "it is a test double": there is no Ringover adapter
+        // project yet. It is deliberately not registered to refuse by name either, unlike the
+        // four blocked core-banking and insurance ones — those exist as assemblies waiting on a
+        // vendor document, while this one is work not yet done, and a registration that refused
+        // would let an administrator activate a telephony connection whose every call fails.
+        // With no registration, activation itself reports no adapter, which is the truth.
+        [IntegrationKind.Ringover] = false,
+
         // The in-memory double (INT-10). Development only — asserted separately, in both
         // directions, because this entry describes a NON-Development host.
         [IntegrationKind.Fake] = false,

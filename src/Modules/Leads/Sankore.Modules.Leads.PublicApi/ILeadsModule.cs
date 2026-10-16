@@ -1,10 +1,20 @@
 namespace Sankore.Modules.Leads.PublicApi;
 
+using Sankore.Shared.Kernel;
+
 /// <summary>
 /// Contract other modules may use to read minimal lead information.
 /// Kept intentionally small today (MVP scope); grows only when a concrete
 /// cross-module need appears (e.g. Customers module querying original lead
 /// source after conversion for attribution reporting).
+///
+/// <para>
+/// <b>One member returns a sensitive value and it is named here so nobody has to discover
+/// it:</b> <see cref="ResolvePhoneForCallAsync"/>, which exists so a telephone number never has
+/// to travel through a browser to be dialled. Everything else on this contract carries
+/// identifiers and structured labels only — see <see cref="GetLeadHistoryAsync"/>, whose
+/// projection rules still stand unchanged.
+/// </para>
 /// </summary>
 public interface ILeadsModule
 {
@@ -26,6 +36,99 @@ public interface ILeadsModule
     /// an at-least-once event consumer and must not fail on a lead that was purged.
     /// </summary>
     Task<IReadOnlyList<LeadHistoryItem>> GetLeadHistoryAsync(Guid tenantId, Guid leadId, CancellationToken ct);
+
+    /// <summary>
+    /// Creates a lead from a call nobody answered (TEL-B-13).
+    ///
+    /// <para>
+    /// <b>The name is SYNTHETIC and that is assumed, not worked around.</b> <c>Lead.Capture</c>
+    /// requires a name and an unanswered call from an unknown number has none — nobody spoke. So
+    /// the lead is created with a placeholder the agent replaces on their first real contact, and
+    /// the placeholder is built HERE rather than by the caller: a label an agent reads is this
+    /// module's vocabulary, and a telephony module composing French prospect names would be a
+    /// second place to translate.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Idempotent on the NUMBER, not on the call.</b> Two calls from one number are one person
+    /// trying twice, so this answers the existing open lead rather than creating a second — which
+    /// is also why it cannot be built on <c>SystemCaptureLead</c>, whose <c>Force: true</c> turns
+    /// the duplicate gate off entirely. A number that already belongs to an open lead returns that
+    /// lead's id with <c>Created: false</c>, and the caller attaches the call to it.
+    /// </para>
+    ///
+    /// <para>
+    /// The number arrives in CLEAR, like <c>FindOpenLeadsByPhoneAsync</c>'s and for the same
+    /// reason: this module holds the blind-index key and no caller can compute an index it would
+    /// match.
+    /// </para>
+    /// </summary>
+    /// <param name="ownerId">
+    /// The agent the call was for, who becomes the lead's owner. A lead created from a missed call
+    /// and routed to nobody would sit in a queue with no SLA and no owner, which is the one
+    /// outcome worse than not creating it.
+    /// </param>
+    Task<Result<MissedCallLeadResult>> CaptureFromMissedCallAsync(
+        Guid tenantId,
+        string phoneNumber,
+        Guid ownerId,
+        Guid? agencyId,
+        DateTimeOffset missedAt,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Whether <paramref name="actorUserId"/> may work this lead (TEL-B-09).
+    ///
+    /// <para>
+    /// The same question <see cref="ResolvePhoneForCallAsync"/> answers on its way to a number,
+    /// asked on its own — for a caller that needs the verdict without the number. One definition
+    /// behind both: the lead's current assignee, its owner, the agent who collected it, or their
+    /// supervisor. A permission cannot express it, because every commercial agent holds the same
+    /// one.
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="actorUserId"/> must be the AUTHENTICATED caller of the request this runs
+    /// in, and is refused when it is not — see <see cref="ResolvePhoneForCallAsync"/> for why.
+    /// False for a lead that does not exist, which a caller holding an arbitrary identifier
+    /// cannot tell from a refusal.
+    /// </para>
+    /// </summary>
+    Task<bool> CanActorWorkLeadAsync(
+        Guid tenantId, Guid leadId, Guid actorUserId, CancellationToken ct);
+
+    /// <summary>
+    /// A lead's telephone number in clear, <b>for dialling and for nothing else</b> (TEL-B-06).
+    ///
+    /// <para>
+    /// The exception to this contract's rule, and the reason it is an exception: the alternative
+    /// was for the browser to send a number, and a contract taking a number is a contract a
+    /// browser can be made to post somebody else's number to. So the browser names a RECORD and a
+    /// SLOT, the number is read here, and the one caller — the click-to-call slice — hands it
+    /// straight to a telephony provider's API. It reaches no response, no log, no event and no
+    /// column.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Who may dial is the same question as who may work the lead</b>, which this module
+    /// already answers for a household write: the current assignee, the owner, the agent who
+    /// collected it, or their supervisor. A permission alone cannot express it — every commercial
+    /// agent holds the same one, and they must not ring each other's prospects.
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="actorUserId"/> must be the AUTHENTICATED caller of the request this runs
+    /// in. It is refused when it is not: the ownership rule is evaluated against the ambient
+    /// identity, so a background caller passing somebody else's id would be asking this module to
+    /// vouch for a perimeter check it did not make.
+    /// </para>
+    /// </summary>
+    /// <param name="slot">
+    /// <c>Primary</c> is the prospect's own number; <c>Secondary</c> is the company's, for a
+    /// corporate lead. A slot that holds nothing answers a failure rather than an empty string.
+    /// </param>
+    Task<Result<string>> ResolvePhoneForCallAsync(
+        Guid tenantId, Guid leadId, PhoneSlot slot, Guid actorUserId, CancellationToken ct);
 
     /// <summary>
     /// The OPEN leads whose telephone number is this one (TEL-B-09).
@@ -97,6 +200,24 @@ public sealed record CustomerOpenLead(
     Guid? AssignedAgentId,
     DateTimeOffset CapturedAt,
     DateTimeOffset? LastActivityAt);
+
+/// <param name="Created">
+/// False when the number already belonged to an open lead, which is the ordinary answer for a
+/// caller who tried twice. The caller attaches its call either way.
+/// </param>
+public sealed record MissedCallLeadResult(Guid LeadId, bool Created);
+
+/// <summary>
+/// Which of a lead's numbers to dial (TEL-B-06). Its own enum rather than one shared through the
+/// Kernel with M01's: the two meanings differ — M01's slots are contact points, these are the
+/// prospect's own number and their company's — and a single enum would invite a caller to assume
+/// they map onto each other.
+/// </summary>
+public enum PhoneSlot
+{
+    Primary,
+    Secondary,
+}
 
 /// <param name="AgencyId">
 /// The lead's agency, so the caller can apply its own perimeter. Null when the lead carries none

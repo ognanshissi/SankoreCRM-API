@@ -810,6 +810,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.HasIndex("LeadId", "PerformedAt")
                         .HasDatabaseName("ix_lead_activities_lead_id_performed_at");
 
+                    b.HasIndex("TenantId", "CtiCallReference")
+                        .IsUnique()
+                        .HasDatabaseName("ux_lead_activity_cti_call")
+                        .HasFilter("cti_call_reference IS NOT NULL");
+
                     b.HasIndex("TenantId", "LeadId")
                         .HasDatabaseName("ix_lead_activities_tenant_id_lead_id");
 
@@ -845,6 +850,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("FirstContactAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("first_contact_at");
+
+                    b.Property<string>("FirstContactSource")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("first_contact_source");
 
                     b.Property<Guid>("LeadId")
                         .HasColumnType("uuid")

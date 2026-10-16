@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Sankore.Shared.Realtime</RootNamespace>
+
+    <!--
+      The push channel: a SignalR hub and the one implementation of IRealtimeNotifier (Kernel).
+
+      Its own project and NOT part of Sankore.Shared.Infrastructure, which every host references:
+      Sankore.Hangfire mounts a dashboard and Sankore.Admin an API, and neither pushes anything to
+      a browser. Putting a hub and a Redis backplane in the shared infrastructure would make both
+      of them ship — and open — a second Redis multiplexer they have no use for.
+
+      Microsoft.NET.Sdk.Web and not Microsoft.NET.Sdk: a Hub, IHubContext and MapHub live in the
+      ASP.NET Core shared framework, which a plain class library does not reference. The SignalR
+      SERVER therefore costs no package; only the backplane below does.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Redis BACKPLANE, and the reason it is not optional in a deployment that runs more
+         than one instance: a hub keeps its connections in the memory of the process that accepted
+         them, so an "incoming call" pushed from the instance that received the webhook reaches
+         only the agents connected to THAT instance. The symptom is a screen pop that works for
+         half the agency, which reads as a flaky browser. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" />
+    <!-- Pulled transitively by the backplane. Named here so the forward pin in
+         Directory.Packages.props actually applies — a central version only governs a package the
+         project references, and every version the backplane would resolve on its own carries
+         advisories. See that file for the detail. -->
+    <PackageReference Include="MessagePack" />
+
+    <!-- For UseRealtimeAccessToken, which teaches the JWT handler to read the token from the
+         query string on the hub path ONLY. It lives here rather than in the host because its
+         correctness depends on SankoreRealtimeHub.Path: a copy next to the JWT configuration
+         would be a second spelling of that route, and the two drifting is a connection that
+         fails authentication with nothing to say why. Already in the central version list. -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sankore.Shared.Realtime.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

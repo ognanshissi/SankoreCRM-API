@@ -40,6 +40,10 @@
     <!-- Cross-module dependency: KYC PublicApi for KycRequested event (US-M13-172) -->
     <ProjectReference Include="..\..\Kyc\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
     <ProjectReference Include="..\..\Workflow\Sankore.Modules.Workflow.PublicApi\Sankore.Modules.Workflow.PublicApi.csproj" />
+    <!-- TEL-B-11/B-12: this module consumes TelephonyCallWrappedUpEvent to write the lead's Call
+         activity and stop its first-contact SLA. PublicApi only, like every other cross-module
+         reference here. -->
+    <ProjectReference Include="..\..\Integration\Sankore.Modules.Integration.PublicApi\Sankore.Modules.Integration.PublicApi.csproj" />
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />
   </ItemGroup>
 

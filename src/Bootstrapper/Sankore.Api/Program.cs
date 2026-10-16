@@ -39,6 +39,7 @@ using Sankore.Shared.Infrastructure.Localization;
 using Sankore.Shared.Infrastructure.Secrets;
 using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Realtime;
 
 // Emitting the OpenAPI document is a build-time concern, not a run. The front-end client in
 // SankoreFront is generated from swaggers/sankore-crm-api-swagger.json, and producing that file
@@ -136,6 +137,15 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(jwtConfig["SigningKey"]!))
         };
+        // Le jeton ne voyage PAS en en-tête sur un websocket : l'API WebSocket du navigateur ne
+        // permet pas d'en poser un, donc SignalR le met en query sous `access_token`. Appelé
+        // AVANT l'affectation ci-dessous ? Non : UseRealtimeAccessToken compose avec
+        // OnMessageReceived existant, et comme `options.Events` est RÉASSIGNÉ juste après, l'appel
+        // doit venir APRÈS — sinon le OnMessageReceived qu'il installe est jeté en silence et
+        // aucune connexion au hub ne s'authentifie. La règle ne s'applique qu'au chemin du hub :
+        // un jeton en query sur une route ordinaire serait un identifiant écrit dans chaque log
+        // d'accès et chaque trace de proxy du parcours.
+        //
         // Une session coupée depuis « Sessions actives » refuse aussi les jetons d'accès qu'elle
         // avait déjà reçus. Sans claim sid (jeton antérieur), rien ne change.
         options.Events = new JwtBearerEvents
@@ -155,6 +165,11 @@ builder.Services
                     ctx.Fail("Session ended.");
             },
         };
+
+        // Après l'affectation d'options.Events, délibérément : cette extension compose avec le
+        // OnMessageReceived déjà présent au lieu de le remplacer, et l'objet Events vient d'être
+        // recréé au-dessus.
+        options.UseRealtimeAccessToken();
     });
 
 // ── The remote-KYC session scheme (KRM-B-05, §4.3) ─────────────────────────
@@ -422,6 +437,19 @@ builder.Services.AddMassTransit(x =>
     // Absence déclarée par un agent (M12) : ses tâches ouvertes passent au remplaçant (M13).
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.AgentAbsenceTaskTransferConsumer>();
 
+    // TEL-B-11/B-12 : la qualification d'un appel devient l'activité « Appel » du lead et arrête
+    // son horloge de premier contact. Sans ce consommateur, un agent qualifie ses appels et le
+    // lead n'en garde aucune trace — et son SLA reste en retard pour une conversation qui a eu
+    // lieu.
+    x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.TelephonyCallWrappedUpConsumer>();
+
+    // TEL-B-17 : le PREMIER consommateur de ClientAnonymizedEvent. M01 le publie depuis ses
+    // travaux de rétention et personne n'écoutait — ce qui était juste tant que rien d'autre ne
+    // détenait de données personnelles d'un client hors du schéma customers. Un enregistrement de
+    // la voix de quelqu'un est le contre-exemple le plus net.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Telephony.Recordings
+        .ClientAnonymizedRecordingConsumer>();
+
     // Notification module consumers
     x.AddConsumer<TenantNotificationSettingsChangedConsumer>();
 
@@ -567,6 +595,13 @@ builder.Services.AddTransient<MigrateObjectsJob>();
 // Redis distributed cache — used by Notifications module for provider resolution
 builder.AddRedisDistributedCache("redis");
 
+// Le canal de push vers le navigateur (TEL-B-10) : le hub SignalR, plus son backplane Redis quand
+// une chaîne de connexion existe. Sans backplane, une sonnerie poussée depuis l'instance qui a
+// reçu le webhook n'atteint que les agents connectés à CELLE-LÀ — un screen pop qui marche pour la
+// moitié de l'agence, et qui se lit comme un navigateur capricieux. AddSankoreRealtime prévient au
+// démarrage quand il n'y en a pas.
+builder.Services.AddSankoreRealtime(builder.Configuration);
+
 builder.Services.AddEndpointsApiExplorer();
 
 #region Swagger Generation
@@ -643,6 +678,7 @@ var app = builder.Build();
 
 app.MapDefaultEndpoints();
 app.LogCorsOrigins();
+app.LogRealtimeBackplane();
 
 // ---------------------------------------------------------------------
 // 3. Ensure database schemas exist (creates tables when no migrations are applied yet)
@@ -907,6 +943,31 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(CancellationToken.None),
             "0 2 * * *");
 
+        // Les enregistrements (TEL-B-16, TEL-B-17). Deux planifications et non une : récupérer
+        // court après le fournisseur tous les quarts d'heure, purger est un devoir de rétention
+        // quotidien — et un opérateur qui met l'une en pause depuis la page « Job control » ne
+        // doit pas mettre l'autre. Mettre la récupération en pause perd des enregistrements que
+        // l'institution voulait ; mettre la purge en pause garde des enregistrements qu'elle est
+        // obligée de détruire.
+        //
+        // Les deux ne font rien pour un tenant dont la politique est Disabled, ce qui est tout
+        // tenant jusqu'à ce qu'un responsable conformité énonce une base légale.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Telephony.Recordings
+            .FetchTelephonyRecordingsOrchestrator>(
+            Sankore.Modules.Integration.Features.Telephony.Recordings
+                .FetchTelephonyRecordingsOrchestrator.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Telephony.Recordings
+                .FetchTelephonyRecordingsOrchestrator.CronExpression);
+
+        AddOrUpdate<Sankore.Modules.Integration.Features.Telephony.Recordings
+            .PurgeTelephonyRecordingsOrchestrator>(
+            Sankore.Modules.Integration.Features.Telephony.Recordings
+                .PurgeTelephonyRecordingsOrchestrator.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.Telephony.Recordings
+                .PurgeTelephonyRecordingsOrchestrator.CronExpression);
+
         // 02:40 : le contrôle quotidien des liaisons utilisateur/fournisseur (TEL-B-05). Après le
         // job de partitions de 02:00, pour qu'un contrôle qui écrit écrive dans une partition qui
         // existe. Rien ne nous prévient qu'un compte a été retiré de l'annuaire du fournisseur —
@@ -1007,7 +1068,8 @@ app.UseTenantResolution(
     "/api/ingest",                  // M13 web form + webhook ingest (public key in the path)
     "/sdk",                         // the forms.js builds those pages load
     "/integration/webhooks",        // M14 inbound sync hooks (connection id + HMAC)
-    "/integration/relay-agents");   // M14 relay agent enrolment + heartbeat (client certificate)
+    "/integration/relay-agents",    // M14 relay agent enrolment + heartbeat (client certificate)
+    SankoreRealtimeHub.Path);       // le hub : le tenant vient du claim du jeton, pas du domaine
 app.UseRequestLocalization(opts =>
 {
     opts.SupportedCultures = [new("fr"), new("en")];
@@ -1064,6 +1126,11 @@ app.MapPublicIngestEndpoints();
 // authentication. An unknown or deactivated connection answers 401 exactly as a bad signature
 // does — a 404 would turn the route into a connection-enumeration oracle.
 app.MapIntegrationPublicEndpoints();
+
+// Le hub temps réel (TEL-B-10). Avant la ligne qui émet l'OpenAPI, comme toute route — un hub ne
+// contribue aucun chemin au document, donc le seul symptôme d'une erreur d'ordre ici serait
+// l'absence de symptôme.
+app.MapSankoreRealtimeHub();
 
 // app.MapKycEndpoints();
 // app.MapLoansEndpoints();

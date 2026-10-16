@@ -3,6 +3,13 @@ namespace Sankore.Modules.Integration.Features.Telephony;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Integration.Features.Telephony.CallContext;
+using Sankore.Modules.Integration.Features.Telephony.ClickToCall;
+using Sankore.Modules.Integration.Features.Telephony.LinkCall;
+using Sankore.Modules.Integration.Features.Telephony.Missed;
+using Sankore.Modules.Integration.Features.Telephony.Outcomes;
+using Sankore.Modules.Integration.Features.Telephony.Recordings;
+using Sankore.Modules.Integration.Features.Telephony.WrapUp;
 using Sankore.Modules.Integration.Features.Telephony.UserLinks.GetDirectory;
 using Sankore.Modules.Integration.Features.Telephony.UserLinks.LinkUser;
 using Sankore.Modules.Integration.Features.Telephony.UserLinks.ListUserLinks;
@@ -38,6 +45,31 @@ internal static class TelephonyEndpoints
         group.MapLinkTelephonyUser();
         group.MapSetTelephonyCallerNumber();
         group.MapUnlinkTelephonyUser();
+
+        // ── The agent's post (TEL-B-06, TEL-B-10) ───────────────────────────
+        // The dial takes a record and a slot and never a number; the context read is the other
+        // half of the screen pop, where the permission and the perimeter are applied — a push
+        // carries a call id and nothing else.
+        group.MapRequestClickToCall();
+        group.MapGetCallContext();
+        group.MapLinkCall();
+
+        // ── Exploitation (TEL-B-11, TEL-B-13) ───────────────────────────────
+        // The wrap-up is what turns a journalled call into the lead's own history and stops its
+        // first-contact SLA; the missed-call list is the other end of the same day's work.
+        group.MapWrapUpCall();
+        group.MapListMissedCalls();
+        group.MapCreateLeadFromCall();
+
+        // The outcome referential the wrap-up validates against. Seeded per tenant at start-up —
+        // an empty one is a wrap-up screen with no options, so there is no "unconfigured" state.
+        group.MapCallOutcomes();
+
+        // ── Recordings (TEL-B-15, TEL-B-17) ─────────────────────────────────
+        // The policy ships Disabled, so these answer honestly for a tenant that keeps nothing: the
+        // policy read says Disabled with nobody named, and the player says "not available".
+        group.MapRecordingPolicy();
+        group.MapRecordingAccess();
 
         // ── The webhook simulator (TEL-B-18, §9) ────────────────────────────
         // Mapped in Development only. There is no Ringover account in this deployment, so this is

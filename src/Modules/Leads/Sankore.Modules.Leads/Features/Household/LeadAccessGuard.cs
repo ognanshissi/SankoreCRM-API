@@ -22,9 +22,16 @@ using Sankore.Shared.Kernel;
 /// suppress the ambient transaction like every other one in this module.
 /// </para>
 /// </summary>
-internal sealed class LeadAccessGuard(ICurrentUser currentUser, IAdministrationModule administration)
+/// <remarks>
+/// <b>Public for a mechanical reason, not a design one</b> — the same one <c>HoldingSyncService</c>
+/// gives in M01: <c>LeadsModuleFacade</c> is public because it implements the module's contract,
+/// and a public type cannot take an internal constructor dependency. It stays in
+/// <c>Features.Household</c>, nothing outside this assembly references it, and TEL-B-06's
+/// click-to-call reaches it only through the facade.
+/// </remarks>
+public sealed class LeadAccessGuard(ICurrentUser currentUser, IAdministrationModule administration)
 {
-    internal const string Forbidden = "LEAD_NOT_YOURS";
+    public const string Forbidden = "LEAD_NOT_YOURS";
 
     /// <summary>
     /// Roles that reach every lead of their tenant without an ownership check. Deliberately short:
@@ -58,7 +65,7 @@ internal sealed class LeadAccessGuard(ICurrentUser currentUser, IAdministrationM
     /// lying around.
     /// </para>
     /// </remarks>
-    internal async Task<Result> EnsureCanWorkAsync(Lead lead, CancellationToken ct)
+    public async Task<Result> EnsureCanWorkAsync(Lead lead, CancellationToken ct)
     {
         if (currentUser.Roles.Intersect(BypassRoles, StringComparer.OrdinalIgnoreCase).Any())
             return Result.Ok();
