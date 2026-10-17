@@ -1,0 +1,479 @@
+services:
+  env-dashboard:
+    image: "mcr.microsoft.com/dotnet/nightly/aspire-dashboard:13.5"
+    # Les ports des OUTILS sont liés à `TOOLS_BIND_ADDRESS`, par défaut la boucle locale.
+    # `"18030:3000"` lie toutes les interfaces : sur un portable en réseau d'entreprise ou en
+    # Wi-Fi public, ces tableaux de bord étaient joignables par n'importe qui sur le même
+    # réseau. Les hôtes applicatifs restent sur toutes les interfaces, eux : ils exigent un
+    # jeton, et on peut vouloir les appeler depuis un téléphone de test.
+    ports:
+      - "${TOOLS_BIND_ADDRESS}:${ASPIRE_DASHBOARD_PUBLISHED_PORT}:18888"
+    expose:
+      - "18889"
+      - "18890"
+    networks:
+      - "aspire"
+    restart: "always"
+  admin-postgres:
+    image: ${DOCKER_REGISTRY-}admin-postgres
+    # `container_name` retiré, volontairement.
+    #
+    # Un `container_name` est un nom GLOBAL sur le démon Docker, pas un nom cadré au projet
+    # Compose. « postgres » et « admin-postgres » entrent donc en collision avec n'importe
+    # quelle autre pile de la machine — constaté : un `postgres` d'un autre projet tournait
+    # déjà et `up` échouait sur « The container name "/postgres" is already in use ».
+    #
+    # Sans cette clé, Compose nomme le conteneur « <projet>-<service>-1 ». Le nom DNS sur le
+    # réseau reste le nom du SERVICE, donc les chaînes de connexion ci-dessous (Host=postgres)
+    # continuent de résoudre.
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    # Sonde de santé : `depends_on` était en `service_started`, qui n'attend que l'EXISTENCE du
+    # conteneur. Or l'API applique ses migrations au démarrage (Program.cs), donc elle ouvrait
+    # une connexion avant que Postgres n'accepte la moindre requête et mourait sur
+    # « Connection refused » — constaté au premier `up`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: "5s"
+      timeout: "5s"
+      retries: 12
+      start_period: "10s"
+    expose:
+      - "5432"
+    volumes:
+      - type: "volume"
+        target: "/var/lib/postgresql"
+        source: "sankorecrm.apphost-25fc6f3f86-admin-postgres-data"
+        read_only: false
+    networks:
+      - "sankore-internal"
+  sankore-admin:
+    image: ${DOCKER_REGISTRY-}sankore.admin
+    container_name: sankore.admin
+    build:
+      context: .
+      dockerfile: src/Bootstrapper/Sankore.Admin/Dockerfile
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SANKORE_ADMIN_PORT}"
+      ConnectionStrings__AdminDatabase: "Host=admin-postgres;Port=5432;Username=postgres;Password=${POSTGRES_PASSWORD};Database=AdminDatabase"
+      ADMINDATABASE_HOST: "admin-postgres"
+      ADMINDATABASE_PORT: "5432"
+      ADMINDATABASE_USERNAME: "postgres"
+      ADMINDATABASE_PASSWORD: "${POSTGRES_PASSWORD}"
+      ADMINDATABASE_URI: "postgresql://postgres:${POSTGRES_PASSWORD}@admin-postgres:5432/AdminDatabase"
+      ADMINDATABASE_JDBCCONNECTIONSTRING: "jdbc:postgresql://admin-postgres:5432/AdminDatabase"
+      ADMINDATABASE_DATABASENAME: "AdminDatabase"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "sankore-admin"
+    expose:
+      - "${SANKORE_ADMIN_PORT}"
+    ports:
+      - "${SANKORE_ADMIN_PUBLISHED_PORT}:${SANKORE_ADMIN_PORT}"
+    depends_on:
+      admin-postgres:
+        condition: "service_healthy"
+    # Aucun des trois hôtes n'avait de politique de redémarrage : une défaillance passagère au
+    # démarrage — la base qui n'accepte pas encore, un courtier qui redémarre — laissait le
+    # service à terre jusqu'à une intervention. `unless-stopped` et non `always` : un arrêt
+    # demandé par un opérateur doit rester un arrêt.
+    restart: "unless-stopped"
+    networks:
+      - "sankore-internal"
+  postgres:
+    image: ${DOCKER_REGISTRY-}postgres
+    # Même raison que pour admin-postgres : un nom global qui collisionne.
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    # Sonde de santé : `depends_on` était en `service_started`, qui n'attend que l'EXISTENCE du
+    # conteneur. Or l'API applique ses migrations au démarrage (Program.cs), donc elle ouvrait
+    # une connexion avant que Postgres n'accepte la moindre requête et mourait sur
+    # « Connection refused » — constaté au premier `up`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: "5s"
+      timeout: "5s"
+      retries: 12
+      start_period: "10s"
+    expose:
+      - "5432"
+    volumes:
+      - type: "volume"
+        target: "/var/lib/postgresql"
+        source: "sankorecrm.apphost-25fc6f3f86-postgres-data"
+        read_only: false
+    networks:
+      - "sankore-internal"
+  rabbitmq:
+    image: "docker.io/library/rabbitmq:4.3-management"
+    environment:
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD}"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: "10s"
+      timeout: "10s"
+      retries: 10
+      start_period: "20s"
+    expose:
+      - "5672"
+      - "15672"
+    ports:
+      - "${TOOLS_BIND_ADDRESS}:${RABBITMQ_MANAGEMENT_PUBLISHED_PORT}:15672"
+    networks:
+      - "sankore-internal"
+  seq:
+    image: "docker.io/datalust/seq:2025.2"
+    environment:
+      ACCEPT_EULA: "Y"
+      # Seq contient les journaux de l'application : identifiants de tenant, d'utilisateur,
+      # d'appel, et le détail des erreurs. Sans authentification c'est lisible — et
+      # interrogeable par son API — par quiconque atteint le port.
+      #
+      # Laissé ouvert pour une pile LOCALE, et uniquement parce que le port est maintenant lié
+      # à la boucle locale. Pour un déploiement partagé : poser
+      # SEQ_FIRSTRUN_ADMINPASSWORDHASH (`seqcli hash`) et mettre SEQ_NO_AUTHENTICATION=False.
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "${SEQ_NO_AUTHENTICATION}"
+      SEQ_FIRSTRUN_ADMINPASSWORDHASH: "${SEQ_ADMIN_PASSWORD_HASH}"
+    expose:
+      - "80"
+    ports:
+      - "${TOOLS_BIND_ADDRESS}:${SEQ_PUBLISHED_PORT}:80"
+    networks:
+      - "sankore-internal"
+  maildev:
+    image: "maildev/maildev:latest"
+    expose:
+      - "1025"
+      - "1080"
+    # Celui-ci est le plus sensible des quatre, et la revue automatique ne l'a pas relevé :
+    # maildev capture les courriels sortants, donc les jetons d'ACTIVATION et de
+    # RÉINITIALISATION DE MOT DE PASSE. Une interface ouverte sur le réseau, c'est une prise
+    # de contrôle de compte en deux clics.
+    ports:
+      - "${TOOLS_BIND_ADDRESS}:${MAILDEV_PUBLISHED_PORT}:1080"
+    networks:
+      - "sankore-internal"
+  redis:
+    image: "docker.io/library/redis:8.6"
+    command:
+      - "-c"
+      - "redis-server --requirepass $$REDIS_PASSWORD"
+    entrypoint:
+      - "/bin/sh"
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: "5s"
+      timeout: "5s"
+      retries: 12
+    expose:
+      - "6379"
+    networks:
+      - "sankore-internal"
+  tempo:
+    image: "grafana/tempo:2.5.0"
+    container_name: "sankore-tempo"
+    command:
+      - "-config.file=/etc/tempo.yaml"
+    expose:
+      - "3200"
+      - "4317"
+    volumes:
+      - type: "bind"
+        target: "/etc/tempo.yaml"
+        source: "${TEMPO_BINDMOUNT_0}"
+        read_only: true
+    networks:
+      - "sankore-internal"
+  prometheus:
+    image: "prom/prometheus:v2.52.0"
+    container_name: "sankore-prometheus"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
+    expose:
+      - "9090"
+    volumes:
+      - type: "bind"
+        target: "/etc/prometheus/prometheus.yml"
+        source: "${PROMETHEUS_BINDMOUNT_0}"
+        read_only: true
+    networks:
+      - "sankore-internal"
+  grafana:
+    image: "grafana/grafana:11.1.0"
+    container_name: "sankore-grafana"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD}"
+      # `Admin` anonyme était un chemin d'ESCALADE et pas seulement une commodité : un
+      # administrateur Grafana peut créer une source de données, c'est-à-dire faire émettre des
+      # requêtes par le conteneur vers le réseau interne — Postgres, l'API, Redis. `Viewer` ne
+      # peut pas en créer, et les tableaux de bord restent lisibles d'un clic.
+      #
+      # Mettre GRAFANA_ANONYMOUS_ENABLED=false pour exiger une connexion
+      # (GRAFANA_ADMIN_PASSWORD).
+      GF_AUTH_ANONYMOUS_ENABLED: "${GRAFANA_ANONYMOUS_ENABLED}"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ALERTING_ENABLED: "false"
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+    expose:
+      - "3000"
+    ports:
+      - "${TOOLS_BIND_ADDRESS}:${GRAFANA_PUBLISHED_PORT}:3000"
+    volumes:
+      - type: "bind"
+        target: "/etc/grafana/provisioning"
+        source: "${GRAFANA_BINDMOUNT_0}"
+        read_only: true
+      - type: "bind"
+        target: "/var/lib/grafana/dashboards"
+        source: "${GRAFANA_BINDMOUNT_1}"
+        read_only: true
+    depends_on:
+      prometheus:
+        condition: "service_started"
+      tempo:
+        condition: "service_started"
+    networks:
+      - "sankore-internal"
+  sankore-api:
+    image: ${DOCKER_REGISTRY-}sankore.api
+    container_name: sankore.api
+    build:
+      context: .
+      dockerfile: src/Bootstrapper/Sankore.Api/Dockerfile
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SANKORE_API_PORT}"
+      ConnectionStrings__Database: "Host=postgres;Port=5432;Username=postgres;Password=${POSTGRES_PASSWORD};Database=Database"
+      DATABASE_HOST: "postgres"
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: "postgres"
+      DATABASE_PASSWORD: "${POSTGRES_PASSWORD}"
+      DATABASE_URI: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/Database"
+      DATABASE_JDBCCONNECTIONSTRING: "jdbc:postgresql://postgres:5432/Database"
+      DATABASE_DATABASENAME: "Database"
+      ConnectionStrings__rabbitmq: "amqp://guest:${RABBITMQ_PASSWORD}@rabbitmq:5672"
+      RABBITMQ_HOST: "rabbitmq"
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USERNAME: "guest"
+      RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
+      RABBITMQ_URI: "amqp://guest:${RABBITMQ_PASSWORD}@rabbitmq:5672"
+      ConnectionStrings__seq: "http://seq:80"
+      SEQ_HOST: "seq"
+      SEQ_PORT: "80"
+      SEQ_URI: "http://seq:80"
+      ConnectionStrings__redis: "redis:6379,password=${REDIS_PASSWORD}"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      REDIS_URI: "redis://:${REDIS_PASSWORD}@redis:6379"
+      SANKORE_TEMPO_OTLP_ENDPOINT: "http://tempo:4317"
+      Notifications__Smtp__Host: "maildev"
+      Notifications__Smtp__Port: "1025"
+      Notifications__Smtp__UseSsl: "false"
+      Notifications__Smtp__UseStartTls: "false"
+      # ── Jetons d'authentification ──────────────────────────────────────
+      Jwt__SigningKey: "${JWT_SIGNING_KEY}"
+      Jwt__Issuer: "${JWT_ISSUER}"
+      Jwt__Audience: "${JWT_AUDIENCE}"
+
+      # ── Coffre de secrets ──────────────────────────────────────────────
+      # L'API REFUSE DE DÉMARRER sans une valeur valide.
+      Secrets__EncryptionKey: "${SECRETS_ENCRYPTION_KEY}"
+
+      # ── Chiffrement de champs et index aveugles, par module ────────────
+      # Validés à la PREMIÈRE UTILISATION, pas au démarrage : une clé absente se manifeste
+      # par une écriture en échec et non par un démarrage en échec.
+      Customers__FieldEncryptionKey: "${CUSTOMERS_FIELD_ENCRYPTION_KEY}"
+      Customers__BlindIndexKey: "${CUSTOMERS_BLIND_INDEX_KEY}"
+      Leads__FieldEncryptionKey: "${LEADS_FIELD_ENCRYPTION_KEY}"
+      Leads__BlindIndexKey: "${LEADS_BLIND_INDEX_KEY}"
+      Kyc__FieldEncryptionKey: "${KYC_FIELD_ENCRYPTION_KEY}"
+      Kyc__BlindIndexKey: "${KYC_BLIND_INDEX_KEY}"
+      Integration__FieldEncryptionKey: "${INTEGRATION_FIELD_ENCRYPTION_KEY}"
+      Integration__BlindIndexKey: "${INTEGRATION_BLIND_INDEX_KEY}"
+
+      # ── Magasins d'objets chiffrés ─────────────────────────────────────
+      # Cinq préoccupations, cinq clés. Les BasePath pointent sur des VOLUMES : par défaut
+      # ils atterrissent sous la racine de contenu, qu'un redéploiement détruit — les images
+      # KYC et les enregistrements d'appels seraient perdus à chaque mise à jour.
+      Kyc__Storage__EncryptionKey: "${KYC_STORAGE_ENCRYPTION_KEY}"
+      Kyc__Storage__BasePath: "/var/sankore/kyc"
+      FileStore__EncryptionKey: "${FILESTORE_ENCRYPTION_KEY}"
+      FileStore__BasePath: "/var/sankore/files"
+      Integration__Batch__Storage__EncryptionKey: "${INTEGRATION_BATCH_STORAGE_ENCRYPTION_KEY}"
+      Integration__Batch__Storage__BasePath: "/var/sankore/batch"
+      Integration__Insurance__ClaimStorage__EncryptionKey: "${INTEGRATION_CLAIMSTORAGE_ENCRYPTION_KEY}"
+      Integration__Insurance__ClaimStorage__BasePath: "/var/sankore/claims"
+
+      # Enregistrements d'appels : le magasin n'est enregistré QUE si la clé est présente, et
+      # la politique est livrée `Disabled`. Vide = pas d'enregistrement, ce qui est le défaut.
+      Telephony__Recordings__EncryptionKey: "${TELEPHONY_RECORDINGS_ENCRYPTION_KEY}"
+      Telephony__Recordings__BasePath: "/var/sankore/recordings"
+
+      # ── Référentiel de tenants ─────────────────────────────────────────
+      TenantStore__BaseUrl: "${TENANTSTORE_BASEURL}"
+      TenantStore__ApiKey: "${TENANTSTORE_APIKEY}"
+      ApiKey: "${SANKORE_API_KEY}"
+
+      # ── CORS ───────────────────────────────────────────────────────────
+      # Un tableau : une variable par indice. « * » est refusé au démarrage, la politique
+      # autorisant les identifiants.
+      Cors__AllowedOrigins__0: "${CORS_ALLOWED_ORIGIN_0}"
+      Cors__AllowedOrigins__1: "${CORS_ALLOWED_ORIGIN_1}"
+
+      # ── Swagger ────────────────────────────────────────────────────────
+      # Servi uniquement derrière une authentification Basic hors développement, et répond
+      # 503 tant que le mot de passe n'est pas posé.
+      Swagger__Enabled: "${SWAGGER_ENABLED}"
+      Swagger__Auth__Username: "${SWAGGER_AUTH_USERNAME}"
+      Swagger__Auth__Password: "${SWAGGER_AUTH_PASSWORD}"
+
+      # ── Antivirus des pièces de sinistre ───────────────────────────────
+      # Défaut FERMÉ : sans analyseur, chaque pièce est `ScanFailed` et rien ne part chez un
+      # assureur.
+      Integration__Insurance__Antivirus__Address: "${INTEGRATION_ANTIVIRUS_ADDRESS}"
+
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "sankore-api"
+    expose:
+      - "${SANKORE_API_PORT}"
+    # Publié sur l'hôte : le fichier généré ne déclarait qu'`expose`, donc l'API n'était
+    # joignable que depuis le réseau Compose — et `sankore-internal` est `internal`.
+    ports:
+      - "${SANKORE_API_PUBLISHED_PORT}:${SANKORE_API_PORT}"
+    volumes:
+      # Un volume par préoccupation chiffrée. Sans eux, les BasePath ci-dessus atterrissent
+      # dans la couche du conteneur, qu'un redéploiement détruit.
+      - type: "volume"
+        source: "sankore-kyc-storage"
+        target: "/var/sankore/kyc"
+      - type: "volume"
+        source: "sankore-filestore"
+        target: "/var/sankore/files"
+      - type: "volume"
+        source: "sankore-batch-storage"
+        target: "/var/sankore/batch"
+      - type: "volume"
+        source: "sankore-claim-storage"
+        target: "/var/sankore/claims"
+      - type: "volume"
+        source: "sankore-recordings"
+        target: "/var/sankore/recordings"
+    depends_on:
+      rabbitmq:
+        condition: "service_healthy"
+      postgres:
+        condition: "service_healthy"
+      redis:
+        condition: "service_healthy"
+      # `seq` manquait alors que l'API porte `ConnectionStrings__seq`. Laissé en
+      # `service_started` : les journaux partent en tâche de fond et une collecte indisponible
+      # ne doit pas retarder le démarrage de l'API.
+      seq:
+        condition: "service_started"
+    # Aucun des trois hôtes n'avait de politique de redémarrage : une défaillance passagère au
+    # démarrage — la base qui n'accepte pas encore, un courtier qui redémarre — laissait le
+    # service à terre jusqu'à une intervention. `unless-stopped` et non `always` : un arrêt
+    # demandé par un opérateur doit rester un arrêt.
+    restart: "unless-stopped"
+    networks:
+      - "sankore-internal"
+  sankore-hangfire:
+    image: ${DOCKER_REGISTRY-}sankore.hangfire
+    container_name: sankore.hangfire
+    build:
+      context: .
+      dockerfile: src/Bootstrapper/Sankore.Hangfire/Dockerfile
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SANKORE_HANGFIRE_PORT}"
+      ConnectionStrings__Database: "Host=postgres;Port=5432;Username=postgres;Password=${POSTGRES_PASSWORD};Database=Database"
+      DATABASE_HOST: "postgres"
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: "postgres"
+      DATABASE_PASSWORD: "${POSTGRES_PASSWORD}"
+      DATABASE_URI: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/Database"
+      DATABASE_JDBCCONNECTIONSTRING: "jdbc:postgresql://postgres:5432/Database"
+      DATABASE_DATABASENAME: "Database"
+      # Étaient codés en dur dans le fichier généré. Le tableau de bord pointe sur la MÊME
+      # base que l'API et refuse toute requête sans mot de passe.
+      Hangfire__Dashboard__Username: "${HANGFIRE_DASHBOARD_USERNAME}"
+      Hangfire__Dashboard__Password: "${HANGFIRE_DASHBOARD_PASSWORD}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "sankore-hangfire"
+    expose:
+      - "${SANKORE_HANGFIRE_PORT}"
+    ports:
+      # Lié comme les OUTILS et non comme les hôtes applicatifs : ce n'est pas une surface
+      # produit, c'est un tableau de bord qui déclenche, requeue et supprime des travaux de
+      # fond. Avec un mot de passe de développement, l'ouvrir au réseau donne la main sur les
+      # traitements par lots de l'institution.
+      - "${TOOLS_BIND_ADDRESS}:${SANKORE_HANGFIRE_PUBLISHED_PORT}:${SANKORE_HANGFIRE_PORT}"
+    depends_on:
+      postgres:
+        condition: "service_healthy"
+    # Aucun des trois hôtes n'avait de politique de redémarrage : une défaillance passagère au
+    # démarrage — la base qui n'accepte pas encore, un courtier qui redémarre — laissait le
+    # service à terre jusqu'à une intervention. `unless-stopped` et non `always` : un arrêt
+    # demandé par un opérateur doit rester un arrêt.
+    restart: "unless-stopped"
+    networks:
+      - "sankore-internal"
+networks:
+  # `local: true` retiré : ce n'est pas une clé reconnue par Compose, et le fichier était
+  # refusé à la validation (« additional properties 'local' not allowed »).
+  #
+  # Remplacé par le pilote par défaut et NON par `internal: true`, bien que le nom y invite :
+  # `internal` coupe tout accès sortant du réseau, ce qui empêcherait l'API de joindre un
+  # serveur SMTP, une passerelle SMS ou un fournisseur de téléphonie. Rien dans le fichier
+  # généré ne demandait cette isolation — l'ajouter aurait été un changement de comportement
+  # déduit d'un nom.
+  sankore-internal:
+    driver: "bridge"
+
+  # Déclaré parce que `env-dashboard` s'y rattache. Il manquait, et Compose refuse un service
+  # qui référence un réseau inexistant.
+  aspire:
+    driver: "bridge"
+volumes:
+  sankorecrm.apphost-25fc6f3f86-admin-postgres-data:
+    driver: "local"
+  sankorecrm.apphost-25fc6f3f86-postgres-data:
+    driver: "local"
+
+  # Un volume par préoccupation chiffrée de l'API. Séparés et non un seul : ce sont cinq clés
+  # distinctes, et les monter ensemble ferait d'une sauvegarde partielle une sauvegarde dont
+  # on ne sait pas ce qu'elle contient.
+  sankore-kyc-storage:
+    driver: "local"
+  sankore-filestore:
+    driver: "local"
+  sankore-batch-storage:
+    driver: "local"
+  sankore-claim-storage:
+    driver: "local"
+  sankore-recordings:
+    driver: "local"
