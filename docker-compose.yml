@@ -330,6 +330,27 @@ services:
       Telephony__Recordings__EncryptionKey: "${TELEPHONY_RECORDINGS_ENCRYPTION_KEY}"
       Telephony__Recordings__BasePath: "/var/sankore/recordings"
 
+      # ── Stockage objet Cloudflare R2 ───────────────────────────────────
+      # Choisit le support des cinq magasins ci-dessus : un bucket R2 par préoccupation si
+      # ceci est renseigné, les volumes locaux sinon. Le chiffrement reste le même dans les
+      # deux cas — ces clés-ci ne remplacent aucune des clés de chiffrement ci-dessus.
+      #
+      # LES TROIS ENSEMBLE OU AUCUNE. `IsConfigured` est un OU sur les quatre valeurs :
+      # une seule renseignée fait ÉCHOUER LE DÉMARRAGE en nommant la clé manquante, au lieu
+      # de retomber silencieusement sur un volume qu'un redéploiement jette. Vides, les trois
+      # sont lues comme absentes (`Trimmed`) et on garde le comportement actuel.
+      #
+      # Les buckets ne sont PAS créés par l'API : les cinq doivent exister chez R2, nommés
+      # exactement comme la préoccupation — kyc-documents, imports, integration-batch-files,
+      # insurance-claim-documents, telephony-recordings.
+      ObjectStorage__R2__AccountId: "${R2_ACCOUNT_ID}"
+      ObjectStorage__R2__AccessKeyId: "${R2_ACCESS_KEY_ID}"
+      ObjectStorage__R2__SecretAccessKey: "${R2_SECRET_ACCESS_KEY}"
+      # Point de terminaison complet. VIDE en R2 normal : il est dérivé de l'AccountId en
+      # `https://<AccountId>.r2.cloudflarestorage.com`. À ne renseigner que pour un service
+      # compatible S3 qui n'est pas R2 (MinIO) ou un point de terminaison R2 régional.
+      ObjectStorage__R2__ServiceUrl: "${R2_SERVICE_URL}"
+
       # ── Référentiel de tenants ─────────────────────────────────────────
       TenantStore__BaseUrl: "${TENANTSTORE_BASEURL}"
       TenantStore__ApiKey: "${TENANTSTORE_APIKEY}"
