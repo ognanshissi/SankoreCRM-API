@@ -831,3 +831,82 @@ en) and new email templates. Idempotent.
 - The KYC file list accepts `mine=true`, used by the « Mes dossiers » view.
 - A scheduled-pull lead source can be saved without an endpoint while in Draft or Testing; going
   live without one is refused with `LIVE_SOURCE_ENDPOINT_REQUIRED`.
+
+---
+
+## 14. Ops dashboards behind domains (Traefik labels in the compose stack)
+
+Added 2026-10-18. Until then the five ops dashboards were loopback-only — `TOOLS_BIND_ADDRESS`
+is `127.0.0.1` — and the only way in was an SSH tunnel:
+
+```bash
+ssh -N -L 18030:127.0.0.1:18030 -L 18341:127.0.0.1:18341 \
+       -L 18672:127.0.0.1:18672 -L 18300:127.0.0.1:18300 \
+       -L 18888:127.0.0.1:18888 user@dokploy-host
+```
+
+That tunnel still works and is still the right way in for anything not listed below. What
+changed is that five services now also carry Traefik labels, so Dokploy publishes them on
+their own subdomain.
+
+| Domain variable | Suggested host | Service | Container port |
+|---|---|---|---|
+| `TOOLS_DOMAIN_GRAFANA` | `grafana.ops.example.com` | `grafana` | 3000 |
+| `TOOLS_DOMAIN_SEQ` | `seq.ops.example.com` | `seq` | 80 |
+| `TOOLS_DOMAIN_HANGFIRE` | `jobs.ops.example.com` | `sankore-hangfire` | `${SANKORE_HANGFIRE_PORT}` |
+| `TOOLS_DOMAIN_RABBITMQ` | `mq.ops.example.com` | `rabbitmq` | 15672 |
+| `TOOLS_DOMAIN_ASPIRE` | `aspire.ops.example.com` | `env-dashboard` | 18888 |
+
+**maildev is deliberately absent.** It captures outgoing mail, which means activation and
+password-reset tokens in cleartext. It stays on the tunnel.
+
+### What makes the route work
+
+Three things, and all three are easy to get wrong:
+
+1. **`dokploy-network` on the service.** Traefik runs in its own container and routes only to
+   networks it is attached to. Each of the five now lists `sankore-internal` *and*
+   `dokploy-network`.
+2. **`traefik.docker.network: dokploy-network`.** Because the containers are on two networks,
+   Traefik would otherwise pick an IP itself and can pick the `sankore-internal` one, which it
+   cannot reach. The symptom is a domain that answers intermittently.
+3. **The router targets the container port, not the published one.** `3000`, never `18030`.
+
+### Before deploying
+
+1. **DNS first.** One `A` record per host, pointing at the Dokploy host. Traefik asks
+   Let's Encrypt on the first request to the domain, and a failed validation is cached.
+2. **Set `TOOLS_BASICAUTH_USERS`**, or the domains will not answer at all:
+
+   ```bash
+   docker run --rm httpd:2.4-alpine htpasswd -nbB ops 'MotDePasseFort'
+   ```
+
+   Paste it into `.env` **with every `$` doubled** (`$$2y$$10$$...`) — Compose reads `$2y` as a
+   variable otherwise. Verify the value that actually reaches Traefik:
+
+   ```bash
+   docker compose -f docker-compose.yml config | grep basicauth.users
+   ```
+
+   An empty value makes the middleware invalid, which makes Traefik refuse the router. That is
+   the intended failure direction: a forgotten password never results in an open Seq.
+3. **Harden the two dashboards that have no login of their own**, now that they are reachable:
+   `GRAFANA_ANONYMOUS_ENABLED=false`, and `SEQ_NO_AUTHENTICATION=False` with
+   `SEQ_ADMIN_PASSWORD_HASH` (`seqcli hash`). Traefik's basic auth guards the UI, not the Seq
+   ingestion API called with a key.
+4. The Aspire dashboard additionally requires a browser token, written to its logs at startup:
+   `docker compose logs env-dashboard | grep -i token`.
+
+### If you prefer the Dokploy UI
+
+Dokploy's **Domains** tab on the compose service generates equivalent labels itself. Use one
+mechanism or the other, not both — two routers with the same `Host()` rule and different names
+is undefined behaviour. The labels committed here are the versioned option, and they carry the
+basic-auth middleware, which the UI does not add.
+
+### Host port bindings were left in place
+
+The `${TOOLS_BIND_ADDRESS}:...` publications are untouched, so the SSH tunnel remains a working
+fallback when a certificate or a Traefik route misbehaves. Remove them only once the domains are
+proven.

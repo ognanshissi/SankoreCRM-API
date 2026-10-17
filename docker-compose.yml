@@ -9,10 +9,62 @@ services:
     ports:
       - "${TOOLS_BIND_ADDRESS}:${ASPIRE_DASHBOARD_PUBLISHED_PORT}:18888"
     expose:
+      # 18888 ajoute : c'est le port que le routeur Traefik ci-dessous vise.
+      - "18888"
       - "18889"
       - "18890"
     networks:
-      - "aspire"
+      - "sankore-internal"
+      - "dokploy-network"
+    # ── Exposition publique par Traefik (Dokploy) ──────────────────────────
+    # 18888 est l'interface du tableau de bord. 18889 (OTLP/gRPC) et 18890 restent internes :
+    # c'est par là que l'API, l'admin et Hangfire poussent leur télémétrie.
+    #
+    # Le tableau de bord Aspire exige en plus un jeton de navigateur, écrit dans ses
+    # journaux au démarrage : `docker compose logs env-dashboard | grep -i token`.
+    labels:
+      traefik.enable: "true"
+      # Le conteneur est sur DEUX réseaux depuis l'ajout ci-dessus. Sans cette ligne Traefik
+      # choisit lui-même l'IP vers laquelle router, et il peut choisir celle de
+      # `sankore-internal`, où il n'est pas rattaché : le domaine répond alors par
+      # intermittence, ou pas du tout.
+      traefik.docker.network: "dokploy-network"
+
+      # Routeur HTTPS. `tls.certresolver=letsencrypt` est le résolveur que Dokploy déclare
+      # dans son Traefik ; le certificat est demandé au premier appel du domaine, donc
+      # l'enregistrement DNS doit déjà pointer sur l'hôte Dokploy AVANT le déploiement.
+      traefik.http.routers.sankore-aspire.rule: "Host(`${TOOLS_DOMAIN_ASPIRE:-aspire.localhost}`)"
+      traefik.http.routers.sankore-aspire.entrypoints: "websecure"
+      traefik.http.routers.sankore-aspire.tls.certresolver: "letsencrypt"
+      traefik.http.routers.sankore-aspire.middlewares: "sankore-auth-aspire"
+      # `service` explicite : plusieurs ports sont déclarés sur ce conteneur et Traefik
+      # refuse de deviner lequel servir.
+      traefik.http.routers.sankore-aspire.service: "sankore-aspire"
+      traefik.http.services.sankore-aspire.loadbalancer.server.port: "18888"
+
+      # Authentification HTTP posée DEVANT l'application. Le middleware est défini ici, sur
+      # le service qu'il protège, et non une fois pour toutes ailleurs : un middleware
+      # déclaré sur un autre conteneur disparaît quand ce conteneur s'arrête, et tous les
+      # routeurs qui le référencent tombent avec lui.
+      #
+      # `TOOLS_BASICAUTH_USERS` vide = middleware invalide = routeur refusé par Traefik. Le
+      # domaine ne répond pas tant que les identifiants ne sont pas posés, ce qui est le bon
+      # sens de l'échec : jamais d'ouverture par oubli.
+      traefik.http.middlewares.sankore-auth-aspire.basicauth.users: "${TOOLS_BASICAUTH_USERS}"
+      # L'en-tête `Authorization` n'est pas transmis en amont : l'application derrière n'a
+      # rien à faire de ces identifiants-là, et Grafana comme Hangfire ont les leurs.
+      traefik.http.middlewares.sankore-auth-aspire.basicauth.removeheader: "true"
+
+      # Routeur HTTP, uniquement pour renvoyer sur HTTPS. La redirection est définie ici
+      # plutôt qu'emprunté au `redirect-to-https` de Dokploy : celui-là vit dans le
+      # fournisseur `file` de Traefik et devrait être référencé `redirect-to-https@file`,
+      # un détail qui casse en silence si Dokploy le renomme.
+      traefik.http.routers.sankore-aspire-web.rule: "Host(`${TOOLS_DOMAIN_ASPIRE:-aspire.localhost}`)"
+      traefik.http.routers.sankore-aspire-web.entrypoints: "web"
+      traefik.http.routers.sankore-aspire-web.middlewares: "sankore-https-aspire"
+      traefik.http.routers.sankore-aspire-web.service: "sankore-aspire"
+      traefik.http.middlewares.sankore-https-aspire.redirectscheme.scheme: "https"
+      traefik.http.middlewares.sankore-https-aspire.redirectscheme.permanent: "true"
     restart: "always"
   admin-postgres:
     image: ${DOCKER_REGISTRY-}admin-postgres
@@ -77,8 +129,13 @@ services:
       ApiKey: "${SANKORE_API_KEY}"
     expose:
       - "${SANKORE_ADMIN_PORT}"
+    # Lié sur `TOOLS_BIND_ADDRESS` et non sur toutes les interfaces : ce service est le
+    # référentiel de tenants, il porte `TENANTSTORE_APIKEY`, et il n'a aucune raison d'être
+    # joignable depuis l'extérieur. L'API l'atteint par le réseau Compose
+    # (`TENANTSTORE_BASEURL=http://sankore-admin:8080/`), pas par ce port publié, qui ne
+    # sert plus qu'à un tunnel SSH d'administration.
     ports:
-      - "${SANKORE_ADMIN_PUBLISHED_PORT}:${SANKORE_ADMIN_PORT}"
+      - "${TOOLS_BIND_ADDRESS}:${SANKORE_ADMIN_PUBLISHED_PORT}:${SANKORE_ADMIN_PORT}"
     depends_on:
       admin-postgres:
         condition: "service_healthy"
@@ -137,6 +194,53 @@ services:
       - "${TOOLS_BIND_ADDRESS}:${RABBITMQ_MANAGEMENT_PUBLISHED_PORT}:15672"
     networks:
       - "sankore-internal"
+      - "dokploy-network"
+    # ── Exposition publique par Traefik (Dokploy) ──────────────────────────
+    # Seule l'interface de gestion (15672) est routée. 5672, le port AMQP, reste interne :
+    # un routeur HTTP ne saurait pas le servir et il n'a rien à faire dehors.
+    labels:
+      traefik.enable: "true"
+      # Le conteneur est sur DEUX réseaux depuis l'ajout ci-dessus. Sans cette ligne Traefik
+      # choisit lui-même l'IP vers laquelle router, et il peut choisir celle de
+      # `sankore-internal`, où il n'est pas rattaché : le domaine répond alors par
+      # intermittence, ou pas du tout.
+      traefik.docker.network: "dokploy-network"
+
+      # Routeur HTTPS. `tls.certresolver=letsencrypt` est le résolveur que Dokploy déclare
+      # dans son Traefik ; le certificat est demandé au premier appel du domaine, donc
+      # l'enregistrement DNS doit déjà pointer sur l'hôte Dokploy AVANT le déploiement.
+      traefik.http.routers.sankore-rabbitmq.rule: "Host(`${TOOLS_DOMAIN_RABBITMQ:-mq.localhost}`)"
+      traefik.http.routers.sankore-rabbitmq.entrypoints: "websecure"
+      traefik.http.routers.sankore-rabbitmq.tls.certresolver: "letsencrypt"
+      traefik.http.routers.sankore-rabbitmq.middlewares: "sankore-auth-rabbitmq"
+      # `service` explicite : plusieurs ports sont déclarés sur ce conteneur et Traefik
+      # refuse de deviner lequel servir.
+      traefik.http.routers.sankore-rabbitmq.service: "sankore-rabbitmq"
+      traefik.http.services.sankore-rabbitmq.loadbalancer.server.port: "15672"
+
+      # Authentification HTTP posée DEVANT l'application. Le middleware est défini ici, sur
+      # le service qu'il protège, et non une fois pour toutes ailleurs : un middleware
+      # déclaré sur un autre conteneur disparaît quand ce conteneur s'arrête, et tous les
+      # routeurs qui le référencent tombent avec lui.
+      #
+      # `TOOLS_BASICAUTH_USERS` vide = middleware invalide = routeur refusé par Traefik. Le
+      # domaine ne répond pas tant que les identifiants ne sont pas posés, ce qui est le bon
+      # sens de l'échec : jamais d'ouverture par oubli.
+      traefik.http.middlewares.sankore-auth-rabbitmq.basicauth.users: "${TOOLS_BASICAUTH_USERS}"
+      # L'en-tête `Authorization` n'est pas transmis en amont : l'application derrière n'a
+      # rien à faire de ces identifiants-là, et Grafana comme Hangfire ont les leurs.
+      traefik.http.middlewares.sankore-auth-rabbitmq.basicauth.removeheader: "true"
+
+      # Routeur HTTP, uniquement pour renvoyer sur HTTPS. La redirection est définie ici
+      # plutôt qu'emprunté au `redirect-to-https` de Dokploy : celui-là vit dans le
+      # fournisseur `file` de Traefik et devrait être référencé `redirect-to-https@file`,
+      # un détail qui casse en silence si Dokploy le renomme.
+      traefik.http.routers.sankore-rabbitmq-web.rule: "Host(`${TOOLS_DOMAIN_RABBITMQ:-mq.localhost}`)"
+      traefik.http.routers.sankore-rabbitmq-web.entrypoints: "web"
+      traefik.http.routers.sankore-rabbitmq-web.middlewares: "sankore-https-rabbitmq"
+      traefik.http.routers.sankore-rabbitmq-web.service: "sankore-rabbitmq"
+      traefik.http.middlewares.sankore-https-rabbitmq.redirectscheme.scheme: "https"
+      traefik.http.middlewares.sankore-https-rabbitmq.redirectscheme.permanent: "true"
   seq:
     image: "docker.io/datalust/seq:2025.2"
     environment:
@@ -156,6 +260,54 @@ services:
       - "${TOOLS_BIND_ADDRESS}:${SEQ_PUBLISHED_PORT}:80"
     networks:
       - "sankore-internal"
+      - "dokploy-network"
+    # ── Exposition publique par Traefik (Dokploy) ──────────────────────────
+    # Seq écoute sur 80. Poser SEQ_NO_AUTHENTICATION=False et SEQ_ADMIN_PASSWORD_HASH
+    # maintenant que l'interface est publique : l'authentification Traefik protège
+    # l'accès, pas l'API Seq appelée avec une clé.
+    labels:
+      traefik.enable: "true"
+      # Le conteneur est sur DEUX réseaux depuis l'ajout ci-dessus. Sans cette ligne Traefik
+      # choisit lui-même l'IP vers laquelle router, et il peut choisir celle de
+      # `sankore-internal`, où il n'est pas rattaché : le domaine répond alors par
+      # intermittence, ou pas du tout.
+      traefik.docker.network: "dokploy-network"
+
+      # Routeur HTTPS. `tls.certresolver=letsencrypt` est le résolveur que Dokploy déclare
+      # dans son Traefik ; le certificat est demandé au premier appel du domaine, donc
+      # l'enregistrement DNS doit déjà pointer sur l'hôte Dokploy AVANT le déploiement.
+      traefik.http.routers.sankore-seq.rule: "Host(`${TOOLS_DOMAIN_SEQ:-seq.localhost}`)"
+      traefik.http.routers.sankore-seq.entrypoints: "websecure"
+      traefik.http.routers.sankore-seq.tls.certresolver: "letsencrypt"
+      traefik.http.routers.sankore-seq.middlewares: "sankore-auth-seq"
+      # `service` explicite : plusieurs ports sont déclarés sur ce conteneur et Traefik
+      # refuse de deviner lequel servir.
+      traefik.http.routers.sankore-seq.service: "sankore-seq"
+      traefik.http.services.sankore-seq.loadbalancer.server.port: "80"
+
+      # Authentification HTTP posée DEVANT l'application. Le middleware est défini ici, sur
+      # le service qu'il protège, et non une fois pour toutes ailleurs : un middleware
+      # déclaré sur un autre conteneur disparaît quand ce conteneur s'arrête, et tous les
+      # routeurs qui le référencent tombent avec lui.
+      #
+      # `TOOLS_BASICAUTH_USERS` vide = middleware invalide = routeur refusé par Traefik. Le
+      # domaine ne répond pas tant que les identifiants ne sont pas posés, ce qui est le bon
+      # sens de l'échec : jamais d'ouverture par oubli.
+      traefik.http.middlewares.sankore-auth-seq.basicauth.users: "${TOOLS_BASICAUTH_USERS}"
+      # L'en-tête `Authorization` n'est pas transmis en amont : l'application derrière n'a
+      # rien à faire de ces identifiants-là, et Grafana comme Hangfire ont les leurs.
+      traefik.http.middlewares.sankore-auth-seq.basicauth.removeheader: "true"
+
+      # Routeur HTTP, uniquement pour renvoyer sur HTTPS. La redirection est définie ici
+      # plutôt qu'emprunté au `redirect-to-https` de Dokploy : celui-là vit dans le
+      # fournisseur `file` de Traefik et devrait être référencé `redirect-to-https@file`,
+      # un détail qui casse en silence si Dokploy le renomme.
+      traefik.http.routers.sankore-seq-web.rule: "Host(`${TOOLS_DOMAIN_SEQ:-seq.localhost}`)"
+      traefik.http.routers.sankore-seq-web.entrypoints: "web"
+      traefik.http.routers.sankore-seq-web.middlewares: "sankore-https-seq"
+      traefik.http.routers.sankore-seq-web.service: "sankore-seq"
+      traefik.http.middlewares.sankore-https-seq.redirectscheme.scheme: "https"
+      traefik.http.middlewares.sankore-https-seq.redirectscheme.permanent: "true"
   maildev:
     image: "maildev/maildev:latest"
     expose:
@@ -254,6 +406,53 @@ services:
         condition: "service_started"
     networks:
       - "sankore-internal"
+      - "dokploy-network"
+    # ── Exposition publique par Traefik (Dokploy) ──────────────────────────
+    # Grafana sert son interface sur 3000 dans le conteneur ; `GRAFANA_PUBLISHED_PORT`
+    # (18030) est le port de l'HÔTE et ne veut rien dire pour Traefik.
+    labels:
+      traefik.enable: "true"
+      # Le conteneur est sur DEUX réseaux depuis l'ajout ci-dessus. Sans cette ligne Traefik
+      # choisit lui-même l'IP vers laquelle router, et il peut choisir celle de
+      # `sankore-internal`, où il n'est pas rattaché : le domaine répond alors par
+      # intermittence, ou pas du tout.
+      traefik.docker.network: "dokploy-network"
+
+      # Routeur HTTPS. `tls.certresolver=letsencrypt` est le résolveur que Dokploy déclare
+      # dans son Traefik ; le certificat est demandé au premier appel du domaine, donc
+      # l'enregistrement DNS doit déjà pointer sur l'hôte Dokploy AVANT le déploiement.
+      traefik.http.routers.sankore-grafana.rule: "Host(`${TOOLS_DOMAIN_GRAFANA:-grafana.localhost}`)"
+      traefik.http.routers.sankore-grafana.entrypoints: "websecure"
+      traefik.http.routers.sankore-grafana.tls.certresolver: "letsencrypt"
+      traefik.http.routers.sankore-grafana.middlewares: "sankore-auth-grafana"
+      # `service` explicite : plusieurs ports sont déclarés sur ce conteneur et Traefik
+      # refuse de deviner lequel servir.
+      traefik.http.routers.sankore-grafana.service: "sankore-grafana"
+      traefik.http.services.sankore-grafana.loadbalancer.server.port: "3000"
+
+      # Authentification HTTP posée DEVANT l'application. Le middleware est défini ici, sur
+      # le service qu'il protège, et non une fois pour toutes ailleurs : un middleware
+      # déclaré sur un autre conteneur disparaît quand ce conteneur s'arrête, et tous les
+      # routeurs qui le référencent tombent avec lui.
+      #
+      # `TOOLS_BASICAUTH_USERS` vide = middleware invalide = routeur refusé par Traefik. Le
+      # domaine ne répond pas tant que les identifiants ne sont pas posés, ce qui est le bon
+      # sens de l'échec : jamais d'ouverture par oubli.
+      traefik.http.middlewares.sankore-auth-grafana.basicauth.users: "${TOOLS_BASICAUTH_USERS}"
+      # L'en-tête `Authorization` n'est pas transmis en amont : l'application derrière n'a
+      # rien à faire de ces identifiants-là, et Grafana comme Hangfire ont les leurs.
+      traefik.http.middlewares.sankore-auth-grafana.basicauth.removeheader: "true"
+
+      # Routeur HTTP, uniquement pour renvoyer sur HTTPS. La redirection est définie ici
+      # plutôt qu'emprunté au `redirect-to-https` de Dokploy : celui-là vit dans le
+      # fournisseur `file` de Traefik et devrait être référencé `redirect-to-https@file`,
+      # un détail qui casse en silence si Dokploy le renomme.
+      traefik.http.routers.sankore-grafana-web.rule: "Host(`${TOOLS_DOMAIN_GRAFANA:-grafana.localhost}`)"
+      traefik.http.routers.sankore-grafana-web.entrypoints: "web"
+      traefik.http.routers.sankore-grafana-web.middlewares: "sankore-https-grafana"
+      traefik.http.routers.sankore-grafana-web.service: "sankore-grafana"
+      traefik.http.middlewares.sankore-https-grafana.redirectscheme.scheme: "https"
+      traefik.http.middlewares.sankore-https-grafana.redirectscheme.permanent: "true"
   sankore-api:
     image: ${DOCKER_REGISTRY-}sankore.api
     container_name: sankore.api
@@ -419,8 +618,13 @@ services:
     # service à terre jusqu'à une intervention. `unless-stopped` et non `always` : un arrêt
     # demandé par un opérateur doit rester un arrêt.
     restart: "unless-stopped"
+    # `dokploy-network` en plus de `sankore-internal` : Traefik tourne dans son propre
+    # conteneur et ne peut router que vers un réseau auquel il est rattaché. C'est le SEUL
+    # service public — le domaine Dokploy doit viser le port du CONTENEUR
+    # (`SANKORE_API_PORT`, exposé), pas le port publié sur l'hôte.
     networks:
       - "sankore-internal"
+      - "dokploy-network"
   sankore-hangfire:
     image: ${DOCKER_REGISTRY-}sankore.hangfire
     container_name: sankore.hangfire
@@ -464,6 +668,54 @@ services:
     restart: "unless-stopped"
     networks:
       - "sankore-internal"
+      - "dokploy-network"
+    # ── Exposition publique par Traefik (Dokploy) ──────────────────────────
+    # Double authentification assumée : celle de Traefik ci-dessous ET celle du tableau de
+    # bord (`Hangfire__Dashboard__*`). Ce tableau de bord relance et supprime des
+    # travaux de fond — le runbook §5 demande de le restreindre.
+    labels:
+      traefik.enable: "true"
+      # Le conteneur est sur DEUX réseaux depuis l'ajout ci-dessus. Sans cette ligne Traefik
+      # choisit lui-même l'IP vers laquelle router, et il peut choisir celle de
+      # `sankore-internal`, où il n'est pas rattaché : le domaine répond alors par
+      # intermittence, ou pas du tout.
+      traefik.docker.network: "dokploy-network"
+
+      # Routeur HTTPS. `tls.certresolver=letsencrypt` est le résolveur que Dokploy déclare
+      # dans son Traefik ; le certificat est demandé au premier appel du domaine, donc
+      # l'enregistrement DNS doit déjà pointer sur l'hôte Dokploy AVANT le déploiement.
+      traefik.http.routers.sankore-hangfire.rule: "Host(`${TOOLS_DOMAIN_HANGFIRE:-jobs.localhost}`)"
+      traefik.http.routers.sankore-hangfire.entrypoints: "websecure"
+      traefik.http.routers.sankore-hangfire.tls.certresolver: "letsencrypt"
+      traefik.http.routers.sankore-hangfire.middlewares: "sankore-auth-hangfire"
+      # `service` explicite : plusieurs ports sont déclarés sur ce conteneur et Traefik
+      # refuse de deviner lequel servir.
+      traefik.http.routers.sankore-hangfire.service: "sankore-hangfire"
+      traefik.http.services.sankore-hangfire.loadbalancer.server.port: "${SANKORE_HANGFIRE_PORT}"
+
+      # Authentification HTTP posée DEVANT l'application. Le middleware est défini ici, sur
+      # le service qu'il protège, et non une fois pour toutes ailleurs : un middleware
+      # déclaré sur un autre conteneur disparaît quand ce conteneur s'arrête, et tous les
+      # routeurs qui le référencent tombent avec lui.
+      #
+      # `TOOLS_BASICAUTH_USERS` vide = middleware invalide = routeur refusé par Traefik. Le
+      # domaine ne répond pas tant que les identifiants ne sont pas posés, ce qui est le bon
+      # sens de l'échec : jamais d'ouverture par oubli.
+      traefik.http.middlewares.sankore-auth-hangfire.basicauth.users: "${TOOLS_BASICAUTH_USERS}"
+      # L'en-tête `Authorization` n'est pas transmis en amont : l'application derrière n'a
+      # rien à faire de ces identifiants-là, et Grafana comme Hangfire ont les leurs.
+      traefik.http.middlewares.sankore-auth-hangfire.basicauth.removeheader: "true"
+
+      # Routeur HTTP, uniquement pour renvoyer sur HTTPS. La redirection est définie ici
+      # plutôt qu'emprunté au `redirect-to-https` de Dokploy : celui-là vit dans le
+      # fournisseur `file` de Traefik et devrait être référencé `redirect-to-https@file`,
+      # un détail qui casse en silence si Dokploy le renomme.
+      traefik.http.routers.sankore-hangfire-web.rule: "Host(`${TOOLS_DOMAIN_HANGFIRE:-jobs.localhost}`)"
+      traefik.http.routers.sankore-hangfire-web.entrypoints: "web"
+      traefik.http.routers.sankore-hangfire-web.middlewares: "sankore-https-hangfire"
+      traefik.http.routers.sankore-hangfire-web.service: "sankore-hangfire"
+      traefik.http.middlewares.sankore-https-hangfire.redirectscheme.scheme: "https"
+      traefik.http.middlewares.sankore-https-hangfire.redirectscheme.permanent: "true"
 networks:
   # `local: true` retiré : ce n'est pas une clé reconnue par Compose, et le fichier était
   # refusé à la validation (« additional properties 'local' not allowed »).
@@ -475,6 +727,12 @@ networks:
   # déduit d'un nom.
   sankore-internal:
     driver: "bridge"
+
+  # Créé et possédé par Dokploy, d'où `external` : Compose s'y rattache sans le gérer. Un
+  # `docker compose up` sur une machine sans Dokploy échoue ici tant que le réseau n'existe
+  # pas — `docker network create dokploy-network` suffit à le satisfaire localement.
+  dokploy-network:
+    external: true
 
   # Déclaré parce que `env-dashboard` s'y rattache. Il manquait, et Compose refuse un service
   # qui référence un réseau inexistant.
