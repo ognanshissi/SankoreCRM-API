@@ -910,3 +910,76 @@ basic-auth middleware, which the UI does not add.
 The `${TOOLS_BIND_ADDRESS}:...` publications are untouched, so the SSH tunnel remains a working
 fallback when a certificate or a Traefik route misbehaves. Remove them only once the domains are
 proven.
+
+---
+
+## 15. Reaching Postgres from your machine
+
+Added 2026-10-18. Both instances declare `expose: 5432` plus a **loopback-only** publication,
+so they are reachable from the Dokploy host but never from the internet:
+
+| Service | Database | Host port | Used by |
+|---|---|---|---|
+| `postgres` | `Database` | `${POSTGRES_PUBLISHED_PORT}` (18432) | `sankore-api`, `sankore-hangfire` |
+| `admin-postgres` | `AdminDatabase` | `${ADMIN_POSTGRES_PUBLISHED_PORT}` (18433) | `sankore-admin` |
+
+Ports live in the 18xxx block for the reason the compose header gives: 15432 is taken by other
+Postgres stacks. They bind `${TOOLS_BIND_ADDRESS}` — keep it at `127.0.0.1`, or the databases
+are published to the server's public interface, where a `-p` binding typically bypasses `ufw`.
+
+### The connection string
+
+Nothing stores it; the compose file assembles it from `POSTGRES_PASSWORD`:
+
+```
+Host=postgres;Port=5432;Username=postgres;Password=<POSTGRES_PASSWORD>;Database=Database
+```
+
+In Dokploy the password comes from the stack's **Environment** tab, which is the source of
+truth — not any local `.env`. To read what a container actually received:
+
+```bash
+docker compose -f docker-compose.yml exec sankore-api printenv ConnectionStrings__Database
+```
+
+### A psql prompt, without handling the password
+
+The password is already in the container's environment:
+
+```bash
+docker compose -f docker-compose.yml exec postgres \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U postgres -d Database'
+```
+
+`PGPASSWORD` is not optional: the services set `POSTGRES_HOST_AUTH_METHOD=scram-sha-256` and
+`--auth-local=scram-sha-256`, so there is no trust auth, not even on the local socket. Swap in
+`admin-postgres` / `-d AdminDatabase` for the tenant registry.
+
+Dump the same way:
+
+```bash
+docker compose -f docker-compose.yml exec -T postgres \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U postgres -d Database' > database.sql
+```
+
+### A GUI client (DataGrip, pgAdmin)
+
+```bash
+ssh -N -L 18432:127.0.0.1:18432 -L 18433:127.0.0.1:18433 user@dokploy-host
+```
+
+Then connect to `localhost:18432`, user `postgres`, database `Database`, with the password from
+the Environment tab. Unlike a tunnel to a container IP, this survives every redeploy.
+
+### Not a Traefik domain
+
+The §14 labels route HTTP; Postgres speaks its own TCP protocol, so a domain would need a TCP
+router on its own entrypoint — and a publicly reachable database is not the goal. The tunnel is
+the supported path.
+
+### If the databases are missing
+
+Neither service sets `POSTGRES_DB`, so `initdb` creates only the `postgres` database.
+`Database` and `AdminDatabase` are created when the apps first run their EF migrations. A `\l`
+that does not list them means the API has not started cleanly yet — read its logs before
+suspecting the connection.

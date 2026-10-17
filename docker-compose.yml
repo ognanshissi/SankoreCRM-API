@@ -98,6 +98,20 @@ services:
       start_period: "10s"
     expose:
       - "5432"
+    # Publié sur la BOUCLE LOCALE, pour qu'un client graphique (DataGrip, pgAdmin) puisse
+    # passer par un tunnel SSH stable. Le port du conteneur n'était joignable que depuis
+    # `sankore-internal`, ce qui n'offrait que `docker compose exec` — et un tunnel vers
+    # l'IP du conteneur, qui change à chaque recréation.
+    #
+    # Lié comme les OUTILS, donc invisible depuis l'extérieur tant que `TOOLS_BIND_ADDRESS`
+    # vaut `127.0.0.1`. Et surtout PAS de domaine Traefik ici : les labels de ce fichier
+    # routent du HTTP, Postgres parle son propre protocole TCP. Une base de données joignable
+    # publiquement n'est de toute façon pas ce qu'on veut.
+    #
+    # Bloc 18xxx comme le reste du fichier : 15432 est pris par d'autres piles Postgres de la
+    # machine, ce qui est la raison pour laquelle les ports publiés vivent tous en 18xxx.
+    ports:
+      - "${TOOLS_BIND_ADDRESS}:${ADMIN_POSTGRES_PUBLISHED_PORT}:5432"
     volumes:
       - type: "volume"
         target: "/var/lib/postgresql"
@@ -169,6 +183,20 @@ services:
       start_period: "10s"
     expose:
       - "5432"
+    # Publié sur la BOUCLE LOCALE, pour qu'un client graphique (DataGrip, pgAdmin) puisse
+    # passer par un tunnel SSH stable. Le port du conteneur n'était joignable que depuis
+    # `sankore-internal`, ce qui n'offrait que `docker compose exec` — et un tunnel vers
+    # l'IP du conteneur, qui change à chaque recréation.
+    #
+    # Lié comme les OUTILS, donc invisible depuis l'extérieur tant que `TOOLS_BIND_ADDRESS`
+    # vaut `127.0.0.1`. Et surtout PAS de domaine Traefik ici : les labels de ce fichier
+    # routent du HTTP, Postgres parle son propre protocole TCP. Une base de données joignable
+    # publiquement n'est de toute façon pas ce qu'on veut.
+    #
+    # Bloc 18xxx comme le reste du fichier : 15432 est pris par d'autres piles Postgres de la
+    # machine, ce qui est la raison pour laquelle les ports publiés vivent tous en 18xxx.
+    ports:
+      - "${TOOLS_BIND_ADDRESS}:${POSTGRES_PUBLISHED_PORT}:5432"
     volumes:
       - type: "volume"
         target: "/var/lib/postgresql"
