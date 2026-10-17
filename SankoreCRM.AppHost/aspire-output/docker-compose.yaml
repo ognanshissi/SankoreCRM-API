@@ -9,11 +9,8 @@ services:
     networks:
       - "aspire"
     restart: "always"
-  postgres:
-    image: "${POSTGRES_IMAGE-}"
-    build:
-      context: .
-      dockerfile: Dockerfile.postgres
+  admin-postgres:
+    image: "docker.io/library/postgres:18.3"
     environment:
       POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
@@ -21,15 +18,61 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
     expose:
       - "5432"
+    volumes:
+      - type: "volume"
+        target: "/var/lib/postgresql"
+        source: "sankorecrm.apphost-25fc6f3f86-admin-postgres-data"
+        read_only: false
+    networks:
+      - "aspire"
+  sankore-admin:
+    image: "${SANKORE_ADMIN_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SANKORE_ADMIN_PORT}"
+      ConnectionStrings__AdminDatabase: "Host=admin-postgres;Port=5432;Username=postgres;Password=${POSTGRES_PASSWORD};Database=AdminDatabase"
+      ADMINDATABASE_HOST: "admin-postgres"
+      ADMINDATABASE_PORT: "5432"
+      ADMINDATABASE_USERNAME: "postgres"
+      ADMINDATABASE_PASSWORD: "${POSTGRES_PASSWORD}"
+      ADMINDATABASE_URI: "postgresql://postgres:${POSTGRES_PASSWORD}@admin-postgres:5432/AdminDatabase"
+      ADMINDATABASE_JDBCCONNECTIONSTRING: "jdbc:postgresql://admin-postgres:5432/AdminDatabase"
+      ADMINDATABASE_DATABASENAME: "AdminDatabase"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "sankore-admin"
+    expose:
+      - "${SANKORE_ADMIN_PORT}"
+    depends_on:
+      admin-postgres:
+        condition: "service_started"
+    networks:
+      - "aspire"
+  postgres:
+    image: "${POSTGRES_IMAGE}"
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    expose:
+      - "5432"
+    volumes:
+      - type: "volume"
+        target: "/var/lib/postgresql"
+        source: "sankorecrm.apphost-25fc6f3f86-postgres-data"
+        read_only: false
     networks:
       - "aspire"
   rabbitmq:
-    image: "docker.io/library/rabbitmq:4.3"
+    image: "docker.io/library/rabbitmq:4.3-management"
     environment:
       RABBITMQ_DEFAULT_USER: "guest"
       RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD}"
     expose:
       - "5672"
+      - "15672"
     networks:
       - "aspire"
   seq:
@@ -39,6 +82,13 @@ services:
       SEQ_FIRSTRUN_NOAUTHENTICATION: "True"
     expose:
       - "80"
+    networks:
+      - "aspire"
+  maildev:
+    image: "maildev/maildev:latest"
+    expose:
+      - "1025"
+      - "1080"
     networks:
       - "aspire"
   redis:
@@ -52,6 +102,64 @@ services:
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
     expose:
       - "6379"
+    networks:
+      - "aspire"
+  tempo:
+    image: "grafana/tempo:2.5.0"
+    container_name: "sankore-tempo"
+    command:
+      - "-config.file=/etc/tempo.yaml"
+    expose:
+      - "3200"
+      - "4317"
+    volumes:
+      - type: "bind"
+        target: "/etc/tempo.yaml"
+        source: "${TEMPO_BINDMOUNT_0}"
+        read_only: true
+    networks:
+      - "aspire"
+  prometheus:
+    image: "prom/prometheus:v2.52.0"
+    container_name: "sankore-prometheus"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
+    expose:
+      - "9090"
+    volumes:
+      - type: "bind"
+        target: "/etc/prometheus/prometheus.yml"
+        source: "${PROMETHEUS_BINDMOUNT_0}"
+        read_only: true
+    networks:
+      - "aspire"
+  grafana:
+    image: "grafana/grafana:11.1.0"
+    container_name: "sankore-grafana"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ALERTING_ENABLED: "false"
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+    expose:
+      - "3000"
+    volumes:
+      - type: "bind"
+        target: "/etc/grafana/provisioning"
+        source: "${GRAFANA_BINDMOUNT_0}"
+        read_only: true
+      - type: "bind"
+        target: "/var/lib/grafana/dashboards"
+        source: "${GRAFANA_BINDMOUNT_1}"
+        read_only: true
+    depends_on:
+      prometheus:
+        condition: "service_started"
+      tempo:
+        condition: "service_started"
     networks:
       - "aspire"
   sankore-api:
@@ -83,6 +191,12 @@ services:
       REDIS_PORT: "6379"
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
       REDIS_URI: "redis://:${REDIS_PASSWORD}@redis:6379"
+      ASPNETCORE_HTTP_PORTS: "5080"
+      SANKORE_TEMPO_OTLP_ENDPOINT: "http://tempo:4317"
+      Notifications__Smtp__Host: "maildev"
+      Notifications__Smtp__Port: "1025"
+      Notifications__Smtp__UseSsl: "false"
+      Notifications__Smtp__UseStartTls: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "sankore-api"
@@ -97,6 +211,37 @@ services:
         condition: "service_started"
     networks:
       - "aspire"
+  sankore-hangfire:
+    image: "${SANKORE_HANGFIRE_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SANKORE_HANGFIRE_PORT}"
+      ConnectionStrings__Database: "Host=postgres;Port=5432;Username=postgres;Password=${POSTGRES_PASSWORD};Database=Database"
+      DATABASE_HOST: "postgres"
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: "postgres"
+      DATABASE_PASSWORD: "${POSTGRES_PASSWORD}"
+      DATABASE_URI: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/Database"
+      DATABASE_JDBCCONNECTIONSTRING: "jdbc:postgresql://postgres:5432/Database"
+      DATABASE_DATABASENAME: "Database"
+      Hangfire__Dashboard__Username: "admin"
+      Hangfire__Dashboard__Password: "dev-only-change-me"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "sankore-hangfire"
+    expose:
+      - "${SANKORE_HANGFIRE_PORT}"
+    depends_on:
+      postgres:
+        condition: "service_started"
+    networks:
+      - "aspire"
 networks:
   aspire:
     driver: "bridge"
+volumes:
+  sankorecrm.apphost-25fc6f3f86-admin-postgres-data:
+    driver: "local"
+  sankorecrm.apphost-25fc6f3f86-postgres-data:
+    driver: "local"

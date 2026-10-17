@@ -35,6 +35,14 @@ using Xunit;
 /// </summary>
 public sealed class RouteRemoteKycFileHandlerTests : IDisposable
 {
+    /// <summary>
+    /// Sorti de l'appel pour satisfaire CA1861, que la configuration Release promeut en erreur.
+    /// La règle vise un appel répété, ce qui n'est pas le cas ici — mais garder la famille à
+    /// zéro est ce qui donne un sens au gate : il est là pour attraper une régression, et une
+    /// violation permanente rend toutes les suivantes invisibles.
+    /// </summary>
+    private static readonly string[] LivenessPassedFlags = ["LIVENESS_PASSED"];
+
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly Guid _customerId = Guid.NewGuid();
     private readonly Guid _agencyId = Guid.NewGuid();
@@ -135,7 +143,7 @@ public sealed class RouteRemoteKycFileHandlerTests : IDisposable
         _db.KycConfidenceAssessments.Add(KycConfidenceAssessment.Create(
             _tenantId, file.Id, score, KycConfidenceLevel.High,
             trigger: "VERIFICATION", clock: _clock,
-            flagsJson: JsonSerializer.Serialize(new[] { "LIVENESS_PASSED" })));
+            flagsJson: JsonSerializer.Serialize(LivenessPassedFlags)));
 
         _db.KycFaceVerifications.Add(KycFaceVerification.Create(
             _tenantId, file.Id, attempt: 1, similarityScore: 0.94, isMatch: true, clock: _clock,

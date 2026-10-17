@@ -224,3 +224,11 @@ FakesAssemblies/
 # Docker container storage
 .containers/
 node_modules/
+
+# Variables de `docker-compose.yml`. Contient les clés de chiffrement et les mots de passe de
+# l'environnement, en clair. Le gabarit suivi par git est `.env.example`.
+#
+# ATTENTION : ce fichier était DÉJÀ suivi par git quand cette règle a été ajoutée, et
+# `.gitignore` n'a aucun effet sur un fichier déjà suivi. Il faut le retirer de l'index :
+#   git rm --cached .env
+.env

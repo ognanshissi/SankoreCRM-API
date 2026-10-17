@@ -1,6 +1,25 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+
+    <!--
+      Les dépendances TRANSITIVES sont épinglées depuis ce fichier, pas seulement les
+      directes.
+
+      Activé pour une raison de sécurité et pas de style : deux paquets de cryptographie
+      arrivaient en transitif dans une version portant NU1902/NU1903, `Directory.Build.props`
+      promeut ces familles en ERREURS en Release, et aucune image de conteneur ne pouvait donc
+      se construire. Les épingler projet par projet aurait demandé une référence directe dans
+      les 28 projets du graphe — l'audit NuGet se fait par projet — pour deux paquets que
+      personne n'utilise directement.
+
+      Le prix est réel : ce drapeau fait surgir tout conflit de version latent du dépôt sous
+      forme de NU1109 au lieu de le laisser se résoudre silencieusement vers le haut. C'est
+      une bonne nouvelle déguisée en mauvaise — un conflit tu est un paquet dont personne ne
+      sait quelle version tourne en production — mais cela veut dire qu'ajouter un paquet peut
+      désormais demander d'aligner une version ici.
+    -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup Label="Testing">
     <PackageVersion Include="FluentAssertions" Version="6.12.1" />
@@ -47,6 +66,25 @@
          password-reset tokens. -->
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.12" />
   </ItemGroup>
+  <!--
+    Deux dépendances TRANSITIVES épinglées pour leurs avis de sécurité.
+
+    Elles arrivent par la chaîne de Data Protection et par la signature PKCS de M02, et les
+    versions qui se résolvaient — 10.0.0 et 10.0.12 — portent NU1902/NU1903. Or
+    `Directory.Build.props` promeut ces deux familles en ERREURS en Release : aucune image de
+    conteneur ne pouvait donc se construire, et c'était le seul chemin du dépôt qui passait
+    par Release.
+
+    Épinglées ici et non par une référence directe dans les projets concernés, parce que
+    l'audit NuGet se fait PAR PROJET : il aurait fallu une `PackageReference` dans les 28
+    projets du graphe de l'API, pour deux paquets que personne n'utilise directement. Essayé,
+    mesuré : deux projets épinglés laissaient 202 erreurs d'audit dans les autres.
+  -->
+  <ItemGroup Label="SecurityPins">
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.13" />
+  </ItemGroup>
+
   <ItemGroup Label="EntityFrameworkCore">
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" Version="10.0.3" />
@@ -92,7 +130,10 @@
   <ItemGroup Label="RelayAgent">
     <!-- The on-premise relay agent (INT-26) is a worker shipped as a Docker image and as a
          Windows service. These are referenced ONLY by that project. -->
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <!-- 10.0.11 et non 10.0.0 : avec l'épinglage transitif actif, l'AppHost rétrogradait ce
+         paquet de 10.0.11 (exigé par Aspire.Hosting.Docker) vers la version centrale et
+         échouait en NU1109. -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
