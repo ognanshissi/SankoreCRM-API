@@ -74,6 +74,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "sankore-admin"
+      ApiKey: "${SANKORE_API_KEY}"
     expose:
       - "${SANKORE_ADMIN_PORT}"
     ports:
@@ -354,7 +355,7 @@ services:
       # ── Référentiel de tenants ─────────────────────────────────────────
       TenantStore__BaseUrl: "${TENANTSTORE_BASEURL}"
       TenantStore__ApiKey: "${TENANTSTORE_APIKEY}"
-      ApiKey: "${SANKORE_API_KEY}"
+      
 
       # ── CORS ───────────────────────────────────────────────────────────
       # Un tableau : une variable par indice. « * » est refusé au démarrage, la politique
