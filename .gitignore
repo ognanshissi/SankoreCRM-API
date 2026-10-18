@@ -232,3 +232,8 @@ node_modules/
 # `.gitignore` n'a aucun effet sur un fichier déjà suivi. Il faut le retirer de l'index :
 #   git rm --cached .env
 .env
+
+# Variables de `docker-compose.admin.yml`, la pile autonome du référentiel de tenants. Même
+# nature que `.env` : mot de passe de la base du registre et clé d'API d'entrée, en clair. Le
+# gabarit suivi par git est `.env.admin.example`.
+.env.admin

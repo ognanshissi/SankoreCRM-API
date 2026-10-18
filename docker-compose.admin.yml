@@ -1,0 +1,239 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sankore.Admin — pile AUTONOME du référentiel de tenants.
+#
+# Ce fichier porte le registre et SA base, extraits de `docker-compose.yml` pour qu'ils se
+# déploient, se mettent à jour et se redémarrent sans toucher à l'API, à Hangfire, au courtier
+# ni à l'observabilité. Ce sont deux cycles de vie différents : le registre change à chaque
+# nouveau client, l'API à chaque livraison fonctionnelle.
+#
+#   docker compose -f docker-compose.admin.yml --env-file .env.admin up -d --build
+#   docker compose -f docker-compose.admin.yml --env-file .env.admin logs -f sankore-admin
+#
+# `name:` ci-dessous donne à cette pile son PROPRE projet Compose, et ce n'est pas cosmétique :
+# sans lui, un `up` lancé depuis ce répertoire hérite du nom du dossier — celui de la pile
+# principale — et Compose considère alors tous les services de l'autre fichier comme des
+# orphelins, qu'un `--remove-orphans` détruirait.
+#
+# LE LIEN AVEC L'API passe par le réseau `sankore-shared`, pas par un port publié : Compose pose
+# le nom de chaque service en alias DNS sur chaque réseau qu'il rejoint, donc
+# `TENANTSTORE_BASEURL=http://sankore-admin:8080/` continue de résoudre depuis l'autre pile tant
+# que les deux y sont rattachées — y compris lorsqu'elles sont deux projets Compose distincts. Ce
+# réseau est externe et à créer une fois : `docker network create sankore-shared`.
+#
+# Si le registre part sur une AUTRE machine, c'est `TENANTSTORE_BASEURL` de la pile API qu'il
+# faut passer à son URL publique, et alors seulement il lui faut un domaine (voir le commentaire
+# sur les labels, plus bas).
+# ─────────────────────────────────────────────────────────────────────────────
+name: "sankore-admin"
+
+services:
+  admin-postgres:
+    image: ${DOCKER_REGISTRY-}admin-postgres
+    # Pas de `container_name` : c'est un nom GLOBAL sur le démon Docker, pas un nom cadré au
+    # projet Compose, et « admin-postgres » entre en collision avec n'importe quelle autre pile
+    # de la machine. Compose nomme le conteneur « sankore-admin-admin-postgres-1 » et le nom DNS
+    # sur le réseau reste le nom du SERVICE, donc la chaîne de connexion ci-dessous résout.
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      POSTGRES_USER: "${ADMIN_POSTGRES_USER:-postgres}"
+      # `:?` pour la même raison que la clé d'API ci-dessous : sur un volume VIERGE, un mot de
+      # passe vide fait échouer l'initdb assez clairement, mais sur un volume DÉJÀ initialisé il
+      # ne produit qu'une authentification refusée, loin de sa cause.
+      POSTGRES_PASSWORD: "${ADMIN_POSTGRES_PASSWORD:?ADMIN_POSTGRES_PASSWORD est obligatoire}"
+      # Ne prend effet qu'au PREMIER démarrage d'un volume vide. Sur un volume déjà initialisé,
+      # la base existe déjà et c'est `MigrateAsync()` du registre qui en fait le schéma.
+      POSTGRES_DB: "${ADMIN_POSTGRES_DB:-AdminDatabase}"
+    # `depends_on: service_healthy` ne vaut que par cette sonde : le registre applique ses
+    # migrations AVANT `app.Run()`, donc il ouvrirait une connexion avant que Postgres accepte
+    # la moindre requête et mourrait sur « Connection refused ».
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ADMIN_POSTGRES_USER:-postgres}"]
+      interval: "5s"
+      timeout: "5s"
+      retries: 12
+      start_period: "10s"
+    expose:
+      - "5432"
+    # Publié sur la BOUCLE LOCALE pour qu'un client graphique (DataGrip, pgAdmin) passe par un
+    # tunnel SSH stable — voir §15 du runbook. Lié comme les OUTILS, donc invisible depuis
+    # l'extérieur tant que `TOOLS_BIND_ADDRESS` vaut `127.0.0.1`. Et surtout PAS de domaine
+    # Traefik : Postgres parle son propre protocole TCP, et une base joignable publiquement
+    # n'est pas ce qu'on veut.
+    ports:
+      - "${TOOLS_BIND_ADDRESS:-127.0.0.1}:${ADMIN_POSTGRES_PUBLISHED_PORT:-18433}:5432"
+    volumes:
+      - type: "volume"
+        target: "/var/lib/postgresql"
+        source: "admin-postgres-data"
+        read_only: false
+    networks:
+      - "sankore-admin-internal"
+    restart: "unless-stopped"
+
+  sankore-admin:
+    image: ${DOCKER_REGISTRY-}sankore.admin
+    container_name: sankore.admin
+    build:
+      context: .
+      dockerfile: src/Bootstrapper/Sankore.Admin/Dockerfile
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SANKORE_ADMIN_PORT:-8080}"
+
+      # ── Base du registre ───────────────────────────────────────────────
+      # L'hôte est une VARIABLE et non `admin-postgres` en dur : une pile autonome peut vouloir
+      # une base gérée (celle de Dokploy, un Postgres d'un fournisseur) plutôt que le conteneur
+      # ci-dessus. Dans ce cas, poser `ADMIN_POSTGRES_HOST` sur l'hôte interne fourni et
+      # supprimer le service `admin-postgres` de ce fichier — ou le laisser, inutilisé.
+      ConnectionStrings__AdminDatabase: "Host=${ADMIN_POSTGRES_HOST:-admin-postgres};Port=${ADMIN_POSTGRES_PORT:-5432};Username=${ADMIN_POSTGRES_USER:-postgres};Password=${ADMIN_POSTGRES_PASSWORD:?ADMIN_POSTGRES_PASSWORD est obligatoire};Database=${ADMIN_POSTGRES_DB:-AdminDatabase}"
+      # Les six suivantes viennent de la génération Aspire et AUCUN code de ce dépôt ne les lit
+      # (le registre lit `ConnectionStrings__AdminDatabase`, ci-dessus). Conservées à
+      # l'identique pour que l'extraction reste un déplacement et non un déplacement doublé
+      # d'un nettoyage : si rien ne vient les réclamer, elles peuvent partir.
+      ADMINDATABASE_HOST: "${ADMIN_POSTGRES_HOST:-admin-postgres}"
+      ADMINDATABASE_PORT: "${ADMIN_POSTGRES_PORT:-5432}"
+      ADMINDATABASE_USERNAME: "${ADMIN_POSTGRES_USER:-postgres}"
+      ADMINDATABASE_PASSWORD: "${ADMIN_POSTGRES_PASSWORD:?ADMIN_POSTGRES_PASSWORD est obligatoire}"
+      ADMINDATABASE_URI: "postgresql://${ADMIN_POSTGRES_USER:-postgres}:${ADMIN_POSTGRES_PASSWORD:?ADMIN_POSTGRES_PASSWORD est obligatoire}@${ADMIN_POSTGRES_HOST:-admin-postgres}:${ADMIN_POSTGRES_PORT:-5432}/${ADMIN_POSTGRES_DB:-AdminDatabase}"
+      ADMINDATABASE_JDBCCONNECTIONSTRING: "jdbc:postgresql://${ADMIN_POSTGRES_HOST:-admin-postgres}:${ADMIN_POSTGRES_PORT:-5432}/${ADMIN_POSTGRES_DB:-AdminDatabase}"
+      ADMINDATABASE_DATABASENAME: "${ADMIN_POSTGRES_DB:-AdminDatabase}"
+
+      # ── Télémétrie ─────────────────────────────────────────────────────
+      # VIDE par défaut, et c'est le sens de « déployable seule » : `env-dashboard` vit dans
+      # l'autre pile, et un point de terminaison OTLP pointant sur un hôte qui n'existe pas
+      # remplit les journaux d'échecs d'export. Vide, `AddServiceDefaults` n'enregistre
+      # simplement pas d'exportateur (`Extensions.cs` teste la chaîne).
+      #
+      # Les deux piles sur la même machine : `http://env-dashboard:18889` résout par
+      # `dokploy-network`, auquel les deux sont rattachées.
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${ADMIN_OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "sankore-admin"
+
+      # ── Clé d'entrée ───────────────────────────────────────────────────
+      # `UseApiKeyAuth()` garde tout l'hôte — mais IL NE VALIDE RIEN SI LA VALEUR EST VIDE
+      # (`ApiKeyMiddleware` passe la main quand la clé configurée est absente). Un oubli ici
+      # n'affaiblit donc pas la garde : il l'enlève, et le référentiel de tenants répond à qui
+      # l'atteint. Doit valoir exactement le `TENANTSTORE_APIKEY` de la pile API.
+      #
+      # `:?` et non `${SANKORE_API_KEY}` : Compose REFUSE DE DÉMARRER la pile plutôt que de la
+      # démarrer ouverte. C'est le seul endroit de la chaîne où ce défaut est rattrapable sans
+      # toucher au middleware — une pile séparée se déploie avec son propre environnement, et
+      # c'est précisément l'occasion où une variable s'oublie.
+      ApiKey: "${SANKORE_API_KEY:?SANKORE_API_KEY est obligatoire : vide, UseApiKeyAuth ne valide rien et le registre est ouvert}"
+
+      # ── Swagger ────────────────────────────────────────────────────────
+      # Servi uniquement derrière une authentification Basic hors développement, et répond 503
+      # tant que le mot de passe n'est pas posé. Utile sur une pile autonome : c'est la seule
+      # façon d'inspecter le registre sans forger les en-têtes à la main.
+      Swagger__Enabled: "${ADMIN_SWAGGER_ENABLED:-}"
+      Swagger__Auth__Username: "${ADMIN_SWAGGER_AUTH_USERNAME:-}"
+      Swagger__Auth__Password: "${ADMIN_SWAGGER_AUTH_PASSWORD:-}"
+
+      # ── Tenant par défaut, provisionné au démarrage ────────────────────
+      # `TenantSeeder` crée ce tenant au premier démarrage, ce qui remplace le premier
+      # `curl POST /api/v1/tenants` du §6 de docs/deployment-dokploy.md. Idempotent : un
+      # redéploiement ne réécrit rien.
+      #
+      # `Fqdn` est l'ORIGINE DU FRONT, SCHÉMA COMPRIS (`https://crm.example.com`) — pas un
+      # hôte nu, et pas l'hôte de l'API. Le navigateur estampille chaque appel avec
+      # `location.origin` (`tenant.interceptor.ts` côté SankoreFront) et la recherche compare
+      # la chaîne ENTIÈRE : un hôte nu n'est jamais trouvé, et le symptôme est une 400
+      # « Cannot determine tenant » sur chaque requête, sans rien d'anormal dans les journaux.
+      DefaultTenant__Name: "${DEFAULT_TENANT_NAME:-Sankore}"
+      DefaultTenant__Fqdn: "${DEFAULT_TENANT_FQDN}"
+      DefaultTenant__RootUserEmail: "${DEFAULT_TENANT_EMAIL}"
+      # À FIGER sur tout déploiement qui conserve ses données : chaque ligne de la base de
+      # l'API porte cet identifiant. Un registre reconstruit sans lui en génère un nouveau, et
+      # tout l'historique devient invisible pour un tenant qui, vu de l'extérieur, est le même.
+      # C'est le piège N°1 de la séparation : repartir sur un volume vide SANS cette valeur
+      # donne une pile qui démarre très bien et une API dont les données ont disparu.
+      DefaultTenant__Id: "${DEFAULT_TENANT_ID:-}"
+    # `bash` explicite, et non `CMD-SHELL` : celui-ci passe par dash, qui ne connaît pas
+    # `/dev/tcp`, et l'image `aspnet` n'embarque ni curl, ni wget, ni nc.
+    #
+    # Une réponse prouve plus qu'un port ouvert : les migrations ET le seed du tenant tournent
+    # AVANT `app.Run()`, donc 200 ici veut dire que le tenant par défaut est en base.
+    healthcheck:
+      test:
+        - "CMD"
+        - "bash"
+        - "-c"
+        - "exec 3<>/dev/tcp/127.0.0.1/${SANKORE_ADMIN_PORT:-8080} && printf 'GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && head -n1 <&3 | grep -q 200"
+      interval: "10s"
+      timeout: "5s"
+      retries: 12
+      start_period: "30s"
+    expose:
+      - "${SANKORE_ADMIN_PORT:-8080}"
+    # Lié sur `TOOLS_BIND_ADDRESS` et non sur toutes les interfaces : ce service est le
+    # référentiel de tenants, il porte la clé d'API, et il n'a aucune raison d'être joignable
+    # depuis l'extérieur. L'API l'atteint par `dokploy-network`, pas par ce port publié, qui ne
+    # sert plus qu'à un tunnel SSH d'administration.
+    #
+    # Pas de labels `traefik.*` ici, délibérément : un référentiel de tenants exposé sur un
+    # domaine public n'est gardé que par sa clé d'API. Si la pile API est sur une AUTRE machine
+    # et qu'il faut donc bien un domaine, reprendre le gabarit de `env-dashboard` dans
+    # `docker-compose.yml` — routeur HTTPS + `basicauth` DEVANT l'application — et ne pas se
+    # contenter de l'onglet Domains de Dokploy, qui n'ajoute pas le middleware.
+    ports:
+      - "${TOOLS_BIND_ADDRESS:-127.0.0.1}:${SANKORE_ADMIN_PUBLISHED_PORT:-18200}:${SANKORE_ADMIN_PORT:-8080}"
+    depends_on:
+      admin-postgres:
+        condition: "service_healthy"
+        # `required: false` : avec une base gérée (`ADMIN_POSTGRES_HOST` ailleurs), le service
+        # `admin-postgres` peut être retiré de ce fichier sans que ce bloc fasse échouer le
+        # `up` en réclamant une dépendance absente.
+        required: false
+    # `unless-stopped` et non `always` : un arrêt demandé par un opérateur doit rester un arrêt.
+    restart: "unless-stopped"
+    networks:
+      - "sankore-admin-internal"
+      # Le seul point de contact avec la pile principale. Sans ce rattachement, l'API résout
+      # `sankore-admin` nulle part et chaque requête non authentifiée échoue sur une 400
+      # « Cannot determine tenant ».
+      #
+      # `sankore-shared` et NON `dokploy-network` : ce dernier est le réseau de TOUT ce que
+      # Dokploy fait tourner sur la machine, donc l'y rattacher rendrait le référentiel de
+      # tenants joignable par n'importe quelle autre application de l'hôte — avec, pour seule
+      # garde, la clé d'API ci-dessus. Un réseau dédié aux deux piles Sankore réduit la surface
+      # à ce qui doit effectivement se parler, et ce service n'a par ailleurs aucune raison
+      # d'être visible de Traefik puisqu'il ne porte aucun domaine.
+      - "sankore-shared"
+
+networks:
+  # Interne à cette pile : le registre et sa base, et rien d'autre. Pilote par défaut et NON
+  # `internal: true`, bien que le nom y invite : `internal` coupe tout accès sortant, ce dont
+  # ce service n'a pas besoin aujourd'hui mais qui serait un changement de comportement déduit
+  # d'un nom.
+  sankore-admin-internal:
+    driver: "bridge"
+
+  # Le bus entre les DEUX piles Sankore, et rien d'autre : `sankore-api` et `env-dashboard` s'y
+  # rattachent dans `docker-compose.yml`. `external` parce qu'aucune des deux piles ne peut le
+  # posséder — celle qui le créerait le détruirait à son `down`, emportant le lien de l'autre.
+  # À créer une fois, avant le premier `up` des deux côtés :
+  #
+  #   docker network create sankore-shared
+  #
+  # Un réseau absent fait échouer le `up` en le nommant, ce qui est le bon sens de l'échec.
+  sankore-shared:
+    external: true
+
+volumes:
+  # `name:` explicite, et c'est la clé de voûte de la séparation : sans lui, Compose préfixe le
+  # volume du nom du projet, donc changer de projet (ce que fait `name: sankore-admin` en tête)
+  # pointerait sur un volume VIDE. Le registre se réamorcerait alors proprement, avec un
+  # NOUVEAU `TenantId` — et toutes les données de l'API deviendraient invisibles.
+  #
+  # Le défaut est donc le volume DÉJÀ EN PLACE, celui que la pile unique a créé
+  # (`docker volume ls | grep admin-postgres`). Une installation neuve peut poser
+  # `ADMIN_POSTGRES_VOLUME=sankore-admin-postgres-data` et repartir d'un nom propre.
+  admin-postgres-data:
+    driver: "local"
+    name: "${ADMIN_POSTGRES_VOLUME:-sankorecrm_sankorecrm.apphost-25fc6f3f86-admin-postgres-data}"

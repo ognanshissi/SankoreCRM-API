@@ -36,6 +36,10 @@ terminates TLS and forwards plain HTTP to your container port.
 |---|---|---|---|
 | **Sankore.Api** | `src/Bootstrapper/Sankore.Api/Dockerfile` | the CRM itself: all modules, Hangfire **server**, outbox processors | yes |
 | **Sankore.Admin** | `src/Bootstrapper/Sankore.Admin/Dockerfile` | tenant registry; the API calls it on every unauthenticated request | internal only if you can |
+
+On the compose route the registry is a **separate stack** — `docker-compose.admin.yml` plus
+`.env.admin`, deployable and restartable on its own, see §3. `docker-compose.yml` carries
+everything else.
 | **Sankore.Hangfire** | `src/Bootstrapper/Sankore.Hangfire/Dockerfile` | job dashboard **only** (no job server), same storage as the API | restricted |
 
 | Managed service | Required? | Why |
@@ -156,6 +160,140 @@ registry to the internet. Set it.
 
 Migrations run at start-up (`adminDbContext.Database.MigrateAsync()`), so the first boot creates
 the schema and the `citext` extension.
+
+### The compose route: `docker-compose.admin.yml`
+
+Added 2026-10-18. The registry and its Postgres are a **stack of their own**, so they deploy,
+redeploy and restart without touching the API, Hangfire, the broker or the observability tools —
+two lifecycles, two stacks: the registry changes when a client is onboarded, the API on every
+functional release.
+
+```bash
+docker network create sankore-shared    # once per host, see "the two stacks talk" below
+cp .env.admin.example .env.admin        # fill it in, see below
+docker compose -f docker-compose.admin.yml --env-file .env.admin up -d --build
+docker compose -f docker-compose.admin.yml --env-file .env.admin logs -f sankore-admin
+```
+
+In Dokploy that is a second **Compose** application in the same project, pointed at
+`docker-compose.admin.yml`, with `.env.admin`'s contents in its Environment tab. The main stack
+keeps `docker-compose.yml`, which no longer declares either service.
+
+**How the two stacks talk.** `TENANTSTORE_BASEURL=http://sankore-admin:8080/` is unchanged:
+Compose registers each service name as a DNS alias on every network the container joins, so the
+name resolves **across Compose projects** as long as both are on a common network. That network
+is `sankore-shared` — external, owned by neither stack (the one that created it would destroy it
+on `down` and take the other's link with it), and carrying exactly three containers:
+`sankore-admin`, `sankore-api`, and `env-dashboard` so the registry can still push telemetry.
+
+Not `dokploy-network`, though both stacks are already on it: that one carries **everything**
+Dokploy runs on the host, so the tenant registry would be reachable from any other application
+on the machine, with its API key as the only guard. It has no domain and no reason to be visible
+to Traefik. Create the bus once per host — a missing external network fails the `up` by name,
+which is the right failure direction:
+
+```bash
+docker network create sankore-shared
+```
+
+Change `TENANTSTORE_BASEURL` to a public URL only if the registry moves to another host — and
+then give it a domain with basic auth in front, following the `env-dashboard` labels in
+`docker-compose.yml` (§14). The Dokploy Domains tab alone does not add the middleware.
+
+**`SANKORE_API_KEY` and `ADMIN_POSTGRES_PASSWORD` are declared `${VAR:?...}`**, so Compose
+refuses to render the stack at all when either is unset. That is deliberate for the key:
+`ApiKeyMiddleware` **skips validation entirely when the configured key is empty**, so a
+forgotten variable does not weaken the guard, it removes it — and a stack with its own
+environment file is exactly where a variable gets forgotten. The middleware's fail-open
+behaviour is unchanged by this split and still worth fixing in code (§9).
+
+**Three values must be identical on both sides**, and nothing fails loudly if they drift:
+
+| `.env.admin` | `.env` (API stack) | What breaks when they differ |
+|---|---|---|
+| `SANKORE_API_KEY` | `TENANTSTORE_APIKEY` | every API→registry call answers 401 |
+| `DEFAULT_TENANT_FQDN` | `DEFAULT_TENANT_FQDN` | `SystemUserSeeder` cannot find the tenant it provisions |
+| `DEFAULT_TENANT_ID` | — (registry only) | see below |
+
+**The volume is the one trap worth re-reading.** Compose prefixes volume names with the project
+name, and this stack is its own project (`name: sankore-admin` at the top of the file), so a
+plain declaration would have pointed at an **empty** volume: the registry would have come up
+perfectly and seeded a *new* `TenantId`, leaving every row of the API's database orphaned. The
+volume is therefore declared with an explicit `name:` that defaults to the volume the single
+stack already created:
+
+```bash
+docker volume ls | grep admin-postgres
+# sankorecrm_sankorecrm.apphost-25fc6f3f86-admin-postgres-data   ← the default
+```
+
+A fresh installation can set `ADMIN_POSTGRES_VOLUME=sankore-admin-postgres-data` and start from
+a clean name. An existing one should leave it alone, and pin `DEFAULT_TENANT_ID` before the
+first split deploy.
+
+`ADMIN_POSTGRES_PASSWORD` replaces the shared `POSTGRES_PASSWORD` for this stack. On an existing
+installation it must carry **the same value**: the volume was initialised with it and Postgres
+will not accept another — the symptom is a refused authentication at start-up, not a reset.
+
+To put the registry on a managed Postgres instead of the bundled container, set
+`ADMIN_POSTGRES_HOST` (and `_PORT`, `_USER`, `_DB`) to the internal host Dokploy shows and delete
+the `admin-postgres` service; the `depends_on` carries `required: false` for exactly that.
+
+### Cutting an existing single-stack installation over
+
+The old and the new definitions cannot run at the same time: they share the container name
+`sankore.admin`, the host ports 18200/18433, and — by design — the same Postgres volume. Two
+Postgres processes on one data directory corrupt it, so stop the old pair first.
+
+The commands below use plain `docker`, not `docker compose`: the two services are **no longer in
+`docker-compose.yml`**, so Compose cannot address them by service name any more, while the
+containers started from the old file are still running. Find them first — the registry's name is
+pinned, its database's is derived from the project:
+
+```bash
+docker ps --filter name=admin --format '{{.Names}}'
+# sankore.admin
+# sankorecrm-admin-postgres-1      ← <project>-admin-postgres-1
+```
+
+```bash
+# 1. What the running registry was told, so the new stack is told the same.
+docker exec sankore.admin printenv DefaultTenant__Id DefaultTenant__Fqdn
+docker exec sankorecrm-admin-postgres-1 printenv POSTGRES_PASSWORD
+
+# 2. A dump, because this is the registry: losing it orphans every row the API owns.
+docker exec sankorecrm-admin-postgres-1 \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U postgres -d AdminDatabase' > admin-registry.sql
+
+# 3. Stop and remove the old pair. The VOLUME is untouched by this — it is what carries over,
+#    and `docker rm` does not touch named volumes anyway.
+docker stop sankore.admin sankorecrm-admin-postgres-1
+docker rm   sankore.admin sankorecrm-admin-postgres-1
+
+# 4. Fill .env.admin with the values from steps 1 and 2 — ADMIN_POSTGRES_PASSWORD is the
+#    POSTGRES_PASSWORD read above, and DEFAULT_TENANT_ID the id read above — then:
+docker network create sankore-shared
+docker compose -f docker-compose.admin.yml --env-file .env.admin up -d --build
+
+# 5. The registry answers, and the tenant id is the one from step 1, not a new one.
+curl -s -H "X-Api-Key: <SANKORE_API_KEY>" http://127.0.0.1:18200/api/v1/tenants
+```
+
+**The API container must be recreated once**, because it gains the `sankore-shared` network and a
+network cannot be attached to a running container by Compose:
+
+```bash
+docker compose -f docker-compose.yml up -d sankore-api env-dashboard
+```
+
+After that it resolves `sankore-admin` by DNS on each call, with no further restarts — and its
+tenant cache (5 min by id, 24 h by domain) covers the gap while the registry is down.
+
+Until step 3 is done, `docker compose -f docker-compose.yml up -d` reports the two containers as
+**orphans** of that project — correct, since they were started from a file that no longer
+declares them. Step 3 is what clears the warning. Do not answer it with `--remove-orphans` once
+the new stack is up: that flag removes containers, and after the cutover the pair it finds is the
+pair you want to keep.
 
 ---
 
@@ -669,6 +807,7 @@ Two blockers that were here when this runbook was first written are now fixed in
 | 1 | **No production health endpoint on Hangfire** | `MapDefaultEndpoints()` is Development-only | no readiness signal for the dashboard host. Admin no longer has this problem: it declares its own `/health` like the API, and `ApiKeyMiddleware` exempts `/health` and `/alive` so a container probe can reach it. Before that, its probe got 401 then 404, the container stayed `unhealthy`, and `sankore-api` — which waited on that health — refused to start at all |
 | 2 | **Swagger is Development-only** (this one is correct) | `Program.cs` | do not "fix" it by setting `ASPNETCORE_ENVIRONMENT=Development` in production — that would also expose health details and turn on sensitive EF data logging |
 | 3 | **`Messaging__UseRabbitMq=true` cannot authenticate** | `cfg.Host(host)` passes a hostname only | a broker with credentials will not connect; see §7 |
+| 4 | **`ApiKeyMiddleware` fails open** | it skips validation when the configured `ApiKey` is empty, rather than denying | an unset variable does not weaken the guard on Sankore.Admin, it removes it: the tenant registry answers every caller that can reach it. Deny-by-default would be the fix; it would also mean every local run needs a key, which is why it has not been changed here. Until then the compose guard is the mitigation — `docker-compose.admin.yml` declares `ApiKey: "${SANKORE_API_KEY:?...}"`, so the stack refuses to render without one, including from Dokploy's Environment tab. The Dockerfile-*Application* route earlier in §3 has no such guard: there, an empty `ApiKey` still boots open |
 
 Also worth knowing, though not blocking:
 
@@ -984,10 +1123,13 @@ proven.
 Added 2026-10-18. Both instances declare `expose: 5432` plus a **loopback-only** publication,
 so they are reachable from the Dokploy host but never from the internet:
 
-| Service | Database | Host port | Used by |
-|---|---|---|---|
-| `postgres` | `Database` | `${POSTGRES_PUBLISHED_PORT}` (18432) | `sankore-api`, `sankore-hangfire` |
-| `admin-postgres` | `AdminDatabase` | `${ADMIN_POSTGRES_PUBLISHED_PORT}` (18433) | `sankore-admin` |
+| Service | Compose file | Database | Host port | Used by |
+|---|---|---|---|---|
+| `postgres` | `docker-compose.yml` | `Database` | `${POSTGRES_PUBLISHED_PORT}` (18432) | `sankore-api`, `sankore-hangfire` |
+| `admin-postgres` | `docker-compose.admin.yml` | `AdminDatabase` | `${ADMIN_POSTGRES_PUBLISHED_PORT}` (18433) | `sankore-admin` |
+
+The two instances are now in two different stacks (§3), so every `docker compose` command below
+needs the `-f` that matches the service — the ports and the tunnel are unchanged.
 
 Ports live in the 18xxx block for the reason the compose header gives: 15432 is taken by other
 Postgres stacks. They bind `${TOOLS_BIND_ADDRESS}` — keep it at `127.0.0.1`, or the databases
@@ -1018,8 +1160,14 @@ docker compose -f docker-compose.yml exec postgres \
 ```
 
 `PGPASSWORD` is not optional: the services set `POSTGRES_HOST_AUTH_METHOD=scram-sha-256` and
-`--auth-local=scram-sha-256`, so there is no trust auth, not even on the local socket. Swap in
-`admin-postgres` / `-d AdminDatabase` for the tenant registry.
+`--auth-local=scram-sha-256`, so there is no trust auth, not even on the local socket.
+
+For the tenant registry, the same command against the other stack:
+
+```bash
+docker compose -f docker-compose.admin.yml --env-file .env.admin exec admin-postgres \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U postgres -d AdminDatabase'
+```
 
 Dump the same way:
 
@@ -1045,7 +1193,8 @@ the supported path.
 
 ### If the databases are missing
 
-Neither service sets `POSTGRES_DB`, so `initdb` creates only the `postgres` database.
-`Database` and `AdminDatabase` are created when the apps first run their EF migrations. A `\l`
-that does not list them means the API has not started cleanly yet — read its logs before
-suspecting the connection.
+Both services set `POSTGRES_DB` (`Database` and `AdminDatabase`), so `initdb` creates the named
+database on a **fresh** volume — and only there: on a volume that is already initialised the key
+is ignored, and the schema comes from the app's EF migrations at start-up instead. A `\l` that
+lists neither means the app has not started cleanly yet — read its logs before suspecting the
+connection.
