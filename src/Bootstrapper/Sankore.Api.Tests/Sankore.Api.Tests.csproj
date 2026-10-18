@@ -16,6 +16,8 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <!-- SystemUserSeederTests reads AdministrationDbContext, like the module's own suites do. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
   </ItemGroup>
 
   <ItemGroup>

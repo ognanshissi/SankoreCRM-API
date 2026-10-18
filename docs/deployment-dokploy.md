@@ -407,22 +407,73 @@ delete jobs.
 
 ---
 
-## 6. First run — provision a tenant, then its root user
+## 6. First run — the tenant and its root user provision themselves
 
 Nothing works before a tenant exists in the registry: `TenantResolutionMiddleware` rejects
 requests it cannot attribute, and the root-user endpoint checks the registry explicitly.
+
+**Both are now provisioned at start-up from the environment**, so steps 1 and 2 below are a
+fallback, not the normal path. Set these in the stack's environment and deploy:
+
+```bash
+DEFAULT_TENANT_NAME=MFI Côte d'Ivoire
+DEFAULT_TENANT_FQDN=https://crm.example.com   # the FRONT-END'S ORIGIN, scheme included
+DEFAULT_TENANT_EMAIL=admin@mfi.ci
+DEFAULT_TENANT_ID=                            # empty on the first deploy, then pin it
+SYSTEM_USER_PASSWORD=<strong>                 # empty disables the whole thing
+```
+
+`Sankore.Admin` creates the tenant (`TenantSeeder`), then `Sankore.Api` sends the same
+`RegisterCommand` that `create-root` sends (`SystemUserSeeder`). Two lines to look for after a
+deploy:
+
+```
+[INF] TenantSeeder: provisioned tenant 0f3e… (MFI Côte d'Ivoire) for https://crm.example.com
+[INF] SystemUserSeeder: created system user 7a21… (admin@mfi.ci) for tenant 0f3e…
+```
+
+Both are idempotent and neither can stop a host from starting. A redeploy logs
+`already provisioned` and writes nothing; a failure logs the reason and the manual remedy, and
+the host finishes booting — an API that refused to start would not even answer `/health`, which
+in Dokploy is a restart loop rather than a diagnosable deployment.
+
+> **`DEFAULT_TENANT_FQDN` is an origin, scheme included — and it is the FRONT-END'S origin, not
+> the API's.** Clients stamp every call with `location.origin` (`tenant.interceptor.ts`), and
+> `GetTenantByFqdnHandler` compares that against `tenants.fqdn` as a whole string. A bare host
+> (`api.example.com`) or a copied URL with a trailing slash is never matched, the deployment
+> comes up clean, and every request then answers
+> `400 {"error":"Cannot determine tenant…"}` with nothing wrong in any log. The seeders refuse a
+> value that is not an origin rather than store one that cannot work.
+
+> **Pin `DEFAULT_TENANT_ID` once, from the first deploy's logs.** Every row of the API's
+> database carries that id. A registry rebuilt without it generates a fresh one, and the whole
+> history becomes invisible to a tenant that looks identical from the outside. Leave it empty
+> the first time, read the id from the line above (or `GET /api/v1/tenants`), then set it. An id
+> that matches no existing tenant is ignored with a warning, never forced — and once it is
+> pinned, changing `DEFAULT_TENANT_FQDN` *moves* that tenant to the new origin instead of
+> creating a second one beside it.
+
+The system user can log in immediately: `LoginHandler` refuses only `UserAccountType.Service`,
+does not act on `MfaEnabled`, and enforces no password expiry. It holds every permission,
+through the `System` role `RoleSeeder` grants them all to.
+
+### Provisioning by hand
+
+Still the way in for a second tenant, and the fallback whenever a seeder reports it gave up.
 
 **1 — create the tenant** (against Sankore.Admin, with the API key):
 
 ```bash
 curl -X POST https://admin.example.com/api/v1/tenants \
   -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-  -d '{"name":"MFI Côte d'\''Ivoire","rootUserEmail":"admin@mfi.ci","fqdn":"api.example.com"}'
+  -d '{"name":"MFI Côte d'\''Ivoire","rootUserEmail":"admin@mfi.ci","fqdn":"https://crm.example.com"}'
 # → 201 {"id":"<tenantId>"}
 ```
 
-The `fqdn` is how the API will recognise the tenant, so it must be the host clients actually
-call — `api.example.com` here, or the front-end's domain if that is what reaches the API.
+The `fqdn` is how the API will recognise the tenant, and it must be the FRONT-END'S ORIGIN,
+scheme included — `https://crm.example.com`. Not a bare host, and not the API's host: the
+comparison is made against the whole string clients send, which is their `location.origin`. This
+line used to recommend `api.example.com`; that value never matches.
 
 **2 — create the root user** (against the API). The tenant comes from the request's host or the
 `X-Tenant-Fqdn` header, never from a body field:
@@ -431,7 +482,7 @@ call — `api.example.com` here, or the front-end's domain if that is what reach
 curl -X POST https://api.example.com/api/v1/users/create-root \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: $API_KEY" \
-  -H "X-Tenant-Fqdn: api.example.com" \
+  -H "X-Tenant-Fqdn: https://crm.example.com" \
   -d '{"email":"admin@mfi.ci","password":"<strong>","confirmPassword":"<strong>",
        "firstName":"Awa","lastName":"Ouattara","tenantId":"<tenantId>"}'
 ```
@@ -762,6 +813,21 @@ has to fail closed.
 `ApiKeyValidator` now holds the comparison for both, using
 `CryptographicOperations.FixedTimeEquals`. The previous ordinary string comparison returned as
 soon as two bytes differed, which leaks the shared-prefix length through response timing.
+
+**The key itself then undid most of that, and that is now fixed too.** `docker-compose.yml` set
+`ApiKey` on `sankore-admin` but not on `sankore-api`, so the API fell back to the value in its
+`appsettings.json` — a literal `sk-dev-…`, committed to the repository. The gate was closed
+against a secret anybody with the repo could read. The compose file now passes
+`ApiKey: "${SANKORE_API_KEY}"` to `sankore-api`, and `appsettings.json` ships it empty, which
+puts the fail-closed `503` back in charge of a deployment that forgets it.
+
+If your `SANKORE_API_KEY` (or `TENANTSTORE_APIKEY`) still holds that `sk-dev-…` value, it is
+public. Generate a new one and set BOTH to it — Admin validates incoming calls against its own
+`ApiKey`, and the API sends `TenantStore__ApiKey`, so they have to match:
+
+```bash
+openssl rand -hex 32 | sed 's/^/sk-/'
+```
 
 Verified end to end (11 unit tests, plus a live instance):
 

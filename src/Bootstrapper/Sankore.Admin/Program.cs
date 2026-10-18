@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Sankore.Admin.Features.TenantDomains;
 using Sankore.Admin.Features.Tenants;
@@ -12,6 +13,12 @@ builder.AddServiceDefaults();
 
 builder.Services.AddDbContext<AdminDbContext>(opts =>
     opts.UseNpgsql(builder.Configuration.GetConnectionString("AdminDatabase")));
+
+// The tenant TenantSeeder provisions at start-up. No ValidateOnStart: a malformed value is
+// reported by the seeder and the registry still comes up, so the manual POST /api/v1/tenants
+// stays reachable.
+builder.Services.Configure<DefaultTenantOptions>(
+    builder.Configuration.GetSection(DefaultTenantOptions.Section));
 
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
@@ -67,7 +74,12 @@ using (var scope = app.Services.CreateScope())
 {
     var adminDbContext = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
     await adminDbContext.Database.MigrateAsync();
-    await TenantSeeder.SeedAsync(adminDbContext);
+
+    await TenantSeeder.SeedAsync(
+        adminDbContext,
+        scope.ServiceProvider.GetRequiredService<IOptions<DefaultTenantOptions>>().Value,
+        app.Environment,
+        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(TenantSeeder)));
 }
 
 // Served only where SwaggerExposure allows (Development by default) and always behind HTTP Basic

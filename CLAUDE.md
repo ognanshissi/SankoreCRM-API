@@ -1154,9 +1154,10 @@ so the component writes it nowhere — the parent rebuilds the URL from the toke
 because `_readTokenFromFragment` wiped the address bar. The link stays single-use server-side:
 scanning moves the journey, it does not duplicate it, and the desktop's session stops working on its
 next call because `KycRemoteGate` re-reads the invitation every time. `qrcode-generator@2.0.4` is a
-new dependency (zero transitive deps, MIT, one lockfile entry) — **installed with
-`--legacy-peer-deps`, which this repo already requires**: `ngx-quill@30.1.3` peers on Angular 21
-while the workspace is on 22, a pre-existing conflict. The SVG is drawn by hand and
+new dependency (zero transitive deps, MIT, one lockfile entry). It was installed with
+`--legacy-peer-deps`, which the repo required at the time; it no longer does — `ngx-quill` has moved
+from 30.1.3 (peering on Angular 21 against a workspace on 22) to 31.0.1, which peers on 22, so
+`npm ci` and `npm install` both run with no flag. The SVG is drawn by hand and
 `kyc-continue-on-phone.spec.ts` pins the part that was written here rather than the encoder: one
 rect per dark module, `x`/`y` as (column, row) — a transposed QR looks identical and does not scan —
 and the four-module quiet zone, which is part of the standard and not decoration.

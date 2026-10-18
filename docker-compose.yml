@@ -151,6 +151,39 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "sankore-admin"
       ApiKey: "${SANKORE_API_KEY}"
+
+      # ── Tenant par défaut, provisionné au démarrage ────────────────────
+      # `TenantSeeder` crée ce tenant au premier démarrage, ce qui remplace le premier
+      # `curl POST /api/v1/tenants` du §6 de docs/deployment-dokploy.md. Idempotent : un
+      # redéploiement ne réécrit rien.
+      #
+      # `Fqdn` est l'ORIGINE DU FRONT, SCHÉMA COMPRIS (`https://crm.example.com`) — pas un
+      # hôte nu, et pas l'hôte de l'API. Le navigateur estampille chaque appel avec
+      # `location.origin` (`tenant.interceptor.ts` côté SankoreFront) et la recherche compare
+      # la chaîne ENTIÈRE : un hôte nu n'est jamais trouvé, et le symptôme est une 400
+      # « Cannot determine tenant » sur chaque requête, sans rien d'anormal dans les journaux.
+      DefaultTenant__Name: "${DEFAULT_TENANT_NAME:-Sankore}"
+      DefaultTenant__Fqdn: "${DEFAULT_TENANT_FQDN}"
+      DefaultTenant__RootUserEmail: "${DEFAULT_TENANT_EMAIL}"
+      # À FIGER sur tout déploiement qui conserve ses données : chaque ligne de la base de
+      # l'API porte cet identifiant. Un registre reconstruit sans lui en génère un nouveau, et
+      # tout l'historique devient invisible pour un tenant qui, vu de l'extérieur, est le même.
+      DefaultTenant__Id: "${DEFAULT_TENANT_ID:-}"
+    # Même sonde que `sankore-api`, et pour la même raison : l'image `aspnet` n'embarque ni
+    # curl ni wget, et `CMD-SHELL` passerait par dash, qui ne connaît pas `/dev/tcp`. Elle
+    # existe pour que `sankore-api` puisse attendre le registre : les migrations et le seed du
+    # tenant tournent AVANT que Kestrel n'écoute, donc une réponse prouve que le tenant par
+    # défaut est en base.
+    healthcheck:
+      test:
+        - "CMD"
+        - "bash"
+        - "-c"
+        - "exec 3<>/dev/tcp/127.0.0.1/${SANKORE_ADMIN_PORT} && printf 'GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && head -n1 <&3 | grep -q 200"
+      interval: "10s"
+      timeout: "5s"
+      retries: 12
+      start_period: "30s"
     expose:
       - "${SANKORE_ADMIN_PORT}"
     # Lié sur `TOOLS_BIND_ADDRESS` et non sur toutes les interfaces : ce service est le
@@ -594,6 +627,33 @@ services:
       # ── Référentiel de tenants ─────────────────────────────────────────
       TenantStore__BaseUrl: "${TENANTSTORE_BASEURL}"
       TenantStore__ApiKey: "${TENANTSTORE_APIKEY}"
+
+      # La clé que l'API EXIGE sur `POST /api/v1/users/create-root`, l'appel qui provisionne un
+      # super-utilisateur. Elle n'était pas passée ici : l'hôte retombait donc sur la valeur
+      # d'`appsettings.json`, committée dans le dépôt, et la clé qui garde le provisionnement
+      # d'un super-utilisateur était lisible par quiconque a le dépôt. `appsettings.json` la
+      # laisse maintenant vide, et hors Development l'endpoint répond 503 tant qu'elle manque.
+      ApiKey: "${SANKORE_API_KEY}"
+
+      # ── Utilisateur système, provisionné au démarrage ──────────────────
+      # `SystemUserSeeder` envoie la même commande que `create-root`, ce qui remplace le second
+      # `curl` du §6 de docs/deployment-dokploy.md. Idempotent : le tenant ne peut porter qu'un
+      # utilisateur système, et le seeder le vérifie avant d'écrire.
+      #
+      # Même origine que `DEFAULT_TENANT_FQDN`, et ce n'est pas une redondance : c'est par elle
+      # que cet hôte retrouve, dans le registre, le tenant qu'il provisionne.
+      SystemUser__TenantFqdn: "${DEFAULT_TENANT_FQDN}"
+      # Vide : l'adresse du tenant dans le registre (`DEFAULT_TENANT_EMAIL`) fait alors office
+      # de défaut, plutôt que d'écrire deux fois la même.
+      SystemUser__Email: "${SYSTEM_USER_EMAIL:-}"
+      # VIDE désactive tout le seeder, et c'est le défaut : un déploiement qui n'en veut pas
+      # garde la voie manuelle. Doit satisfaire la politique Identity (8 caractères, une
+      # majuscule, une minuscule, un chiffre, un caractère non alphanumérique) — le seeder la
+      # vérifie au démarrage et dit ce qui manque, plutôt que de laisser remonter une liste
+      # d'`IdentityError`.
+      SystemUser__Password: "${SYSTEM_USER_PASSWORD}"
+      SystemUser__FirstName: "${SYSTEM_USER_FIRSTNAME:-System}"
+      SystemUser__LastName: "${SYSTEM_USER_LASTNAME:-Sankore}"
       
 
       # ── CORS ───────────────────────────────────────────────────────────
@@ -673,6 +733,12 @@ services:
       # ne doit pas retarder le démarrage de l'API.
       seq:
         condition: "service_started"
+      # `service_healthy`, parce que la sonde du registre ne répond qu'une fois ses migrations
+      # ET son seed de tenant passés : `SystemUserSeeder` trouve alors le tenant du premier
+      # coup. Ce n'est qu'un confort — il réessaie dix fois de toute façon, et c'est lui la
+      # vraie garantie, un `depends_on` ne couvrant pas un registre déployé séparément.
+      sankore-admin:
+        condition: "service_healthy"
     # Aucun des trois hôtes n'avait de politique de redémarrage : une défaillance passagère au
     # démarrage — la base qui n'accepte pas encore, un courtier qui redémarre — laissait le
     # service à terre jusqu'à une intervention. `unless-stopped` et non `always` : un arrêt

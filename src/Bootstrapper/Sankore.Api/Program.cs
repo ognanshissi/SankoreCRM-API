@@ -118,6 +118,12 @@ builder.Services.AddScoped<ITenantContext>(sp =>
     return new HttpTenantContext(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>());
 });
 builder.Services.AddTenantStore(builder.Configuration);
+
+// The system user SystemUserSeeder provisions at start-up. No ValidateOnStart: a bad value is
+// reported by the seeder and the API still comes up, so /health answers and the manual
+// POST /api/v1/users/create-root stays reachable.
+builder.Services.Configure<SystemUserOptions>(
+    builder.Configuration.GetSection(SystemUserOptions.Section));
 builder.Services.AddLanguageResolution();
 builder.Services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
@@ -711,6 +717,11 @@ if (emitOpenApiTo is null)
     await CustomersModule.InitializeAsync(scope.ServiceProvider);
     await KycModule.InitializeAsync(scope.ServiceProvider);
     await IntegrationModule.InitializeAsync(scope.ServiceProvider);
+
+    // AFTER the modules: it sends RegisterCommand, which assigns the System role, and that role
+    // is seeded by AdministrationModule.InitializeAsync just above. It takes the root provider
+    // and not this scope — it establishes an ambient tenant scope and needs to build its own.
+    await SystemUserSeeder.SeedAsync(app.Services);
 }
 
 // ---------------------------------------------------------------------
