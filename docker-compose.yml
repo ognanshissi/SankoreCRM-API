@@ -86,6 +86,16 @@ services:
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      # Manquait, et la sonde de santé de `postgres.Dockerfile` la référence déjà
+      # (`pg_isready -d "$POSTGRES_DB"`) — signe que l'image attendait cette variable.
+      #
+      # Sans elle, aucune base nommée n'est créée à l'initdb et c'est l'API qui crée la sienne
+      # par ses migrations : Hangfire, qui pointe sur la MÊME base sans la créer, échouait sur
+      # « database "Database" does not exist » dès qu'il démarrait le premier.
+      #
+      # Ne prend effet qu'au PREMIER démarrage d'un volume vide : sur un volume déjà initialisé,
+      # c'est la dépendance vers l'API ci-dessous qui garantit l'ordre.
+      POSTGRES_DB: "AdminDatabase"
     # Sonde de santé : `depends_on` était en `service_started`, qui n'attend que l'EXISTENCE du
     # conteneur. Or l'API applique ses migrations au démarrage (Program.cs), donc elle ouvrait
     # une connexion avant que Postgres n'accepte la moindre requête et mourait sur
@@ -171,6 +181,8 @@ services:
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      # Voir le commentaire sur admin-postgres.
+      POSTGRES_DB: "Database"
     # Sonde de santé : `depends_on` était en `service_started`, qui n'attend que l'EXISTENCE du
     # conteneur. Or l'API applique ses migrations au démarrage (Program.cs), donc elle ouvrait
     # une connexion avant que Postgres n'accepte la moindre requête et mourait sur
@@ -605,6 +617,26 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "sankore-api"
+    # Sonde HTTP sans paquet ajouté : l'image `aspnet` n'embarque ni curl, ni wget, ni nc —
+    # seulement bash, dont `/dev/tcp` suffit.
+    #
+    # Forme `CMD` avec bash EXPLICITE, et non `CMD-SHELL` : celui-ci passe par `/bin/sh`
+    # (dash), qui ne connaît pas `/dev/tcp` et répond « cannot create /dev/tcp/...: Directory
+    # nonexistent ». La sonde échouait alors toujours, l'API restait `unhealthy`, et Hangfire
+    # ne démarrait jamais puisqu'il l'attend.
+    #
+    # Elle tape `/health`, et comme les migrations tournent AVANT que Kestrel n'écoute, une
+    # réponse prouve que la base est prête — ce qui est précisément ce que Hangfire attend.
+    healthcheck:
+      test:
+        - "CMD"
+        - "bash"
+        - "-c"
+        - "exec 3<>/dev/tcp/127.0.0.1/${SANKORE_API_PORT} && printf 'GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && head -n1 <&3 | grep -q 200"
+      interval: "10s"
+      timeout: "5s"
+      retries: 12
+      start_period: "40s"
     expose:
       - "${SANKORE_API_PORT}"
     # Publié sur l'hôte : le fichier généré ne déclarait qu'`expose`, donc l'API n'était
@@ -688,6 +720,11 @@ services:
       - "${TOOLS_BIND_ADDRESS}:${SANKORE_HANGFIRE_PUBLISHED_PORT}:${SANKORE_HANGFIRE_PORT}"
     depends_on:
       postgres:
+        condition: "service_healthy"
+      # Hangfire pointe sur la MÊME base que l'API mais ne la crée pas : c'est l'API qui
+      # l'applique par ses migrations. Sans cette dépendance, Hangfire démarrant le premier
+      # mourait sur « database "Database" does not exist » — constaté.
+      sankore-api:
         condition: "service_healthy"
     # Aucun des trois hôtes n'avait de politique de redémarrage : une défaillance passagère au
     # démarrage — la base qui n'accepte pas encore, un courtier qui redémarre — laissait le
