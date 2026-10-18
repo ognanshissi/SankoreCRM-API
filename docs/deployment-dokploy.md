@@ -215,25 +215,39 @@ behaviour is unchanged by this split and still worth fixing in code (§9).
 | `DEFAULT_TENANT_FQDN` | `DEFAULT_TENANT_FQDN` | `SystemUserSeeder` cannot find the tenant it provisions |
 | `DEFAULT_TENANT_ID` | — (registry only) | see below |
 
-**The volume is the one trap worth re-reading.** Compose prefixes volume names with the project
-name, and this stack is its own project (`name: sankore-admin` at the top of the file), so a
-plain declaration would have pointed at an **empty** volume: the registry would have come up
-perfectly and seeded a *new* `TenantId`, leaving every row of the API's database orphaned. The
-volume is therefore declared with an explicit `name:` that defaults to the volume the single
-stack already created:
+**The named volume in the generated stack was never holding the data.** This was found during
+the cutover and it is the most important thing on this page. `pgvector/pgvector:pg16` declares
+`VOLUME /var/lib/postgresql/data`, and the Aspire-generated compose mounted the named volume one
+level up, on `/var/lib/postgresql`. Docker therefore created an **anonymous** volume at
+`/var/lib/postgresql/data` which *shadowed* it: the cluster lived in the anonymous volume, and
+the named volume held nothing but an empty `data/` directory. A `docker compose down -v`, a
+`docker rm -v` or a `docker volume prune` would have destroyed the tenant registry without
+warning, and the named volume everyone would have reached for as the backup was decorative.
+
+`docker-compose.admin.yml` mounts `/var/lib/postgresql/data` — PGDATA itself. One line, and the
+check is one command: exactly **one** volume, the named one:
 
 ```bash
-docker volume ls | grep admin-postgres
-# sankorecrm_sankorecrm.apphost-25fc6f3f86-admin-postgres-data   ← the default
+docker inspect sankore-admin-admin-postgres-1 --format '{{range .Mounts}}{{.Name}} -> {{.Destination}}{{"\n"}}{{end}}'
+# sankore-admin-postgres-data -> /var/lib/postgresql/data
 ```
 
-A fresh installation can set `ADMIN_POSTGRES_VOLUME=sankore-admin-postgres-data` and start from
-a clean name. An existing one should leave it alone, and pin `DEFAULT_TENANT_ID` before the
-first split deploy.
+Because of this, the old volume **cannot** be carried over — it contains no cluster, and an
+`initdb` refuses a non-empty directory anyway. The data moves by `pg_dump` and restore, which is
+the cutover below. `ADMIN_POSTGRES_VOLUME` defaults to a clean `sankore-admin-postgres-data`.
 
-`ADMIN_POSTGRES_PASSWORD` replaces the shared `POSTGRES_PASSWORD` for this stack. On an existing
-installation it must carry **the same value**: the volume was initialised with it and Postgres
-will not accept another — the symptom is a refused authentication at start-up, not a reset.
+**`DEFAULT_TENANT_ID` is what makes the move survivable.** Pin it before the cutover. The
+registry re-seeds the default tenant on a fresh database, and with the id pinned it re-creates it
+with *the same* id, so every row of the API's database still resolves. Unpinned, the seeder
+generates a new id and the API's data is orphaned behind a tenant that looks identical from the
+outside. On this installation the pinned value was already in place, which is the only reason the
+first (mis-mounted) attempt was recoverable.
+
+> **The same flaw is still present on the main stack's `postgres` service**, which also mounts
+> `sankorecrm.apphost-25fc6f3f86-postgres-data` on `/var/lib/postgresql`. The CRM database —
+> clients, leads, KYC, audit — is therefore on an anonymous volume too, and the named volume
+> protects nothing. Fixing it is the same one-line change plus a dump/restore of a much larger
+> database, so it is left as a decision rather than a side effect of this split: see §9, item 5.
 
 To put the registry on a managed Postgres instead of the bundled container, set
 `ADMIN_POSTGRES_HOST` (and `_PORT`, `_USER`, `_DB`) to the internal host Dokploy shows and delete
@@ -241,59 +255,87 @@ the `admin-postgres` service; the `depends_on` carries `required: false` for exa
 
 ### Cutting an existing single-stack installation over
 
-The old and the new definitions cannot run at the same time: they share the container name
-`sankore.admin`, the host ports 18200/18433, and — by design — the same Postgres volume. Two
-Postgres processes on one data directory corrupt it, so stop the old pair first.
+Performed on this repository on 2026-10-18; the sequence below is the one that worked, including
+the two things that went wrong.
 
-The commands below use plain `docker`, not `docker compose`: the two services are **no longer in
-`docker-compose.yml`**, so Compose cannot address them by service name any more, while the
-containers started from the old file are still running. Find them first — the registry's name is
-pinned, its database's is derived from the project:
-
-```bash
-docker ps --filter name=admin --format '{{.Names}}'
-# sankore.admin
-# sankorecrm-admin-postgres-1      ← <project>-admin-postgres-1
-```
+The old and the new definitions cannot run at once: they share the container name
+`sankore.admin`, the host ports 18200/18433, and the registry's identity. The commands use plain
+`docker` for the old pair, because those two services are **no longer in `docker-compose.yml`**
+and Compose can no longer address them by service name, while the containers it started are
+still running.
 
 ```bash
+# 0. Build the registry image from current source. Do NOT skip this: the image on this host was
+#    eight minutes older than the commit that exempts /health from the API-key middleware, so
+#    the new container's probe got 401 and the container never became healthy, while serving
+#    traffic perfectly. A stale image is invisible until a health check disagrees with it.
+docker compose -f docker-compose.admin.yml --env-file .env.admin build sankore-admin
+
 # 1. What the running registry was told, so the new stack is told the same.
-docker exec sankore.admin printenv DefaultTenant__Id DefaultTenant__Fqdn
-docker exec sankorecrm-admin-postgres-1 printenv POSTGRES_PASSWORD
+docker ps --filter name=admin --format '{{.Names}}'          # find the old pair
+docker exec sankore.admin printenv ApiKey DefaultTenant__Id DefaultTenant__Fqdn \
+    DefaultTenant__Name DefaultTenant__RootUserEmail
+docker exec <project>-admin-postgres-1 printenv POSTGRES_PASSWORD
 
-# 2. A dump, because this is the registry: losing it orphans every row the API owns.
-docker exec sankorecrm-admin-postgres-1 \
-  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U postgres -d AdminDatabase' > admin-registry.sql
+# 2. THE dump. This is the migration path, not just a precaution — the named volume holds
+#    nothing (see above), so this file is the only thing that moves the data.
+docker exec <project>-admin-postgres-1 \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U postgres -d AdminDatabase' \
+  > admin-registry-pre-split-$(date +%F).sql
+grep -c '^CREATE TABLE' admin-registry-pre-split-*.sql    # 3: Tenants, TenantDomains, history
 
-# 3. Stop and remove the old pair. The VOLUME is untouched by this — it is what carries over,
-#    and `docker rm` does not touch named volumes anyway.
-docker stop sankore.admin sankorecrm-admin-postgres-1
-docker rm   sankore.admin sankorecrm-admin-postgres-1
-
-# 4. Fill .env.admin with the values from steps 1 and 2 — ADMIN_POSTGRES_PASSWORD is the
-#    POSTGRES_PASSWORD read above, and DEFAULT_TENANT_ID the id read above — then:
+# 3. Put the API side on the shared bus FIRST, while the old registry still answers: the API is
+#    recreated (a network cannot be attached to a running container) and its SystemUserSeeder
+#    needs the registry during that boot.
 docker network create sankore-shared
-docker compose -f docker-compose.admin.yml --env-file .env.admin up -d --build
+docker compose -f docker-compose.yml up -d sankore-api env-dashboard
 
-# 5. The registry answers, and the tenant id is the one from step 1, not a new one.
-curl -s -H "X-Api-Key: <SANKORE_API_KEY>" http://127.0.0.1:18200/api/v1/tenants
+# 4. Retire the old pair. No `-v`, ever: it would take the anonymous volume with it, which on
+#    the OLD mount layout is where the cluster actually lives.
+docker stop sankore.admin <project>-admin-postgres-1
+docker rm   sankore.admin <project>-admin-postgres-1
+
+# 5. Fill .env.admin from step 1, then bring up the database ALONE and restore into it before
+#    the app can migrate a fresh schema on top of the restore.
+docker compose -f docker-compose.admin.yml --env-file .env.admin up -d admin-postgres
+until [ "$(docker inspect -f '{{.State.Health.Status}}' sankore-admin-admin-postgres-1)" = healthy ]; do sleep 2; done
+docker exec -i sankore-admin-admin-postgres-1 \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -U postgres -d AdminDatabase' \
+  < admin-registry-pre-split-*.sql
+
+# 6. Now the registry. EF finds a complete __EFMigrationsHistory and applies nothing; the
+#    seeder finds its tenant and writes nothing.
+docker compose -f docker-compose.admin.yml --env-file .env.admin up -d
+docker logs sankore.admin 2>&1 | grep -c 'Applying migration'   # must be 0
 ```
 
-**The API container must be recreated once**, because it gains the `sankore-shared` network and a
-network cannot be attached to a running container by Compose:
+`ON_ERROR_STOP=1` on the restore is deliberate: this dump carries only the `citext` extension and
+zero `spatial_ref_sys` rows, so there is nothing to collide with the `init-extensions.sql` the
+fresh `initdb` already ran — any error at all means something is wrong and the restore should
+stop rather than half-apply.
+
+### Verifying the cutover
 
 ```bash
-docker compose -f docker-compose.yml up -d sankore-api env-dashboard
+# the registry's own port: answers with the key, refuses without, probe is anonymous
+curl -s -o /dev/null -w '%{http_code}\n' -H "X-Api-Key: $SANKORE_API_KEY" http://127.0.0.1:18200/api/v1/tenants   # 200
+curl -s -o /dev/null -w '%{http_code}\n'                                   http://127.0.0.1:18200/api/v1/tenants   # 401
+curl -s -o /dev/null -w '%{http_code}\n'                                   http://127.0.0.1:18200/health           # 200
+
+# the API reaching it across the two stacks, by service name, over sankore-shared
+docker exec sankore.api bash -c 'exec 3<>/dev/tcp/sankore-admin/8080 \
+  && printf "GET /health HTTP/1.1\r\nHost: sankore-admin\r\nConnection: close\r\n\r\n" >&3 && head -n1 <&3'
+
+# every tenant is back, with its original id
+curl -s -H "X-Api-Key: $SANKORE_API_KEY" http://127.0.0.1:18200/api/v1/tenants
 ```
 
-After that it resolves `sankore-admin` by DNS on each call, with no further restarts — and its
-tenant cache (5 min by id, 24 h by domain) covers the gap while the registry is down.
-
-Until step 3 is done, `docker compose -f docker-compose.yml up -d` reports the two containers as
-**orphans** of that project — correct, since they were started from a file that no longer
-declares them. Step 3 is what clears the warning. Do not answer it with `--remove-orphans` once
-the new stack is up: that flag removes containers, and after the cutover the pair it finds is the
-pair you want to keep.
+Keep the dump and the old volumes until the installation has run for a while. Nothing in the
+cutover deletes them: the decorative
+`sankorecrm_sankorecrm.apphost-25fc6f3f86-admin-postgres-data` and the orphaned anonymous volume
+that holds the pre-cutover cluster are both still on the host, and `docker volume ls -qf
+dangling=true` lists the latter among others. That is also the reason not to run a
+`docker volume prune` on this host casually.
 
 ---
 
@@ -808,6 +850,7 @@ Two blockers that were here when this runbook was first written are now fixed in
 | 2 | **Swagger is Development-only** (this one is correct) | `Program.cs` | do not "fix" it by setting `ASPNETCORE_ENVIRONMENT=Development` in production — that would also expose health details and turn on sensitive EF data logging |
 | 3 | **`Messaging__UseRabbitMq=true` cannot authenticate** | `cfg.Host(host)` passes a hostname only | a broker with credentials will not connect; see §7 |
 | 4 | **`ApiKeyMiddleware` fails open** | it skips validation when the configured `ApiKey` is empty, rather than denying | an unset variable does not weaken the guard on Sankore.Admin, it removes it: the tenant registry answers every caller that can reach it. Deny-by-default would be the fix; it would also mean every local run needs a key, which is why it has not been changed here. Until then the compose guard is the mitigation — `docker-compose.admin.yml` declares `ApiKey: "${SANKORE_API_KEY:?...}"`, so the stack refuses to render without one, including from Dokploy's Environment tab. The Dockerfile-*Application* route earlier in §3 has no such guard: there, an empty `ApiKey` still boots open |
+| 5 | **The CRM database is on an anonymous volume** | `postgres` mounts its named volume on `/var/lib/postgresql`, but the image declares `VOLUME /var/lib/postgresql/data` | the named volume `…-postgres-data` is shadowed and empty; the real cluster is an anonymous volume. `docker compose down -v`, `docker rm -v` or `docker volume prune` destroys clients, leads, KYC and audit data, and the volume a restore would reach for contains nothing. Found 2026-10-18 while splitting the registry out, where the same bug was fixed by mounting PGDATA directly (§3). Same one-line fix here, but it needs a dump/restore of the live database, so it is a scheduled migration — not a redeploy |
 
 Also worth knowing, though not blocking:
 

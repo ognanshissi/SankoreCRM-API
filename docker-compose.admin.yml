@@ -25,9 +25,9 @@
 # sur les labels, plus bas).
 # ─────────────────────────────────────────────────────────────────────────────
 name: "sankore-admin"
-
 services:
   admin-postgres:
+    env_file: ".env.admin"
     image: ${DOCKER_REGISTRY-}admin-postgres
     # Pas de `container_name` : c'est un nom GLOBAL sur le démon Docker, pas un nom cadré au
     # projet Compose, et « admin-postgres » entre en collision avec n'importe quelle autre pile
@@ -66,8 +66,17 @@ services:
     ports:
       - "${TOOLS_BIND_ADDRESS:-127.0.0.1}:${ADMIN_POSTGRES_PUBLISHED_PORT:-18433}:5432"
     volumes:
+      # `/var/lib/postgresql/data` et NON le parent `/var/lib/postgresql`, que le fichier
+      # généré par Aspire montait. C'est la correction la plus importante de ce fichier, et elle
+      # ne se voyait pas : l'image déclare `VOLUME /var/lib/postgresql/data`, donc Docker crée
+      # un volume ANONYME à cet endroit — qui MASQUE le volume nommé monté au-dessus. Le
+      # cluster vivait dans l'anonyme, le volume nommé ne contenait qu'un répertoire `data`
+      # vide, et la sauvegarde qu'on croyait tenir ne tenait rien : `docker rm -v`,
+      # `docker compose down -v` ou un `docker volume prune` détruisaient le registre en
+      # silence. Vérification : `docker inspect <conteneur> --format '{{.Mounts}}'` ne doit
+      # montrer QU'UN volume, le nommé.
       - type: "volume"
-        target: "/var/lib/postgresql"
+        target: "/var/lib/postgresql/data"
         source: "admin-postgres-data"
         read_only: false
     networks:
@@ -75,6 +84,7 @@ services:
     restart: "unless-stopped"
 
   sankore-admin:
+    env_file: ".env.admin"
     image: ${DOCKER_REGISTRY-}sankore.admin
     container_name: sankore.admin
     build:
@@ -226,14 +236,16 @@ networks:
     external: true
 
 volumes:
-  # `name:` explicite, et c'est la clé de voûte de la séparation : sans lui, Compose préfixe le
-  # volume du nom du projet, donc changer de projet (ce que fait `name: sankore-admin` en tête)
-  # pointerait sur un volume VIDE. Le registre se réamorcerait alors proprement, avec un
-  # NOUVEAU `TenantId` — et toutes les données de l'API deviendraient invisibles.
+  # `name:` explicite : sans lui, Compose préfixe le volume du nom du projet, et le nom réel du
+  # volume changerait avec le projet — ce qui, sur une pile dont le nom du projet est justement
+  # ce qui la sépare, est le genre de dépendance qu'on ne veut pas. Ici, `docker volume ls`
+  # montre exactement ce que ce fichier déclare.
   #
-  # Le défaut est donc le volume DÉJÀ EN PLACE, celui que la pile unique a créé
-  # (`docker volume ls | grep admin-postgres`). Une installation neuve peut poser
-  # `ADMIN_POSTGRES_VOLUME=sankore-admin-postgres-data` et repartir d'un nom propre.
+  # CE VOLUME NE REPREND PAS celui de l'ancienne pile unique, et il ne peut pas : ce dernier
+  # était monté sur le PARENT de `PGDATA` (voir le commentaire du montage, plus haut), donc il
+  # n'a jamais contenu de cluster — il ne porte qu'un répertoire `data` vide, qu'un initdb
+  # refuserait. La reprise des données se fait par un `pg_dump`/restauration, et c'est de toute
+  # façon ce qu'on veut faire une fois : repartir d'un volume correctement monté.
   admin-postgres-data:
     driver: "local"
-    name: "${ADMIN_POSTGRES_VOLUME:-sankorecrm_sankorecrm.apphost-25fc6f3f86-admin-postgres-data}"
+    name: "${ADMIN_POSTGRES_VOLUME:-sankore-admin-postgres-data}"

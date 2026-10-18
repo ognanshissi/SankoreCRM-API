@@ -237,3 +237,7 @@ node_modules/
 # nature que `.env` : mot de passe de la base du registre et clé d'API d'entrée, en clair. Le
 # gabarit suivi par git est `.env.admin.example`.
 .env.admin
+
+# Sauvegardes du référentiel de tenants (§3 du runbook de déploiement). Contiennent les noms de
+# domaine et les adresses des comptes racines de chaque tenant.
+admin-registry-*.sql

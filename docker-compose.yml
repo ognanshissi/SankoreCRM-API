@@ -136,9 +136,19 @@ services:
     ports:
       - "${TOOLS_BIND_ADDRESS}:${POSTGRES_PUBLISHED_PORT}:5432"
     volumes:
+      # `/var/lib/postgresql/data` et NON le parent `/var/lib/postgresql`, que le fichier généré
+      # par Aspire montait. Corrigé le 2026-10-18, après l'avoir constaté sur la base du
+      # registre : l'image déclare `VOLUME /var/lib/postgresql/data`, donc Docker crée un volume
+      # ANONYME à cet endroit, qui MASQUE le volume nommé monté au-dessus. Le cluster vivait dans
+      # l'anonyme ; le volume nommé ne contenait qu'un répertoire `data` vide.
+      #
+      # Autrement dit, la base du CRM — clients, prospects, KYC, journal d'audit — n'était pas
+      # sur le volume qu'on aurait sauvegardé, et un `docker compose down -v`, un `docker rm -v`
+      # ou un `docker volume prune` l'aurait détruite sans rien dire. Vérification :
+      # `docker inspect <conteneur> --format '{{.Mounts}}'` ne doit montrer QU'UN volume.
       - type: "volume"
-        target: "/var/lib/postgresql"
-        source: "sankorecrm.apphost-25fc6f3f86-postgres-data"
+        target: "/var/lib/postgresql/data"
+        source: "sankore-postgres-data"
         read_only: false
     networks:
       - "sankore-internal"
@@ -808,11 +818,20 @@ networks:
   aspire:
     driver: "bridge"
 volumes:
-  # Le volume de `admin-postgres` est parti avec lui dans `docker-compose.admin.yml`, où il est
-  # déclaré avec un `name:` explicite — donc sans préfixe de projet, et donc toujours le MÊME
-  # volume Docker qu'ici avant la séparation.
-  sankorecrm.apphost-25fc6f3f86-postgres-data:
+  # Le volume de `admin-postgres` est parti avec lui dans `docker-compose.admin.yml`.
+  #
+  # Celui-ci est NOUVEAU, et pas seulement renommé : l'ancien
+  # (`sankorecrm.apphost-25fc6f3f86-postgres-data`) était monté sur le parent de PGDATA et n'a
+  # donc jamais contenu de cluster — un initdb refuserait d'ailleurs son répertoire `data`
+  # résiduel. Les données ont été reprises par `pg_dump`/restauration le 2026-10-18. L'ancien
+  # volume est laissé en place : il ne sert plus à rien, mais le supprimer n'est pas l'affaire
+  # d'un fichier de composition.
+  #
+  # `name:` explicite pour que `docker volume ls` montre exactement ce qui est déclaré ici,
+  # sans préfixe de projet à deviner.
+  sankore-postgres-data:
     driver: "local"
+    name: "${POSTGRES_VOLUME:-sankore-postgres-data}"
 
   # Un volume par préoccupation chiffrée de l'API. Séparés et non un seul : ce sont cinq clés
   # distinctes, et les monter ensemble ferait d'une sauvegarde partielle une sauvegarde dont
