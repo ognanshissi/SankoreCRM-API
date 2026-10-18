@@ -1,11 +1,19 @@
 using MediatR;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Microsoft.OpenApi.Models;
+using Sankore.Admin.Domain;
+using Sankore.Admin.Features.Auth;
 using Sankore.Admin.Features.TenantDomains;
 using Sankore.Admin.Features.Tenants;
 using Sankore.Admin.Infrastructure;
+using Sankore.Admin.Infrastructure.Auth;
+using Sankore.Admin.Infrastructure.OpenApi;
 using Sankore.Shared.Infrastructure.Auth;
+
+// Build-time only: write the OpenAPI document for the admin front-end's client and exit. Nothing
+// is migrated or seeded in that mode, and the signing key is not required.
+var emitOpenApiTo = OpenApiEmitter.OutputPathFrom(args);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,67 +27,51 @@ builder.Services.AddDbContext<AdminDbContext>(opts =>
 // stays reachable.
 builder.Services.Configure<DefaultTenantOptions>(
     builder.Configuration.GetSection(DefaultTenantOptions.Section));
+builder.Services.Configure<PlatformAdminSeedOptions>(
+    builder.Configuration.GetSection(PlatformAdminSeedOptions.Section));
 
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
-builder.Services.AddOpenApi();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+// Enums as names, like Sankore.Api. This host used to send them as integers, harmless while no
+// response carried one; the admin front-end's generated client is configured for string enums.
+builder.Services.ConfigureHttpJsonOptions(opts =>
+    opts.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
+builder.Services.AddProblemDetails();
+
+builder.Services.AddAdminAuthentication(builder.Configuration, validateOnStart: emitOpenApiTo is null);
+using (var loggerFactory = LoggerFactory.Create(b => b.AddConsole()))
 {
-    options.CustomSchemaIds(type => type.FullName);
+    builder.Services.AddAdminCors(
+        builder.Configuration, builder.Environment, loggerFactory.CreateLogger("Sankore.Admin.Cors"));
+}
 
-    options.SwaggerDoc("v1", new()
-    {
-        Title = "Sankore Admin API",
-        Version = "v1",
-        Description = "Administration API for SankoreCRM"
-    });
-
-    options.AddSecurityDefinition("Bearer", new()
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Enter your JWT token."
-    });
-
-    options.AddSecurityRequirement(new()
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            []
-        }
-    });
-});
+builder.Services.AddOpenApi();
+builder.Services.AddAdminSwagger();
 
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
 
-// ---------------------------------------------------------------------
-//  Ensure database schemas exist (creates tables when no migrations are applied yet)
-// ---------------------------------------------------------------------
-
-using (var scope = app.Services.CreateScope())
+if (emitOpenApiTo is null)
 {
+    using var scope = app.Services.CreateScope();
     var adminDbContext = scope.ServiceProvider.GetRequiredService<AdminDbContext>();
     await adminDbContext.Database.MigrateAsync();
+
+    var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 
     await TenantSeeder.SeedAsync(
         adminDbContext,
         scope.ServiceProvider.GetRequiredService<IOptions<DefaultTenantOptions>>().Value,
         app.Environment,
-        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(TenantSeeder)));
+        loggerFactory.CreateLogger(nameof(TenantSeeder)));
+
+    await PlatformAdminSeeder.SeedAsync(
+        adminDbContext,
+        scope.ServiceProvider.GetRequiredService<IOptions<PlatformAdminSeedOptions>>().Value,
+        scope.ServiceProvider.GetRequiredService<IPasswordHasher<PlatformAdmin>>(),
+        loggerFactory.CreateLogger(nameof(PlatformAdminSeeder)));
 }
 
 // Served only where SwaggerExposure allows (Development by default) and always behind HTTP Basic
@@ -98,8 +90,19 @@ if (SwaggerExposure.IsEnabled(app.Configuration, app.Environment))
 
 app.UseHttpsRedirection();
 
-// API key validation for service-to-service calls from SankoreApi
-app.UseApiKeyAuth();
+// Before the API key: a browser's CORS preflight carries no credential at all, and answering it
+// 401 is reported by the browser as a CORS failure, not as an authentication one.
+app.UseCors();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// API key validation for service-to-service calls from SankoreApi — everywhere except the
+// operators' sign-in routes, which a browser calls and which carry their own JWT. The key must
+// never be shipped to a front-end: whoever holds it administers every tenant.
+app.UseWhen(
+    ctx => !ctx.Request.Path.StartsWithSegments(AuthEndpoints.Prefix, StringComparison.OrdinalIgnoreCase),
+    branch => branch.UseApiKeyAuth());
 
 // Same flat liveness route the API declares, and for the same reason: `MapDefaultEndpoints`
 // (ServiceDefaults) maps /health and /alive ONLY in Development, so outside it this host answered
@@ -115,7 +118,14 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
     .WithOpenApi()
     .AllowAnonymous();
 
+app.MapAuthEndpoints();
 app.MapTenantEndpoints();
 app.MapTenantDomainEndpoints();
+
+if (emitOpenApiTo is not null)
+{
+    await OpenApiEmitter.WriteAsync(app, emitOpenApiTo);
+    return;
+}
 
 app.Run();

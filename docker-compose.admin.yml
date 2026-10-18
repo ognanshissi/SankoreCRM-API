@@ -164,6 +164,19 @@ services:
       # C'est le piège N°1 de la séparation : repartir sur un volume vide SANS cette valeur
       # donne une pile qui démarre très bien et une API dont les données ont disparu.
       DefaultTenant__Id: "${DEFAULT_TENANT_ID:-}"
+
+      # ── Connexion des administrateurs plateforme (front admin) ─────────
+      # Clé de signature PROPRE au front admin, jamais `Jwt__SigningKey` de la pile API : un
+      # jeton d'utilisateur tenant ne doit pas ouvrir le registre. `:?` parce que l'hôte refuse
+      # de démarrer sans elle (32 octets au moins) — autant que Compose le dise avant.
+      AdminJwt__SigningKey: "${ADMIN_JWT_SIGNING_KEY:?ADMIN_JWT_SIGNING_KEY est obligatoire (openssl rand -base64 48)}"
+      # Origine du front admin, schéma compris. Vide : le navigateur bloque le front (CORS).
+      Cors__AllowedOrigins__0: "${ADMIN_FRONT_ORIGIN:-}"
+      # Premier administrateur, créé UNIQUEMENT si la table est vide. Retirer le mot de passe
+      # de l'environnement après le premier démarrage : il est alors stocké haché.
+      PlatformAdmin__Email: "${PLATFORM_ADMIN_EMAIL:-}"
+      PlatformAdmin__FullName: "${PLATFORM_ADMIN_FULL_NAME:-Administrateur plateforme}"
+      PlatformAdmin__Password: "${PLATFORM_ADMIN_PASSWORD:-}"
     # `bash` explicite, et non `CMD-SHELL` : celui-ci passe par dash, qui ne connaît pas
     # `/dev/tcp`, et l'image `aspnet` n'embarque ni curl, ni wget, ni nc.
     #

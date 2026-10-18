@@ -30,8 +30,14 @@ Wipes the volume and starts from a clean database. All migrations run from scrat
 # 1. Find the Aspire Postgres container
 docker ps --format "{{.Names}}" | grep postgres
 
-# 2. Find its data volume
-docker volume ls | grep sankorecrm
+# 2. Find its data volume.
+#    NOTE (2026-10-18): the Compose stack's volumes were renamed and remounted - they are
+#    now `sankore-postgres-data` (CRM) and `sankore-admin-postgres-data` (tenant registry),
+#    and they do NOT match `grep sankorecrm`. The `sankorecrm.apphost-*` volumes that still
+#    match are the Aspire ones this page is about, plus two now-empty leftovers of the old
+#    Compose mounts. Read the name off the container before removing anything:
+#      docker inspect <container> --format '{{range .Mounts}}{{.Name}}{{"\n"}}{{end}}'
+docker volume ls | grep -E 'sankorecrm|sankore-'
 
 # 3. Stop the container and remove the volume
 docker stop <container-name>

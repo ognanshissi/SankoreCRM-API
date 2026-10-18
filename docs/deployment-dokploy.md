@@ -243,11 +243,14 @@ generates a new id and the API's data is orphaned behind a tenant that looks ide
 outside. On this installation the pinned value was already in place, which is the only reason the
 first (mis-mounted) attempt was recoverable.
 
-> **The same flaw is still present on the main stack's `postgres` service**, which also mounts
-> `sankorecrm.apphost-25fc6f3f86-postgres-data` on `/var/lib/postgresql`. The CRM database —
-> clients, leads, KYC, audit — is therefore on an anonymous volume too, and the named volume
-> protects nothing. Fixing it is the same one-line change plus a dump/restore of a much larger
-> database, so it is left as a decision rather than a side effect of this split: see §9, item 5.
+> **The main stack's `postgres` had the same flaw, and it was fixed the same day.** It mounted
+> `sankorecrm.apphost-25fc6f3f86-postgres-data` on `/var/lib/postgresql`, so the CRM database —
+> clients, leads, KYC, audit — was on an anonymous volume too and the named volume protected
+> nothing. `docker-compose.yml` now mounts `/var/lib/postgresql/data` onto a new named volume,
+> `sankore-postgres-data`, and the 28 MB database was moved across by dump and restore with the
+> applications stopped. Verification was a row-for-row comparison of all 38 populated tables
+> against the dump's own `COPY` blocks: no differences. The old volume is still on the host,
+> holding nothing; the orphaned anonymous volume still holds the pre-fix cluster.
 
 To put the registry on a managed Postgres instead of the bundled container, set
 `ADMIN_POSTGRES_HOST` (and `_PORT`, `_USER`, `_DB`) to the internal host Dokploy shows and delete
@@ -850,7 +853,7 @@ Two blockers that were here when this runbook was first written are now fixed in
 | 2 | **Swagger is Development-only** (this one is correct) | `Program.cs` | do not "fix" it by setting `ASPNETCORE_ENVIRONMENT=Development` in production — that would also expose health details and turn on sensitive EF data logging |
 | 3 | **`Messaging__UseRabbitMq=true` cannot authenticate** | `cfg.Host(host)` passes a hostname only | a broker with credentials will not connect; see §7 |
 | 4 | **`ApiKeyMiddleware` fails open** | it skips validation when the configured `ApiKey` is empty, rather than denying | an unset variable does not weaken the guard on Sankore.Admin, it removes it: the tenant registry answers every caller that can reach it. Deny-by-default would be the fix; it would also mean every local run needs a key, which is why it has not been changed here. Until then the compose guard is the mitigation — `docker-compose.admin.yml` declares `ApiKey: "${SANKORE_API_KEY:?...}"`, so the stack refuses to render without one, including from Dokploy's Environment tab. The Dockerfile-*Application* route earlier in §3 has no such guard: there, an empty `ApiKey` still boots open |
-| 5 | **The CRM database is on an anonymous volume** | `postgres` mounts its named volume on `/var/lib/postgresql`, but the image declares `VOLUME /var/lib/postgresql/data` | the named volume `…-postgres-data` is shadowed and empty; the real cluster is an anonymous volume. `docker compose down -v`, `docker rm -v` or `docker volume prune` destroys clients, leads, KYC and audit data, and the volume a restore would reach for contains nothing. Found 2026-10-18 while splitting the registry out, where the same bug was fixed by mounting PGDATA directly (§3). Same one-line fix here, but it needs a dump/restore of the live database, so it is a scheduled migration — not a redeploy |
+| 5 | ~~**Both databases were on anonymous volumes**~~ — **fixed 2026-10-18** | both services mounted their named volume on `/var/lib/postgresql` while the image declares `VOLUME /var/lib/postgresql/data`, so Docker shadowed the named volume with an anonymous one | the named volumes were decorative and the real clusters were anonymous: `docker compose down -v`, `docker rm -v` or `docker volume prune` would have destroyed the tenant registry and the whole CRM database, and the volumes a restore would have reached for held nothing. Found while splitting the registry out. Both now mount PGDATA directly, onto `sankore-admin-postgres-data` and `sankore-postgres-data`; both databases were moved by dump and restore (§3). Check with `docker inspect <container> --format '{{.Mounts}}'` — exactly one volume per database container |
 
 Also worth knowing, though not blocking:
 

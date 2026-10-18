@@ -241,3 +241,7 @@ node_modules/
 # Sauvegardes du référentiel de tenants (§3 du runbook de déploiement). Contiennent les noms de
 # domaine et les adresses des comptes racines de chaque tenant.
 admin-registry-*.sql
+
+# Sauvegardes de la base du CRM (§3 du runbook). Contiennent les données clients en clair
+# pour tout ce qui n'est pas chiffré au niveau du champ.
+crm-database-*.sql
