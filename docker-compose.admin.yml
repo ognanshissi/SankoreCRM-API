@@ -27,7 +27,6 @@
 name: "sankore-admin"
 services:
   admin-postgres:
-    env_file: ".env.admin"
     image: ${DOCKER_REGISTRY-}admin-postgres
     # Pas de `container_name` : c'est un nom GLOBAL sur le démon Docker, pas un nom cadré au
     # projet Compose, et « admin-postgres » entre en collision avec n'importe quelle autre pile
@@ -84,7 +83,6 @@ services:
     restart: "unless-stopped"
 
   sankore-admin:
-    env_file: ".env.admin"
     image: ${DOCKER_REGISTRY-}sankore.admin
     container_name: sankore.admin
     build:
