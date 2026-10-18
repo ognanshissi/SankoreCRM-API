@@ -687,6 +687,33 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.ToTable("company_info", "administration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.CompanyLogo", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("TenantId")
+                        .HasName("pk_company_logos");
+
+                    b.ToTable("company_logos", "administration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.ComplianceSettings", b =>
                 {
                     b.Property<Guid>("Id")

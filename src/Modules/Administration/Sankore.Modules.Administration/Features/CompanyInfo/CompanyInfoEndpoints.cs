@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Administration.Features.CompanyInfo.CompanyLogo;
 using Sankore.Modules.Administration.Features.CompanyInfo.GetCompanyInfo;
 using Sankore.Modules.Administration.Features.CompanyInfo.UpdateCompanyInfo;
 
@@ -14,6 +15,7 @@ internal static class CompanyInfoEndpoints
 
         group.MapGetCompanyInfo();
         group.MapUpdateCompanyInfo();
+        group.MapCompanyLogo();
 
         return app;
     }

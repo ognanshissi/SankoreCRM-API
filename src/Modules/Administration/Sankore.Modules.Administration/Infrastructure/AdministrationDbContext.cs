@@ -40,6 +40,7 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<ComplianceSettings> ComplianceSettings => Set<ComplianceSettings>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<CompanyInfo> CompanyInfos => Set<CompanyInfo>();
+    public DbSet<CompanyLogo> CompanyLogos => Set<CompanyLogo>();
     public DbSet<UserImportJob> UserImportJobs => Set<UserImportJob>();
 
     /// <summary>Professional cards and their indemnity cover (CIMA articles 503, 510, 732).</summary>
@@ -130,6 +131,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<ComplianceSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<CompanyLogo>().HasQueryFilter(l => l.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<DistributionCredential>().HasQueryFilter(c => c.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<UserImportJob>(b =>

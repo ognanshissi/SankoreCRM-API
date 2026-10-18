@@ -183,6 +183,13 @@ public static class AdministrationModule
                 o.TokenLifespan = tokens.Value.ActivationTokenLifespan);
     }
 
+    /// <summary>
+    /// Mounted by the host under <c>api/v1/public</c>: the institution's logo, read by mail clients
+    /// and the sign-in page, neither of which carries a token or a tenant header.
+    /// </summary>
+    public static IEndpointRouteBuilder MapAdministrationPublicEndpoints(this IEndpointRouteBuilder app)
+        => Features.CompanyInfo.CompanyLogo.CompanyLogoEndpoints.MapCompanyLogoPublic(app);
+
     public static IEndpointRouteBuilder MapAdministrationModuleEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapLogin();

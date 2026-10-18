@@ -1158,6 +1158,13 @@ appVersion1.MapGroup("public")
     .RequireRateLimiting("sms-webhooks")
     .MapNotificationsPublicEndpoints();
 
+// The institution's logo (company branding). Under `public` for the same reason as the two groups
+// above — a mail client opening an e-mail sends no tenant header — and on the inherited "api"
+// policy, which falls back to the caller's IP for an anonymous request: browsers and mail proxies
+// cache the response for a week, so a page view is not a request.
+appVersion1.MapGroup("public")
+    .MapAdministrationPublicEndpoints();
+
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 appVersion1.MapGroup("object-storage").MapMigrateObjects();
 

@@ -34,6 +34,13 @@ public class CompanyInfo
         };
     }
 
+    /// <summary>Pointe le logo vers l'image déposée, ou le retire. Les autres réglages ne bougent pas.</summary>
+    public void SetLogoUrl(string logoUrl)
+    {
+        LogoUrl = logoUrl;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     public void Update(
         string name,
         string description,
