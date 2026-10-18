@@ -77,7 +77,7 @@ internal static class SwaggerSetup
     /// Declares, per operation, the credential that route really accepts — the document used to
     /// claim a bearer token everywhere while the host only ever checked the API key, so a
     /// generated client sent the wrong header. Anonymous routes declare none, the auth routes the
-    /// bearer, and everything else the service key.
+    /// bearer, and the registry routes either one (two requirement objects = OR in OpenAPI).
     /// </summary>
     private sealed class SecurityRequirementFilter : IOperationFilter
     {
@@ -87,17 +87,17 @@ internal static class SwaggerSetup
             if (metadata.OfType<IAllowAnonymous>().Any())
                 return;
 
-            var scheme = metadata.OfType<IAuthorizeData>().Any() ? BearerScheme : ApiKeyScheme;
-            operation.Security =
-            [
-                new OpenApiSecurityRequirement
-                {
-                    [new OpenApiSecurityScheme
-                    {
-                        Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = scheme }
-                    }] = []
-                }
-            ];
+            operation.Security = metadata.OfType<IAuthorizeData>().Any()
+                ? [Requirement(BearerScheme)]
+                : [Requirement(ApiKeyScheme), Requirement(BearerScheme)];
         }
+
+        private static OpenApiSecurityRequirement Requirement(string scheme) => new()
+        {
+            [new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = scheme }
+            }] = []
+        };
     }
 }

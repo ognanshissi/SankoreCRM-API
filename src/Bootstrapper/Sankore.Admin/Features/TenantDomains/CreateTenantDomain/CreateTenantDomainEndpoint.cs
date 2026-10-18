@@ -15,15 +15,25 @@ public static class CreateTenantDomainEndpoint
     {
         group.MapPost("/", async (Request req, IMediator mediator, CancellationToken ct) =>
             {
-                var id = await mediator.Send(
+                var result = await mediator.Send(
                     new CreateTenantDomainCommand(
-                        req.TenantId, req.Fqdn, req.IsPrimary, req.ValidFrom, req.ValidTo), ct);
-                return Results.Created($"/api/v1/tenant-domains/{id}", new { id });
+                        req.TenantId, req.Fqdn ?? string.Empty, req.IsPrimary, req.ValidFrom, req.ValidTo), ct);
+
+                return result.Error switch
+                {
+                    CreateTenantDomainError.None =>
+                        Results.Created($"/api/v1/tenant-domains/{result.Id}", new CreateTenantDomainResponse(result.Id!.Value)),
+                    CreateTenantDomainError.TenantNotFound => Results.Problem(result.Message, statusCode: StatusCodes.Status404NotFound),
+                    CreateTenantDomainError.Conflict => Results.Problem(result.Message, statusCode: StatusCodes.Status409Conflict),
+                    _ => Results.Problem(result.Message, statusCode: StatusCodes.Status400BadRequest),
+                };
             })
             .WithName("CreateTenantDomain")
             .WithSummary("Assign a new FQDN to a tenant")
             .Produces<CreateTenantDomainResponse>(StatusCodes.Status201Created)
-            .Produces(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithOpenApi();
     }
 }

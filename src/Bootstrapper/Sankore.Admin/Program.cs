@@ -97,11 +97,18 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// API key validation for service-to-service calls from SankoreApi — everywhere except the
-// operators' sign-in routes, which a browser calls and which carry their own JWT. The key must
-// never be shipped to a front-end: whoever holds it administers every tenant.
+// The registry accepts EITHER credential: the service key Sankore.Api sends, or a platform
+// administrator's JWT from the admin front-end. The key must never be shipped to a browser —
+// whoever holds it administers every tenant — so an operator proves themselves with a token,
+// and a request that carries a valid one skips the key check. "Valid" is AdminClaims.IsPlatformAdmin:
+// authenticated by the AdminJwt bearer scheme AND carrying the operator scope — not bare
+// authentication, which would silently widen the day another scheme is added to this host. A
+// tenant user's token is signed with another key and never authenticates here at all.
+//
+// The sign-in routes skip the key unconditionally: they are what produces the token.
 app.UseWhen(
-    ctx => !ctx.Request.Path.StartsWithSegments(AuthEndpoints.Prefix, StringComparison.OrdinalIgnoreCase),
+    ctx => !ctx.Request.Path.StartsWithSegments(AuthEndpoints.Prefix, StringComparison.OrdinalIgnoreCase)
+           && !AdminClaims.IsPlatformAdmin(ctx.User),
     branch => branch.UseApiKeyAuth());
 
 // Same flat liveness route the API declares, and for the same reason: `MapDefaultEndpoints`

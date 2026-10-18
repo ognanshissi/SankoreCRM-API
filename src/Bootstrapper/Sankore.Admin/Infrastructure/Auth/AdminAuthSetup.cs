@@ -53,6 +53,9 @@ public static class AdminAuthSetup
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Value.SigningKey)),
                     ClockSkew = TimeSpan.FromSeconds(30),
                     NameClaimType = "name",
+                    // Named after the scheme rather than the library default ("AuthenticationTypes.Federation"),
+                    // so AdminClaims.IsPlatformAdmin can tell this identity from one a future scheme produces.
+                    AuthenticationType = JwtBearerDefaults.AuthenticationScheme,
                 };
             });
 
@@ -105,10 +108,18 @@ public static class AdminAuthSetup
                     + "Cors__AllowedOrigins__0 to its origin.", CorsSection);
         }
 
-        services.AddCors(o => o.AddPolicy(CorsPolicy, p => p
+        // Also the DEFAULT policy: the front-end now reads the registry routes too, and a policy
+        // named on the auth group alone left the browser blocking every tenant call.
+        services.AddCors(o =>
+        {
+            o.AddPolicy(CorsPolicy, Configure);
+            o.AddDefaultPolicy(Configure);
+        });
+
+        void Configure(Microsoft.AspNetCore.Cors.Infrastructure.CorsPolicyBuilder p) => p
             .WithOrigins(origins)
             .AllowAnyHeader()
-            .AllowAnyMethod()));
+            .AllowAnyMethod();
 
         return services;
     }

@@ -19,8 +19,25 @@ public static class AdminClaims
     /// <summary>Read as is: inbound claim mapping is off, so <c>sub</c> is not renamed to NameIdentifier.</summary>
     public const string Subject = JwtRegisteredClaimNames.Sub;
 
+    /// <summary>Stamped on every operator token; what the registry gate checks, not mere authentication.</summary>
+    public const string Scope = "scope";
+    public const string PlatformAdminScope = "platform-admin";
+
     public static Guid? AdminId(ClaimsPrincipal user) =>
         Guid.TryParse(user.FindFirst(Subject)?.Value, out var id) ? id : null;
+
+    /// <summary>
+    /// True for a principal authenticated by the AdminJwt bearer scheme AND carrying the operator
+    /// scope. Checking <c>IsAuthenticated</c> alone would be correct only while that scheme is the
+    /// host's sole one — a second scheme added later (a cookie, another JWT) would silently gain
+    /// access to the registry.
+    /// </summary>
+    public static bool IsPlatformAdmin(ClaimsPrincipal user) =>
+        user.Identities.Any(i =>
+            i.IsAuthenticated
+            && i.AuthenticationType == Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme
+            && i.HasClaim(Scope, PlatformAdminScope))
+        && AdminId(user) is not null;
 }
 
 internal sealed class AdminTokenService(IOptions<AdminJwtOptions> options)
@@ -37,6 +54,7 @@ internal sealed class AdminTokenService(IOptions<AdminJwtOptions> options)
             new(JwtRegisteredClaimNames.Email, admin.Email),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("name", admin.FullName),
+            new(AdminClaims.Scope, AdminClaims.PlatformAdminScope),
         };
 
         var token = new JwtSecurityToken(
