@@ -18,7 +18,7 @@
 # le nom de chaque service en alias DNS sur chaque réseau qu'il rejoint, donc
 # `TENANTSTORE_BASEURL=http://sankore-admin:8080/` continue de résoudre depuis l'autre pile tant
 # que les deux y sont rattachées — y compris lorsqu'elles sont deux projets Compose distincts. Ce
-# réseau est externe et à créer une fois : `docker network create sankore-shared`.
+# réseau est créé par CETTE pile : déployez-la avant la pile API.
 #
 # Si le registre part sur une AUTRE machine, c'est `TENANTSTORE_BASEURL` de la pile API qu'il
 # faut passer à son URL publique, et alors seulement il lui faut un domaine (voir le commentaire
@@ -238,15 +238,22 @@ networks:
     driver: "bridge"
 
   # Le bus entre les DEUX piles Sankore, et rien d'autre : `sankore-api` et `env-dashboard` s'y
-  # rattachent dans `docker-compose.yml`. `external` parce qu'aucune des deux piles ne peut le
-  # posséder — celle qui le créerait le détruirait à son `down`, emportant le lien de l'autre.
-  # À créer une fois, avant le premier `up` des deux côtés :
+  # rattachent dans `docker-compose.yml`.
   #
-  #   docker network create sankore-shared
+  # CRÉÉ PAR CETTE PILE, sous un nom fixe, et déclaré `external` côté API. Il était externe des
+  # deux côtés, donc à créer à la main sur le serveur avant tout déploiement — ce que Dokploy ne
+  # fait pas, et le premier déploiement échouait sur « network sankore-shared not found ». Cette
+  # pile est de toute façon celle qui démarre en premier (l'API interroge le registre dès son
+  # lancement), c'est donc à elle de l'apporter. Ordre de déploiement : celle-ci, puis l'API.
   #
-  # Un réseau absent fait échouer le `up` en le nommant, ce qui est le bon sens de l'échec.
+  # `name:` est ce qui le rend partageable : sans lui Compose le préfixerait du nom du projet
+  # (`sankore-admin_sankore-shared`) et l'API ne le trouverait pas. Le risque qui justifiait
+  # `external` — un `down` de cette pile emportant le lien de l'autre — ne se produit pas : Docker
+  # refuse de supprimer un réseau auquel des conteneurs sont encore rattachés, et le `down` laisse
+  # alors le réseau en place.
   sankore-shared:
-    external: true
+    name: "sankore-shared"
+    driver: "bridge"
 
 volumes:
   # `name:` explicite : sans lui, Compose préfixe le volume du nom du projet, et le nom réel du

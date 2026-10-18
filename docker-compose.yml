@@ -802,10 +802,9 @@ networks:
     external: true
 
   # Le bus entre cette pile et celle du référentiel de tenants (`docker-compose.admin.yml`), et
-  # rien d'autre. `external` parce qu'aucune des deux ne peut le posséder : celle qui le créerait
-  # le détruirait à son `down`, emportant le lien de l'autre. À créer une fois :
-  #
-  #   docker network create sankore-shared
+  # rien d'autre. `external` ICI parce que c'est la pile du registre qui le crée (sous ce nom
+  # exact) : déployez-la AVANT celle-ci. Un « network sankore-shared not found » au déploiement
+  # de l'API veut dire que la pile du registre n'a pas encore été déployée sur ce serveur.
   #
   # Pourquoi pas `dokploy-network`, auquel les deux piles sont déjà rattachées : il porte TOUT ce
   # que Dokploy fait tourner sur la machine, et le registre y serait joignable par n'importe
