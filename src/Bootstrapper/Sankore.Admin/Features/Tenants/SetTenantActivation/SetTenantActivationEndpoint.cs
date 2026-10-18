@@ -14,9 +14,9 @@ namespace Sankore.Admin.Features.Tenants.SetTenantActivation;
 /// </para>
 ///
 /// <para>
-/// Sankore.Api enforces the flag (<c>TenantResolutionMiddleware</c>), but caches the tenant by
-/// origin for <c>TenantStore:FqdnCacheTtl</c> (24 h by default), so a deactivation can take that
-/// long to bite. Known limitation, stated in the admin front-end's confirmation.
+/// Sankore.Api enforces the flag (<c>TenantResolutionMiddleware</c>, 403 <c>TENANT_INACTIVE</c>)
+/// and re-reads a tenant's status every <c>TenantStore:CacheTtl</c> (30 s by default), so a
+/// deactivation reaches open sessions within that delay.
 /// </para>
 /// </summary>
 public static class SetTenantActivationEndpoint

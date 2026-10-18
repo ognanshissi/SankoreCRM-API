@@ -34,4 +34,8 @@
     <ProjectReference Include="..\Sankore.Shared.ObjectStorage\Sankore.Shared.ObjectStorage.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sankore.Shared.Infrastructure.Tests" />
+  </ItemGroup>
+
 </Project>

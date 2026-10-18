@@ -47,6 +47,13 @@ namespace Sankore.Shared.Infrastructure.Tenants;
 /// </summary>
 public sealed record TenantExemptPaths(string[] Prefixes);
 
+/// <summary>Codes the front-end matches on to show the right page instead of a generic error.</summary>
+public static class TenantStatusCodes
+{
+    public const string Inactive = "TENANT_INACTIVE";
+    public const string Maintenance = "TENANT_MAINTENANCE";
+}
+
 public sealed class TenantResolutionMiddleware(
     RequestDelegate next,
     ITenantStore tenantStore,
@@ -158,12 +165,17 @@ public sealed class TenantResolutionMiddleware(
             return;
         }
 
+        // 403 and not 401, with a code the front-end can recognise. A 401 here was read by the
+        // front's token interceptor as an expired session: it tried a refresh, which this same
+        // check refused again, then signed the user out to a login page that could only fail —
+        // the deactivation surfaced as "an error occurred while signing in" instead of saying the
+        // institution's access was suspended.
         if (!tenant.IsActive)
         {
             logger.LogWarning(SecurityEvents.InactiveTenant,
                 "Request rejected: tenant {TenantId} is inactive", effectiveTenantId);
-            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await ctx.Response.WriteAsJsonAsync(new { error = "Tenant account is inactive." });
+            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await ctx.Response.WriteAsJsonAsync(new { error = "Tenant account is inactive.", code = TenantStatusCodes.Inactive });
             return;
         }
 
@@ -172,7 +184,8 @@ public sealed class TenantResolutionMiddleware(
             ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await ctx.Response.WriteAsJsonAsync(new
             {
-                error = "The platform is under maintenance. Please try again later."
+                error = "The platform is under maintenance. Please try again later.",
+                code = TenantStatusCodes.Maintenance,
             });
             return;
         }

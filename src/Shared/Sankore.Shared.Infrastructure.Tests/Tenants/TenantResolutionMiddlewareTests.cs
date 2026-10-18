@@ -128,6 +128,25 @@ public sealed class TenantResolutionMiddlewareTests
         ctx.Items[TenantKey.ResolvedTenantKey].Should().Be(TenantId);
     }
 
+    [Fact]
+    public async Task An_inactive_tenant_is_refused_with_a_403_the_front_end_can_recognise()
+    {
+        // 403 and not 401: the front's token interceptor answers a 401 with a refresh and then a
+        // sign-out, which turned a suspended institution into a login page that could only fail.
+        var ctx = Request("/api/v1/leads");
+        ctx.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim("tenant_id", TenantId.ToString())], "test"));
+        var reached = false;
+
+        await Pipeline(_ => { reached = true; return Task.CompletedTask; }, tenantActive: false)(ctx);
+
+        reached.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        ctx.Response.Body.Position = 0;
+        new StreamReader(ctx.Response.Body).ReadToEnd().Should().Contain(TenantStatusCodes.Inactive);
+    }
+
     // ── Harness ─────────────────────────────────────────────────────────
 
     private static DefaultHttpContext Request(string path)
@@ -150,11 +169,11 @@ public sealed class TenantResolutionMiddlewareTests
     /// while these tests stayed green. Going through the pipeline exercises the activation too.
     /// </para>
     /// </summary>
-    private static RequestDelegate Pipeline(RequestDelegate terminal)
+    private static RequestDelegate Pipeline(RequestDelegate terminal, bool tenantActive = true)
     {
         var store = Substitute.For<ITenantStore>();
         store.GetAsync(TenantId, Arg.Any<CancellationToken>())
-            .Returns(new TenantInfo(TenantId, "IMF", "imf.ci", true, false, null, null));
+            .Returns(new TenantInfo(TenantId, "IMF", "imf.ci", tenantActive, false, null, null));
 
         var services = new ServiceCollection();
         services.AddSingleton(store);
