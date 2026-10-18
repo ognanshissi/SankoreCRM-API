@@ -169,11 +169,19 @@ services:
       # l'API porte cet identifiant. Un registre reconstruit sans lui en génère un nouveau, et
       # tout l'historique devient invisible pour un tenant qui, vu de l'extérieur, est le même.
       DefaultTenant__Id: "${DEFAULT_TENANT_ID:-}"
-    # Même sonde que `sankore-api`, et pour la même raison : l'image `aspnet` n'embarque ni
-    # curl ni wget, et `CMD-SHELL` passerait par dash, qui ne connaît pas `/dev/tcp`. Elle
-    # existe pour que `sankore-api` puisse attendre le registre : les migrations et le seed du
-    # tenant tournent AVANT que Kestrel n'écoute, donc une réponse prouve que le tenant par
-    # défaut est en base.
+    # Même sonde que `sankore-api`, et `bash` explicite pour la même raison : `CMD-SHELL`
+    # passerait par dash, qui ne connaît pas `/dev/tcp`, et l'image `aspnet` n'embarque ni
+    # curl, ni wget, ni nc.
+    #
+    # Elle n'a pas toujours pu fonctionner, et c'est ce qui a été corrigé avec elle : cet hôte
+    # ne mappait AUCUNE route de santé joignable. `MapDefaultEndpoints` (ServiceDefaults) ne
+    # mappe `/health` qu'en Development, et `app.UseApiKeyAuth()` garde tout l'hôte — une sonde
+    # de conteneur ne peut pas porter de secret, donc elle recevait 401 puis 404, le conteneur
+    # restait `unhealthy`, et l'API qui l'attendait ne démarrait plus. `Sankore.Admin` déclare
+    # maintenant son `/health` comme l'API, et `ApiKeyMiddleware` exempte les chemins de sonde.
+    #
+    # Une réponse prouve plus qu'un port ouvert : les migrations ET le seed du tenant tournent
+    # AVANT `app.Run()`, donc 200 ici veut dire que le tenant par défaut est en base.
     healthcheck:
       test:
         - "CMD"
@@ -733,12 +741,22 @@ services:
       # ne doit pas retarder le démarrage de l'API.
       seq:
         condition: "service_started"
-      # `service_healthy`, parce que la sonde du registre ne répond qu'une fois ses migrations
-      # ET son seed de tenant passés : `SystemUserSeeder` trouve alors le tenant du premier
-      # coup. Ce n'est qu'un confort — il réessaie dix fois de toute façon, et c'est lui la
-      # vraie garantie, un `depends_on` ne couvrant pas un registre déployé séparément.
+      # `service_started` et NON `service_healthy`, même maintenant que la sonde du registre
+      # fonctionne. Deux raisons, dans cet ordre :
+      #
+      # 1. On l'a payé : une sonde fausse a suffi à empêcher l'API de démarrer (« dependency
+      #    failed to start: container sankore.admin is unhealthy »), c'est-à-dire à transformer
+      #    un provisionnement raté en panne totale.
+      # 2. L'API SURVIT à un registre en panne, et ne doit donc pas en être l'otage : les
+      #    tenants sont en cache Redis (5 min par identifiant, 24 h par domaine), et ses propres
+      #    données sont dans une AUTRE base. Refuser de démarrer parce que `admin-postgres` est
+      #    malade coûterait plus que ça ne protège.
+      #
+      # La vraie garantie contre la course au démarrage est ailleurs : `SystemUserSeeder`
+      # réessaie dix fois, trente secondes — et un `depends_on` ne couvrirait de toute façon pas
+      # un registre déployé à part.
       sankore-admin:
-        condition: "service_healthy"
+        condition: "service_started"
     # Aucun des trois hôtes n'avait de politique de redémarrage : une défaillance passagère au
     # démarrage — la base qui n'accepte pas encore, un courtier qui redémarre — laissait le
     # service à terre jusqu'à une intervention. `unless-stopped` et non `always` : un arrêt

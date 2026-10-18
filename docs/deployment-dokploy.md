@@ -666,7 +666,7 @@ Two blockers that were here when this runbook was first written are now fixed in
 
 | # | Finding | Where | Consequence |
 |---|---|---|---|
-| 1 | **No production health endpoint on Admin or Hangfire** | `MapDefaultEndpoints()` is Development-only | no meaningful readiness signal for two of three services; use `/health` on the API only |
+| 1 | **No production health endpoint on Hangfire** | `MapDefaultEndpoints()` is Development-only | no readiness signal for the dashboard host. Admin no longer has this problem: it declares its own `/health` like the API, and `ApiKeyMiddleware` exempts `/health` and `/alive` so a container probe can reach it. Before that, its probe got 401 then 404, the container stayed `unhealthy`, and `sankore-api` — which waited on that health — refused to start at all |
 | 2 | **Swagger is Development-only** (this one is correct) | `Program.cs` | do not "fix" it by setting `ASPNETCORE_ENVIRONMENT=Development` in production — that would also expose health details and turn on sensitive EF data logging |
 | 3 | **`Messaging__UseRabbitMq=true` cannot authenticate** | `cfg.Host(host)` passes a hostname only | a broker with credentials will not connect; see §7 |
 

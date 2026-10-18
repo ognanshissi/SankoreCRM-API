@@ -18,8 +18,28 @@ public sealed class ApiKeyMiddleware(
     private const string HeaderName = ApiKeyValidator.HeaderName;
     private const string ConfigKey = ApiKeyValidator.ConfigKey;
 
+    /// <summary>
+    /// Liveness probes, which cannot carry a secret.
+    ///
+    /// <para>
+    /// This middleware guards a WHOLE host, so it answered 401 to the container's own
+    /// health check — and to every orchestrator that polls one. The symptom was a registry
+    /// permanently <c>unhealthy</c>, a stream of <c>API key missing on GET /health</c> warnings
+    /// hiding real ones, and Compose refusing to start whatever depended on it. Exempting the
+    /// two probe paths leaks nothing the API does not already serve anonymously from its own
+    /// <c>/health</c>: a status word and a timestamp, no component detail.
+    /// </para>
+    /// </summary>
+    private static readonly string[] ProbePaths = ["/health", "/alive"];
+
     public async Task InvokeAsync(HttpContext context)
     {
+        if (ProbePaths.Any(p => context.Request.Path.StartsWithSegments(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            await next(context);
+            return;
+        }
+
         var expectedKey = config[ConfigKey];
 
         // If no API key is configured, skip validation (dev mode)

@@ -101,6 +101,20 @@ app.UseHttpsRedirection();
 // API key validation for service-to-service calls from SankoreApi
 app.UseApiKeyAuth();
 
+// Same flat liveness route the API declares, and for the same reason: `MapDefaultEndpoints`
+// (ServiceDefaults) maps /health and /alive ONLY in Development, so outside it this host answered
+// 404 to every probe — and 401 before that, because UseApiKeyAuth above guards the whole host
+// and a container health check cannot carry a secret. A registry that cannot be probed is one
+// Compose reports `unhealthy` for ever, and whatever depends on it never starts.
+//
+// It reports liveness and nothing else: reaching this point means the migrations and the default
+// tenant seed already ran, since both happen before app.Run(). The anonymous access is the same
+// trade the API makes — a status word and a timestamp, no component detail.
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow }))
+    .WithTags("Health")
+    .WithOpenApi()
+    .AllowAnonymous();
+
 app.MapTenantEndpoints();
 app.MapTenantDomainEndpoints();
 
