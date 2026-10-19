@@ -382,6 +382,12 @@ head of the lead's agency one "Dispatch manuel" task, closed by `AssignmentTasks
 lead with no agency gets no task and just waits. `DispatchingRule.MaxTasksPerAgent = 0` means no
 ceiling (`HasTaskCapacityFor`) — existing rules carry 0 from their migration.
 
+**Agent load is counted, not read.** `AgentSummary.ActiveLeadsCount`/`HotLeadsCount` come from
+counters on `AppUser` that nothing updates (always 0). Every path that scores a pool — dispatch,
+preview, simulation, task dispatch — passes it through `AgentLoad.WithLiveLoadAsync`, which counts
+the open (and hot) leads assigned to each candidate. `LeadAutoDispatchConsumer` runs one message at
+a time (`LeadAutoDispatchConsumerDefinition`) so an import's dispatches see each other's load.
+
 The capture → scoring → qualification → dispatch → conversion walkthrough, with the measured
 score of each dimension and the cases a change here must not break, is in
 `docs/plan-test-qualification-lead.md`; `docs/workflow-complet-leads.md` lists every endpoint of

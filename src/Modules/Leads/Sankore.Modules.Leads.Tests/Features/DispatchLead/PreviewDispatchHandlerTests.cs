@@ -132,8 +132,8 @@ public sealed class PreviewDispatchHandlerTests : IDisposable
         var excluded = AgentTestBuilder.Create().Named("Agent Exclu")
             .SpeakingLanguages("FR").LocatedAt(5.33, -4.03).WithLoad(1).Build();
         var hoarder = AgentTestBuilder.Create().Named("Agent Monopole")
-            .SpeakingLanguages("FR").LocatedAt(5.33, -4.03).WithLoad(1).Build()
-            with { HotLeadsCount = 99 };
+            .SpeakingLanguages("FR").LocatedAt(5.33, -4.03).WithLoad(1).Build();
+        await AgentLoadFixture.AssignOpenLeadsAsync(db, _tenantId, hoarder.Id, 5, hot: true);
         var fine = AgentTestBuilder.Create().Named("Agent OK")
             .SpeakingLanguages("FR").LocatedAt(5.33, -4.03).WithLoad(1).Build();
 
@@ -210,8 +210,8 @@ public sealed class PreviewDispatchHandlerTests : IDisposable
         var lead = await SeedLeadAsync(db);
 
         var hoarder = AgentTestBuilder.Create().Named("Agent Monopole")
-            .SpeakingLanguages("FR").LocatedAt(5.33, -4.03).WithLoad(1).Build()
-            with { HotLeadsCount = 99 };
+            .SpeakingLanguages("FR").LocatedAt(5.33, -4.03).WithLoad(1).Build();
+        await AgentLoadFixture.AssignOpenLeadsAsync(db, _tenantId, hoarder.Id, 5, hot: true);
 
         var rule = DispatchingRule.Create(
             _tenantId, "Anti-monopole serré", DispatchingStrategy.CompatibilityScoring,

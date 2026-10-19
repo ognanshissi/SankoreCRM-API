@@ -173,8 +173,8 @@ public sealed class DispatchLeadHandlerTests : IDisposable
         // Single candidate, already at (or above) the default anti-monopoly threshold of 5 hot leads.
         var overloadedAgent = AgentTestBuilder.Create()
             .Named("Overloaded Agent")
-            .WithHotLeads(5)
             .Build();
+        await AgentLoadFixture.AssignOpenLeadsAsync(db, _tenantId, overloadedAgent.Id, 5, hot: true);
 
         var usersModule = Substitute.For<IAdministrationModule>();
         usersModule.GetAvailableAgentsAsync(_tenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
@@ -233,6 +233,33 @@ public sealed class DispatchLeadHandlerTests : IDisposable
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("ALL_AGENTS_AT_TASK_CAPACITY");
+    }
+
+    [Fact]
+    public async Task Consecutive_leads_are_spread_by_the_agents_real_load_not_the_stale_counter()
+    {
+        // Both summaries say 0 active leads — the counter on the user is never updated. The load
+        // must come from the leads themselves, or every lead goes to the same agent.
+        await using var db = _factory.CreateContext();
+        db.DispatchingRules.Add(RuleWithTaskCeiling(0));
+        var first = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+        var second = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+        db.Leads.AddRange(first, second);
+        await db.SaveChangesAsync();
+
+        var awa = AgentTestBuilder.Create().Named("Awa Fall").Build();
+        var ibra = AgentTestBuilder.Create().Named("Ibra Ba").Build();
+        var usersModule = Substitute.For<IAdministrationModule>();
+        usersModule.GetAvailableAgentsAsync(_tenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<AgentSummary> { awa, ibra });
+        var handler = BuildHandler(db, usersModule, Substitute.For<IEventPublisher>());
+
+        var r1 = await handler.Handle(new DispatchLeadCommand(first.Id, _tenantId), CancellationToken.None);
+        var r2 = await handler.Handle(new DispatchLeadCommand(second.Id, _tenantId), CancellationToken.None);
+
+        r1.IsSuccess.Should().BeTrue();
+        r2.IsSuccess.Should().BeTrue();
+        r2.Value.AgentId.Should().NotBe(r1.Value.AgentId, "the first agent now holds one open lead more");
     }
 
     private DispatchingRule RuleWithTaskCeiling(int maxTasks) => DispatchingRule.Create(

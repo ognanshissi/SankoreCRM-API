@@ -33,10 +33,12 @@ internal sealed class SimulateDispatchHandler(
             return Result.Fail<SimulateDispatchResult>("LEAD_NOT_FOUND");
 
         // Load available agents (same cross-module contract as real dispatch).
-        var allCandidates = await usersModule.GetAvailableAgentsAsync(
-            tenantId: lead.TenantId,
-            agencyId: lead.PreferredAgencyId,
-            ct: ct);
+        var allCandidates = await DispatchLead.AgentLoad.WithLiveLoadAsync(db, lead.TenantId,
+            await usersModule.GetAvailableAgentsAsync(
+                tenantId: lead.TenantId,
+                agencyId: lead.PreferredAgencyId,
+                ct: ct),
+            ct);
 
         // Apply exclusions.
         var excludedCount = rule.ExcludedAgentIds.Count > 0

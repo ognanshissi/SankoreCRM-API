@@ -59,10 +59,12 @@ internal sealed class DispatchTaskHandler(
             return Result.Fail<DispatchTaskResult>("LEAD_NOT_FOUND");
 
         // 3. Fetch available agents from the Administration module (PublicApi only)
-        var candidates = await usersModule.GetAvailableAgentsAsync(
-            tenantId: cmd.TenantId,
-            agencyId: lead.PreferredAgencyId,
-            ct: ct);
+        var candidates = await DispatchLead.AgentLoad.WithLiveLoadAsync(db, cmd.TenantId,
+            await usersModule.GetAvailableAgentsAsync(
+                tenantId: cmd.TenantId,
+                agencyId: lead.PreferredAgencyId,
+                ct: ct),
+            ct);
 
         if (candidates.Count == 0)
         {

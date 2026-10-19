@@ -58,10 +58,12 @@ internal sealed class PreviewDispatchHandler(
 
         var rules = await ruleResolver.ResolveAsync(lead, requestedStrategy: null, ct);
 
-        var candidates = await usersModule.GetAvailableAgentsAsync(
-            tenantId: tenantId,
-            agencyId: lead.PreferredAgencyId,
-            ct: ct);
+        var candidates = await AgentLoad.WithLiveLoadAsync(db, tenantId,
+            await usersModule.GetAvailableAgentsAsync(
+                tenantId: tenantId,
+                agencyId: lead.PreferredAgencyId,
+                ct: ct),
+            ct);
 
         if (candidates.Count == 0)
         {

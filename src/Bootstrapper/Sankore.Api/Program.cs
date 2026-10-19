@@ -437,7 +437,8 @@ builder.Services.AddMassTransit(x =>
     // beside the email one so an email change does not invalidate the SMS entry and the reverse.
     x.AddConsumer<Sankore.Modules.Notifications.Infrastructure.Consumers.TenantSmsSettingsChangedConsumer>();
 
-    x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer>();
+    x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer,
+        Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumerDefinition>();
     x.AddConsumer<LeadDispatchedTaskConsumer>();
     x.AddConsumer<LeadDispatchingFailedTaskConsumer>();
     // Absence déclarée par un agent (M12) : ses tâches ouvertes passent au remplaçant (M13).
