@@ -281,6 +281,15 @@ public static class Permissions
     public static readonly PermissionItem CanViewLeadAnalytics =
         new("lead:analytics:view", "View Lead SLA, Funnel and Agent Performance Analytics", ApplicationModules.Leads, "analytics:view");
 
+    /// <summary>
+    /// The administrators' lead report (GET leads/reports/overview): the whole tenant, every agent,
+    /// with no team scoping. Distinct from <see cref="CanViewLeadAnalytics"/>, which a manager holds
+    /// to watch their own team — this one shows every team's figures, so it is granted to
+    /// Administrator only (RoleSeeder grants every permission to it) and to others by hand.
+    /// </summary>
+    public static readonly PermissionItem CanViewLeadReports =
+        new("lead:report:view", "View the institution-wide lead and agent reports", ApplicationModules.Leads, "report:view");
+
     public static readonly PermissionItem CanManageQualificationTemplates =
         new("lead:qualification-template:manage", "Create and Manage Qualification Templates", ApplicationModules.Leads, "qualification-template:manage");
 
@@ -873,6 +882,7 @@ public static class Permissions
         CanDismissDuplicate,
         CanExportLeads,
         CanViewLeadAnalytics,
+        CanViewLeadReports,
         CanManageQualificationTemplates,
         CanRecordConsent,
         CanWithdrawConsent,
