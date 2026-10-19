@@ -54,6 +54,15 @@ public sealed class LeadTestBuilder
         return this;
     }
 
+    /// <summary>Leaves the lead as captured (New), instead of qualified for the dispatching tests.</summary>
+    public LeadTestBuilder Fresh()
+    {
+        _fresh = true;
+        return this;
+    }
+
+    private bool _fresh;
+
     public LeadTestBuilder WithSourceConfig(Guid leadSourceConfigId)
     {
         _leadSourceConfigId = leadSourceConfigId;
@@ -74,7 +83,8 @@ public sealed class LeadTestBuilder
             clock: TimeProvider.System,
             leadSourceConfigId: _leadSourceConfigId);
 
-        lead.Qualify(75); // moves to Qualified (score ≥ 60) by default for dispatching tests
+        if (!_fresh)
+            lead.Qualify(75); // moves to Qualified (score ≥ 60) by default for dispatching tests
         lead.ClearDomainEvents();
         return lead;
     }

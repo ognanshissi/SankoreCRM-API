@@ -388,6 +388,14 @@ preview, simulation, task dispatch — passes it through `AgentLoad.WithLiveLoad
 the open (and hot) leads assigned to each candidate. `LeadAutoDispatchConsumer` runs one message at
 a time (`LeadAutoDispatchConsumerDefinition`) so an import's dispatches see each other's load.
 
+**"Contacté" is `LeadStatus.Open`** — there is no `Contacted` status. A recorded contact moves the
+lead forward through `Lead.RecordContactEstablished` (New → Open, stage → `ContactEstablished`):
+the agent's declared first contact, a telephony wrap-up whose outcome `CountsAsContact`, a logged
+call/meeting/visit whose outcome `Lead.IsContactOutcome` reads as reached. An outbound call that
+does not count, or a logged no-answer/voicemail, is `RecordContactAttempt` (stage only). Both are
+forward-only and leave closed leads alone. `Lead.Reopen` accepts Lost, Disqualified, Recycled (and
+New); Converted and Archived stay final.
+
 The capture → scoring → qualification → dispatch → conversion walkthrough, with the measured
 score of each dimension and the cases a change here must not break, is in
 `docs/plan-test-qualification-lead.md`; `docs/workflow-complet-leads.md` lists every endpoint of

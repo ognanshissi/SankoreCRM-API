@@ -189,6 +189,14 @@ public sealed class TelephonyCallWrappedUpConsumer(
                     db, evt.TenantId, leadId, assignment!.AgentId, ct);
         }
 
+        // ── What the call says about the lead ────────────────────────────────
+        // An outcome the tenant counts as a contact makes the lead "Contacté", assignment or not:
+        // somebody spoke to them. An outbound call that did not count is an attempt.
+        if (evt.CountsAsContact)
+            lead.RecordContactEstablished();
+        else if (string.Equals(evt.Direction, "Outbound", StringComparison.OrdinalIgnoreCase))
+            lead.RecordContactAttempt();
+
         // ── The callback the outcome demanded ────────────────────────────────
         if (evt.CallbackAt is { } callbackAt)
         {

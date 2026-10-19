@@ -76,6 +76,14 @@ internal sealed class LogActivityHandler(
 
         lead.RecordActivity();
 
+        // A call, meeting or visit logged with its outcome moves the lead the way a telephony
+        // wrap-up does: reached → "Contacté", no answer → contact attempted.
+        switch (Lead.IsContactOutcome(cmd.Type, cmd.Outcome))
+        {
+            case true: lead.RecordContactEstablished(); break;
+            case false: lead.RecordContactAttempt(); break;
+        }
+
         db.LeadActivities.Add(activity);
         await db.SaveChangesAsync(ct);
 

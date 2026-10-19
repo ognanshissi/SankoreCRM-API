@@ -764,6 +764,78 @@ public sealed class Lead : AggregateRoot
         return Result.Ok();
     }
 
+    /// <summary>
+    /// Somebody actually spoke to the lead — a first contact recorded by the agent, a call whose
+    /// outcome the tenant counts as a contact, a call or meeting logged as reached. The lead goes
+    /// from <see cref="LeadStatus.New"/> to <see cref="LeadStatus.Open"/> (shown "Contacté") and its
+    /// stage to <see cref="PipelineStage.ContactEstablished"/>.
+    ///
+    /// <para>
+    /// Before, nothing did this: recording the first contact stopped the SLA and closed the task,
+    /// but the lead stayed "Nouveau" at stage New until someone dragged its card — so the list's
+    /// "Contactés" tab and the pipeline's columns told nothing about what agents had done.
+    /// </para>
+    ///
+    /// Forward only and silent: a lead already further along (qualified, in KYC…) keeps its status
+    /// and stage, and a closed one is left alone. Returns whether anything changed.
+    /// </summary>
+    public bool RecordContactEstablished()
+    {
+        if (!IsDispatchable) return false;
+
+        var changed = false;
+        if (Status == LeadStatus.New)
+        {
+            Status = LeadStatus.Open;
+            RaiseDomainEvent(new LeadStatusChangedDomainEvent(Id, LeadStatus.New, Status));
+            changed = true;
+        }
+        if (PipelineStage is Domain.PipelineStage.New or Domain.PipelineStage.ContactAttempted)
+        {
+            var previous = PipelineStage;
+            PipelineStage = Domain.PipelineStage.ContactEstablished;
+            RaiseDomainEvent(new LeadPipelineStageChangedDomainEvent(Id, previous, PipelineStage));
+            changed = true;
+        }
+        if (changed) UpdatedAt = DateTimeOffset.UtcNow;
+        return changed;
+    }
+
+    /// <summary>
+    /// Somebody tried and did not get through — an outbound call without answer, a voicemail. Only
+    /// the stage moves, <see cref="PipelineStage.New"/> → <see cref="PipelineStage.ContactAttempted"/>:
+    /// the status stays New, because nobody has been contacted yet. Forward only, like
+    /// <see cref="RecordContactEstablished"/>.
+    /// </summary>
+    public bool RecordContactAttempt()
+    {
+        if (!IsDispatchable || PipelineStage != Domain.PipelineStage.New) return false;
+
+        PipelineStage = Domain.PipelineStage.ContactAttempted;
+        UpdatedAt     = DateTimeOffset.UtcNow;
+        RaiseDomainEvent(new LeadPipelineStageChangedDomainEvent(Id, Domain.PipelineStage.New, PipelineStage));
+        return true;
+    }
+
+    /// <summary>
+    /// What a logged activity says about contact, from its type and outcome — the one mapping both
+    /// the activity log and its tests read. Null: it says nothing (an e-mail, a note, no outcome).
+    /// </summary>
+    public static bool? IsContactOutcome(ActivityType type, ActivityOutcome? outcome)
+    {
+        if (type is not (ActivityType.Call or ActivityType.Meeting or ActivityType.Visit) || outcome is null)
+            return null;
+
+        return outcome switch
+        {
+            ActivityOutcome.Reached or ActivityOutcome.Interested or ActivityOutcome.NotInterested
+                or ActivityOutcome.Rescheduled or ActivityOutcome.Completed => true,
+            // "À rappeler" is the lead asking for another call, not a conversation that took place.
+            ActivityOutcome.NoAnswer or ActivityOutcome.Voicemail or ActivityOutcome.Callback => false,
+            _ => null,
+        };
+    }
+
     /// <summary>Advances the pipeline stage, enforcing the allow-list of forward transitions.</summary>
     public Result AdvancePipelineStage(PipelineStage newStage)
     {
@@ -1613,16 +1685,32 @@ public sealed class Lead : AggregateRoot
         => RaiseDomainEvent(new Events.SlaEscalatedDomainEvent(Id, assignmentId, agentId, escalationDepth));
 
     /// <summary>
-    /// Transitions a New lead to Open — signals the first manual or system
-    /// action has been taken on this lead.
+    /// Puts a lead back to work: <see cref="LeadStatus.Open"/>. Accepted from a lead that was lost,
+    /// disqualified or recycled — what the "Réouvrir" button is shown on — and, as before, from a
+    /// New one.
+    ///
+    /// <para>
+    /// It used to accept ONLY a New lead, while the screen offered it only on closed ones: the
+    /// button failed every single time. Converted and Archived stay final — a converted lead has
+    /// its customer, and an archived one may already be anonymised.
+    /// </para>
+    ///
+    /// The loss reason goes (it described a decision that is being undone), and a pipeline stage
+    /// left on <see cref="PipelineStage.Lost"/> returns to <see cref="PipelineStage.New"/>.
     /// </summary>
     public Result Reopen()
     {
-        if (Status != LeadStatus.New)
-            return Result.Fail("Only a New lead can be opened.");
+        if (Status is not (LeadStatus.New or LeadStatus.Lost or LeadStatus.Disqualified or LeadStatus.Recycled))
+            return Result.Fail("LEAD_CANNOT_BE_REOPENED_FROM_CURRENT_STATUS");
 
         var previous = Status;
-        Status    = LeadStatus.Open;
+        Status     = LeadStatus.Open;
+        LossReason = null;
+        if (PipelineStage == Domain.PipelineStage.Lost)
+        {
+            PipelineStage = Domain.PipelineStage.New;
+            RaiseDomainEvent(new LeadPipelineStageChangedDomainEvent(Id, Domain.PipelineStage.Lost, PipelineStage));
+        }
         UpdatedAt = DateTimeOffset.UtcNow;
         RaiseDomainEvent(new LeadStatusChangedDomainEvent(Id, previous, Status));
         return Result.Ok();

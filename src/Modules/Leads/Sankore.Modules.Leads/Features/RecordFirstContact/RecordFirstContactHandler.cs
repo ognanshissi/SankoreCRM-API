@@ -11,7 +11,9 @@ internal sealed class RecordFirstContactHandler(LeadsDbContext db)
     public async Task<Result> Handle(
         RecordFirstContactCommand cmd, CancellationToken ct)
     {
+        // AsTracking: this context does not track by default, and the lead now changes too.
         var lead = await db.Leads
+            .AsTracking()
             .FirstOrDefaultAsync(l => l.Id == cmd.LeadId, ct);
 
         if (lead is null)
@@ -39,6 +41,8 @@ internal sealed class RecordFirstContactHandler(LeadsDbContext db)
         // The assignment's first-contact task is done: it disappears from "Mes tâches" instead of
         // waiting there, overdue, for a call that already happened.
         await Tasks.AssignmentTasks.CompleteFirstContactAsync(db, lead.TenantId, lead.Id, assignment.AgentId, ct);
+        // And the lead itself is now contacted: "Contacté", stage "Contact établi".
+        lead.RecordContactEstablished();
         // No db.Leads.Update(lead): the lead is already tracked, and calling Update marks the
         // OWNED PrincipalPep's identifying key as modified — EF then refuses the save with
         // "part of a key and so cannot be modified".
