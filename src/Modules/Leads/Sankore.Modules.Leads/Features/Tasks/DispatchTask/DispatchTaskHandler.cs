@@ -101,7 +101,7 @@ internal sealed class DispatchTaskHandler(
         foreach (var agent in eligible)
         {
             var openTasks = await capacityService.GetOpenTaskCountAsync(cmd.TenantId, agent.Id, ct);
-            if (openTasks < rules.MaxTasksPerAgent)
+            if (rules.HasTaskCapacityFor(openTasks))
                 unsaturated.Add(agent);
         }
 

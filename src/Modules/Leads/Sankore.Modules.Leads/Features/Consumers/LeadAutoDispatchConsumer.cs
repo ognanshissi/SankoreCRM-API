@@ -9,13 +9,21 @@ using Microsoft.Extensions.Options;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.CaptureLead.Events;
 using Sankore.Modules.Leads.Features.DispatchLead;
-using Sankore.Modules.Leads.Features.QualifyLead;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 
 /// <summary>
-/// Scores, qualifies and dispatches a freshly captured lead, when the tenant asked for it
+/// Dispatches a freshly captured lead to an agent, when the deployment asked for it
 /// (<c>Leads:AutoDispatchOnCapture</c>).
+///
+/// <para>
+/// <b>It does NOT qualify the lead.</b> It used to score and qualify it first, so every captured
+/// lead reached its agent already labelled "Qualifié" or "En qualification" by a calculator that
+/// had seen no conversation — 35 of its 100 points come from activity history, empty at capture.
+/// Qualifying is the agent's work on the lead, which is the very reason it is routed to them; the
+/// lead now arrives in its capture status and dispatching, which requires no qualification
+/// (<see cref="Lead.IsDispatchable"/>), routes it as is.
+/// </para>
 ///
 /// Out of the capture transaction on purpose: the lead must persist even when no agent is free,
 /// and a 400-row import must not run 400 synchronous dispatches — each calling the Administration
@@ -78,30 +86,7 @@ public sealed class LeadAutoDispatchConsumer(
         if (lead.CurrentAssignmentId is not null) return;   // already dispatched — replayed message
         if (!lead.IsDispatchable) return;                   // closed between capture and delivery
 
-        // ── 1. Score and qualify ──────────────────────────────────────────
-        // Through the normal command so the score history, the intent level and the audit trail
-        // are the ones every other qualification produces. Path 3 of QualifyLeadHandler
-        // (no template, no explicit score) is the attribute-based calculator.
-        var qualification = await sender.Send(
-            new QualifyLeadCommand(
-                LeadId: lead.Id,
-                QualifiedBy: Guid.Empty,
-                TriggerEvent: "AUTO_ON_CAPTURE"),
-            ct);
-
-        if (qualification.IsFailure)
-        {
-            logger.LogWarning(
-                "Auto-qualification of lead {LeadId} failed: {Error}", lead.Id, qualification.Error);
-            return;
-        }
-
-        logger.LogInformation(
-            "Lead {LeadId} auto-qualified: score={Score}, status={Status} (threshold {Threshold})",
-            lead.Id, qualification.Value.Score, qualification.Value.Status,
-            settings.Value.QualificationThreshold);
-
-        // ── 2. Dispatch ───────────────────────────────────────────────────
+        // ── Dispatch ──────────────────────────────────────────────────────
         // Strategy left null: DispatchingRuleResolver picks the applicable rule and the rule
         // carries the strategy.
         var dispatch = await sender.Send(

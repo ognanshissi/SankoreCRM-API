@@ -350,6 +350,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("anonymized_at");
 
+                    b.Property<DateTimeOffset?>("AwaitingDispatchSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("awaiting_dispatch_since");
+
                     b.Property<string>("Campaign")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -687,6 +691,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
 
                     b.HasIndex("PhoneNumber")
                         .HasDatabaseName("ix_leads_phone_number");
+
+                    b.HasIndex("TenantId", "AwaitingDispatchSince")
+                        .HasDatabaseName("ix_leads_tenant_id_awaiting_dispatch_since")
+                        .HasFilter("awaiting_dispatch_since IS NOT NULL");
 
                     b.HasIndex("TenantId", "CustomerId")
                         .HasDatabaseName("ix_leads_tenant_id_customer_id")

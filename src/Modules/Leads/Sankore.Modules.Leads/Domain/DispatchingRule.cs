@@ -18,9 +18,24 @@ public sealed class DispatchingRule: ITenant
 
     /// <summary>
     /// Maximum number of open CRM tasks (Pending + InProgress) an agent may hold
-    /// before being excluded from the dispatch pool (US-M13-082).
+    /// before being excluded from the dispatch pool (US-M13-082). Zero or less means
+    /// no ceiling — see <see cref="HasTaskCapacityFor"/>.
     /// </summary>
     public int MaxTasksPerAgent { get; private set; }
+
+    /// <summary>
+    /// Whether an agent holding <paramref name="openTasks"/> open tasks may still receive work.
+    ///
+    /// <para>
+    /// Zero reads as "no ceiling", as <c>CompatibilityScorer</c> already read it. The column was
+    /// added with a default of 0 on every existing rule, and the settings screen never sent the
+    /// field, so every rule saved from it carried 0 as well. Read as a ceiling, 0 left no agent
+    /// with room: every dispatch failed with ALL_AGENTS_AT_TASK_CAPACITY, and an import of ten
+    /// leads assigned none of them. A rule that should route nothing is deactivated instead.
+    /// </para>
+    /// </summary>
+    public bool HasTaskCapacityFor(int openTasks) =>
+        MaxTasksPerAgent <= 0 || openTasks < MaxTasksPerAgent;
 
     /// <summary>
     /// How long (in minutes) a declining agent is excluded from the same task's

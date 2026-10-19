@@ -36,6 +36,9 @@ internal sealed class RecordFirstContactHandler(LeadsDbContext db)
         // records TelephonyCall, and a manager reading a contact rate can then tell a claim from
         // evidence — see FirstContactSource.
         assignment.RecordFirstContact(contactedAt, Domain.FirstContactSource.AgentDeclared);
+        // The assignment's first-contact task is done: it disappears from "Mes tâches" instead of
+        // waiting there, overdue, for a call that already happened.
+        await Tasks.AssignmentTasks.CompleteFirstContactAsync(db, lead.TenantId, lead.Id, assignment.AgentId, ct);
         // No db.Leads.Update(lead): the lead is already tracked, and calling Update marks the
         // OWNED PrincipalPep's identifying key as modified — EF then refuses the save with
         // "part of a key and so cannot be modified".

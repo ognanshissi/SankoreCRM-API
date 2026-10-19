@@ -35,11 +35,12 @@ public static class ListLeadsEndpoint
         string? search = null,
         string? tag = null,
         LeadIntentLevel? intentLevel = null,
-        Guid? leadSourceConfigId = null)
+        Guid? leadSourceConfigId = null,
+        bool? awaitingDispatch = null)
     {
         // Appended last, like the query record's own member: this call is positional.
         var result = await sender.Send(
-            new ListLeadsQuery(page, pageSize, status, pipelineStage, source, ownerId, agencyId, search, tag, intentLevel, leadSourceConfigId), ct);
+            new ListLeadsQuery(page, pageSize, status, pipelineStage, source, ownerId, agencyId, search, tag, intentLevel, leadSourceConfigId, awaitingDispatch), ct);
 
         return Results.Ok(result.Value);
     }

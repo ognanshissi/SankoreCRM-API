@@ -30,8 +30,8 @@ using Xunit.Abstractions;
 /// <summary>
 /// Takes the first five rows of <c>docs/sample-lead-import.xlsx</c> and runs the real chain:
 /// reader → parser → CaptureLeadHandler → LeadCapturedEvent → LeadAutoDispatchConsumer →
-/// QualifyLeadHandler → DispatchLeadHandler, with the settings actually shipped in
-/// appsettings.Development.json (AutoDispatchOnCapture = true, QualificationThreshold = 35).
+/// DispatchLeadHandler, with the settings actually shipped in appsettings.Development.json
+/// (AutoDispatchOnCapture = true). Auto-dispatch routes the lead WITHOUT qualifying it.
 ///
 /// What is faked: the agent pool (Administration is another module), the outbox publisher and
 /// the bus. Everything that decides a score, a status or an agent is the production code.
@@ -248,18 +248,12 @@ public sealed class ImportAutoDispatchEndToEndTests : IDisposable
         assignments.Should().HaveCount(RowsUnderTest,
             "with the gate relaxed every live lead is dispatched, whatever its score");
 
-        leads.Should().OnlyContain(l => l.Score > 0, "every lead went through the calculator");
         leads.Should().OnlyContain(l => l.CurrentAssignmentId != null);
-        leads.Should().OnlyContain(
-            l => l.Status == LeadStatus.Qualified || l.Status == LeadStatus.Qualifying);
 
-        // The threshold decides the label, not the dispatching: every lead is dispatched, and
-        // the status is Qualified exactly when the score reaches the threshold.
-        leads.Should().OnlyContain(
-            l => (l.Score >= Threshold) == (l.Status == LeadStatus.Qualified));
-
-        histories.Should().HaveCount(RowsUnderTest);
-        histories.Should().OnlyContain(h => h.TriggerEvent == "AUTO_ON_CAPTURE");
+        // Routed, not qualified: the lead reaches its agent in its capture status, and no score
+        // is written on its behalf — qualifying it is the agent's job.
+        leads.Should().OnlyContain(l => l.Status == LeadStatus.New);
+        histories.Should().NotContain(h => h.TriggerEvent == "AUTO_ON_CAPTURE");
 
         // Every assignment went to a real candidate, under the anti-monopoly ceiling. No spread
         // is asserted: the stubbed agents' counters never move between dispatches, so
@@ -269,9 +263,7 @@ public sealed class ImportAutoDispatchEndToEndTests : IDisposable
 
         _output.WriteLine(new string('-', 78));
         _output.WriteLine(
-            $"{leads.Count} leads · {leads.Count(l => l.Status == LeadStatus.Qualified)} Qualified · " +
-            $"{leads.Count(l => l.Status == LeadStatus.Qualifying)} Qualifying · " +
-            $"{assignments.Count} dispatchés · score moyen {leads.Average(l => l.Score):F1}");
+            $"{leads.Count} leads · {assignments.Count} dispatchés · tous au statut New");
     }
 
     [Fact]

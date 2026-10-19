@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.DispatchLead;
 
 using System.Text.Json;
+using System.Transactions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,8 +68,8 @@ internal sealed class DispatchLeadHandler(
 
         if (candidates.Count == 0)
         {
-            await publisher.PublishAsync(
-                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE"), ct);
+            await QueueForRetryAsync(lead, () => publisher.PublishAsync(
+                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE"), ct), ct);
 
             logger.LogWarning("Lead {LeadId} could not be dispatched: no agent available", lead.Id);
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
@@ -171,8 +172,8 @@ internal sealed class DispatchLeadHandler(
 
         if (eligible_candidates.Count == 0)
         {
-            await publisher.PublishAsync(
-                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS"), ct);
+            await QueueForRetryAsync(lead, () => publisher.PublishAsync(
+                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS"), ct), ct);
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
         }
 
@@ -207,9 +208,9 @@ internal sealed class DispatchLeadHandler(
                 // agency happens to hold no card is not a capacity problem, and telling an
                 // operator it is would send them to the wrong screen entirely — the one they
                 // need is the credential register.
-                await publisher.PublishAsync(
+                await QueueForRetryAsync(lead, () => publisher.PublishAsync(
                     new LeadDispatchingFailedEvent(
-                        lead.Id, cmd.TenantId, "NO_LICENSED_AGENT_AVAILABLE"), ct);
+                        lead.Id, cmd.TenantId, "NO_LICENSED_AGENT_AVAILABLE"), ct), ct);
 
                 return Result.Fail<DispatchLeadResult>("NO_LICENSED_AGENT_AVAILABLE");
             }
@@ -283,14 +284,14 @@ internal sealed class DispatchLeadHandler(
         foreach (var agent in eligible_candidates)
         {
             var openTasks = await capacityService.GetOpenTaskCountAsync(cmd.TenantId, agent.Id, ct);
-            if (openTasks < rules.MaxTasksPerAgent)
+            if (rules.HasTaskCapacityFor(openTasks))
                 unsaturated.Add(agent);
         }
 
         if (unsaturated.Count == 0)
         {
-            await publisher.PublishAsync(
-                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "ALL_AGENTS_AT_TASK_CAPACITY"), ct);
+            await QueueForRetryAsync(lead, () => publisher.PublishAsync(
+                new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "ALL_AGENTS_AT_TASK_CAPACITY"), ct), ct);
             logger.LogWarning(
                 "Lead {LeadId} blocked: all {Count} eligible agents are at task capacity ({Max})",
                 lead.Id, eligible_candidates.Count, rules.MaxTasksPerAgent);
@@ -309,8 +310,15 @@ internal sealed class DispatchLeadHandler(
 
         if (eligible.Count == 0)
         {
-            await publisher.PublishAsync(
-                new AntiMonopolyTriggeredEvent(lead.Id, rules.AntiMonopolyThreshold), ct);
+            // The lead is left without an agent all the same, so it is a dispatch failure too: the
+            // anti-monopoly signal alone reaches nobody who can place the lead.
+            await QueueForRetryAsync(lead, async () =>
+            {
+                await publisher.PublishAsync(
+                    new AntiMonopolyTriggeredEvent(lead.Id, rules.AntiMonopolyThreshold), ct);
+                await publisher.PublishAsync(
+                    new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "ANTI_MONOPOLY_BLOCKED"), ct);
+            }, ct);
 
             logger.LogWarning(
                 "Lead {LeadId} blocked by anti-monopoly threshold ({Threshold})",
@@ -371,5 +379,39 @@ internal sealed class DispatchLeadHandler(
             AgentName: winner.Agent.FullName,
             CompatibilityScore: winner.CompatibilityScore,
             SlaDeadline: assignment.SlaDeadline));
+    }
+
+    /// <summary>
+    /// Puts the lead in the dispatch queue and announces it — once. <c>DispatchWaitingLeadsJob</c>
+    /// retries it until an agent becomes available; a retry that fails again finds it already
+    /// queued and stays silent, so a lead waiting an afternoon does not raise an alert every few
+    /// minutes.
+    ///
+    /// <para>
+    /// Committed on its own, in a suppressed transaction scope. The failure events used to be
+    /// written to the outbox and then dropped: the handler returns <c>Result.Fail</c> without
+    /// saving, and <c>TransactionBehavior</c> rolls the ambient scope back on a failure anyway. No
+    /// <c>LeadDispatchingFailedEvent</c> ever left this handler — an import whose ten leads all
+    /// failed to dispatch left no task and no trace, and the leads sat unassigned for good.
+    /// Suppressing gives the queue entry and its events their own short transaction (as
+    /// <c>RevealSensitiveFieldHandler</c> does for its alert): the dispatch is still refused, the
+    /// record of the refusal survives.
+    /// </para>
+    ///
+    /// Safe to save the whole context: every failure path returns before the lead's assignment or
+    /// the outgoing assignment is touched, so the queue mark and the outbox rows are the only
+    /// pending changes.
+    /// </summary>
+    private async Task QueueForRetryAsync(Lead lead, Func<Task> publish, CancellationToken ct)
+    {
+        if (!lead.MarkAwaitingDispatch(clock.GetUtcNow()))
+            return;
+
+        using var suppressed = new TransactionScope(
+            TransactionScopeOption.Suppress,
+            TransactionScopeAsyncFlowOption.Enabled);
+
+        await publish();
+        await db.SaveChangesAsync(ct);
     }
 }

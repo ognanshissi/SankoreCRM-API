@@ -361,13 +361,26 @@ decision. Dispatching still works with an empty table, and a test pins that.
 
 **Auto-dispatch on capture** is off by default (`Leads:AutoDispatchOnCapture`). When on,
 `CaptureLeadHandler` publishes `LeadCapturedEvent` **through the outbox**, in the lead's own
-transaction, and `LeadAutoDispatchConsumer` scores, qualifies and dispatches out of band. Never
+transaction, and `LeadAutoDispatchConsumer` dispatches out of band — **without qualifying the
+lead**, which reaches its agent in its capture status (qualifying it is the agent's work). The
+dispatch then gives the agent a "Premier contact" task (`AssignmentTasks`). Never
 do this inline: a lead must persist when no agent is free, and a 400-row import would otherwise
 run 400 synchronous dispatches inside its loop. The consumer skips a lead captured with an owner,
 a suspected duplicate, and anything already assigned — its idempotency is `CurrentAssignmentId`,
 not an inbox table. It establishes `BackgroundJobContext.SetScope` **before** creating its DI
 scope, because `ITenantContext` and `ICurrentUser` are built from it and a consumer has no HTTP
 context.
+
+**Dispatch queue.** A dispatch that finds no agent (no one available, all at the task ceiling,
+all excluded, no licensed agent, anti-monopoly) puts the lead in the queue
+(`Lead.AwaitingDispatchSince`) and publishes `LeadDispatchingFailedEvent` **once**, on entry —
+both committed in a *suppressed* transaction scope, because `TransactionBehavior` rolls back a
+failed command and used to take the event with it. `DispatchWaitingLeadsJob` (per tenant, every
+2 min) retries the queue oldest first under the dispatching rule; any assignment clears the mark.
+Without `LeadDispatchingFailed` generation rules, `LeadDispatchingFailedTaskConsumer` gives the
+head of the lead's agency one "Dispatch manuel" task, closed by `AssignmentTasks` on assignment; a
+lead with no agency gets no task and just waits. `DispatchingRule.MaxTasksPerAgent = 0` means no
+ceiling (`HasTaskCapacityFor`) — existing rules carry 0 from their migration.
 
 The capture → scoring → qualification → dispatch → conversion walkthrough, with the measured
 score of each dimension and the cases a change here must not break, is in

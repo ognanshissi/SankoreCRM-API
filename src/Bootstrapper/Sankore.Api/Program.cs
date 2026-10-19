@@ -781,6 +781,14 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(tenantId),
             "0 3 * * *");
 
+        // Dispatch queue: leads no agent could take are retried under the dispatching rule until
+        // one becomes available. Every two minutes — the wait an agent coming back from a break
+        // sees before the queue reaches them — and nearly free when nobody is available.
+        AddOrUpdate<Sankore.Modules.Leads.Features.DispatchQueue.DispatchWaitingLeadsJob>(
+            $"dispatch-waiting-leads-{suffix}",
+            job => job.ExecuteAsync(tenantId),
+            "*/2 * * * *");
+
         // Health questionnaire retention (BNF-B-09). Nightly, offset from the other jobs: it
         // reads the tenant's own retention period and blanks only answers already transmitted to
         // the insurer, so there is nothing to race with.

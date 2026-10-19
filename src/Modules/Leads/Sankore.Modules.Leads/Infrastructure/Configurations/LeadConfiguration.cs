@@ -138,6 +138,11 @@ internal sealed class LeadConfiguration(IFieldEncryptor encryptor) : IEntityType
         builder.HasIndex(l => new { l.TenantId, l.CustomerReference })
                .HasFilter("customer_reference IS NOT NULL");
 
+        // The dispatch queue, read every few minutes by DispatchWaitingLeadsJob, oldest first.
+        // Partial: the queue is a handful of rows among every lead the tenant ever captured.
+        builder.HasIndex(l => new { l.TenantId, l.AwaitingDispatchSince })
+               .HasFilter("awaiting_dispatch_since IS NOT NULL");
+
         // Capture context
         builder.Property(l => l.Campaign).HasMaxLength(100);
         builder.Property(l => l.ExternalReference).HasMaxLength(100);

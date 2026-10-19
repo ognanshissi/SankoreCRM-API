@@ -95,7 +95,7 @@ internal sealed class PreviewDispatchHandler(
             {
                 var excluded = rules.ExcludedAgentIds.Contains(c.Agent.Id);
                 var openTasks = openTaskCounts[c.Agent.Id];
-                var atCapacity = openTasks >= rules.MaxTasksPerAgent;
+                var atCapacity = !rules.HasTaskCapacityFor(openTasks);
                 var monopoly = c.Agent.HotLeadsCount >= rules.AntiMonopolyThreshold;
 
                 return new DispatchPreviewCandidate(

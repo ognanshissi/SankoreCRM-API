@@ -75,6 +75,7 @@ internal sealed class GetLeadHandler(LeadsDbContext db)
             ProspectType:             lead.ProspectType.ToString(),
             LeadSourceConfigId:       lead.LeadSourceConfigId,
             LeadSourceCode:           source?.Code,
-            LeadSourceLabel:          source?.Label));
+            LeadSourceLabel:          source?.Label,
+            AwaitingDispatchSince:    lead.AwaitingDispatchSince));
     }
 }

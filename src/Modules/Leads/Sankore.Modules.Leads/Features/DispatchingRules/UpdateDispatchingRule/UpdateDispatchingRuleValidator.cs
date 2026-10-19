@@ -8,6 +8,8 @@ internal sealed class UpdateDispatchingRuleValidator : AbstractValidator<UpdateD
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
         RuleFor(x => x.MaxLeadsPerAgent).GreaterThan(0);
+        // 0 = no ceiling (DispatchingRule.HasTaskCapacityFor); a negative value means nothing.
+        RuleFor(x => x.MaxTasksPerAgent).GreaterThanOrEqualTo(0);
         RuleFor(x => x.AntiMonopolyThreshold).GreaterThan(0);
         RuleFor(x => x.FirstContactSla).GreaterThan(TimeSpan.Zero);
         RuleFor(x => x.Weights.Language).GreaterThanOrEqualTo(0);

@@ -42,6 +42,11 @@ internal sealed class ListLeadsHandler(LeadsDbContext db)
                 l.PhoneNumber.Contains(search));
         }
 
+        // The dispatch queue: leads no agent could take yet, still unassigned. Assignment clears
+        // the mark, the second predicate only guards a row caught mid-write.
+        if (query.AwaitingDispatch == true)
+            q = q.Where(l => l.AwaitingDispatchSince != null && l.CurrentAssignmentId == null);
+
         if (query.IntentLevel.HasValue)
             q = q.Where(l => l.IntentLevel == query.IntentLevel.Value);
 
@@ -108,7 +113,10 @@ internal sealed class ListLeadsHandler(LeadsDbContext db)
                 // Appended last on purpose — this construction is fully positional, and the
                 // record's neighbours are same-typed, so an inserted argument would bind
                 // silently to the wrong member.
-                lead.LeadSourceConfigId))
+                lead.LeadSourceConfigId,
+                null,
+                null,
+                lead.AwaitingDispatchSince))
             .ToListAsync(ct);
 
         // Code and label come from a second read rather than a join in the projection above: a

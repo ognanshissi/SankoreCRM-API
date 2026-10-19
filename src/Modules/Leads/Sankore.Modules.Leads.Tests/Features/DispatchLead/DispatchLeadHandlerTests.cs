@@ -194,6 +194,73 @@ public sealed class DispatchLeadHandlerTests : IDisposable
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task A_rule_with_no_task_ceiling_still_dispatches()
+    {
+        // MaxTasksPerAgent = 0 is what every existing rule received from the migration, and what
+        // the settings screen saved: read as a ceiling it blocked every agent, so an import
+        // assigned none of its leads.
+        await using var db = _factory.CreateContext();
+        var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+        db.Leads.Add(lead);
+        db.DispatchingRules.Add(RuleWithTaskCeiling(0));
+        await db.SaveChangesAsync();
+
+        var agent = AgentTestBuilder.Create().Named("Awa Fall").Build();
+        await AddOpenTasksAsync(db, agent.Id, 3);
+
+        var result = await BuildHandler(db, PoolOf(agent), Substitute.For<IEventPublisher>())
+            .Handle(new DispatchLeadCommand(lead.Id, _tenantId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AgentId.Should().Be(agent.Id);
+    }
+
+    [Fact]
+    public async Task A_task_ceiling_still_excludes_an_agent_who_reached_it()
+    {
+        await using var db = _factory.CreateContext();
+        var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+        db.Leads.Add(lead);
+        db.DispatchingRules.Add(RuleWithTaskCeiling(2));
+        await db.SaveChangesAsync();
+
+        var agent = AgentTestBuilder.Create().Named("Awa Fall").Build();
+        await AddOpenTasksAsync(db, agent.Id, 2);
+
+        var result = await BuildHandler(db, PoolOf(agent), Substitute.For<IEventPublisher>())
+            .Handle(new DispatchLeadCommand(lead.Id, _tenantId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("ALL_AGENTS_AT_TASK_CAPACITY");
+    }
+
+    private DispatchingRule RuleWithTaskCeiling(int maxTasks) => DispatchingRule.Create(
+        _tenantId, "Plafond de tâches", DispatchingStrategy.RoundRobin,
+        new ScoringWeights(Language: 25, Product: 25, Geography: 20, Workload: 15, Performance: 15),
+        maxLeadsPerAgent: 30, antiMonopolyThreshold: 5,
+        firstContactSla: TimeSpan.FromHours(2), priority: 10,
+        maxTasksPerAgent: maxTasks);
+
+    private async Task AddOpenTasksAsync(
+        Sankore.Modules.Leads.Infrastructure.LeadsDbContext db, Guid agentId, int count)
+    {
+        for (var i = 0; i < count; i++)
+            db.CrmTasks.Add(CrmTask.Create(
+                tenantId: _tenantId, type: CrmTaskType.Generic, priority: CrmTaskPriority.Medium,
+                title: $"Tâche {i}", dueAt: DateTimeOffset.UtcNow.AddDays(1), leadId: null,
+                assignedAgentId: agentId));
+        await db.SaveChangesAsync();
+    }
+
+    private IAdministrationModule PoolOf(AgentSummary agent)
+    {
+        var usersModule = Substitute.For<IAdministrationModule>();
+        usersModule.GetAvailableAgentsAsync(_tenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<AgentSummary> { agent });
+        return usersModule;
+    }
+
     private static DispatchLeadHandler BuildHandler(
         Sankore.Modules.Leads.Infrastructure.LeadsDbContext db,
         IAdministrationModule usersModule,

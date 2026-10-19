@@ -404,6 +404,33 @@ public sealed class Lead : AggregateRoot
     /// </summary>
     public Guid? CurrentAssignmentId { get; private set; }
 
+    /// <summary>
+    /// When the lead entered the dispatch queue: a dispatch found no agent for it, and
+    /// <c>DispatchWaitingLeadsJob</c> retries it under the dispatching rule until one becomes
+    /// available. Null when the lead is not waiting — never dispatched, or assigned since.
+    ///
+    /// <para>
+    /// Before the queue, a failed dispatch was final: the lead stayed unassigned until somebody
+    /// noticed it in the list, and an import that ran while every agent was busy left all its
+    /// leads unrouted for good.
+    /// </para>
+    /// </summary>
+    public DateTimeOffset? AwaitingDispatchSince { get; private set; }
+
+    /// <summary>
+    /// Puts the lead in the dispatch queue, and says whether it was not already there — the caller
+    /// announces only that first entry, so a retry that fails again stays silent. A lead that still
+    /// has an agent is not queued: a failed REassignment leaves it with the one it has.
+    /// </summary>
+    public bool MarkAwaitingDispatch(DateTimeOffset now)
+    {
+        if (AwaitingDispatchSince is not null || CurrentAssignmentId is not null || !IsDispatchable)
+            return false;
+
+        AwaitingDispatchSince = now;
+        return true;
+    }
+
     // ── Attribution & UTM (F13.37-BE-04) ───────────────────────────────────
     public string? UtmSource { get; private set; }
     public string? UtmMedium { get; private set; }
@@ -664,9 +691,12 @@ public sealed class Lead : AggregateRoot
         if (closing.IsFailure)
             return closing;
 
-        CurrentAssignmentId = assignment.Id;
-        CurrentAssignedId   = assignment.AgentId;
-        UpdatedAt           = DateTimeOffset.UtcNow;
+        CurrentAssignmentId   = assignment.Id;
+        CurrentAssignedId     = assignment.AgentId;
+        // Whoever placed it — the queue, the engine at capture, a branch manager by hand — the
+        // lead has an agent and leaves the queue.
+        AwaitingDispatchSince = null;
+        UpdatedAt             = DateTimeOffset.UtcNow;
 
         RaiseDomainEvent(new LeadAssignedDomainEvent(Id, assignment.Id, assignment.AgentId));
         return Result.Ok();

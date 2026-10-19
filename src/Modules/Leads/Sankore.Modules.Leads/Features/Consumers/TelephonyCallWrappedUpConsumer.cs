@@ -181,6 +181,12 @@ public sealed class TelephonyCallWrappedUpConsumer(
             // flatters every figure by the length of their paperwork.
             stoppedSla = assignment?.RecordFirstContact(
                 evt.StartedAt, FirstContactSource.TelephonyCall) == true;
+
+            // A qualified call is a first contact too: it closes the assignment's task, exactly as
+            // the agent's own declaration does.
+            if (stoppedSla)
+                await Features.Tasks.AssignmentTasks.CompleteFirstContactAsync(
+                    db, evt.TenantId, leadId, assignment!.AgentId, ct);
         }
 
         // ── The callback the outcome demanded ────────────────────────────────

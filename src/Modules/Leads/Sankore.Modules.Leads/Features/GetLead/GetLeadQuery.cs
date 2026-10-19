@@ -65,4 +65,9 @@ public sealed record LeadDto(
     /// </param>
     string? LeadSourceCode = null,
     /// <param name="LeadSourceLabel">The source's human-readable <c>Label</c>, same caveats.</param>
-    string? LeadSourceLabel = null);
+    string? LeadSourceLabel = null,
+    /// <param name="AwaitingDispatchSince">
+    /// When the lead entered the dispatch queue — no agent could take it, and it is retried until
+    /// one can. Null when it is not waiting.
+    /// </param>
+    DateTimeOffset? AwaitingDispatchSince = null);

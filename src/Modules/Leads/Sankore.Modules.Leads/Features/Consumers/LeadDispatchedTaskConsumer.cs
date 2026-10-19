@@ -5,14 +5,22 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.DispatchLead.Events;
+using Sankore.Modules.Leads.Features.Tasks;
 using Sankore.Modules.Leads.Infrastructure;
 
 /// <summary>
-/// Generates CRM tasks when a lead is successfully dispatched to an agent.
-/// Evaluates all active TaskGenerationRules for the "LeadDispatched" event
-/// and creates one task per matching rule.
-/// Note: no ITenantContext available in MassTransit consumers (no HTTP context);
-/// uses IgnoreQueryFilters() + manual TenantId filter from the event payload.
+/// Gives the agent a task when a lead is dispatched to them: one per active <c>LeadDispatched</c>
+/// generation rule when the tenant configured some, and otherwise the default first-contact task
+/// (<see cref="AssignmentTasks"/>). It also cancels the open assignment tasks of the agent the lead
+/// came from.
+///
+/// <para>
+/// It used to do nothing at all for a tenant without rules — the default — so an assignment never
+/// reached the agent's "Mes tâches" list, which is the one screen an agent works from.
+/// </para>
+///
+/// Note: no ITenantContext available in MassTransit consumers (no HTTP context); every query
+/// uses IgnoreQueryFilters() + the TenantId from the event payload.
 /// </summary>
 public sealed class LeadDispatchedTaskConsumer(
     LeadsDbContext db,
@@ -22,41 +30,22 @@ public sealed class LeadDispatchedTaskConsumer(
     public async Task Consume(ConsumeContext<LeadDispatchedEvent> context)
     {
         var evt = context.Message;
-        var now = DateTimeOffset.UtcNow;
+        var ct = context.CancellationToken;
 
         var rules = await db.TaskGenerationRules
             .IgnoreQueryFilters()
             .Where(r => r.TenantId == evt.TenantId
                      && r.TriggerEventType == TaskTriggerEvents.LeadDispatched
                      && r.IsActive)
-            .ToListAsync(context.CancellationToken);
+            .ToListAsync(ct);
 
-        if (rules.Count == 0) return;
+        var created = await AssignmentTasks.SyncOnAssignedAsync(
+            db, evt.TenantId, evt.LeadId, evt.AgentId, evt.SlaDeadline, rules, DateTimeOffset.UtcNow, ct);
 
-        foreach (var rule in rules)
-        {
-            var title = rule.TitleTemplate.Replace("{LeadId}", evt.LeadId.ToString());
-
-            var task = CrmTask.Create(
-                tenantId:        evt.TenantId,
-                type:            rule.TaskType,
-                priority:        rule.Priority,
-                title:           title,
-                dueAt:           now.Add(rule.DueDuration),
-                leadId:          evt.LeadId,
-                assignedAgentId: evt.AgentId,
-                slaDeadline:     now.Add(rule.SlaDuration),
-                description:     rule.DescriptionTemplate?.Replace("{LeadId}", evt.LeadId.ToString()),
-                triggerEventType: TaskTriggerEvents.LeadDispatched,
-                triggerEventId:  evt.LeadId);
-
-            db.CrmTasks.Add(task);
-        }
-
-        await db.SaveChangesAsync(context.CancellationToken);
+        await db.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "Generated {Count} task(s) for dispatched lead {LeadId} (tenant {TenantId})",
-            rules.Count, evt.LeadId, evt.TenantId);
+            "Generated {Count} task(s) for dispatched lead {LeadId} → agent {AgentId} (tenant {TenantId}, {Source})",
+            created, evt.LeadId, evt.AgentId, evt.TenantId, rules.Count == 0 ? "default first-contact task" : $"{rules.Count} rule(s)");
     }
 }
