@@ -1,4 +1,5 @@
 using Sankore.Modules.Leads.Features.Reports.GetAgentReport;
+using Sankore.Modules.Leads.Features.Dispatching.GetDispatchOverview;
 using Sankore.Modules.Leads.Features.Reports.GetLeadReport;
 using Microsoft.AspNetCore.Builder;
 
@@ -337,6 +338,7 @@ public static class LeadsModule
         group.MapGetLeadStats();
         group.MapGetLeadReport();
         group.MapGetAgentReport();
+        group.MapGetDispatchOverview();
         group.MapReopenLead();
         group.MapNurtureLead();
         group.MapRecycleLead();
