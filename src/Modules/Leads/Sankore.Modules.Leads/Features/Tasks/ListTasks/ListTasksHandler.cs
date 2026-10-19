@@ -38,8 +38,11 @@ internal sealed class ListTasksHandler(
                 var teamIds = await admin.GetTeamAgentIdsAsync(
                     tenant.CurrentTenantId, query.CurrentUserId.Value, ct);
 
-                if (teamIds.Count > 0)
-                    q = q.Where(t => t.AssignedAgentId != null && teamIds.Contains(t.AssignedAgentId.Value));
+                // An empty team means nobody to supervise, not "everyone": the filter used to be
+                // skipped then, and a branch manager alone in their agency saw every task of the
+                // tenant. A super-user's team is already the whole tenant (GetTeamAgentIdsAsync).
+                var team = teamIds.ToList();
+                q = q.Where(t => t.AssignedAgentId != null && team.Contains(t.AssignedAgentId.Value));
             }
         }
 
