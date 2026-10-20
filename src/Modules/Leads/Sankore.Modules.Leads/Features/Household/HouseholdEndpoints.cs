@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Features.Household.AddHouseholdMember;
 using Sankore.Modules.Leads.Features.Household.GetHousehold;
 using Sankore.Modules.Leads.Features.Household.RemoveHouseholdMember;
+using Sankore.Modules.Leads.Features.Household.SetHouseholdResources;
 using Sankore.Modules.Leads.Features.Household.SetPepStatus;
 using Sankore.Modules.Leads.Features.Household.UpdateHouseholdMember;
 using Sankore.Shared.Kernel;
@@ -59,6 +60,18 @@ internal static class HouseholdEndpoints
             .WithName("RemoveLeadHouseholdMember")
             .WithTags("Leads")
             .WithSummary("Remove a household member (logical — the row is kept)")
+            .RequireAuthorization(Permissions.CanManageLeadHousehold.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .WithOpenApi();
+
+        app.MapPut("{leadId:guid}/household/resources", SetResources)
+            .WithName("SetLeadHouseholdResources")
+            .WithTags("Leads")
+            .WithSummary("Declare the household's monthly income, housing cost and other loans")
             .RequireAuthorization(Permissions.CanManageLeadHousehold.Code)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
@@ -153,6 +166,20 @@ internal static class HouseholdEndpoints
         return result.IsSuccess ? Results.NoContent() : Problem(result.Error);
     }
 
+    private static async Task<IResult> SetResources(
+        Guid leadId, SetHouseholdResourcesRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new SetHouseholdResourcesCommand(
+            LeadId:            leadId,
+            MonthlyIncome:     req.MonthlyIncome,
+            HousingCost:       req.HousingCost,
+            OtherDebts:        req.OtherDebts,
+            Currency:          req.Currency,
+            ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
+
+        return result.IsSuccess ? Results.NoContent() : Problem(result.Error);
+    }
+
     private static async Task<IResult> SetPrincipalPep(
         Guid leadId, SetPepStatusRequest req, ISender sender, CancellationToken ct)
     {
@@ -219,4 +246,16 @@ public sealed record RemoveHouseholdMemberRequest(
 
 public sealed record SetPepStatusRequest(
     PepStatusDto Pep,
+    DateTimeOffset? ExpectedUpdatedAt = null);
+
+/// <summary>
+/// The household's monthly resources, all three together — see
+/// <see cref="SetHouseholdResourcesCommand"/>. Null clears a figure.
+/// </summary>
+public sealed record SetHouseholdResourcesRequest(
+    decimal? MonthlyIncome = null,
+    decimal? HousingCost = null,
+    decimal? OtherDebts = null,
+    /// <summary>ISO 4217; XOF when omitted.</summary>
+    string? Currency = null,
     DateTimeOffset? ExpectedUpdatedAt = null);

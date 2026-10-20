@@ -82,6 +82,11 @@ internal sealed class LeadConfiguration(IFieldEncryptor encryptor) : IEntityType
         builder.Property(l => l.PrincipalCountryCode).HasMaxLength(2).IsFixedLength(false);
         builder.Property(l => l.PrincipalNeighbourhood).HasMaxLength(100);
 
+        builder.Property(l => l.HouseholdMonthlyIncome).HasPrecision(18, 4);
+        builder.Property(l => l.HouseholdHousingCost).HasPrecision(18, 4);
+        builder.Property(l => l.HouseholdOtherDebts).HasPrecision(18, 4);
+        builder.Property(l => l.HouseholdResourcesCurrency).HasMaxLength(3);
+
         // Encrypted, like every other postal address. Unbounded text: the ciphertext of a
         // ~200-character address is roughly 300 characters, and a cap would truncate a payload
         // into something that no longer decrypts. NOTHING may compare this column in SQL.

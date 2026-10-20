@@ -218,6 +218,27 @@ public sealed class Lead : AggregateRoot
     /// </summary>
     public Guid? IdentitySourceActivityId { get; private set; }
 
+    // ── What the household lives on, per month, as the prospect declares it ─
+    //
+    // Declarative, unchecked figures: they let an agent estimate what the household can repay
+    // before the qualification questionnaire, nothing more. Three plain decimals and one currency
+    // rather than three Money owned types, because the three are always declared together and in
+    // the same currency.
+
+    /// <summary>Net monthly income of the whole household.</summary>
+    public decimal? HouseholdMonthlyIncome { get; private set; }
+
+    /// <summary>Rent or housing loan, per month.</summary>
+    public decimal? HouseholdHousingCost { get; private set; }
+
+    /// <summary>Other loans being repaid, per month.</summary>
+    public decimal? HouseholdOtherDebts { get; private set; }
+
+    /// <summary>ISO 4217 — <c>XOF</c> unless the screen says otherwise.</summary>
+    public string? HouseholdResourcesCurrency { get; private set; }
+
+    public DateTimeOffset? HouseholdResourcesDeclaredAt { get; private set; }
+
     /// <summary>
     /// The principal's identity as a value object, or null while the structured names are missing.
     ///
@@ -1387,6 +1408,13 @@ public sealed class Lead : AggregateRoot
         PrincipalLandmark      = null;
         NameVerifiedBy         = null;
 
+        // What a household earns and owes is personal financial data, declared about a person.
+        HouseholdMonthlyIncome       = null;
+        HouseholdHousingCost         = null;
+        HouseholdOtherDebts          = null;
+        HouseholdResourcesCurrency   = null;
+        HouseholdResourcesDeclaredAt = null;
+
         CompanyName  = null;
         CompanyEmail = null;
         CompanyPhone = null;
@@ -1526,6 +1554,37 @@ public sealed class Lead : AggregateRoot
             return Result.Fail("Cannot update a closed lead.");
 
         IdentitySourceActivityId = activityId;
+        UpdatedAt = now;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Records the household's monthly resources as declared — see
+    /// <see cref="HouseholdMonthlyIncome"/>. A full replacement: the screen posts the three figures
+    /// together, and a null clears that one.
+    /// </summary>
+    /// <returns><c>LEAD_RESOURCES_NEGATIVE</c>, or the closed-lead refusal.</returns>
+    public Result DeclareHouseholdResources(
+        decimal? monthlyIncome,
+        decimal? housingCost,
+        decimal? otherDebts,
+        string? currency,
+        DateTimeOffset now)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+
+        if (monthlyIncome < 0 || housingCost < 0 || otherDebts < 0)
+            return Result.Fail("LEAD_RESOURCES_NEGATIVE");
+
+        HouseholdMonthlyIncome = monthlyIncome;
+        HouseholdHousingCost   = housingCost;
+        HouseholdOtherDebts    = otherDebts;
+
+        var declared = monthlyIncome is not null || housingCost is not null || otherDebts is not null;
+        HouseholdResourcesCurrency   = declared ? (Blank(currency)?.ToUpperInvariant() ?? "XOF") : null;
+        HouseholdResourcesDeclaredAt = declared ? now : null;
+
         UpdatedAt = now;
         return Result.Ok();
     }

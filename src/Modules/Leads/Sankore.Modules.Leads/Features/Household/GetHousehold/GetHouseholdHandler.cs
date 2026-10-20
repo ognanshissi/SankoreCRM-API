@@ -102,6 +102,14 @@ internal sealed class GetHouseholdHandler(
                                        ? HouseholdMapping.ToDto(lead.PrincipalPep)
                                        : null,
             HasPepExposure:        lead.HasPepExposure,
-            Members:               members));
+            Members:               members,
+            Resources:             lead.HouseholdResourcesDeclaredAt is { } declaredAt
+                                       ? new HouseholdResourcesDto(
+                                           MonthlyIncome: lead.HouseholdMonthlyIncome,
+                                           HousingCost:   lead.HouseholdHousingCost,
+                                           OtherDebts:    lead.HouseholdOtherDebts,
+                                           Currency:      lead.HouseholdResourcesCurrency ?? "XOF",
+                                           DeclaredAt:    declaredAt)
+                                       : null));
     }
 }

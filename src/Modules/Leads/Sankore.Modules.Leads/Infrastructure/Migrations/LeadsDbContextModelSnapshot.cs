@@ -486,6 +486,30 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("has_pep_exposure");
 
+                    b.Property<decimal?>("HouseholdHousingCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("household_housing_cost");
+
+                    b.Property<decimal?>("HouseholdMonthlyIncome")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("household_monthly_income");
+
+                    b.Property<decimal?>("HouseholdOtherDebts")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("household_other_debts");
+
+                    b.Property<string>("HouseholdResourcesCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("household_resources_currency");
+
+                    b.Property<DateTimeOffset?>("HouseholdResourcesDeclaredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("household_resources_declared_at");
+
                     b.Property<Guid?>("IdentitySourceActivityId")
                         .HasColumnType("uuid")
                         .HasColumnName("identity_source_activity_id");

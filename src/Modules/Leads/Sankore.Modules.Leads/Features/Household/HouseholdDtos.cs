@@ -83,4 +83,18 @@ public sealed record LeadHouseholdDto(
     bool PrincipalIsPepExposed,
     PepStatusDto? PrincipalPep,
     bool HasPepExposure,
-    IReadOnlyList<HouseholdMemberDto> Members);
+    IReadOnlyList<HouseholdMemberDto> Members,
+    /// <param name="Resources">What the household lives on per month, null until declared.</param>
+    HouseholdResourcesDto? Resources = null);
+
+/// <summary>
+/// The household's monthly resources, as the prospect declared them — unchecked figures for an
+/// early estimate of what the household can repay.
+/// </summary>
+/// <param name="Currency">ISO 4217.</param>
+public sealed record HouseholdResourcesDto(
+    decimal? MonthlyIncome,
+    decimal? HousingCost,
+    decimal? OtherDebts,
+    string Currency,
+    DateTimeOffset DeclaredAt);
