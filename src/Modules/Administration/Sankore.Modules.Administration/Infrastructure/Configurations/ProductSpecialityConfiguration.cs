@@ -19,6 +19,9 @@ public class ProductSpecialityConfiguration : IEntityTypeConfiguration<ProductSp
         builder.Property(x => x.ParametersJson)
             .HasColumnType("jsonb")
             .HasColumnName("parameters");
+        builder.Property(x => x.CustomFieldsJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("custom_fields");
         builder.Property(x => x.BusinessProductId).HasMaxLength(100);
         builder.Property(x => x.BusinessPlatformName).HasMaxLength(100);
 

@@ -35,4 +35,12 @@ public sealed record ImportLeadRow
     public string? CompanyName { get; init; }
     public string? OwnerId { get; init; }
     public string? AgencyId { get; init; }
+
+    /// <summary>
+    /// The row's <c>custom.&lt;key&gt;</c> columns, by full header name (dynamic forms, lot 6). Read as
+    /// text and checked against the tenant's lead form at capture, like every other cell: a value
+    /// the form refuses fails the row with the field named, as an unreadable date does.
+    /// </summary>
+    [CsvHelper.Configuration.Attributes.Ignore]
+    public IReadOnlyDictionary<string, string?> CustomFields { get; init; } = new Dictionary<string, string?>();
 }

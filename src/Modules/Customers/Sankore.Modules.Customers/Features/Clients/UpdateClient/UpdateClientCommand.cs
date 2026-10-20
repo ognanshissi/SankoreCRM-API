@@ -32,7 +32,9 @@ public sealed record UpdateClientCommand(
     MaritalStatus? MaritalStatus,
     [property: SensitiveData] decimal? DeclaredIncome,
     string? DeclaredIncomeCurrency,
-    string? PreferredLanguage
+    string? PreferredLanguage,
+    /// <summary>Custom-field changes, merged — see <c>UpdateClientRequest.CustomFields</c>.</summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "Client";

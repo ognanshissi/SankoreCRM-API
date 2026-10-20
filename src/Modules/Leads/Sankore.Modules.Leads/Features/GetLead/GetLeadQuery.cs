@@ -70,4 +70,9 @@ public sealed record LeadDto(
     /// When the lead entered the dispatch queue — no agent could take it, and it is retried until
     /// one can. Null when it is not waiting.
     /// </param>
-    DateTimeOffset? AwaitingDispatchSince = null);
+    DateTimeOffset? AwaitingDispatchSince = null,
+    /// <param name="CustomFields">
+    /// Values of the tenant's custom lead fields, keyed by field key (<c>GET forms/Lead</c> says
+    /// how to render them). Filled on the detail read only; null in lists.
+    /// </param>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);

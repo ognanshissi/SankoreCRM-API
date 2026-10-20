@@ -25,7 +25,11 @@ public sealed record CreateLegalClientCommand(
     [property: SensitiveData] PostalAddressInput HeadOfficeAddress,
     [property: SensitiveData] IReadOnlyList<string> PhoneNumbers,
     [property: SensitiveData] string? Email,
-    string? PreferredLanguage
+    string? PreferredLanguage,
+    /// <summary>Values of the tenant's custom client fields, keyed by field key.</summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    /// <summary>SERVER-SET: true from the creation screen only — see the individual command.</summary>
+    bool EnforceFormRequirements = false
 ) : IRequest<Result<CreateLegalClientResult>>, ICommand, IResourceCommand, IAgencyScopedRequest
 {
     public string ResourceType => "Client";

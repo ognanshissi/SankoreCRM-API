@@ -76,6 +76,7 @@ internal sealed class GetLeadHandler(LeadsDbContext db)
             LeadSourceConfigId:       lead.LeadSourceConfigId,
             LeadSourceCode:           source?.Code,
             LeadSourceLabel:          source?.Label,
-            AwaitingDispatchSince:    lead.AwaitingDispatchSince));
+            AwaitingDispatchSince:    lead.AwaitingDispatchSince,
+            CustomFields:             Administration.PublicApi.Forms.CustomFieldValues.Read(lead.CustomFieldsJson)));
     }
 }

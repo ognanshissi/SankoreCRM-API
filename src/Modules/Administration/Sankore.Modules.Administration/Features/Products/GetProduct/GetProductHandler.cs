@@ -10,19 +10,14 @@ internal sealed class GetProductHandler(AdministrationDbContext db)
 {
     public async Task<Result<ProductDto>> Handle(GetProductQuery request, CancellationToken ct)
     {
+        // Loaded whole and mapped in memory: the custom fields are parsed from their jsonb text,
+        // which a SQL projection cannot do.
         var product = await db.ProductSpecialities
-            .Where(p => p.Id == request.ProductId)
-            .Select(p => new ProductDto(
-                p.Id, p.Name, p.Code, p.Category,
-                p.Description, p.ParametersJson,
-                p.IsActive, p.EffectiveFrom, p.EffectiveTo,
-                p.BusinessProductId, p.BusinessPlatformName,
-                p.BeneficiaryPolicy, p.AllowMultipleHoldings, p.KycRemotePolicy))
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(p => p.Id == request.ProductId, ct);
 
         if (product is null)
             return Result.Fail<ProductDto>("PRODUCT_NOT_FOUND");
 
-        return Result.Ok(product);
+        return Result.Ok(ProductFormGate.ToDto(product));
     }
 }

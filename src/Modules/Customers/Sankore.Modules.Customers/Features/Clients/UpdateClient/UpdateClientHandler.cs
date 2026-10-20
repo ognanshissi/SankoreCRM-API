@@ -2,6 +2,9 @@ namespace Sankore.Modules.Customers.Features.Clients.UpdateClient;
 
 using System.Globalization;
 using MediatR;
+using Microsoft.Extensions.Logging;
+using Sankore.Modules.Administration.PublicApi;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
@@ -24,7 +27,9 @@ internal sealed class UpdateClientHandler(
     CustomersDbContext db,
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
-    IFieldEncryptor encryptor
+    IFieldEncryptor encryptor,
+    IAdministrationModule? administration = null,
+    ILogger<UpdateClientHandler>? logger = null
 ) : IRequestHandler<UpdateClientCommand, Result>
 {
     public async Task<Result> Handle(UpdateClientCommand cmd, CancellationToken ct)
@@ -71,6 +76,21 @@ internal sealed class UpdateClientHandler(
 
         if (update.IsFailure)
             return update;
+
+        if (cmd.CustomFields is { Count: > 0 })
+        {
+            var custom = await ClientFormGate.ApplyAsync(
+                administration, logger, tenantId, client.CustomFieldsJson, cmd.CustomFields,
+                new Dictionary<string, string?> { ["clientType"] = client.Type.ToString() },
+                enforceRequired: true, isCreate: false, ct);
+
+            if (custom.IsFailure)
+                return Result.Fail(custom.Error!);
+
+            var stored = client.SetCustomFields(custom.Value, actor);
+            if (stored.IsFailure)
+                return stored;
+        }
 
         try
         {

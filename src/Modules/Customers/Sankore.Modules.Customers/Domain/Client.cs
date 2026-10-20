@@ -67,6 +67,14 @@ public sealed class Client : AggregateRoot
     public string PreferredLanguage { get; private set; } = default!;
     public int DependentsCount { get; private set; }
 
+    /// <summary>
+    /// Values of the tenant's custom client fields, keyed by field key (dynamic forms, lot 1) —
+    /// checked and merged by <c>CustomFieldValues.Apply</c> before they reach here. In clear,
+    /// like the names: a custom field marked sensitive is masked by the screens and cleared by
+    /// anonymisation, not encrypted.
+    /// </summary>
+    public string? CustomFieldsJson { get; private set; }
+
     // ── AML / LBC-FT profile ────────────────────────────────────────────────
     //
     // The CIMA LBC/FT regulation (article 13.1 of the 2021 text, carried into the 2025 one) is
@@ -413,6 +421,20 @@ public sealed class Client : AggregateRoot
         if (declaredIncomeCurrency is not null) DeclaredIncomeCurrency = Clean(declaredIncomeCurrency);
         if (!string.IsNullOrWhiteSpace(preferredLanguage)) PreferredLanguage = DefaultLanguage(preferredLanguage);
 
+        Touch(actor);
+        return Result.Ok();
+    }
+
+    /// <summary>Stores custom-field values already validated against the tenant's client form.</summary>
+    public Result SetCustomFields(string? json, Guid actor)
+    {
+        if (IsReadOnly)
+            return Result.Fail(CustomerErrors.ClientReadOnly);
+
+        if (string.Equals(CustomFieldsJson, json, StringComparison.Ordinal))
+            return Result.Ok();
+
+        CustomFieldsJson = json;
         Touch(actor);
         return Result.Ok();
     }
@@ -861,6 +883,7 @@ public sealed class Client : AggregateRoot
         Profession = null;
         Employer = null;
         LegalName = null;
+        CustomFieldsJson = null;
 
         EncryptedDateOfBirth = null;
         DateOfBirthBlindIndex = null;

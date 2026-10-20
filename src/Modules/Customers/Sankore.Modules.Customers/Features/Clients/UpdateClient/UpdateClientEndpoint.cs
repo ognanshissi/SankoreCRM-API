@@ -53,7 +53,8 @@ public static class UpdateClientEndpoint
             MaritalStatus: req.MaritalStatus,
             DeclaredIncome: req.DeclaredIncome,
             DeclaredIncomeCurrency: req.DeclaredIncomeCurrency,
-            PreferredLanguage: req.PreferredLanguage), ct);
+            PreferredLanguage: req.PreferredLanguage,
+            CustomFields: req.CustomFields), ct);
 
         if (result.IsSuccess)
             return Results.NoContent();
@@ -78,4 +79,9 @@ public sealed record UpdateClientRequest(
     MaritalStatus? MaritalStatus,
     decimal? DeclaredIncome,
     string? DeclaredIncomeCurrency,
-    string? PreferredLanguage);
+    string? PreferredLanguage,
+    /// <summary>
+    /// Custom-field values to change, merged into the stored ones: a key with a value overwrites,
+    /// a key with null clears (refused for a required field), an absent key is left alone.
+    /// </summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);

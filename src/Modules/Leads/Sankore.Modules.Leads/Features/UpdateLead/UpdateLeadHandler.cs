@@ -5,7 +5,9 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.CustomFields;
 using Sankore.Modules.Leads.Features.FindDuplicates;
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
@@ -14,7 +16,8 @@ using Money = Sankore.Shared.Kernel.ValueObject.Money;
 internal sealed class UpdateLeadHandler(
     LeadsDbContext db,
     ILeadEmailIndexer emailIndexer,
-    IAdministrationModule administration)
+    IAdministrationModule administration,
+    ILogger<UpdateLeadHandler> logger)
     : IRequestHandler<UpdateLeadCommand, Result>
 {
     public async Task<Result> Handle(UpdateLeadCommand cmd, CancellationToken ct)
@@ -62,6 +65,22 @@ internal sealed class UpdateLeadHandler(
             var emailResult = lead.SetEmail(cmd.Email, emailIndexer.Compute(cmd.Email));
             if (emailResult.IsFailure)
                 return emailResult;
+        }
+
+        // Custom fields: merged into what the lead holds, and a required one may not be cleared.
+        if (cmd.CustomFields is { Count: > 0 })
+        {
+            var custom = await LeadFormGate.ApplyAsync(
+                administration, logger, lead.TenantId, lead.CustomFieldsJson, cmd.CustomFields,
+                new Dictionary<string, string?> { ["prospectType"] = lead.ProspectType.ToString() },
+                enforceRequired: true, isCreate: false, ct);
+
+            if (custom.IsFailure)
+                return Result.Fail(custom.Error!);
+
+            var stored = lead.SetCustomFields(custom.Value);
+            if (stored.IsFailure)
+                return stored;
         }
 
         // The line follows the label. Left alone, a lead whose product an agent corrected kept the

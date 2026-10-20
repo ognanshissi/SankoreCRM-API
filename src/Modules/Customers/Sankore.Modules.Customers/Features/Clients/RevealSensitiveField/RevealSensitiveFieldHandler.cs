@@ -81,6 +81,21 @@ internal sealed class RevealSensitiveFieldHandler(
         }
 
         // ── 2. Decrypt the requested field, and only that one ────────────────
+        // A custom field is stored in clear (it is masked on READ, not encrypted at rest), so it
+        // skips the decryption — and nothing else: same perimeter, same quota, same log row.
+        if (cmd.Field == SensitiveField.CustomField)
+        {
+            var custom = Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.Read(client.CustomFieldsJson);
+            if (cmd.CustomFieldKey is null || custom is null || !custom.TryGetValue(cmd.CustomFieldKey, out var value))
+                return Result.Fail<RevealSensitiveFieldResult>(CustomerErrors.UnknownSensitiveField);
+
+            return await LogAndReturnAsync(client, tenantId, actor, now,
+                // "custom:" and not the enum name: the log column holds 60 characters and a key 50.
+                $"custom:{cmd.CustomFieldKey}",
+                value.ValueKind == System.Text.Json.JsonValueKind.String ? value.GetString()! : value.GetRawText(),
+                ct);
+        }
+
         var ciphertext = ResolveCiphertext(client, cmd);
         if (string.IsNullOrWhiteSpace(ciphertext))
             return Result.Fail<RevealSensitiveFieldResult>(CustomerErrors.UnknownSensitiveField);
@@ -107,12 +122,19 @@ internal sealed class RevealSensitiveFieldHandler(
         if (string.IsNullOrWhiteSpace(clear))
             return Result.Fail<RevealSensitiveFieldResult>(CustomerErrors.UnknownSensitiveField);
 
-        // ── 3. Log the access before the value is handed over ────────────────
+        return await LogAndReturnAsync(client, tenantId, actor, now, cmd.Field.ToString(), clear, ct);
+    }
+
+    // ── 3. Log the access before the value is handed over ────────────────
+    private async Task<Result<RevealSensitiveFieldResult>> LogAndReturnAsync(
+        Client client, Guid tenantId, Guid actor, DateTimeOffset now, string fieldName, string clear,
+        CancellationToken ct)
+    {
         db.SensitiveDataAccessLogs.Add(SensitiveDataAccessLog.Record(
             tenantId: tenantId,
             clientId: client.Id,
             actorUserId: actor,
-            fieldName: cmd.Field.ToString(),
+            fieldName: fieldName,
             accessedAt: now,
             // The distributed trace id ties this reveal to the HTTP request (and to the
             // other reveals of the same screen) in Seq without storing anything personal.
@@ -121,7 +143,7 @@ internal sealed class RevealSensitiveFieldHandler(
         await db.SaveChangesAsync(ct);
 
         return Result.Ok(new RevealSensitiveFieldResult(
-            Field: cmd.Field.ToString(),
+            Field: fieldName,
             Value: clear,
             RevealedAt: now));
     }

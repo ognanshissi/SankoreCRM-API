@@ -93,7 +93,18 @@ public sealed record CaptureLeadCommand(
     /// Questionnaire answers collected at capture (BNF-B-18). A health one arrives with its
     /// consent proof — the endpoint refuses the request otherwise, before anything is written.
     /// </summary>
-    IReadOnlyList<CaptureQuestionnaire>? Questionnaires = null
+    IReadOnlyList<CaptureQuestionnaire>? Questionnaires = null,
+    /// <summary>
+    /// Values of the tenant's custom lead fields, keyed by field key — checked against the lead
+    /// form before anything is written. Absent on every path that has never heard of them.
+    /// </summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    /// <summary>
+    /// SERVER-SET: true on the interactive capture only. Enforces the fields the tenant made
+    /// required; an import or an ingest would otherwise lose every prospect a new form setting does
+    /// not describe.
+    /// </summary>
+    bool EnforceFormRequirements = false
 ) : IRequest<Result<CaptureLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

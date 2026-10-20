@@ -21,6 +21,15 @@ internal sealed class CreateProductHandler(
         if (exists)
             return Result.Fail<Guid>("PRODUCT_CODE_TAKEN");
 
+        var customFields = await ProductFormGate.ApplyAsync(
+            db, currentJson: null, request.CustomFields,
+            ProductFormGate.NativeValues(request.Name, request.Code, request.Category, request.Description,
+                request.EffectiveFrom, businessProductId: null, businessPlatformName: null),
+            isCreate: true, ct);
+
+        if (customFields.IsFailure)
+            return Result.Fail<Guid>(customFields.Error!);
+
         var product = ProductSpeciality.Create(
             tenant.CurrentTenantId,
             request.Name,
@@ -29,6 +38,8 @@ internal sealed class CreateProductHandler(
             request.Description,
             request.ParametersJson,
             request.EffectiveFrom);
+
+        product.SetCustomFields(customFields.Value);
 
         await db.ProductSpecialities.AddAsync(product, ct);
         await db.SaveChangesAsync(ct);

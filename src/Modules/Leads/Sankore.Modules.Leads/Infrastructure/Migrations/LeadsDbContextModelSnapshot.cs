@@ -408,6 +408,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("current_assignment_id");
 
+                    b.Property<string>("CustomFieldsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("custom_fields");
+
                     b.Property<Guid?>("CustomerId")
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
@@ -682,6 +686,12 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_leads");
+
+                    b.HasIndex("CustomFieldsJson")
+                        .HasDatabaseName("ix_leads_custom_fields");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("CustomFieldsJson"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("CustomFieldsJson"), new[] { "jsonb_path_ops" });
 
                     b.HasIndex("ExpiresAt")
                         .HasDatabaseName("ix_leads_expires_at");

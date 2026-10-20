@@ -42,6 +42,12 @@ internal sealed class ClientConfiguration : IEntityTypeConfiguration<Client>
         builder.Property(c => c.FatherName).HasMaxLength(150);
         builder.Property(c => c.MotherName).HasMaxLength(150);
         builder.Property(c => c.Profession).HasMaxLength(150);
+        builder.Property(c => c.CustomFieldsJson).HasColumnName("custom_fields").HasColumnType("jsonb");
+        // Same index as on leads, for the same filter — see LeadConfiguration.
+        builder.HasIndex(c => c.CustomFieldsJson)
+            .HasMethod("gin")
+            .HasOperators("jsonb_path_ops")
+            .HasDatabaseName("ix_clients_custom_fields");
         builder.Property(c => c.Employer).HasMaxLength(150);
         builder.Property(c => c.PreferredLanguage).HasMaxLength(10).IsRequired();
         builder.Property(c => c.DeclaredIncomeCurrency).HasMaxLength(3);

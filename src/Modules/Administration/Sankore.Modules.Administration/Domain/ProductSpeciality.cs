@@ -22,6 +22,13 @@ public sealed class ProductSpeciality
     /// </summary>
     public string? ParametersJson { get; private set; }
 
+    /// <summary>
+    /// Values of the tenant's custom product fields, keyed by field key (dynamic forms, lot 1),
+    /// checked against the product form by <c>ProductFormGate</c>. Distinct from
+    /// <see cref="ParametersJson"/>, which is free-form and validated by nobody.
+    /// </summary>
+    public string? CustomFieldsJson { get; private set; }
+
     public bool IsActive { get; private set; }
     public DateOnly? EffectiveFrom { get; private set; }
     public DateOnly? EffectiveTo { get; private set; }
@@ -91,6 +98,9 @@ public sealed class ProductSpeciality
             AllowMultipleHoldings = true,
             KycRemotePolicy = KycRemotePolicy.Disabled,
         };
+
+    /// <summary>Stores custom-field values already validated against the product form.</summary>
+    public void SetCustomFields(string? json) => CustomFieldsJson = json;
 
     public void Update(
         string name,

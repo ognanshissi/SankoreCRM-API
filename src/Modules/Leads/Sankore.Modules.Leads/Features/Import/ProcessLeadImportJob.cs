@@ -104,11 +104,15 @@ public sealed class ProcessLeadImportJob(IServiceScopeFactory scopeFactory)
                         ExternalReference: row.ExternalReference,
                         OwnerId:           row.OwnerId,
                         AgencyId:          row.AgencyId,
-                        CompanyName:       row.CompanyName));
+                        CompanyName:       row.CompanyName,
+                        CustomFields:      raw.CustomFields.Count > 0
+                                               ? Administration.PublicApi.Forms.CustomFieldValues.FromText(raw.CustomFields)
+                                               : null));
 
                     if (!result.IsSuccess)
                     {
-                        failures.Add(new ImportRowFailure(rowNumber, row.PhoneNumber, result.Error!));
+                        failures.Add(new ImportRowFailure(rowNumber, row.PhoneNumber,
+                            Administration.PublicApi.Forms.CustomFieldValues.DescribeForImport(result.Error) ?? result.Error!));
                         continue;
                     }
 

@@ -33,7 +33,28 @@ public sealed class FileImportReader(IFileStore fileStore) : ILeadImportSourceRe
             TrimOptions       = TrimOptions.Trim,
         });
 
-        return csv.GetRecords<ImportLeadRow>().ToList();
+        // Read header by header rather than GetRecords: the `custom.<key>` columns are not
+        // properties of the row and GetRecords would silently drop them.
+        csv.Read();
+        csv.ReadHeader();
+        var customHeaders = (csv.HeaderRecord ?? [])
+            .Where(h => h.StartsWith(Administration.PublicApi.Forms.CustomFieldValues.TextPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var rows = new List<ImportLeadRow>();
+        while (csv.Read())
+        {
+            var row = csv.GetRecord<ImportLeadRow>();
+            if (customHeaders.Count > 0)
+            {
+                row = row with
+                {
+                    CustomFields = customHeaders.ToDictionary(h => h, h => csv.GetField(h), StringComparer.OrdinalIgnoreCase),
+                };
+            }
+            rows.Add(row);
+        }
+        return rows;
     }
 
     private static List<ImportLeadRow> ReadExcel(Stream stream)
@@ -90,9 +111,17 @@ public sealed class FileImportReader(IFileStore fileStore) : ILeadImportSourceRe
                 CompanyName       = Cell("CompanyName"),
                 OwnerId           = Cell("OwnerId"),
                 AgencyId          = Cell("AgencyId"),
+                CustomFields      = CustomCells(headers.Keys, Cell),
             });
         }
 
         return rows;
     }
+
+    /// <summary>The <c>custom.&lt;key&gt;</c> columns of a row, read like every other cell.</summary>
+    internal static IReadOnlyDictionary<string, string?> CustomCells(
+        IEnumerable<string> headers, Func<string, string?> cell)
+        => headers
+            .Where(h => h.StartsWith(Administration.PublicApi.Forms.CustomFieldValues.TextPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(h => h, cell, StringComparer.OrdinalIgnoreCase);
 }

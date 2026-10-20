@@ -27,7 +27,8 @@ internal sealed class GetClientHandler(
     CustomersDbContext db,
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
-    IFieldEncryptor encryptor
+    IFieldEncryptor encryptor,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null
 ) : IRequestHandler<GetClientQuery, Result<ClientDetailDto>>
 {
     public async Task<Result<ClientDetailDto>> Handle(GetClientQuery query, CancellationToken ct)
@@ -59,6 +60,11 @@ internal sealed class GetClientHandler(
                 .FirstOrDefaultAsync(ct);
         }
 
-        return Result.Ok(ClientDtoMapper.ToDetail(client, encryptor, mergedInto));
+        // Read only when there is something to decide about.
+        var showable = client.CustomFieldsJson is null
+            ? null
+            : await ClientFormGate.ShowableKeysAsync(administration, tenantId, ct);
+
+        return Result.Ok(ClientDtoMapper.ToDetail(client, encryptor, mergedInto, showable));
     }
 }

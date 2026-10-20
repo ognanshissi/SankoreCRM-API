@@ -6,6 +6,7 @@ using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.CustomerLink;
+using Sankore.Modules.Leads.Features.CustomFields;
 using Sankore.Modules.Leads.Features.CustomerLink.Events;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
@@ -36,6 +37,18 @@ public sealed class CaptureLeadHandler(
     public async Task<Result<CaptureLeadResult>> Handle(
         CaptureLeadCommand cmd, CancellationToken ct)
     {
+        // ── The tenant's lead form (dynamic forms) ───────────────────────────
+        //
+        // First, before the duplicate gate: a request refused for a malformed custom value should
+        // say so, not answer 409 and be refused again once the agent forced it through.
+        var customFields = await LeadFormGate.ApplyAsync(
+            administration, logger, cmd.TenantId, currentJson: null,
+            cmd.CustomFields, NativeFormValues(cmd),
+            enforceRequired: cmd.EnforceFormRequirements, isCreate: true, ct);
+
+        if (customFields.IsFailure)
+            return Result.Fail<CaptureLeadResult>(customFields.Error!);
+
         // ── Blind indexes (HMAC-SHA256) — the searchable half of the protected columns ────
         var phoneIndex = phoneBlindIndexer.Compute(cmd.PhoneNumber);
         var emailIndex = emailIndexer.Compute(cmd.Email);
@@ -186,6 +199,9 @@ public sealed class CaptureLeadHandler(
             phoneBlindIndex:      phoneIndex,
             leadSourceConfigId:   cmd.LeadSourceConfigId);
 
+        if (customFields.Value is not null)
+            lead.SetCustomFields(customFields.Value);
+
         db.Leads.Add(lead);
 
         // ── The household and the questionnaires of v2 (BNF-B-18) ───────────
@@ -296,6 +312,40 @@ public sealed class CaptureLeadHandler(
     /// minutes, so this is one query per tenant per five minutes rather than one per lead.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The capture's native values under their form keys — what a tenant-required native field and
+    /// a <c>prospectType</c> condition are checked against.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string?> NativeFormValues(CaptureLeadCommand cmd) =>
+        new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["prospectType"]       = cmd.ProspectType.ToString(),
+            ["firstName"]          = cmd.FirstName,
+            ["lastName"]           = cmd.LastName,
+            ["gender"]             = cmd.Gender == LeadGender.Unknown ? null : cmd.Gender.ToString(),
+            ["dateOfBirth"]        = cmd.DateOfBirth?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            ["nationalId"]         = cmd.NationalId,
+            ["companyName"]        = cmd.CompanyName,
+            ["companyEmail"]       = cmd.CompanyEmail,
+            ["companyPhone"]       = cmd.CompanyPhone,
+            ["website"]            = cmd.Website,
+            ["phoneNumber"]        = cmd.PhoneNumber,
+            ["email"]              = cmd.Email,
+            ["preferredLanguage"]  = cmd.PreferredLanguage,
+            ["interestedProduct"]  = cmd.InterestedProduct,
+            ["desiredAmount"]      = cmd.DesiredAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["comment"]            = cmd.Comment,
+            ["source"]             = cmd.Source.ToString(),
+            ["leadSourceConfigId"] = cmd.LeadSourceConfigId?.ToString(),
+            ["channel"]            = cmd.Channel?.ToString(),
+            ["campaign"]           = cmd.Campaign,
+            ["externalReference"]  = cmd.ExternalReference,
+            ["customerReference"]  = cmd.CustomerReference,
+            ["agencyId"]           = cmd.AgencyId?.ToString(),
+            ["preferredAgencyId"]  = cmd.PreferredAgencyId?.ToString(),
+            ["ownerId"]            = cmd.OwnerId?.ToString(),
+        };
+
     private async Task<Guid?> TryResolveProductLineAsync(CaptureLeadCommand cmd, CancellationToken ct)
     {
         try

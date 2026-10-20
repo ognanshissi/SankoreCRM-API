@@ -15,5 +15,10 @@ public sealed class RevealSensitiveFieldValidator : AbstractValidator<RevealSens
         RuleFor(x => x.Field)
             .IsInEnum()
             .WithMessage(CustomerErrors.UnknownSensitiveField);
+
+        RuleFor(x => x.CustomFieldKey)
+            .NotEmpty().MaximumLength(50)
+            .When(x => x.Field == SensitiveField.CustomField)
+            .WithMessage(CustomerErrors.UnknownSensitiveField);
     }
 }

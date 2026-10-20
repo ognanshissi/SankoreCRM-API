@@ -1,6 +1,8 @@
 namespace Sankore.Modules.Customers.Features.LegalEntities.CreateLegalClient;
 
 using MediatR;
+using Microsoft.Extensions.Logging;
+using Sankore.Modules.Administration.PublicApi;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Customers.Domain;
@@ -29,7 +31,9 @@ internal sealed class CreateLegalClientHandler(
     IFieldEncryptor encryptor,
     IBlindIndexer indexer,
     IPhoneticKeyCalculator phoneticKeys,
-    [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher
+    [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
+    IAdministrationModule? administration = null,
+    ILogger<CreateLegalClientHandler>? logger = null
 ) : IRequestHandler<CreateLegalClientCommand, Result<CreateLegalClientResult>>
 {
     public async Task<Result<CreateLegalClientResult>> Handle(
@@ -37,6 +41,15 @@ internal sealed class CreateLegalClientHandler(
     {
         var tenantId = tenantContext.CurrentTenantId;
         var actor = currentUser.Id;
+
+        // 0. The tenant's client form (dynamic forms) — first, so a malformed custom value is
+        //    reported before any duplicate verdict.
+        var customFields = await ClientFormGate.ApplyAsync(
+            administration, logger, tenantId, currentJson: null, cmd.CustomFields,
+            NativeFormValues(cmd), cmd.EnforceFormRequirements, isCreate: true, ct);
+
+        if (customFields.IsFailure)
+            return Result.Fail<CreateLegalClientResult>(customFields.Error!);
 
         // 1. Closed, tenant-configurable list of legal forms: an unknown or deactivated
         //    code is rejected outright (US-M01-BE-17 acceptance criterion).
@@ -152,6 +165,9 @@ internal sealed class CreateLegalClientHandler(
                 actor: actor);
         }
 
+        if (customFields.Value is not null)
+            client.SetCustomFields(customFields.Value, actor);
+
         db.Clients.Add(client);
 
         // 8. Outbox BEFORE SaveChanges: the publisher only enqueues the row, so the
@@ -177,4 +193,27 @@ internal sealed class CreateLegalClientHandler(
             Code: null,
             Candidates: []));
     }
+
+    /// <summary>The request's native values under their form keys — see <c>NativeFormCatalog</c>.</summary>
+    internal static IReadOnlyDictionary<string, string?> NativeFormValues(CreateLegalClientCommand cmd) =>
+        new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["clientType"]         = "Legal",
+            ["legalName"]          = cmd.LegalName,
+            ["legalFormCode"]      = cmd.LegalFormCode,
+            ["registrationNumber"] = cmd.RegistrationNumber,
+            ["taxIdNumber"]        = cmd.TaxIdNumber,
+            ["incorporationDate"]  = cmd.IncorporationDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            ["phoneNumbers"]       = cmd.PhoneNumbers.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)),
+            ["secondaryPhoneNumber"] = cmd.PhoneNumbers.Where(p => !string.IsNullOrWhiteSpace(p)).Skip(1).FirstOrDefault(),
+            ["email"]              = cmd.Email,
+            ["preferredLanguage"]  = cmd.PreferredLanguage,
+            ["address.street"]     = cmd.HeadOfficeAddress?.Street,
+            ["address.city"]       = cmd.HeadOfficeAddress?.City,
+            ["address.state"]      = cmd.HeadOfficeAddress?.State,
+            ["address.country"]    = cmd.HeadOfficeAddress?.Country,
+            ["address.zipCode"]    = cmd.HeadOfficeAddress?.ZipCode,
+            ["agencyId"]           = cmd.AgencyId.ToString(),
+            ["advisorUserId"]      = cmd.AdvisorUserId?.ToString(),
+        };
 }

@@ -198,6 +198,20 @@ public interface IAdministrationModule
         Guid tenantId, string? category, CancellationToken ct);
 
     /// <summary>
+    /// The tenant's form for a lead, a client or a product — native fields as laid out, plus its
+    /// custom fields (dynamic forms, lot 1). Never null: a tenant that never saved a layout gets
+    /// the default one, version 0.
+    ///
+    /// <para>
+    /// Read by the module that stores the record, to check its custom values with
+    /// <see cref="Forms.CustomFieldValues.Apply"/> and the native fields the tenant made required
+    /// with <see cref="Forms.CustomFieldValues.MissingRequiredNatives"/>. Takes the tenant
+    /// explicitly because consumers and import jobs call it outside a request.
+    /// </para>
+    /// </summary>
+    Task<Forms.EntityFormDto> GetEntityFormAsync(Guid tenantId, Forms.FormEntity entity, CancellationToken ct);
+
+    /// <summary>
     /// Returns the email provider configuration for a tenant so that the
     /// Notifications module can resolve the correct provider at send time.
     /// Returns null when no custom config exists (use platform default).

@@ -7,7 +7,10 @@ using Sankore.Modules.Leads.Features.GetLead;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class ListLeadsHandler(LeadsDbContext db)
+internal sealed class ListLeadsHandler(
+    LeadsDbContext db,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
+    ITenantContext? tenant = null)
     : IRequestHandler<ListLeadsQuery, Result<PagedResult<LeadDto>>>
 {
     public async Task<Result<PagedResult<LeadDto>>> Handle(
@@ -49,6 +52,23 @@ internal sealed class ListLeadsHandler(LeadsDbContext db)
 
         if (query.IntentLevel.HasValue)
             q = q.Where(l => l.IntentLevel == query.IntentLevel.Value);
+
+        // Custom-field filters (dynamic forms, lot 6): a jsonb containment per filter, served by the
+        // GIN index on custom_fields. The form decides each value's shape — see FilterDocuments.
+        if (query.CustomFilters is { Count: > 0 })
+        {
+            if (administration is null || tenant is null)
+                return Result.Fail<PagedResult<LeadDto>>("CUSTOM_FILTERS_UNAVAILABLE");
+
+            var form = await administration.GetEntityFormAsync(
+                tenant.CurrentTenantId, Sankore.Modules.Administration.PublicApi.Forms.FormEntity.Lead, ct);
+            var documents = Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.FilterDocuments(form, query.CustomFilters);
+            if (documents.IsFailure)
+                return Result.Fail<PagedResult<LeadDto>>(documents.Error!);
+
+            foreach (var document in documents.Value)
+                q = q.Where(l => l.CustomFieldsJson != null && EF.Functions.JsonContains(l.CustomFieldsJson, document));
+        }
 
         if (!string.IsNullOrWhiteSpace(query.Tag))
         {

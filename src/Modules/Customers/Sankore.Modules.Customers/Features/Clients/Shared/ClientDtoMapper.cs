@@ -27,10 +27,15 @@ public static class ClientDtoMapper
     /// Full detail projection. <paramref name="mergedInto"/> is resolved by the caller
     /// (it needs a second row) and is only non-null for a <c>Merged</c> client.
     /// </summary>
+    /// <param name="showableCustomKeys">
+    /// The custom fields that may leave in clear (<see cref="ClientFormGate.ShowableKeysAsync"/>).
+    /// Null withholds every custom value — the fail-closed reading of "the form is unknown".
+    /// </param>
     public static ClientDetailDto ToDetail(
         Client client,
         IFieldEncryptor encryptor,
-        MergedIntoDto? mergedInto)
+        MergedIntoDto? mergedInto,
+        IReadOnlySet<string>? showableCustomKeys = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(encryptor);
@@ -48,6 +53,18 @@ public static class ClientDtoMapper
             .Take(StatusHistoryPageSize)
             .Select(ToDto)
             .ToList();
+
+        // Custom fields marked sensitive are withheld HERE, like every native protected value:
+        // the screen masking them would leave them in the response body, readable by anyone
+        // holding a token. Their clear value goes through the audited reveal endpoint.
+        var custom = Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.Read(client.CustomFieldsJson);
+        var shown = custom?
+            .Where(kv => showableCustomKeys?.Contains(kv.Key) ?? false)
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        IReadOnlyList<string> masked = custom?.Keys
+            .Where(k => !(showableCustomKeys?.Contains(k) ?? false))
+            .Order(StringComparer.Ordinal)
+            .ToList() ?? [];
 
         return new ClientDetailDto(
             Id: client.Id,
@@ -105,7 +122,9 @@ public static class ClientDtoMapper
             Version: client.Version,
 
             ContactPoints: contactPoints,
-            StatusHistory: statusHistory);
+            StatusHistory: statusHistory,
+            CustomFields: shown,
+            MaskedCustomFieldKeys: masked);
     }
 
     /// <summary>

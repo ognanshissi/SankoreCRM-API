@@ -71,7 +71,9 @@ public static class CreateIndividualClientEndpoint
             PhoneNumbers: req.PhoneNumbers ?? [],
             Email: req.Email,
             Address: req.Address,
-            ConfirmNoDuplicate: req.ConfirmNoDuplicate), ct);
+            ConfirmNoDuplicate: req.ConfirmNoDuplicate,
+            CustomFields: req.CustomFields,
+            EnforceFormRequirements: true), ct);
 
         if (result.IsFailure)
             return Results.Problem(result.Error, statusCode: StatusCodes.Status400BadRequest);
@@ -120,4 +122,9 @@ public sealed record CreateIndividualClientRequest(
     IReadOnlyList<string>? PhoneNumbers,
     string? Email,
     PostalAddressInput? Address,
-    bool ConfirmNoDuplicate);
+    bool ConfirmNoDuplicate,
+    /// <summary>
+    /// Values of the tenant's custom client fields (<c>GET forms/Client</c>), keyed by field key.
+    /// The fields the tenant made required — native or custom — are enforced here.
+    /// </summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);

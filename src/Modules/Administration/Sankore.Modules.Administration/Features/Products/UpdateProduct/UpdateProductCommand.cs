@@ -10,5 +10,6 @@ internal sealed record UpdateProductCommand(
     string? Description = null,
     string? ParametersJson = null,
     string? BusinessProductId = null,
-    string? BusinessPlatformName = null
+    string? BusinessPlatformName = null,
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null
 ) : IRequest<Result>, ICommand;

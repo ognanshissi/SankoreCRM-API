@@ -46,6 +46,9 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     /// <summary>Professional cards and their indemnity cover (CIMA articles 503, 510, 732).</summary>
     public DbSet<DistributionCredential> DistributionCredentials => Set<DistributionCredential>();
 
+    /// <summary>The tenant's layout of the lead, client and product forms (dynamic forms, lot 1).</summary>
+    public DbSet<Domain.Forms.EntityFormLayout> EntityFormLayouts => Set<Domain.Forms.EntityFormLayout>();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
@@ -133,6 +136,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CompanyLogo>().HasQueryFilter(l => l.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<DistributionCredential>().HasQueryFilter(c => c.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<Domain.Forms.EntityFormLayout>().HasQueryFilter(f => f.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<UserImportJob>(b =>
         {

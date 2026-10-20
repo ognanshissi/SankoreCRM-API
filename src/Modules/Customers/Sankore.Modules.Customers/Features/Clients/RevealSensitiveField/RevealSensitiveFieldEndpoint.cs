@@ -56,7 +56,7 @@ public static class RevealSensitiveFieldEndpoint
         http.Response.Headers.Pragma = "no-cache";
 
         var result = await sender.Send(
-            new RevealSensitiveFieldCommand(clientId, req.Field, req.ContactPointId), ct);
+            new RevealSensitiveFieldCommand(clientId, req.Field, req.ContactPointId, req.CustomFieldKey), ct);
 
         if (result.IsSuccess)
             return Results.Ok(result.Value);
@@ -74,4 +74,6 @@ public static class RevealSensitiveFieldEndpoint
 
 public sealed record RevealSensitiveFieldRequest(
     SensitiveField Field,
-    Guid? ContactPointId);
+    Guid? ContactPointId,
+    /// <summary>The custom field to reveal, when <c>Field</c> is <c>CustomField</c>.</summary>
+    string? CustomFieldKey = null);

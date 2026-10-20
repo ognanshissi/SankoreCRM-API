@@ -47,7 +47,8 @@ public static class UpdateLeadEndpoint
             Latitude:         req.Latitude,
             Longitude:        req.Longitude,
             PreferredAgencyId: req.PreferredAgencyId,
-            ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
+            ExpectedUpdatedAt: req.ExpectedUpdatedAt,
+            CustomFields:     req.CustomFields), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -77,4 +78,9 @@ public sealed record UpdateLeadRequest(
     double? Longitude = null,
     Guid? PreferredAgencyId = null,
     /// <summary>UpdatedAt read with the lead; echo it back to detect concurrent edits.</summary>
-    DateTimeOffset? ExpectedUpdatedAt = null);
+    DateTimeOffset? ExpectedUpdatedAt = null,
+    /// <summary>
+    /// Custom-field values to change, merged into the stored ones: a key with a value overwrites,
+    /// a key with null clears, an absent key is left alone.
+    /// </summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);

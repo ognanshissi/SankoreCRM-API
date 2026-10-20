@@ -31,7 +31,23 @@ public sealed class ClientFileImportReader(IFileStore fileStore) : IClientImport
             TrimOptions = TrimOptions.Trim,
         });
 
-        return csv.GetRecords<ImportClientRow>().ToList();
+        // Header by header rather than GetRecords: `custom.<key>` columns are not properties of the
+        // row, and GetRecords would drop them without a word.
+        csv.Read();
+        csv.ReadHeader();
+        var custom = (csv.HeaderRecord ?? [])
+            .Where(h => h.StartsWith(Administration.PublicApi.Forms.CustomFieldValues.TextPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var rows = new List<ImportClientRow>();
+        while (csv.Read())
+        {
+            var row = csv.GetRecord<ImportClientRow>();
+            rows.Add(custom.Count == 0
+                ? row
+                : row with { CustomFields = custom.ToDictionary(h => h, h => csv.GetField(h), StringComparer.OrdinalIgnoreCase) });
+        }
+        return rows;
     }
 
     private static List<ImportClientRow> ReadExcel(Stream stream)
@@ -82,6 +98,9 @@ public sealed class ClientFileImportReader(IFileStore fileStore) : IClientImport
                 AddressStreet = Cell("AddressStreet"),
                 AddressCity = Cell("AddressCity"),
                 AddressCountry = Cell("AddressCountry"),
+                CustomFields = headers.Keys
+                    .Where(h => h.StartsWith(Administration.PublicApi.Forms.CustomFieldValues.TextPrefix, StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(h => h, Cell, StringComparer.OrdinalIgnoreCase),
             };
 
             // Skip the blank rows spreadsheets accumulate below real data; anything with a name

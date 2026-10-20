@@ -147,6 +147,18 @@ internal sealed class LeadConfiguration(IFieldEncryptor encryptor) : IEntityType
         builder.Property(l => l.Campaign).HasMaxLength(100);
         builder.Property(l => l.ExternalReference).HasMaxLength(100);
         builder.Property(l => l.Comment).HasMaxLength(2000);
+
+        // Dynamic forms: the tenant's custom fields. jsonb so a later lot can filter on a value
+        // (`custom_fields ->> 'segment'`) without a migration of the data.
+        builder.Property(l => l.CustomFieldsJson).HasColumnName("custom_fields").HasColumnType("jsonb");
+
+        // List filters on custom values are jsonb containments (`custom_fields @> '{"k":"v"}'`);
+        // jsonb_path_ops is the GIN operator class built for exactly that operator, smaller and
+        // faster than the default one, which also serves key-existence queries nothing here runs.
+        builder.HasIndex(l => l.CustomFieldsJson)
+            .HasMethod("gin")
+            .HasOperators("jsonb_path_ops")
+            .HasDatabaseName("ix_leads_custom_fields");
         builder.Property(l => l.LossReason).HasMaxLength(500);
 
         // Money owned type

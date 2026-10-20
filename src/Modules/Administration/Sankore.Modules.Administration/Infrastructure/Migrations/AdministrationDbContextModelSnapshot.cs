@@ -936,6 +936,52 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.ToTable("distribution_credentials", "administration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.Forms.EntityFormLayout", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Entity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("entity");
+
+                    b.Property<string>("Layout")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("layout")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_entity_form_layouts");
+
+                    b.HasIndex("TenantId", "Entity")
+                        .IsUnique()
+                        .HasDatabaseName("ix_entity_form_layouts_tenant_id_entity");
+
+                    b.ToTable("entity_form_layouts", "administration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.PasswordHistory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1121,6 +1167,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("CustomFieldsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("custom_fields");
 
                     b.Property<string>("Description")
                         .HasMaxLength(500)

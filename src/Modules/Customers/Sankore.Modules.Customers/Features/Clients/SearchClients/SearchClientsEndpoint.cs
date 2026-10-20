@@ -65,6 +65,8 @@ public static class SearchClientsEndpoint
         ClientQuickFilter? quick,
         RiskLevel? riskLevel,
         bool? hasPepExposure,
+        // Repeated: `cf=segment:PME&cf=vip:oui`. Appended last: the generated client is positional.
+        [Microsoft.AspNetCore.Mvc.FromQuery(Name = "cf")] string[]? customFilters,
         CancellationToken ct)
     {
         var result = await sender.Send(new SearchClientsQuery(
@@ -81,7 +83,8 @@ public static class SearchClientsEndpoint
             PageSize: pageSize ?? 20,
             Quick: quick ?? ClientQuickFilter.All,
             RiskLevel: riskLevel,
-            HasPepExposure: hasPepExposure), ct);
+            HasPepExposure: hasPepExposure,
+            CustomFilters: customFilters), ct);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)

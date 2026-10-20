@@ -16,7 +16,9 @@ using Sankore.Shared.Kernel;
 internal sealed class IngestInboundLeadHandler(
     LeadsDbContext db,
     IPhoneBlindIndexer phoneBlindIndexer,
-    TimeProvider clock)
+    TimeProvider clock,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
+    Microsoft.Extensions.Logging.ILogger<IngestInboundLeadHandler>? logger = null)
     : IRequestHandler<IngestInboundLeadCommand, Result<IngestInboundLeadResult>>
 {
     public async Task<Result<IngestInboundLeadResult>> Handle(
@@ -128,6 +130,9 @@ internal sealed class IngestInboundLeadHandler(
         // ── 6. Create lead ──────────────────────────────────────────────
         var lead = InboundLeadFactory.Build(
             cmd.TenantId, source, mapped, fullName!, phone!, phoneIndex, cmd.ExternalId, clock);
+
+        // Mapping rules targeting `custom.<key>` (dynamic forms, lot 6).
+        await CustomFields.InboundCustomFields.ApplyAsync(administration, logger, lead, mapped, source.Id, ct);
 
         db.Leads.Add(lead);
 

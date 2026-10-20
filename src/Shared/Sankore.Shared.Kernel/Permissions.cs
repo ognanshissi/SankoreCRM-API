@@ -196,6 +196,16 @@ public static class Permissions
     public static readonly PermissionItem CanDeleteProduct =
         new("product:delete", "Delete Product Speciality", ApplicationModules.Administration, "delete");
 
+    // ── Dynamic forms (lead, client, product) ─────────────────────────────
+
+    /// <summary>
+    /// Lay out the lead, client and product forms and create their custom fields. READING a form
+    /// needs no permission beyond being signed in: every user who creates a lead renders it.
+    /// </summary>
+    public static readonly PermissionItem CanManageEntityForms =
+        new("form:manage", "Configure the lead, client and product forms and their custom fields",
+            ApplicationModules.Administration, "manage");
+
     // ── Leads module (M13) ────────────────────────────────────────────────
 
     public static readonly PermissionItem CanCaptureLead =
@@ -833,6 +843,7 @@ public static class Permissions
         CanReadProduct,
         CanUpdateProduct,
         CanDeleteProduct,
+        CanManageEntityForms,
         CanCreateWorkflow,
         CanReadWorkflow,
         CanUpdateWorkflow,

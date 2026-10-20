@@ -181,10 +181,11 @@ public sealed class ProcessClientImportJob(IServiceScopeFactory scopeFactory)
             Email: row.Email,
             Address: AddressOf(row),
             // Never auto-confirm in bulk: see the switch above.
-            ConfirmNoDuplicate: false));
+            ConfirmNoDuplicate: false,
+            CustomFields: CustomOf(row)));
 
         if (result.IsFailure)
-            return new(RowOutcome.Failed, result.Error);
+            return new(RowOutcome.Failed, Describe(result.Error));
 
         return result.Value.Outcome switch
         {
@@ -212,15 +213,22 @@ public sealed class ProcessClientImportJob(IServiceScopeFactory scopeFactory)
             HeadOfficeAddress: AddressOf(row) ?? new PostalAddressInput(null, null, null, null, null),
             PhoneNumbers: row.PhoneNumber is null ? [] : [row.PhoneNumber],
             Email: row.Email,
-            PreferredLanguage: row.PreferredLanguage));
+            PreferredLanguage: row.PreferredLanguage,
+            CustomFields: CustomOf(row)));
 
         if (result.IsFailure)
-            return new(RowOutcome.Failed, result.Error);
+            return new(RowOutcome.Failed, Describe(result.Error));
 
         return result.Value.Outcome == CreateLegalClientOutcome.Created
             ? new(RowOutcome.Created, null)
             : new(RowOutcome.Failed, result.Value.Code ?? "Rejected.");
     }
+
+    private static Dictionary<string, System.Text.Json.JsonElement>? CustomOf(ImportClientRow row)
+        => row.CustomFields.Count == 0 ? null : Administration.PublicApi.Forms.CustomFieldValues.FromText(row.CustomFields);
+
+    private static string? Describe(string? error)
+        => Administration.PublicApi.Forms.CustomFieldValues.DescribeForImport(error) ?? error;
 
     private static PostalAddressInput? AddressOf(ImportClientRow row)
         => row.AddressStreet is null && row.AddressCity is null && row.AddressCountry is null

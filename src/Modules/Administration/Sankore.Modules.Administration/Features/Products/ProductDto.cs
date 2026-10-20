@@ -28,4 +28,6 @@ internal sealed record ProductDto(
     /// validated (KRM-B-01). Never null in practice: an unconfigured line reads as the restrictive
     /// default — remote collection off, manual validation.
     /// </summary>
-    KycRemotePolicy? KycRemotePolicy = null);
+    KycRemotePolicy? KycRemotePolicy = null,
+    /// <summary>Values of the tenant's custom product fields, keyed by field key. Filled on the detail read only.</summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);

@@ -2,6 +2,8 @@ namespace Sankore.Modules.Customers.Features.Clients.CreateIndividualClient;
 
 using System.Globalization;
 using MediatR;
+using Microsoft.Extensions.Logging;
+using Sankore.Modules.Administration.PublicApi;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Domain.Matching;
@@ -37,7 +39,9 @@ internal sealed class CreateIndividualClientHandler(
     IFieldEncryptor encryptor,
     IBlindIndexer indexer,
     IPhoneticKeyCalculator phoneticKeys,
-    [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher
+    [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
+    IAdministrationModule? administration = null,
+    ILogger<CreateIndividualClientHandler>? logger = null
 ) : IRequestHandler<CreateIndividualClientCommand, Result<CreateClientResult>>
 {
     public async Task<Result<CreateClientResult>> Handle(
@@ -46,6 +50,15 @@ internal sealed class CreateIndividualClientHandler(
         var tenantId = currentUser.TenantId;
         var actor = currentUser.Id;
         var now = DateTimeOffset.UtcNow;
+
+        // ── 0. The tenant's client form (dynamic forms) ──────────────────────
+        // First, so a malformed custom value is reported before any duplicate verdict.
+        var customFields = await ClientFormGate.ApplyAsync(
+            administration, logger, tenantId, currentJson: null, cmd.CustomFields,
+            NativeFormValues(cmd), cmd.EnforceFormRequirements, isCreate: true, ct);
+
+        if (customFields.IsFailure)
+            return Result.Fail<CreateClientResult>(customFields.Error!);
 
         // ── 1. Minimum age (tenant setting, default 18) ──────────────────────
         // Computed in whole years at "now", not by subtracting years, so a client
@@ -223,6 +236,9 @@ internal sealed class CreateIndividualClientHandler(
         // commits the client, its contact points and the event atomically. Publishing
         // after the commit would let a crash lose the event, leaving M02 without a KYC
         // file for an existing client.
+        if (customFields.Value is not null)
+            client.SetCustomFields(customFields.Value, actor);
+
         await publisher.PublishAsync(
             new ClientCreatedEvent(
                 TenantId: tenantId,
@@ -249,6 +265,41 @@ internal sealed class CreateIndividualClientHandler(
     /// Whole years elapsed between two dates — the legal definition of age, as opposed
     /// to a day count divided by 365.
     /// </summary>
+    /// <summary>The request's native values under their form keys — see <c>NativeFormCatalog</c>.</summary>
+    internal static IReadOnlyDictionary<string, string?> NativeFormValues(CreateIndividualClientCommand cmd) =>
+        new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["clientType"]                = "Individual",
+            ["firstName"]                 = cmd.FirstName,
+            ["lastName"]                  = cmd.LastName,
+            ["maidenName"]                = cmd.MaidenName,
+            ["gender"]                    = cmd.Gender.ToString(),
+            ["dateOfBirth"]               = cmd.DateOfBirth.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            ["birthPlace"]                = cmd.BirthPlace,
+            ["nationality"]               = cmd.Nationality,
+            ["identityDocumentType"]      = cmd.IdentityDocumentType.ToString(),
+            ["identityDocumentNumber"]    = cmd.IdentityDocumentNumber,
+            ["identityDocumentIssuedOn"]  = cmd.IdentityDocumentIssuedOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            ["identityDocumentExpiresOn"] = cmd.IdentityDocumentExpiresOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            ["phoneNumbers"]              = cmd.PhoneNumbers.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)),
+            ["secondaryPhoneNumber"]      = cmd.PhoneNumbers.Where(p => !string.IsNullOrWhiteSpace(p)).Skip(1).FirstOrDefault(),
+            ["email"]                     = cmd.Email,
+            ["preferredLanguage"]         = cmd.PreferredLanguage,
+            ["address.street"]            = cmd.Address?.Street,
+            ["address.city"]              = cmd.Address?.City,
+            ["address.state"]             = cmd.Address?.State,
+            ["address.country"]           = cmd.Address?.Country,
+            ["address.zipCode"]           = cmd.Address?.ZipCode,
+            ["profession"]                = cmd.Profession,
+            ["employer"]                  = cmd.Employer,
+            ["declaredIncome"]            = cmd.DeclaredIncome?.ToString(CultureInfo.InvariantCulture),
+            ["maritalStatus"]             = cmd.MaritalStatus?.ToString(),
+            ["fatherName"]                = cmd.FatherName,
+            ["motherName"]                = cmd.MotherName,
+            ["agencyId"]                  = cmd.AgencyId.ToString(),
+            ["advisorUserId"]             = cmd.AdvisorUserId?.ToString(),
+        };
+
     private static int CompletedYears(DateOnly birthDate, DateOnly on)
     {
         var years = on.Year - birthDate.Year;

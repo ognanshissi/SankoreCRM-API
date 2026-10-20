@@ -76,6 +76,7 @@ public sealed class GoogleSheetsImportReader(IOptions<GoogleImportSettings> sett
                 CompanyName       = Cell("CompanyName"),
                 OwnerId           = Cell("OwnerId"),
                 AgencyId          = Cell("AgencyId"),
+                CustomFields      = FileImportReader.CustomCells(headers.Keys, Cell),
             });
         }
 

@@ -100,7 +100,9 @@ public static class CaptureLeadEndpoint
             Force:                    req.Force,
             LeadSourceConfigId: req.LeadSourceConfigId,
             Household:          req.Household,
-            Questionnaires:     req.Questionnaires), ct);
+            Questionnaires:     req.Questionnaires,
+            CustomFields:       req.CustomFields,
+            EnforceFormRequirements: true), ct);
 
         if (!result.IsSuccess)
             return Results.Problem(title: "Lead capture failed", detail: result.Error, statusCode: 422);
@@ -210,7 +212,12 @@ public sealed record CaptureLeadRequest(
     /// Questionnaire answers collected at capture (BNF-B-18). A health questionnaire REQUIRES its
     /// consent proof — see <see cref="CaptureQuestionnaire.ConsentProofReference"/>.
     /// </summary>
-    IReadOnlyList<CaptureQuestionnaire>? Questionnaires = null);
+    IReadOnlyList<CaptureQuestionnaire>? Questionnaires = null,
+    /// <summary>
+    /// Values of the tenant's custom lead fields (<c>GET forms/Lead</c>), keyed by field key. This
+    /// endpoint also enforces the fields the tenant made required — native or custom.
+    /// </summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);
 
 /// <summary>
 /// One household member on a capture (BNF-B-18) — the same shape the household endpoints take, so

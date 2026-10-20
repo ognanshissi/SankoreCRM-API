@@ -54,6 +54,22 @@ internal sealed class SearchClientsHandler(
             db, db.Clients.AsQueryable(), request.Criteria, tenantId, actor, agencyScope, indexer, ct);
         query = ClientSearchFilter.Quick(query, request.Quick);
 
+        // Custom-field filters (dynamic forms, lot 6), served by the GIN index on custom_fields.
+        if (request.CustomFilters is { Count: > 0 })
+        {
+            if (administration is null)
+                return Result.Fail<PagedResult<ClientSearchItemDto>>("CUSTOM_FILTERS_UNAVAILABLE");
+
+            var form = await administration.GetEntityFormAsync(
+                tenantId, Sankore.Modules.Administration.PublicApi.Forms.FormEntity.Client, ct);
+            var documents = Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.FilterDocuments(form, request.CustomFilters);
+            if (documents.IsFailure)
+                return Result.Fail<PagedResult<ClientSearchItemDto>>(documents.Error!);
+
+            foreach (var document in documents.Value)
+                query = query.Where(c => c.CustomFieldsJson != null && EF.Functions.JsonContains(c.CustomFieldsJson, document));
+        }
+
         var totalCount = await query.CountAsync(ct);
 
         var page = Math.Max(1, request.Page);

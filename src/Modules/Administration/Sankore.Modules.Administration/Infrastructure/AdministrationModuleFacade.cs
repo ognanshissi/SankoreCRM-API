@@ -473,6 +473,17 @@ internal sealed class AdministrationModuleFacade(
     /// the caller may be a Hangfire job or a MassTransit consumer, where the ambient tenant is not
     /// the tenant being asked about.
     /// </summary>
+    public async Task<PublicApi.Forms.EntityFormDto> GetEntityFormAsync(
+        Guid tenantId, PublicApi.Forms.FormEntity entity, CancellationToken ct)
+    {
+        var layout = await db.EntityFormLayouts
+            .IgnoreQueryFilters()
+            .Where(f => f.TenantId == tenantId && f.Entity == entity)
+            .FirstOrDefaultAsync(ct);
+
+        return Domain.Forms.EntityFormResolver.Resolve(entity, layout?.Version ?? 0, layout?.Layout);
+    }
+
     public async Task<ProductSummary?> GetProductAsync(
         Guid tenantId, string productCode, CancellationToken ct)
     {

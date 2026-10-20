@@ -25,7 +25,8 @@ using Sankore.Shared.Kernel;
 public sealed record RevealSensitiveFieldCommand(
     Guid ClientId,
     SensitiveField Field,
-    Guid? ContactPointId
+    Guid? ContactPointId,
+    string? CustomFieldKey = null
 ) : IRequest<Result<RevealSensitiveFieldResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Client";

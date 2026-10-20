@@ -31,7 +31,7 @@ internal static class CreateProductEndpoint
     {
         var result = await sender.Send(new CreateProductCommand(
             req.Name, req.Code, req.Category,
-            req.Description, req.ParametersJson, req.EffectiveFrom), ct);
+            req.Description, req.ParametersJson, req.EffectiveFrom, req.CustomFields), ct);
 
         return result.IsSuccess
             ? Results.Created($"/api/v1/products/{result.Value}", result.Value)
@@ -45,4 +45,9 @@ internal sealed record CreateProductRequest(
     ProductCategory Category,
     string? Description = null,
     string? ParametersJson = null,
-    DateOnly? EffectiveFrom = null);
+    DateOnly? EffectiveFrom = null,
+    /// <summary>
+    /// Values of the tenant's custom product fields (<c>GET forms/Product</c>), keyed by field key.
+    /// The fields the tenant made required — native or custom — are enforced here.
+    /// </summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);

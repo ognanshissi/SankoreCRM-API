@@ -449,6 +449,13 @@ public sealed class Lead : AggregateRoot
     /// <summary>True for leads captured from a source in Testing status. Not dispatched.</summary>
     public bool IsTest { get; private set; }
 
+    /// <summary>
+    /// The values of the tenant's custom fields, keyed by field key (dynamic forms, lot 1). A JSON
+    /// object checked and merged by <c>CustomFieldValues.Apply</c> against the tenant's lead form —
+    /// never written from a raw payload. Null when the lead holds no custom value.
+    /// </summary>
+    public string? CustomFieldsJson { get; private set; }
+
     // ── Lifecycle tracking ───────────────────────────────────────────────────
     public DateTimeOffset? LastActivityAt { get; private set; }
     public string? LossReason { get; private set; }
@@ -1034,6 +1041,23 @@ public sealed class Lead : AggregateRoot
     /// in rather than computed here because the aggregate has no services — the same reason
     /// <see cref="PhoneBlindIndex"/> arrives from the handler.
     /// </param>
+    /// <summary>
+    /// Stores custom-field values already validated against the tenant's form. Refused on a closed
+    /// lead, like every other edit of its data.
+    /// </summary>
+    public Result SetCustomFields(string? json)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+
+        if (string.Equals(CustomFieldsJson, json, StringComparison.Ordinal))
+            return Result.Ok();
+
+        CustomFieldsJson = json;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return Result.Ok();
+    }
+
     public Result SetEmail(string? email, string? blindIndex)
     {
         if (Status is LeadStatus.Converted or LeadStatus.Archived)
@@ -1336,6 +1360,10 @@ public sealed class Lead : AggregateRoot
         // when no column fits it, so it goes whether or not it looks like it holds one.
         Comment    = null;
         LossReason = null;
+
+        // Custom fields: the layout service cannot say which of them describe the person, so all
+        // of them go — the same reasoning as the comment above.
+        CustomFieldsJson = null;
 
         // The exact capture location is a personal datum of its own: a GPS point taken at a
         // walk-in is the prospect's doorstep.

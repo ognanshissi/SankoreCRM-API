@@ -757,7 +757,12 @@ public sealed record CreateFromLeadRequest(
     string? IdentityDocumentNumber,
     string? Profession,
     string? PreferredLanguage,
-    Guid? RequestedClientId);
+    Guid? RequestedClientId,
+    /// <summary>
+    /// The lead's custom values as it stores them (dynamic forms, lot 6). The client keeps those
+    /// whose key its own form also has and accepts; a lead-only field is simply not carried over.
+    /// </summary>
+    string? CustomFieldsJson = null);
 
 /// <summary>
 /// <c>AlreadyExisted</c> is true when the lead had already been converted — the

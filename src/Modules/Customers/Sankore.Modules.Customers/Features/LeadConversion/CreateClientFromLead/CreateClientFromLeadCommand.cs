@@ -70,7 +70,8 @@ internal sealed record CreateClientFromLeadCommand(
     [property: SensitiveData] string? IdentityDocumentNumber,
     string? Profession,
     string? PreferredLanguage,
-    Guid? RequestedClientId
+    Guid? RequestedClientId,
+    string? CustomFieldsJson = null
 ) : IRequest<Result<CreateFromLeadResult>>, ICommand, IResourceCommand
 {
     /// <summary>ISO-8601 date format used by <see cref="DateOfBirth"/>.</summary>
@@ -112,7 +113,8 @@ internal sealed record CreateClientFromLeadCommand(
         IdentityDocumentNumber: request.IdentityDocumentNumber,
         Profession: request.Profession,
         PreferredLanguage: request.PreferredLanguage,
-        RequestedClientId: request.RequestedClientId);
+        RequestedClientId: request.RequestedClientId,
+        CustomFieldsJson: request.CustomFieldsJson);
 }
 
 /// <summary>

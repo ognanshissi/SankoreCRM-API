@@ -11,5 +11,6 @@ internal sealed record CreateProductCommand(
     ProductCategory Category,
     string? Description = null,
     string? ParametersJson = null,
-    DateOnly? EffectiveFrom = null
+    DateOnly? EffectiveFrom = null,
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null
 ) : IRequest<Result<Guid>>, ICommand;

@@ -24,7 +24,9 @@ internal sealed record UpdateLeadCommand(
     double? Longitude,
     Guid? PreferredAgencyId,
     /// <summary>UpdatedAt the caller last read; null skips the staleness check.</summary>
-    DateTimeOffset? ExpectedUpdatedAt = null
+    DateTimeOffset? ExpectedUpdatedAt = null,
+    /// <summary>Custom-field changes, merged — see <c>UpdateLeadRequest.CustomFields</c>.</summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

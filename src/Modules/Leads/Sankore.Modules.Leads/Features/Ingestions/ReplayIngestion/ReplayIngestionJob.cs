@@ -62,7 +62,11 @@ public sealed class ReplayIngestionJob(IServiceScopeFactory scopeFactory)
             // the command above, so a payload carrying its own "leadSourceConfigId" would let
             // that caller claim any source in the tenant. The ingestion row is the only
             // trustworthy statement of where this payload came from.
-            cmd = cmd with { LeadSourceConfigId = ingestion.SourceId };
+            //
+            // EnforceFormRequirements for the same reason: it is the interactive capture's flag,
+            // and a replayed web payload claiming it would be refused for fields the form it came
+            // from never had.
+            cmd = cmd with { LeadSourceConfigId = ingestion.SourceId, EnforceFormRequirements = false };
 
             var result = await sender.Send(cmd, CancellationToken.None);
 

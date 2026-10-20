@@ -8,7 +8,7 @@ using Sankore.Modules.Leads.Domain;
 /// Extracts values from a raw JSON payload via JSONPath, applies transformations,
 /// and maps them to Lead target fields. Used by all integration modes.
 /// </summary>
-internal static class FieldMappingEngine
+internal static partial class FieldMappingEngine
 {
     /// <summary>
     /// Known Lead target fields that can appear as a rule's TargetField.
@@ -24,6 +24,20 @@ internal static class FieldMappingEngine
         "latitude", "longitude",
         "desiredAmount", "desiredCurrency",
     };
+
+    /// <summary>
+    /// A native target, or <c>custom.&lt;key&gt;</c> — a custom lead field (dynamic forms, lot 6).
+    /// Only the key's SHAPE is checked here: the rules are validated without the tenant's form, and
+    /// a key the form does not know is dropped at ingestion with a warning, like any value the form
+    /// refuses — a mapping saved before a field was archived must not start failing every lead.
+    /// </summary>
+    public static bool IsValidTarget(string target)
+        => ValidTargetFields.Contains(target)
+           || (target.StartsWith(Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.TextPrefix, StringComparison.OrdinalIgnoreCase)
+               && CustomTargetKey().IsMatch(target[Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.TextPrefix.Length..]));
+
+    [System.Text.RegularExpressions.GeneratedRegex("^[a-zA-Z][a-zA-Z0-9]{1,49}$")]
+    private static partial System.Text.RegularExpressions.Regex CustomTargetKey();
 
     /// <summary>
     /// Validates a set of mapping rules. Returns errors keyed by source field.
@@ -51,7 +65,7 @@ internal static class FieldMappingEngine
 
             if (string.IsNullOrWhiteSpace(rule.TargetField))
                 errors.Add(new MappingValidationError(path, "targetField is required."));
-            else if (!ValidTargetFields.Contains(rule.TargetField))
+            else if (!IsValidTarget(rule.TargetField))
                 errors.Add(new MappingValidationError(path, $"Unknown target field: '{rule.TargetField}'."));
 
             switch (rule.Transformation)

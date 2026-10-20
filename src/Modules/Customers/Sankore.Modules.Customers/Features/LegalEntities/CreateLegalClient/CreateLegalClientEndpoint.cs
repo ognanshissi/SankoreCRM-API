@@ -52,7 +52,9 @@ public static class CreateLegalClientEndpoint
             HeadOfficeAddress: req.HeadOfficeAddress,
             PhoneNumbers: req.PhoneNumbers ?? [],
             Email: req.Email,
-            PreferredLanguage: req.PreferredLanguage), ct);
+            PreferredLanguage: req.PreferredLanguage,
+            CustomFields: req.CustomFields,
+            EnforceFormRequirements: true), ct);
 
         if (result.IsFailure)
         {
@@ -86,4 +88,9 @@ public sealed record CreateLegalClientRequest(
     PostalAddressInput HeadOfficeAddress,
     IReadOnlyList<string>? PhoneNumbers,
     string? Email,
-    string? PreferredLanguage);
+    string? PreferredLanguage,
+    /// <summary>
+    /// Values of the tenant's custom client fields (<c>GET forms/Client</c>), keyed by field key.
+    /// The fields the tenant made required — native or custom — are enforced here.
+    /// </summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);

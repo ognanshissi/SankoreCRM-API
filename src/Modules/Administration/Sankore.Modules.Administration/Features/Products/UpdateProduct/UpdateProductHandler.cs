@@ -18,12 +18,29 @@ internal sealed class UpdateProductHandler(
         if (product is null)
             return Result.Fail("PRODUCT_NOT_FOUND");
 
+        if (request.CustomFields is { Count: > 0 })
+        {
+            var custom = await ProductFormGate.ApplyAsync(
+                db, product.CustomFieldsJson, request.CustomFields,
+                new Dictionary<string, string?> { ["category"] = product.Category.ToString() },
+                isCreate: false, ct);
+
+            if (custom.IsFailure)
+                return Result.Fail(custom.Error!);
+
+            product.SetCustomFields(custom.Value);
+        }
+
+        // The CBS link has its own endpoint (LinkProductToCbs) and the catalogue screen leaves it out
+        // of this PUT on purpose — which used to ERASE it: Update assigned the two absent fields, so
+        // saving a product's name silently unlinked it from the core banking system. Absent now
+        // means "unchanged"; the link is set and changed where it belongs.
         product.Update(
             request.Name,
             request.Description,
             request.ParametersJson,
-            request.BusinessProductId,
-            request.BusinessPlatformName);
+            request.BusinessProductId ?? product.BusinessProductId,
+            request.BusinessPlatformName ?? product.BusinessPlatformName);
 
         await db.SaveChangesAsync(ct);
 

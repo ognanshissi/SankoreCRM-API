@@ -433,7 +433,8 @@ internal sealed class ConvertLeadHandler(
             IdentityDocumentNumber: lead.NationalId,
             Profession:             null,
             PreferredLanguage:      lead.PreferredLanguage,
-            RequestedClientId:      null);
+            RequestedClientId:      null,
+            CustomFieldsJson:       lead.CustomFieldsJson);
 
         using var suppressed = new TransactionScope(
             TransactionScopeOption.Suppress,

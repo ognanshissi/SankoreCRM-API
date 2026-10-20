@@ -23,7 +23,9 @@ using Sankore.Shared.Kernel;
 internal sealed class ReprocessIngestionHandler(
     LeadsDbContext db,
     IPhoneBlindIndexer phoneBlindIndexer,
-    TimeProvider clock)
+    TimeProvider clock,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
+    Microsoft.Extensions.Logging.ILogger<ReprocessIngestionHandler>? logger = null)
     : IRequestHandler<ReprocessIngestionCommand, Result<ReprocessIngestionResult>>
 {
     public async Task<Result<ReprocessIngestionResult>> Handle(
@@ -89,6 +91,7 @@ internal sealed class ReprocessIngestionHandler(
         var lead = InboundLeadFactory.Build(
             ingestion.TenantId, source, mapped, fullName!, phone!, phoneIndex,
             ingestion.ExternalId, clock);
+        await Features.CustomFields.InboundCustomFields.ApplyAsync(administration, logger, lead, mapped, source.Id, ct);
         db.Leads.Add(lead);
         ingestion.MarkReprocessed(lead.Id);
 

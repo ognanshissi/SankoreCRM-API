@@ -17,5 +17,7 @@ internal sealed record ListLeadsQuery(
     string? Tag = null,
     LeadIntentLevel? IntentLevel = null,
     Guid? LeadSourceConfigId = null,
-    bool? AwaitingDispatch = null
+    bool? AwaitingDispatch = null,
+    /// <summary>Custom-field filters, <c>key:value</c> — see <c>CustomFieldValues.FilterDocuments</c>.</summary>
+    IReadOnlyList<string>? CustomFilters = null
 ) : IRequest<Result<PagedResult<LeadDto>>>;

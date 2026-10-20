@@ -75,6 +75,9 @@ public sealed partial class ClientGoogleSheetsImportReader(IOptions<GoogleImport
                 AddressStreet = Cell("AddressStreet"),
                 AddressCity = Cell("AddressCity"),
                 AddressCountry = Cell("AddressCountry"),
+                CustomFields = headers.Keys
+                    .Where(h => h.StartsWith(Administration.PublicApi.Forms.CustomFieldValues.TextPrefix, StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(h => h, Cell, StringComparer.OrdinalIgnoreCase),
             };
 
             if (candidate.LastName is null && candidate.LegalName is null && candidate.PhoneNumber is null)

@@ -103,7 +103,15 @@ public sealed record ClientDetailDto(
     uint Version,
 
     IReadOnlyList<ClientContactPointDto> ContactPoints,
-    IReadOnlyList<ClientStatusHistorySummaryDto> StatusHistory);
+    IReadOnlyList<ClientStatusHistorySummaryDto> StatusHistory,
+
+    // ── Dynamic forms ───────────────────────────────────────────────────────
+    // Values of the tenant's custom client fields, keyed by field key (GET forms/Client says how
+    // to render them) — WITHOUT those marked sensitive, which are withheld server-side like every
+    // native protected value. MaskedCustomFieldKeys names the withheld ones that hold a value;
+    // POST clients/{id}/reveal with field CustomField + customFieldKey returns one, audited.
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    IReadOnlyList<string>? MaskedCustomFieldKeys = null);
 
 /// <summary>
 /// One row of the client search result. Kept deliberately narrow so the list query

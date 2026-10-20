@@ -36,6 +36,13 @@ public sealed record ImportClientRow
     public string? AddressCity { get; init; }
     public string? AddressCountry { get; init; }
 
+    /// <summary>
+    /// The row's <c>custom.&lt;key&gt;</c> columns, by full header name (dynamic forms, lot 6), checked
+    /// against the tenant's client form at creation — a value it refuses fails the row.
+    /// </summary>
+    [CsvHelper.Configuration.Attributes.Ignore]
+    public IReadOnlyDictionary<string, string?> CustomFields { get; init; } = new Dictionary<string, string?>();
+
     /// <summary>True when the row describes a company rather than a person.</summary>
     public bool IsLegalEntity => !string.IsNullOrWhiteSpace(LegalName);
 }

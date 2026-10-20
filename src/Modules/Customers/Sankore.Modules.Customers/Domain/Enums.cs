@@ -53,5 +53,7 @@ public enum SensitiveField
     Email,
     PostalAddress,
     RegistrationNumber,
-    TaxIdNumber
+    TaxIdNumber,
+    /// <summary>A custom client field marked sensitive — named by <c>CustomFieldKey</c>.</summary>
+    CustomField
 }

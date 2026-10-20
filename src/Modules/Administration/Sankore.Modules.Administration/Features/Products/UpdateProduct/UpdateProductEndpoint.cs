@@ -31,7 +31,7 @@ internal static class UpdateProductEndpoint
     {
         var result = await sender.Send(new UpdateProductCommand(
             id, req.Name, req.Description, req.ParametersJson,
-            req.BusinessProductId, req.BusinessPlatformName), ct);
+            req.BusinessProductId, req.BusinessPlatformName, req.CustomFields), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -46,4 +46,9 @@ internal sealed record UpdateProductRequest(
     string? Description = null,
     string? ParametersJson = null,
     string? BusinessProductId = null,
-    string? BusinessPlatformName = null);
+    string? BusinessPlatformName = null,
+    /// <summary>
+    /// Custom-field values to change, MERGED into the stored ones even though the rest of this PUT
+    /// replaces: a key with a value overwrites, a key with null clears, an absent key is left alone.
+    /// </summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);

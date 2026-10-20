@@ -32,7 +32,9 @@ public sealed record SearchClientsQuery(
     int PageSize = 20,
     ClientQuickFilter Quick = ClientQuickFilter.All,
     RiskLevel? RiskLevel = null,
-    bool? HasPepExposure = null
+    bool? HasPepExposure = null,
+    /// <summary>Custom-field filters, <c>key:value</c> (dynamic forms, lot 6). A sensitive field cannot be filtered on.</summary>
+    IReadOnlyList<string>? CustomFilters = null
 ) : IRequest<Result<PagedResult<ClientSearchItemDto>>>
 {
     public ClientSearchCriteria Criteria => new(

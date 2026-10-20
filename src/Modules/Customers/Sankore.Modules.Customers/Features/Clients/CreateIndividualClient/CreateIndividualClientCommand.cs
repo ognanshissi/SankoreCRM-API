@@ -50,7 +50,14 @@ public sealed record CreateIndividualClientCommand(
     [property: SensitiveData] IReadOnlyList<string> PhoneNumbers,
     [property: SensitiveData] string? Email,
     [property: SensitiveData] PostalAddressInput? Address,
-    bool ConfirmNoDuplicate
+    bool ConfirmNoDuplicate,
+    /// <summary>Values of the tenant's custom client fields, keyed by field key.</summary>
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    /// <summary>
+    /// SERVER-SET: true from the creation screen only. The file import has never heard of a field
+    /// an administrator made required this morning, and refusing its rows would lose them.
+    /// </summary>
+    bool EnforceFormRequirements = false
 ) : IRequest<Result<CreateClientResult>>, ICommand, IResourceCommand, IAgencyScopedRequest
 {
     public string ResourceType => "Client";

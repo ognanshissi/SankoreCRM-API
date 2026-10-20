@@ -401,6 +401,77 @@ score of each dimension and the cases a change here must not break, is in
 `docs/plan-test-qualification-lead.md`; `docs/workflow-complet-leads.md` lists every endpoint of
 the module.
 
+### Dynamic forms: one layout per entity, native and custom fields (lot 1)
+
+A tenant lays out the **Lead**, **Client** and **Product** forms: sections, the placement of every
+native field, and custom fields of 14 types (`FormFieldType`). `GET forms/{Lead|Client|Product}`
+returns the merged form (any signed-in user); `PUT forms/{entity}` replaces the layout
+(`form:manage`), with `expectedVersion` against two editors overwriting each other.
+
+- **One layout per entity, never per kind.** Person/company, individual/legal, product category are
+  expressed with `VisibleWhen` on the kind field (`prospectType`, `clientType`, `category`), on a
+  field or a whole section — a product-owner decision, as are the two below.
+- **Quick-add flags are independent.** A field is on the creation form iff ITS flag is set; a
+  section's flag only shows its title. A required field is always quick-add (save refuses otherwise).
+- **Native fields are code** — `NativeFormCatalog` (Administration.PublicApi, public so the owning
+  modules' tests pin keys and enum names against their own types). A tenant changes label, help,
+  section, order, quick-add, required, hidden; never type, options, limits or condition.
+  `IsRequiredLocked` = the entity's own validator requires it (cannot be relaxed or hidden).
+- **Stored** as one jsonb document in `administration.entity_form_layouts` (converter + comparer,
+  `'{}'::jsonb` default — same trap as `beneficiary_policy`), merged on every read by
+  `EntityFormResolver`: a native field added to the catalogue later is appended to every saved layout.
+- **A saved custom field is archived, never removed, and never changes type** — the layout service
+  cannot see whether a record holds a value for it.
+- **Values** live on the records: `custom_fields jsonb` on `leads.leads`, `customers.clients`,
+  `administration.product_specialities`, checked by `CustomFieldValues.Apply` (pure, merge
+  semantics: value overwrites, null clears, absent keeps). Every write goes through
+  `EntityFormGate` (Leads/Customers, suppressed transaction scope) or `ProductFormGate`.
+- **Requirements are enforced only on the interactive creation** — `EnforceFormRequirements`,
+  SERVER-SET by the capture/create endpoints, false for imports, ingests, pulls and replays (which
+  would otherwise lose rows to a field added this morning; `ReplayIngestionJob` forces it false).
+  Tenant-required NATIVE fields go through `MissingRequiredNatives` against each handler's
+  `NativeFormValues`; entity-required ones stay with the module validator. An update only refuses
+  CLEARING a required field.
+- **Outage:** custom values sent while the form is unreadable → `CUSTOM_FIELDS_UNAVAILABLE`; no
+  values → the write goes on unchecked (a prospect is never lost). Anonymisation clears `custom_fields`.
+- **A client's sensitive custom values are withheld by the SERVER**, like its native protected
+  fields: `ClientDtoMapper` returns only non-sensitive keys in `customFields` and names the rest in
+  `maskedCustomFieldKeys`; the clear value goes through `reveal` (`field: CustomField` +
+  `customFieldKey`, same perimeter, quota and access log, logged as `custom:<key>`). An unreadable
+  form withholds EVERY custom value (fail closed). Values are stored in clear in the jsonb — masked
+  on read, not encrypted at rest. Leads and products return custom values as stored, like the rest
+  of their fields.
+
+Front (lots 2–5): editor at `/settings/forms/:entity`; `<entity-form-renderer>` and
+`<custom-fields-card>` in `crm/common`; the four creation screens (lead drawer, individual and legal
+client wizards, product drawer) render the layout's quick-add fields — a wizard has one step per
+section (`formSteps`), keeps ONE renderer mounted across steps, and its summary is the renderer in
+read-only. **The catalogue's quick-add defaults reproduce those screens as they were** (every field
+the client wizard asked for is quick-add; `agencyId` is the lead's « Agence », `preferredAgencyId` a
+separate preference; `source` is not shown and defaults to `Agency`) — change a default here and the
+creation screen of every tenant that never saved a layout changes with it.
+
+Lot 6 — custom values from outside the screens, and in lists:
+- **Text is accepted everywhere** (`CustomFieldValues.Normalise`): an option by value or label, « oui /
+  non », « 1 500 000 XOF », « 01/03/2026 », « A; B » for a multi-choice, a French decimal comma.
+  Headers / mapping keys are matched case-insensitively when they name one field.
+- **Imports** (leads and clients, CSV / xlsx / Google Sheets) read `custom.<key>` columns — CSV now
+  reads header by header, `GetRecords` would drop them. STRICT, like a bad date: a refused value fails
+  the row, reported by `DescribeForImport` with the column named. Required custom fields are not
+  enforced (`EnforceFormRequirements` stays false).
+- **Ingestion** (web form, the SDK's hosted form, webhook, pull, reprocess): a mapping rule may target
+  `custom.<key>` (`FieldMappingEngine.IsValidTarget` checks the shape only), and without rules a
+  payload key named `custom.<key>` passes through. BEST EFFORT (`ApplyBestEffort`): a refused value is
+  logged and dropped, the prospect is kept. No column records the drop yet — the log is the trace.
+- **Conversion** lead → client carries the lead's values whose key the client form also has and
+  accepts (`CreateFromLeadRequest.CustomFieldsJson`, best effort); lead-only keys just do not carry.
+- **List filters**: `cf=key:value` (repeated) on `GET leads` and `GET clients`, built by
+  `FilterDocuments` into jsonb containments served by a GIN `jsonb_path_ops` index on `custom_fields`.
+  A sensitive field cannot be filtered on; an unknown key or value is a 400, never an ignored filter.
+  `EF.Functions.JsonContains` does not run on InMemory — `CustomFieldsInboundAndListTests` checks the
+  SQL translation instead. The lead export does not take `cf` yet. `Client` has no legal-identity update endpoint, so a legal entity's native identity
+fields are not editable after creation whatever the layout says.
+
 ### Language codes
 
 **Every write of a language code goes through `LanguageCode` (`Sankore.Shared.Kernel`)**:

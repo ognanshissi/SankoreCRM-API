@@ -25,6 +25,7 @@ using Sankore.Modules.Administration.Features.ComplianceSettings;
 using Sankore.Modules.Administration.Features.Credentials;
 using Sankore.Modules.Administration.Infrastructure.Crypto;
 using Sankore.Modules.Administration.Features.Products;
+using Sankore.Modules.Administration.Features.EntityForms;
 using Sankore.Modules.Administration.Features.Roles;
 using Sankore.Modules.Administration.Features.Territories;
 using Sankore.Modules.Administration.Features.Users;
@@ -207,6 +208,7 @@ public static class AdministrationModule
         app.MapRolesEndpoints();
         app.MapPermissionsEndpoints();
         app.MapProductsEndpoints();
+        app.MapEntityFormsEndpoints();
         app.MapNotificationSettingsEndpoints();
         app.MapSmsSettingsEndpoints();
         app.MapComplianceSettingsEndpoints();

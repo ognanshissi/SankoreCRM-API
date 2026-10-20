@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.LeadConversion.CreateClientFromLead;
 
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -53,7 +54,9 @@ internal sealed class CreateClientFromLeadHandler(
     IFieldEncryptor encryptor,
     IBlindIndexer indexer,
     IPhoneticKeyCalculator phoneticKeys,
-    [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher
+    [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
+    Microsoft.Extensions.Logging.ILogger<CreateClientFromLeadHandler>? logger = null
 ) : IRequestHandler<CreateClientFromLeadCommand, Result<CreateFromLeadResult>>
 {
     /// <summary>PostgreSQL SQLSTATE for "unique_violation".</summary>
@@ -252,6 +255,11 @@ internal sealed class CreateClientFromLeadHandler(
                 actor: actor);
         }
 
+        // 8b. The lead's custom values that the client form also has (dynamic forms, lot 6). Best
+        //     effort: a conversion is not refused for a custom value, and a lead-only field is the
+        //     expected reason a key does not carry over, not an error.
+        await CarryCustomFieldsAsync(client, cmd, ct);
+
         db.Clients.Add(client);
 
         // 9. Outbox BEFORE SaveChanges: the publisher only enqueues the row, so the event and
@@ -374,4 +382,22 @@ internal sealed class CreateClientFromLeadHandler(
     }
 
     private sealed record ExistingClient(Guid Id, string ClientNumber);
+
+    private async Task CarryCustomFieldsAsync(Client client, CreateClientFromLeadCommand cmd, CancellationToken ct)
+    {
+        var leadValues = Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.Read(cmd.CustomFieldsJson);
+        if (leadValues is null || leadValues.Count == 0 || administration is null) return;
+
+        var (json, _) = await Sankore.Modules.Administration.PublicApi.Forms.EntityFormGate.ApplyBestEffortAsync(
+            administration,
+            Sankore.Modules.Administration.PublicApi.Forms.FormEntity.Client,
+            cmd.TenantId,
+            currentJson: null,
+            leadValues,
+            new Dictionary<string, string?> { ["clientType"] = client.Type.ToString() },
+            ex => logger?.LogWarning(ex, "Client form unreadable: custom values of lead {LeadId} not carried over", cmd.LeadId),
+            ct);
+
+        if (json is not null) client.SetCustomFields(json, cmd.ConvertedByUserId);
+    }
 }

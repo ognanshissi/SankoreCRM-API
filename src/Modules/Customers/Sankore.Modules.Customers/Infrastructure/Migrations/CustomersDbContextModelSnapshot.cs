@@ -280,6 +280,10 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("CustomFieldsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("custom_fields");
+
                     b.Property<string>("DateOfBirthBlindIndex")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -543,6 +547,12 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_clients");
+
+                    b.HasIndex("CustomFieldsJson")
+                        .HasDatabaseName("ix_clients_custom_fields");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("CustomFieldsJson"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("CustomFieldsJson"), new[] { "jsonb_path_ops" });
 
                     b.HasIndex("TenantId", "AdvisorUserId")
                         .HasDatabaseName("ix_clients_tenant_id_advisor_user_id");
