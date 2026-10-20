@@ -7,7 +7,8 @@ internal sealed class CreateOpportunityValidator : AbstractValidator<CreateOppor
     public CreateOpportunityValidator()
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.Product).NotEmpty().MaximumLength(100);
+        // Optional: a need is noted before it is matched to a product — see Opportunity.CreateFromLead.
+        RuleFor(x => x.Product).MaximumLength(100);
         RuleFor(x => x.LeadId).NotEmpty();
         RuleFor(x => x.Description).MaximumLength(2000).When(x => x.Description is not null);
         RuleFor(x => x.EstimatedCurrency)

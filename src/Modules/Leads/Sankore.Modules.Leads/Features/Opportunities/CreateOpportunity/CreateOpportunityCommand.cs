@@ -8,7 +8,7 @@ internal sealed record CreateOpportunityCommand(
     Guid TenantId,
     Guid LeadId,
     string Title,
-    string Product,
+    string? Product,
     Guid? OwnerId = null,
     string? Description = null,
     decimal? EstimatedAmount = null,

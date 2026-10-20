@@ -35,7 +35,11 @@ internal sealed class UpdateOpportunityHandler(LeadsDbContext db, TimeProvider c
             estimatedAmount:   amount,
             expectedCloseDate: cmd.ExpectedCloseDate,
             ownerId:           cmd.OwnerId,
-            now:               clock.GetUtcNow());
+            now:               clock.GetUtcNow(),
+            product:           cmd.Product,
+            nextStep:          cmd.NextStep,
+            nextStepDueOn:     cmd.NextStepDueOn,
+            confirmSeparateNeed: cmd.ConfirmSeparateNeed);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

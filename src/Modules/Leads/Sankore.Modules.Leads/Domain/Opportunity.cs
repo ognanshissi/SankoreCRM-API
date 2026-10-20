@@ -35,13 +35,28 @@ public sealed class Opportunity : AggregateRoot
     public DateTimeOffset? ClosedAt { get; private set; }
     public string? CloseReason { get; private set; }
 
+    /// <summary>
+    /// What the agent does next on this request — « Planifier la visite du chantier ». Free text: a
+    /// pipeline stage says where the deal is, not what unblocks it.
+    /// </summary>
+    public string? NextStep { get; private set; }
+
+    public DateOnly? NextStepDueOn { get; private set; }
+
+    /// <summary>
+    /// When an agent confirmed that this request is a different need from the one the lead was
+    /// captured for, although their amounts differ. Until then the screen asks whether the two are
+    /// the same request, and offers to align the lead.
+    /// </summary>
+    public DateTimeOffset? SeparateNeedConfirmedAt { get; private set; }
+
     private Opportunity() { } // EF Core
 
     public static Opportunity CreateFromLead(
         Guid tenantId,
         Guid leadId,
         string title,
-        string product,
+        string? product,
         Guid? ownerId,
         TimeProvider clock,
         string? description = null,
@@ -56,7 +71,12 @@ public sealed class Opportunity : AggregateRoot
             LeadId            = leadId,
             Title             = title.Trim(),
             Description       = description?.Trim(),
-            Product           = product.Trim(),
+            // Empty, not null, when the agent does not know it yet: a request is opened on a need
+            // (« un crédit pour mon chantier ») before anybody has matched it to a product, and
+            // refusing it until then is how needs get noted on paper instead. The screen says
+            // « À préciser »; closing it won simply opens no draft holding, as for any label the
+            // catalogue does not resolve.
+            Product           = product?.Trim() ?? string.Empty,
             EstimatedAmount   = estimatedAmount,
             Stage             = OpportunityStage.Prospecting,
             Probability       = 0.1,
@@ -164,19 +184,37 @@ public sealed class Opportunity : AggregateRoot
     /// collected, so a null that cleared would make each save erase the last. Same rule as
     /// <c>Lead.EnrichPrincipalIdentity</c>.
     /// </summary>
+    /// <param name="nextStep">Blank clears it, and its due date with it.</param>
     public void Update(
         string? title,
         string? description,
         Money? estimatedAmount,
         DateTimeOffset? expectedCloseDate,
         Guid? ownerId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? product = null,
+        string? nextStep = null,
+        DateOnly? nextStepDueOn = null,
+        bool confirmSeparateNeed = false)
     {
         if (title is not null) Title = title.Trim();
         if (description is not null) Description = description.Trim();
         if (estimatedAmount is not null) EstimatedAmount = estimatedAmount;
         if (expectedCloseDate is not null) ExpectedCloseDate = expectedCloseDate;
         if (ownerId is not null) OwnerId = ownerId;
+        if (product is not null) Product = product.Trim();
+
+        if (nextStep is not null)
+        {
+            NextStep      = string.IsNullOrWhiteSpace(nextStep) ? null : nextStep.Trim();
+            NextStepDueOn = NextStep is null ? null : nextStepDueOn;
+        }
+        else if (nextStepDueOn is not null && NextStep is not null)
+        {
+            NextStepDueOn = nextStepDueOn;
+        }
+
+        if (confirmSeparateNeed) SeparateNeedConfirmedAt = now;
         UpdatedAt = now;
     }
 

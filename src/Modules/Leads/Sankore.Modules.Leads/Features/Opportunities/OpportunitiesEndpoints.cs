@@ -163,7 +163,11 @@ public static class OpportunitiesEndpoints
                 EstimatedCurrency: req.EstimatedCurrency,
                 ExpectedCloseDate: req.ExpectedCloseDate,
                 OwnerId:           req.OwnerId,
-                ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
+                ExpectedUpdatedAt: req.ExpectedUpdatedAt,
+                Product:           req.Product,
+                NextStep:          req.NextStep,
+                NextStepDueOn:     req.NextStepDueOn,
+                ConfirmSeparateNeed: req.ConfirmSeparateNeed), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -246,10 +250,11 @@ public static class OpportunitiesEndpoints
     }
 }
 
+/// <param name="Product">Facultatif : vide tant que le besoin n'est rattaché à aucun produit.</param>
 public sealed record CreateOpportunityRequest(
     Guid LeadId,
     string Title,
-    string Product,
+    string? Product,
     Guid? OwnerId = null,
     string? Description = null,
     decimal? EstimatedAmount = null,
@@ -299,4 +304,11 @@ public sealed record UpdateOpportunityRequest(
     string? EstimatedCurrency = null,
     DateTimeOffset? ExpectedCloseDate = null,
     Guid? OwnerId = null,
-    DateTimeOffset? ExpectedUpdatedAt = null);
+    DateTimeOffset? ExpectedUpdatedAt = null,
+    /// <summary>Le produit, libellé du catalogue ; vide le remet « à préciser ».</summary>
+    string? Product = null,
+    /// <summary>La prochaine action ; vide l'efface, avec son échéance.</summary>
+    string? NextStep = null,
+    DateOnly? NextStepDueOn = null,
+    /// <summary>Vrai : l'agent confirme que cette demande est un autre besoin que celui du lead.</summary>
+    bool ConfirmSeparateNeed = false);

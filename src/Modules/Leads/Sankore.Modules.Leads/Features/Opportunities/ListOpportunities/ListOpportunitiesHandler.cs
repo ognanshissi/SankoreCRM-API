@@ -28,7 +28,8 @@ internal sealed class ListOpportunitiesHandler(LeadsDbContext db)
                 o.Id, o.LeadId, o.CustomerEntityType, o.CustomerEntityId,
                 o.Title, o.Description, o.Product, o.EstimatedAmount,
                 o.Stage, o.Probability, o.ExpectedCloseDate, o.OwnerId,
-                o.CreatedAt, o.UpdatedAt, o.ClosedAt, o.CloseReason))
+                o.CreatedAt, o.UpdatedAt, o.ClosedAt, o.CloseReason,
+                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<OpportunityDto>>(items);

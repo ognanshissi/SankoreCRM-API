@@ -16,7 +16,11 @@ internal sealed record UpdateOpportunityCommand(
     string? EstimatedCurrency = null,
     DateTimeOffset? ExpectedCloseDate = null,
     Guid? OwnerId = null,
-    DateTimeOffset? ExpectedUpdatedAt = null)
+    DateTimeOffset? ExpectedUpdatedAt = null,
+    string? Product = null,
+    string? NextStep = null,
+    DateOnly? NextStepDueOn = null,
+    bool ConfirmSeparateNeed = false)
     : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "Opportunity";

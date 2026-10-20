@@ -1906,6 +1906,15 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("lead_id");
 
+                    b.Property<string>("NextStep")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("next_step");
+
+                    b.Property<DateOnly?>("NextStepDueOn")
+                        .HasColumnType("date")
+                        .HasColumnName("next_step_due_on");
+
                     b.Property<Guid?>("OwnerId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_id");
@@ -1919,6 +1928,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("product");
+
+                    b.Property<DateTimeOffset?>("SeparateNeedConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("separate_need_confirmed_at");
 
                     b.Property<string>("Stage")
                         .IsRequired()

@@ -15,6 +15,7 @@ internal sealed class OpportunityConfiguration : IEntityTypeConfiguration<Opport
         builder.Property(o => o.Product).HasMaxLength(100).IsRequired();
         builder.Property(o => o.CustomerEntityType).HasMaxLength(50);
         builder.Property(o => o.CloseReason).HasMaxLength(500);
+        builder.Property(o => o.NextStep).HasMaxLength(200);
         builder.Property(o => o.Stage)
             .HasConversion<string>()
             .HasMaxLength(30);

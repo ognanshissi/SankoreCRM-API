@@ -17,7 +17,8 @@ internal sealed class GetOpportunityHandler(LeadsDbContext db)
                 o.Id, o.LeadId, o.CustomerEntityType, o.CustomerEntityId,
                 o.Title, o.Description, o.Product, o.EstimatedAmount,
                 o.Stage, o.Probability, o.ExpectedCloseDate, o.OwnerId,
-                o.CreatedAt, o.UpdatedAt, o.ClosedAt, o.CloseReason))
+                o.CreatedAt, o.UpdatedAt, o.ClosedAt, o.CloseReason,
+                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt))
             .FirstOrDefaultAsync(ct);
 
         return opp is null
