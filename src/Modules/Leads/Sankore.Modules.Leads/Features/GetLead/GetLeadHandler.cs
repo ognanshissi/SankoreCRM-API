@@ -2,10 +2,11 @@ namespace Sankore.Modules.Leads.Features.GetLead;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetLeadHandler(LeadsDbContext db)
+internal sealed class GetLeadHandler(LeadsDbContext db, IOptions<LeadModuleSettings> settings)
     : IRequestHandler<GetLeadQuery, Result<LeadDto>>
 {
     public async Task<Result<LeadDto>> Handle(GetLeadQuery query, CancellationToken ct)
@@ -77,6 +78,17 @@ internal sealed class GetLeadHandler(LeadsDbContext db)
             LeadSourceCode:           source?.Code,
             LeadSourceLabel:          source?.Label,
             AwaitingDispatchSince:    lead.AwaitingDispatchSince,
-            CustomFields:             Administration.PublicApi.Forms.CustomFieldValues.Read(lead.CustomFieldsJson)));
+            CustomFields:             Administration.PublicApi.Forms.CustomFieldValues.Read(lead.CustomFieldsJson),
+            Address: new LeadAddressDto(
+                CountryCode:   lead.PrincipalCountryCode,
+                City:          lead.PrincipalCity,
+                Neighbourhood: lead.PrincipalNeighbourhood,
+                Landmark:      lead.PrincipalLandmark,
+                AddressLine:   lead.PrincipalAddressLine,
+                PostalCode:    lead.PrincipalPostalCode),
+            UsageName:                lead.PrincipalUsageName,
+            NameVerifiedAt:           lead.NameVerifiedAt,
+            IdentitySourceActivityId: lead.IdentitySourceActivityId,
+            QualificationThreshold:   settings.Value.QualificationThreshold));
     }
 }

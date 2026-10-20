@@ -2,7 +2,9 @@ namespace Sankore.Modules.Leads.Tests.Features.Enrichment;
 
 using Microsoft.Extensions.Logging.Abstractions;
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
@@ -10,6 +12,7 @@ using Sankore.Modules.Leads.Features.Enrichment.EnrichLead;
 using Sankore.Modules.Leads.Features.Enrichment.Events;
 using Sankore.Modules.Leads.Features.Household;
 using Sankore.Modules.Leads.Features.Questionnaires;
+using Sankore.Modules.Leads.Features.RecalculateLeadScore;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Leads.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
@@ -30,6 +33,7 @@ public sealed class EnrichLeadHandlerTests : IDisposable
     private readonly TestDbContextFactory _factory;
     private readonly IAdministrationModule _admin = Substitute.For<IAdministrationModule>();
     private readonly IEventPublisher _publisher = Substitute.For<IEventPublisher>();
+    private readonly ISender _sender = Substitute.For<ISender>();
     private static readonly DateTimeOffset Now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
 
     public EnrichLeadHandlerTests()
@@ -82,7 +86,8 @@ public sealed class EnrichLeadHandlerTests : IDisposable
             NullLogger<HouseholdWriteContext>.Instance);
 
         return new EnrichLeadHandler(
-            context, db, _admin, TestCompleteness.Calculator(db, _admin), _publisher);
+            context, db, _admin, TestCompleteness.Calculator(db, _admin), user, _sender,
+            Options.Create(new LeadModuleSettings()), _publisher);
     }
 
     private async Task<Result<Sankore.Modules.Leads.Features.Enrichment.LeadCompletenessDto>>
@@ -97,6 +102,79 @@ public sealed class EnrichLeadHandlerTests : IDisposable
         await using var db = _factory.CreateContext();
         return await db.Leads.Include(l => l.HouseholdMembers)
                              .FirstAsync(l => l.Id == leadId, CancellationToken.None);
+    }
+
+    // ── how the identity screen finds the house, and what it vouches for ───
+
+    [Fact]
+    public async Task It_stores_the_neighbourhood_and_the_landmark_next_to_the_postal_fields()
+    {
+        var lead = await SeedAsync(withNames: true);
+
+        var result = await SendAsync(new EnrichLeadCommand(
+            lead.Id, City: "Abidjan", Neighbourhood: " Cocody Angré ", Landmark: "Derrière la pharmacie du marché"));
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var stored = await ReloadAsync(lead.Id);
+        stored.PrincipalNeighbourhood.Should().Be("Cocody Angré");
+        stored.PrincipalLandmark.Should().Be("Derrière la pharmacie du marché");
+
+        // Blank clears, null leaves alone — the rule every other field of the command follows.
+        await SendAsync(new EnrichLeadCommand(lead.Id, Landmark: ""));
+        stored = await ReloadAsync(lead.Id);
+        stored.PrincipalLandmark.Should().BeNull();
+        stored.PrincipalNeighbourhood.Should().Be("Cocody Angré");
+    }
+
+    [Fact]
+    public async Task Confirming_the_name_records_who_did_it_and_when()
+    {
+        var lead = await SeedAsync(withNames: true);
+
+        var result = await SendAsync(new EnrichLeadCommand(lead.Id, NameVerified: true));
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var stored = await ReloadAsync(lead.Id);
+        stored.NameVerifiedAt.Should().Be(Now);
+        stored.NameVerifiedBy.Should().Be(_agent);
+    }
+
+    [Fact]
+    public async Task The_call_that_confirmed_the_identity_is_kept_on_the_lead()
+    {
+        var lead = await SeedAsync(withNames: true);
+        Guid activityId;
+        await using (var db = _factory.CreateContext())
+        {
+            var call = LeadActivity.Create(
+                tenantId: _tenant, leadId: lead.Id, type: ActivityType.Call, subject: "Appel",
+                performedBy: _agent);
+            db.LeadActivities.Add(call);
+            await db.SaveChangesAsync(CancellationToken.None);
+            activityId = call.Id;
+        }
+
+        var result = await SendAsync(new EnrichLeadCommand(lead.Id, SourceActivityId: activityId));
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        (await ReloadAsync(lead.Id)).IdentitySourceActivityId.Should().Be(activityId);
+    }
+
+    [Fact]
+    public async Task Saving_the_address_rescores_the_lead_and_confirming_the_name_does_not()
+    {
+        // The screen promises the agent the address is worth points: the score has to move on the
+        // save, not at the next logged activity.
+        var lead = await SeedAsync(withNames: true);
+
+        await SendAsync(new EnrichLeadCommand(lead.Id, Neighbourhood: "Cocody"));
+        await _sender.Received(1).Send(
+            Arg.Is<RecalculateLeadScoreCommand>(c => c.LeadId == lead.Id && c.TriggerEvent == "LEAD_ENRICHED"),
+            Arg.Any<CancellationToken>());
+
+        _sender.ClearReceivedCalls();
+        await SendAsync(new EnrichLeadCommand(lead.Id, NameVerified: true));
+        await _sender.DidNotReceive().Send(Arg.Any<RecalculateLeadScoreCommand>(), Arg.Any<CancellationToken>());
     }
 
     // ── the point of the feature ────────────────────────────────────────────
@@ -286,7 +364,8 @@ public sealed class EnrichLeadHandlerTests : IDisposable
             _publisher, new FixedClock(Now), NullLogger<HouseholdWriteContext>.Instance);
 
         var handler = new EnrichLeadHandler(
-            context, db, _admin, TestCompleteness.Calculator(db, _admin), _publisher);
+            context, db, _admin, TestCompleteness.Calculator(db, _admin), stranger, _sender,
+            Options.Create(new LeadModuleSettings()), _publisher);
 
         var result = await handler.Handle(
             new EnrichLeadCommand(lead.Id, City: "Abidjan"), CancellationToken.None);

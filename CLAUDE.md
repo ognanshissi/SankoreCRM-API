@@ -320,6 +320,11 @@ unchanged. Do not lower it casually, and do not assume 60 is reachable at captur
 15 behaviour), which is empty at capture. Measured ceilings on a freshly captured lead are **60
 for a walk-in** (`LeadSource.Agency`, source quality 20/20) and **45 for a file import**
 (`LeadSource.FileImport`, 5/20). A complete row of `docs/sample-lead-import.xlsx` scores 30.
+Those ceilings are without an address: the **address dimension** (`LeadScoreCalculator.AddressScore`,
+country 2, city 8, neighbourhood 6, landmark 2) adds up to 18 on top — the dimensions sum to 118
+and the total is clamped to 100. The front shows the same weights next to each field
+(`lead-view.models.ts`, `ADDRESS_POINTS`; pinned by `AddressScoreTests`): change both together.
+`POST leads/{id}/enrich` rescores the lead when it touches a scored field.
 
 **Which rule applies is resolved from the lead**, by `DispatchingRuleResolver`: the rule pinned
 on the source the lead was ingested through (`LeadSourceConfig.DefaultDispatchingRuleId`, reached

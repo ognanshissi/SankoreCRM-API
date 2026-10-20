@@ -64,7 +64,10 @@ internal static class EnrichmentEndpoints
             ProductLineId:     req.ProductLineId,
             ClearProductLine:  req.ClearProductLine,
             SourceActivityId:  req.SourceActivityId,
-            ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
+            ExpectedUpdatedAt: req.ExpectedUpdatedAt,
+            Neighbourhood:     req.Neighbourhood,
+            Landmark:          req.Landmark,
+            NameVerified:      req.NameVerified), ct);
 
         // 200 with the recomputed report, not 204: the screen that saved a field wants to know
         // what is still missing, and it must learn it from the same calculator the conversion uses.
@@ -109,4 +112,10 @@ public sealed record EnrichLeadRequest(
     Guid? ProductLineId = null,
     bool ClearProductLine = false,
     Guid? SourceActivityId = null,
-    DateTimeOffset? ExpectedUpdatedAt = null);
+    DateTimeOffset? ExpectedUpdatedAt = null,
+    /// <summary>Quartier.</summary>
+    string? Neighbourhood = null,
+    /// <summary>Point de repère. Encrypted at rest.</summary>
+    string? Landmark = null,
+    /// <summary>True to record that an agent checked the spelling of the name.</summary>
+    bool NameVerified = false);

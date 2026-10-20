@@ -37,8 +37,14 @@ using Sankore.Shared.Kernel;
 /// </param>
 /// <param name="SourceActivityId">
 /// The <c>LeadActivity</c> during which this was collected, when an agent is enriching from a call
-/// or a visit (BNF-B-02). Validated to belong to this lead and carried on <c>LeadEnriched</c>. It
-/// gets no column: nothing queries it, and the durable trace is the audit row plus the event.
+/// or a visit (BNF-B-02). Validated to belong to this lead. It
+/// is kept on the lead as <c>IdentitySourceActivityId</c>, so the identity screen can say which
+/// call or visit confirmed what the prospect declared, and carried on <c>LeadEnriched</c>.
+/// </param>
+/// <param name="NameVerified">
+/// The agent confirms the spelling of the name (<c>Lead.NameVerifiedAt</c>). A flag on this command
+/// rather than a command of its own: it is the same screen, the same access and staleness gates,
+/// and usually the same save as the name it confirms.
 /// </param>
 internal sealed record EnrichLeadCommand(
     Guid LeadId,
@@ -54,7 +60,10 @@ internal sealed record EnrichLeadCommand(
     Guid? ProductLineId = null,
     bool ClearProductLine = false,
     Guid? SourceActivityId = null,
-    DateTimeOffset? ExpectedUpdatedAt = null
+    DateTimeOffset? ExpectedUpdatedAt = null,
+    string? Neighbourhood = null,
+    string? Landmark = null,
+    bool NameVerified = false
 ) : IRequest<Result<LeadCompletenessDto>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

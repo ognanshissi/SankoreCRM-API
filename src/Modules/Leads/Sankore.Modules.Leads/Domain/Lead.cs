@@ -185,6 +185,39 @@ public sealed class Lead : AggregateRoot
     /// <summary>ISO 3166-1 alpha-2, upper-cased. See <c>IsoCountry</c>.</summary>
     public string? PrincipalCountryCode { get; private set; }
 
+    // ── Where the principal lives, the way an agent finds the house ─────────
+    //
+    // Lead-only columns, NOT part of PersonIdentity: that value object is shared with the
+    // Customers module and the household members, and in most of the network a street and a
+    // number do not locate a home — a neighbourhood and a landmark do. The postal box, when there
+    // is one, is PrincipalPostalCode.
+
+    /// <summary>Quartier. Clear, like <see cref="PrincipalCity"/>: it names an area, not a door.</summary>
+    public string? PrincipalNeighbourhood { get; private set; }
+
+    /// <summary>
+    /// Point de repère — « derrière la pharmacie du marché ». SENSITIVE and encrypted, like
+    /// <see cref="PrincipalAddressLine"/>: with the neighbourhood it locates a house as surely as a
+    /// street number does.
+    /// </summary>
+    public string? PrincipalLandmark { get; private set; }
+
+    /// <summary>
+    /// When an agent confirmed the spelling of the name. A self-service capture (USSD, SMS) types
+    /// names in capitals without accents, and the name ends on contracts; the identity screen asks
+    /// for this check until somebody has made it.
+    /// </summary>
+    public DateTimeOffset? NameVerifiedAt { get; private set; }
+
+    public Guid? NameVerifiedBy { get; private set; }
+
+    /// <summary>
+    /// The call or visit during which the identity was last confirmed with the prospect, or null
+    /// while it is only what the prospect declared at capture. Kept as a column because the
+    /// identity screen says which, not only the audit trail.
+    /// </summary>
+    public Guid? IdentitySourceActivityId { get; private set; }
+
     /// <summary>
     /// The principal's identity as a value object, or null while the structured names are missing.
     ///
@@ -1350,6 +1383,9 @@ public sealed class Lead : AggregateRoot
         PrincipalPostalCode  = null;
         PrincipalCity        = null;
         PrincipalCountryCode = null;
+        PrincipalNeighbourhood = null;
+        PrincipalLandmark      = null;
+        NameVerifiedBy         = null;
 
         CompanyName  = null;
         CompanyEmail = null;
@@ -1429,7 +1465,9 @@ public sealed class Lead : AggregateRoot
         string? postalCode,
         string? city,
         string? countryCode,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? neighbourhood = null,
+        string? landmark = null)
     {
         if (Status is LeadStatus.Converted or LeadStatus.Archived)
             return Result.Fail("Cannot update a closed lead.");
@@ -1451,11 +1489,43 @@ public sealed class Lead : AggregateRoot
         if (postalCode  is not null) PrincipalPostalCode  = Blank(postalCode);
         if (city        is not null) PrincipalCity        = Blank(city);
         if (countryCode is not null) PrincipalCountryCode = country;
+        if (neighbourhood is not null) PrincipalNeighbourhood = Blank(neighbourhood);
+        if (landmark    is not null) PrincipalLandmark    = Blank(landmark);
 
         // Structured names win over the captured FullName, the same rule as Update() — see there.
         if (FirstName is not null && LastName is not null)
             FullName = $"{FirstName} {LastName}";
 
+        UpdatedAt = now;
+        return Result.Ok();
+    }
+
+    /// <summary>An agent confirms the spelling of the name — see <see cref="NameVerifiedAt"/>.</summary>
+    /// <remarks>
+    /// Idempotent: confirming again moves the date and the author, which is what the screen shows.
+    /// </remarks>
+    public Result MarkNameVerified(Guid? verifiedBy, DateTimeOffset now)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+
+        NameVerifiedAt = now;
+        NameVerifiedBy = verifiedBy;
+        UpdatedAt = now;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Records the call or visit that confirmed the identity — see
+    /// <see cref="IdentitySourceActivityId"/>. The caller has checked that the activity belongs to
+    /// this lead.
+    /// </summary>
+    public Result AttachIdentitySource(Guid activityId, DateTimeOffset now)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+
+        IdentitySourceActivityId = activityId;
         UpdatedAt = now;
         return Result.Ok();
     }

@@ -42,7 +42,9 @@ public sealed class LeadModuleSettings
     /// activity history (interactions 20, behaviour 15), which is empty at capture, so a lead
     /// scored on capture alone peaks at 60 for a walk-in and at 45 for a file import
     /// (<c>LeadSource.FileImport</c> is worth 5 of the 20 source-quality points). A tenant that
-    /// wants imported leads to reach dispatching sets something like 35.
+    /// wants imported leads to reach dispatching sets something like 35. Those ceilings are for a
+    /// lead captured without an address: a complete one (country, city, neighbourhood, landmark)
+    /// adds up to 18 — see <c>LeadScoreCalculator.AddressScore</c>.
     /// </summary>
     public int QualificationThreshold { get; init; } = Domain.Lead.DefaultQualifiedThreshold;
 

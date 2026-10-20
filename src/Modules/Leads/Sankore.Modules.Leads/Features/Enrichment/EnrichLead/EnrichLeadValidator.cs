@@ -23,6 +23,8 @@ internal sealed class EnrichLeadValidator : AbstractValidator<EnrichLeadCommand>
         RuleFor(x => x.AddressLine).MaximumLength(300);
         RuleFor(x => x.PostalCode).MaximumLength(20);
         RuleFor(x => x.City).MaximumLength(100);
+        RuleFor(x => x.Neighbourhood).MaximumLength(100);
+        RuleFor(x => x.Landmark).MaximumLength(200);
 
         RuleFor(x => x.Gender)
             .Must(g => g is null || Genders.Contains(g, StringComparer.OrdinalIgnoreCase))

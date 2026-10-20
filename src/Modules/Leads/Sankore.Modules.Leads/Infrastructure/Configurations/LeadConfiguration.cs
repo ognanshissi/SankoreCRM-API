@@ -80,12 +80,18 @@ internal sealed class LeadConfiguration(IFieldEncryptor encryptor) : IEntityType
         builder.Property(l => l.PrincipalPostalCode).HasMaxLength(20);
         builder.Property(l => l.PrincipalCity).HasMaxLength(100);
         builder.Property(l => l.PrincipalCountryCode).HasMaxLength(2).IsFixedLength(false);
+        builder.Property(l => l.PrincipalNeighbourhood).HasMaxLength(100);
 
         // Encrypted, like every other postal address. Unbounded text: the ciphertext of a
         // ~200-character address is roughly 300 characters, and a cap would truncate a payload
         // into something that no longer decrypts. NOTHING may compare this column in SQL.
         builder.Property(l => l.PrincipalAddressLine)
                .HasColumnName("principal_address_enc")
+               .HasConversion(EncryptedConverters.Text(encryptor));
+
+        // Same treatment, same reason: a landmark next to a neighbourhood is an address.
+        builder.Property(l => l.PrincipalLandmark)
+               .HasColumnName("principal_landmark_enc")
                .HasConversion(EncryptedConverters.Text(encryptor));
 
         // ── Household and PEP (BNF-B-03, BNF-B-05) ──────────────────────────────────────────

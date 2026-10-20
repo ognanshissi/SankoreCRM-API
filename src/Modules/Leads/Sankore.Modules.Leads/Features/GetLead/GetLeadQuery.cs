@@ -75,4 +75,35 @@ public sealed record LeadDto(
     /// Values of the tenant's custom lead fields, keyed by field key (<c>GET forms/Lead</c> says
     /// how to render them). Filled on the detail read only; null in lists.
     /// </param>
-    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    /// <param name="Address">
+    /// Where the principal lives — the postal fields of <c>PersonIdentity</c> plus the quartier and
+    /// the point de repère, which only leads carry. Filled on the detail read only; null in lists,
+    /// because the address line and the landmark are decrypted per row.
+    /// </param>
+    LeadAddressDto? Address = null,
+    /// <param name="UsageName">The principal's nom d'usage. Detail read only.</param>
+    string? UsageName = null,
+    /// <param name="NameVerifiedAt">When an agent confirmed the spelling of the name; null until then.</param>
+    DateTimeOffset? NameVerifiedAt = null,
+    /// <param name="IdentitySourceActivityId">
+    /// The call or visit that confirmed the identity, null while it is only what the prospect
+    /// declared at capture.
+    /// </param>
+    Guid? IdentitySourceActivityId = null,
+    /// <param name="QualificationThreshold">
+    /// The score at or above which qualifying marks the lead <c>Qualified</c>
+    /// (<c>Leads:QualificationThreshold</c>), so the screen can draw it next to the score.
+    /// </param>
+    int? QualificationThreshold = null);
+
+/// <summary>The principal's address, as the identity screen edits it.</summary>
+/// <param name="PostalCode">Also the boîte postale — the only postal code most of the network has.</param>
+/// <param name="CountryCode">ISO 3166-1 alpha-2.</param>
+public sealed record LeadAddressDto(
+    string? CountryCode,
+    string? City,
+    string? Neighbourhood,
+    string? Landmark,
+    string? AddressLine,
+    string? PostalCode);

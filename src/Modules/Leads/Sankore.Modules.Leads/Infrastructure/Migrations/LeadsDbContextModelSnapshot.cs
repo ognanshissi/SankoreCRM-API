@@ -486,6 +486,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("has_pep_exposure");
 
+                    b.Property<Guid?>("IdentitySourceActivityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("identity_source_activity_id");
+
                     b.Property<string>("IntentLevel")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -535,6 +539,14 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("loss_reason");
+
+                    b.Property<DateTimeOffset?>("NameVerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("name_verified_at");
+
+                    b.Property<Guid?>("NameVerifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("name_verified_by");
 
                     b.Property<string>("NationalId")
                         .HasMaxLength(50)
@@ -590,6 +602,15 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(2)")
                         .HasColumnName("principal_country_code")
                         .IsFixedLength(false);
+
+                    b.Property<string>("PrincipalLandmark")
+                        .HasColumnType("text")
+                        .HasColumnName("principal_landmark_enc");
+
+                    b.Property<string>("PrincipalNeighbourhood")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("principal_neighbourhood");
 
                     b.Property<string>("PrincipalPostalCode")
                         .HasMaxLength(20)

@@ -6,7 +6,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 
 /// <summary>
-/// Computes a 0-100 lead score from five AC-mandated dimensions.
+/// Computes a 0-100 lead score from six AC-mandated dimensions plus the address.
 ///
 /// Scoring breakdown:
 ///   1. Profile completeness   0-25 pts  (identity richness + qualification form coverage)
@@ -15,8 +15,13 @@ using Sankore.Modules.Leads.Infrastructure;
 ///   4. Behaviour              0-15 pts  (engagement quality — positive outcomes, multi-channel)
 ///   5. Declarative coherence  0-10 pts  (consistency cross-checks on declared data)
 ///   6. Location               0-10 pts  (geo-point + preferred agency)
+///   7. Address                0-18 pts  (country 2, city 8, neighbourhood 6, landmark 2)
 ///
-/// Total max: 100 pts. Score is clamped to [0, 100].
+/// The dimensions add up to 118 and the score is clamped to [0, 100]. The address dimension was
+/// added on top rather than carved out of the others, deliberately: it is what a self-service
+/// capture (USSD 10 source points, no activity) can still earn before anybody calls, and the
+/// identity screen tells the agent exactly that — « compléter l'adresse rapporte 18 points ».
+/// Taking the points from another dimension would have lowered every existing lead's score.
 /// Each dimension is serialised individually into FactorsJson for explainability.
 /// </summary>
 internal sealed class LeadScoreCalculator(LeadsDbContext db)
@@ -36,8 +41,10 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
         var behaviour   = BehaviourScore(activities);
         var coherence   = DeclarativeCoherenceScore(lead);
         var location    = LocationScore(lead);
+        var address     = AddressScore(lead);
 
-        var total = Math.Clamp(profile + source + interaction + behaviour + coherence + location, 0, 100);
+        var total = Math.Clamp(
+            profile + source + interaction + behaviour + coherence + location + address, 0, 100);
 
         var factorsJson = JsonSerializer.Serialize(new
         {
@@ -47,6 +54,7 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
             behaviour            = behaviour,
             declarativeCoherence = coherence,
             location             = location,
+            address              = address,
             total                = total
         });
 
@@ -202,6 +210,27 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
         int pts = 0;
         if (lead.Location is not null)       pts += 5;
         if (lead.PreferredAgencyId.HasValue) pts += 5;
+        return pts;
+    }
+
+    // ── 7. Address (0-18) ────────────────────────────────────────────────────
+    // What lets the network find the prospect: the city picks the agency, the neighbourhood and
+    // the landmark find the house for a visit. The street is not scored — most of the network has
+    // none worth the name. The front shows these same weights next to each field
+    // (lead-view.models.ts, ADDRESS_POINTS): change both together.
+
+    internal const int CountryPoints       = 2;
+    internal const int CityPoints          = 8;
+    internal const int NeighbourhoodPoints = 6;
+    internal const int LandmarkPoints      = 2;
+
+    internal static int AddressScore(Lead lead)
+    {
+        int pts = 0;
+        if (!string.IsNullOrWhiteSpace(lead.PrincipalCountryCode))   pts += CountryPoints;
+        if (!string.IsNullOrWhiteSpace(lead.PrincipalCity))          pts += CityPoints;
+        if (!string.IsNullOrWhiteSpace(lead.PrincipalNeighbourhood)) pts += NeighbourhoodPoints;
+        if (!string.IsNullOrWhiteSpace(lead.PrincipalLandmark))      pts += LandmarkPoints;
         return pts;
     }
 }
