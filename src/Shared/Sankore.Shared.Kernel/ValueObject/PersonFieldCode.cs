@@ -62,6 +62,23 @@ public static class PersonFieldCode
     /// </summary>
     public const string PepStatus = "PEP_STATUS";
 
+    // ── Consents a product line may require before conversion ────────────
+    //
+    // Codes like the others rather than a separate list on the policy: they gate the same
+    // conversion, through the same calculator, and an administrator configures them in the same
+    // place. Lead-wide, so principal-only — a household member does not consent to the
+    // processing of the file, the prospect does. Health consent is NOT here: it is per person and
+    // already required by the questionnaires that need it (BNF-B-09).
+
+    /// <summary>Consent to process the personal data the request needs.</summary>
+    public const string ConsentDataProcessing = "CONSENT_DATA_PROCESSING";
+
+    /// <summary>Consent to consult the credit bureau (Bureau d'Information sur le Crédit).</summary>
+    public const string ConsentCreditBureau = "CONSENT_CREDIT_BUREAU";
+
+    /// <summary>Consent to share the file with a partner — an insurer for borrower insurance.</summary>
+    public const string ConsentThirdPartySharing = "CONSENT_THIRD_PARTY_SHARING";
+
     /// <summary>Every code, with the people it can be asked of.</summary>
     public static IReadOnlyDictionary<string, PersonFieldScope> All { get; } =
         new Dictionary<string, PersonFieldScope>(StringComparer.OrdinalIgnoreCase)
@@ -81,7 +98,15 @@ public static class PersonFieldCode
             [Email]         = PersonFieldScope.PrincipalOnly,
             [NationalId]    = PersonFieldScope.PrincipalOnly,
             [DesiredAmount] = PersonFieldScope.PrincipalOnly,
+
+            [ConsentDataProcessing]    = PersonFieldScope.PrincipalOnly,
+            [ConsentCreditBureau]      = PersonFieldScope.PrincipalOnly,
+            [ConsentThirdPartySharing] = PersonFieldScope.PrincipalOnly,
         };
+
+    /// <summary>Whether <paramref name="code"/> names a required consent rather than a field.</summary>
+    public static bool IsConsent(string code)
+        => code.StartsWith("CONSENT_", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether <paramref name="code"/> is one this platform can evaluate. Case-insensitive, and it

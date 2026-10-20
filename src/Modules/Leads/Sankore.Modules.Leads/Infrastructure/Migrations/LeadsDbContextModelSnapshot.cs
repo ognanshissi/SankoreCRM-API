@@ -994,6 +994,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("lead_id");
 
+                    b.Property<Guid?>("ProofActivityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("proof_activity_id");
+
                     b.Property<string>("ProofReference")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")

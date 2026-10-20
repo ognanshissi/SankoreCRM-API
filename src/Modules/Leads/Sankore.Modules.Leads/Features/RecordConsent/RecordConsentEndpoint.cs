@@ -40,11 +40,13 @@ public static class RecordConsentEndpoint
             Type:           req.Type,
             Channel:        req.Channel,
             RecordedBy:     recordedBy,
-            ProofReference: req.ProofReference), ct);
+            ProofReference: req.ProofReference,
+            Granted:        req.Granted,
+            ProofActivityId: req.ProofActivityId), ct);
 
         if (!result.IsSuccess)
         {
-            return result.Error is "LEAD_NOT_FOUND"
+            return result.Error is "LEAD_NOT_FOUND" or RecordConsentHandler.ActivityNotFound
                 ? Results.NotFound(new { error = result.Error })
                 : Results.Problem(title: "Record consent failed", detail: result.Error, statusCode: 422);
         }
@@ -58,7 +60,11 @@ public static class RecordConsentEndpoint
 /// <param name="Type">Purpose for which consent is collected.</param>
 /// <param name="Channel">Medium through which consent was obtained.</param>
 /// <param name="ProofReference">Optional auditable reference: URL to recorded call, form ID, IP address, etc.</param>
+/// <param name="Granted">False records a REFUSAL — the prospect was asked and said no.</param>
+/// <param name="ProofActivityId">The logged call or visit during which the prospect answered.</param>
 public sealed record RecordConsentRequest(
     ConsentType Type,
     ConsentChannel Channel,
-    string? ProofReference = null);
+    string? ProofReference = null,
+    bool Granted = true,
+    Guid? ProofActivityId = null);

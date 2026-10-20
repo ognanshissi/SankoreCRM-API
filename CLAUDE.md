@@ -1606,6 +1606,23 @@ would skip a legally required declaration.
 `FatcaStatusChanged` carries the status and the subject, **never the TIN or a document reference**,
 and does not fire when the status is unchanged.
 
+### Required consents, refusals and proof
+
+A product line requires consents the same way it requires fields: `CONSENT_DATA_PROCESSING`,
+`CONSENT_CREDIT_BUREAU`, `CONSENT_THIRD_PARTY_SHARING` are `PersonFieldCode`s (principal-only) in
+`RequiredFieldsBeforeConversion`, mapped to a `ConsentType` by `ConsentRequirement`. Each one not
+given — never asked, refused, or withdrawn — is a blocking `CONSENT_MISSING` gap (`Detail` = the
+code), and `LeadCompletenessDto.RequiredConsents` lists them all so the screen keeps saying
+« obligatoire » once given. Health consent is NOT one of them: it is per person, required by the
+questionnaires (below).
+
+`ConsentStatus.Refused` records « asked and said no » — an answer with its proof, distinct from
+« never asked ». Every check reads `Active`, so a refusal never satisfies anything. Recording a
+refusal over a standing agreement is refused (`CONSENT_ACTIVE_WITHDRAW_FIRST`): changing one's mind
+is a withdrawal, and a refusal row next to an active one would leave the agreement in force. A
+refusal cannot be withdrawn. `LeadConsent.ProofActivityId` points at the logged call or visit the
+answer was given in, validated to belong to the lead.
+
 ### An audit actor is never caller-supplied
 
 `LeadConsent.RecordedBy` names the **authenticated user** who recorded the entry, and

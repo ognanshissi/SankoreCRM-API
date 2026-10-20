@@ -47,6 +47,13 @@ public sealed class LeadConsent : ITenant
     public string? ProofReference { get; private set; }
 
     /// <summary>
+    /// The logged call or visit during which the prospect answered, when there is one — the call
+    /// carries its duration and, with telephony, its recording. Validated by the caller to belong to
+    /// the same lead. No foreign key, like every activity reference in this module.
+    /// </summary>
+    public Guid? ProofActivityId { get; private set; }
+
+    /// <summary>
     /// The AUTHENTICATED USER who recorded this entry. An audit fact, never caller-supplied —
     /// it answers "who collected this consent", which for a health consent is the first thing a
     /// regulator asks.
@@ -90,9 +97,12 @@ public sealed class LeadConsent : ITenant
         string? proofReference = null,
         QualificationSubjectType? subjectType = null,
         Guid? subjectId = null,
-        Guid? givenBy = null)
+        Guid? givenBy = null,
+        bool granted = true,
+        Guid? proofActivityId = null)
         => new()
         {
+            ProofActivityId = proofActivityId,
             SubjectType    = subjectType,
             SubjectId      = subjectId,
             GivenBy        = givenBy,
@@ -101,7 +111,7 @@ public sealed class LeadConsent : ITenant
             LeadId         = leadId,
             Type           = type,
             Channel        = channel,
-            Status         = ConsentStatus.Active,
+            Status         = granted ? ConsentStatus.Active : ConsentStatus.Refused,
             GrantedAt      = clock.GetUtcNow(),
             ProofReference = proofReference?.Trim(),
             RecordedBy     = recordedBy
@@ -130,6 +140,10 @@ public sealed class LeadConsent : ITenant
     {
         if (Status == ConsentStatus.Withdrawn)
             return Result.Fail("CONSENT_ALREADY_WITHDRAWN");
+
+        // A refusal has nothing to withdraw: the prospect never agreed.
+        if (Status == ConsentStatus.Refused)
+            return Result.Fail("CONSENT_REFUSED_NOT_WITHDRAWABLE");
 
         Status           = ConsentStatus.Withdrawn;
         WithdrawnAt      = clock.GetUtcNow();

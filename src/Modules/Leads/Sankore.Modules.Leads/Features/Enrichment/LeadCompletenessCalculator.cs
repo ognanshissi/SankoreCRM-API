@@ -111,6 +111,28 @@ internal sealed class LeadCompletenessCalculator(
         // ── 2. Required fields, per person ───────────────────────────────────
         var subjects = BuildSubjects(lead);
 
+        // The consents the line requires, and those the prospect has GIVEN — an active row, lead-
+        // wide. A refusal or a withdrawal leaves the requirement open, which is the point: « non »
+        // is an answer, not a consent.
+        var requiredConsentTypes = requiredFields
+            .Where(PersonFieldCode.IsConsent)
+            .Select(ConsentRequirement.TypeOf)
+            .Where(t => t is not null)
+            .Select(t => t!.Value)
+            .Distinct()
+            .ToList();
+
+        var givenConsents = requiredConsentTypes.Count == 0
+            ? []
+            : (await db.LeadConsents
+                .Where(c => c.LeadId == lead.Id
+                         && c.SubjectId == null
+                         && c.Status == ConsentStatus.Active
+                         && requiredConsentTypes.Contains(c.Type))
+                .Select(c => c.Type)
+                .ToListAsync(ct))
+              .ToHashSet();
+
         foreach (var subject in subjects)
         {
             foreach (var code in requiredFields)
@@ -125,6 +147,16 @@ internal sealed class LeadCompletenessCalculator(
                 // must read 100%, and leaving the field applicable-but-satisfied would make the
                 // percentage depend on a question nobody is asked.
                 if (code == PersonFieldCode.PepStatus && !pepEnabled) continue;
+
+                if (PersonFieldCode.IsConsent(code))
+                {
+                    var type = ConsentRequirement.TypeOf(code);
+                    Check(type is { } t && givenConsents.Contains(t), () => new CompletenessGap(
+                        Code:         CompletenessCodes.ConsentMissing,
+                        SubjectLabel: subject.Label,
+                        Detail:       code));
+                    continue;
+                }
 
                 var ok = RequiredFieldEvaluator.IsSatisfied(code, subject, lead);
 
@@ -182,7 +214,8 @@ internal sealed class LeadCompletenessCalculator(
             Applicable: applicable,
             CanConvert: !gaps.Any(g => g.Blocking),
             Gaps:       gaps,
-            MissingQuestionnaires: missingQuestionnaires);
+            MissingQuestionnaires: missingQuestionnaires,
+            RequiredConsents: [.. requiredConsentTypes.Select(t => t.ToString())]);
     }
 
     /// <summary>

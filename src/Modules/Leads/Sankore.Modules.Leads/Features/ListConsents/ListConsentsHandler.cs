@@ -29,7 +29,10 @@ internal sealed class ListConsentsHandler(LeadsDbContext db)
                 c.RecordedBy,
                 c.WithdrawnAt,
                 c.WithdrawnBy,
-                c.WithdrawalReason))
+                c.WithdrawalReason,
+                c.ProofActivityId,
+                c.SubjectType == null ? null : c.SubjectType.ToString(),
+                c.SubjectId))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<ConsentDto>>(consents);

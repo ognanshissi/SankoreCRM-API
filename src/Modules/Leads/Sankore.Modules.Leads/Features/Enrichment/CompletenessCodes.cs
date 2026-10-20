@@ -41,6 +41,13 @@ public static class CompletenessCodes
     /// <summary>Indices declared and the documentation not yet produced.</summary>
     public const string FatcaDocumentationOutstanding = "FATCA_DOCUMENTATION_OUTSTANDING";
 
+    /// <summary>
+    /// A consent the product line requires has not been given — never asked, refused, or withdrawn.
+    /// <c>Detail</c> is the required code (<c>CONSENT_DATA_PROCESSING</c>…), so the screen can name
+    /// which one.
+    /// </summary>
+    public const string ConsentMissing = "CONSENT_MISSING";
+
     // ── An existing customer's file must be up to date (BNF-B-23) ────────
 
     /// <summary>The client has no KYC file, or it has never been approved.</summary>

@@ -39,5 +39,12 @@ public enum ConsentType
     /// out of the consent screens the agent already uses.
     /// </para>
     /// </summary>
-    HealthData
+    HealthData,
+
+    /// <summary>
+    /// Consulting the credit bureau (Bureau d'Information sur le Crédit) before studying a credit
+    /// request. Appended: the column stores the NAME, but an appended value is the habit that keeps
+    /// every other representation stable too.
+    /// </summary>
+    CreditBureauCheck
 }

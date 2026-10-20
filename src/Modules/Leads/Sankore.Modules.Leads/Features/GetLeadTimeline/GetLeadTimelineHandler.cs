@@ -179,7 +179,10 @@ internal sealed class GetLeadTimelineHandler(LeadsDbContext db)
             events.Add(new TimelineEvent(
                 OccurredAt: c.GrantedAt,
                 Kind:        TimelineEventKind.Consent,
-                Title:       $"Consent granted: {c.Type}",
+                // A recorded refusal is an answer too, and must not read as an agreement here.
+                Title:       c.Status == ConsentStatus.Refused
+                                 ? $"Consent refused: {c.Type}"
+                                 : $"Consent granted: {c.Type}",
                 Detail:      $"Channel: {c.Channel}" + (c.ProofReference is not null ? $" • Proof: {c.ProofReference}" : string.Empty),
                 ActorId:     c.RecordedBy));
 

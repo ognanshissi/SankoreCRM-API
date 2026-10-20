@@ -52,6 +52,11 @@ public sealed record CompletenessGap(
 /// list since Lot 4 and a screen branches on its template ids — a <c>CompletenessGap</c> carries a
 /// template NAME, which is a label and not something to branch on.
 /// </param>
+/// <param name="RequiredConsents">
+/// The <c>ConsentType</c> names the product line requires before conversion, given or not. The
+/// gaps only name the MISSING ones, and a consent screen has to keep saying « obligatoire » once
+/// it is given — otherwise a required consent would read as optional the moment it is collected.
+/// </param>
 public sealed record LeadCompletenessDto(
     Guid LeadId,
     string Kind,
@@ -60,4 +65,5 @@ public sealed record LeadCompletenessDto(
     int Applicable,
     bool CanConvert,
     IReadOnlyList<CompletenessGap> Gaps,
-    IReadOnlyList<Questionnaires.MissingQuestionnaire> MissingQuestionnaires);
+    IReadOnlyList<Questionnaires.MissingQuestionnaire> MissingQuestionnaires,
+    IReadOnlyList<string>? RequiredConsents = null);

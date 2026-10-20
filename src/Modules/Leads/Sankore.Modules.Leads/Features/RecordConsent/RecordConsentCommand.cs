@@ -11,7 +11,9 @@ internal sealed record RecordConsentCommand(
     ConsentType Type,
     ConsentChannel Channel,
     Guid RecordedBy,
-    string? ProofReference = null
+    string? ProofReference = null,
+    bool Granted = true,
+    Guid? ProofActivityId = null
 ) : IRequest<Result<RecordConsentResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";
