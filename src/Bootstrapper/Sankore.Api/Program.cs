@@ -443,6 +443,8 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<LeadDispatchingFailedTaskConsumer>();
     // Absence déclarée par un agent (M12) : ses tâches ouvertes passent au remplaçant (M13).
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.AgentAbsenceTaskTransferConsumer>();
+    // Rendez-vous de « Ma journée » : invitations et annulations aux collègues invités.
+    x.AddConsumer<Sankore.Modules.Leads.Features.Appointments.AppointmentInvitationConsumer>();
 
     // TEL-B-11/B-12 : la qualification d'un appel devient l'activité « Appel » du lead et arrête
     // son horloge de premier contact. Sans ce consommateur, un agent qualifie ses appels et le

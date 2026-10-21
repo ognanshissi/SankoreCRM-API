@@ -38,6 +38,8 @@ internal static class NotificationsSeeder
         await SeedKycRemoteApprovedAsync(db, logger, ct);
         await SeedKycRemoteRejectedAsync(db, logger, ct);
         await SeedKycRemoteComplementAsync(db, logger, ct);
+        await SeedAppointmentInvitationAsync(db, logger, ct);
+        await SeedAppointmentCancelledAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -2322,6 +2324,176 @@ internal static class NotificationsSeeder
                       <p style="color:#999;font-size:12px">
                         Automatic message from {{ company_name }}.
                       </p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── appointment.invitation ─────────────────────────────────────────────────────
+    // Les valeurs libres sont échappées dans le corps (`html.escape`) : le moteur n'échappe rien, et
+    // un titre ou une description saisis par un agent finiraient en HTML dans la boîte d'un collègue.
+    // Variables (AppointmentInvitationConsumer, en français) : {{ full_name }}, {{ appointment_title }}, {{ appointment_date }}, {{ appointment_time }}, {{ time_zone }}, {{ duration_minutes }}, {{ organizer_name }}, {{ mode_label }}, {{ location }}, {{ meeting_url }}, {{ subject_label }}, {{ description }}, {{ cancellation_reason }}. Une valeur absente est une chaîne vide.
+    private static async Task SeedAppointmentInvitationAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "appointment.invitation";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Invitation : {{ appointment_title }} — {{ appointment_date }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#1b4d4f">Vous êtes invité(e) à un rendez-vous</h2>
+                      <p>Bonjour {{ full_name | html.escape }},</p>
+                      <p>{{ organizer_name | html.escape }} vous invite au rendez-vous suivant :</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Objet</td><td style="padding:8px;border:1px solid #eee">{{ appointment_title | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Date</td><td style="padding:8px;border:1px solid #eee">{{ appointment_date }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Heure</td><td style="padding:8px;border:1px solid #eee">{{ appointment_time }} ({{ time_zone }})</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Format</td><td style="padding:8px;border:1px solid #eee">{{ mode_label }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Organisateur</td><td style="padding:8px;border:1px solid #eee">{{ organizer_name | html.escape }}</td></tr>
+                        {{ if location != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Lieu</td><td style="padding:8px;border:1px solid #eee">{{ location | html.escape }}</td></tr>{{ end }}
+                        {{ if subject_label != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Concerne</td><td style="padding:8px;border:1px solid #eee">{{ subject_label | html.escape }}</td></tr>{{ end }}
+                        {{ if description != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Détails</td><td style="padding:8px;border:1px solid #eee">{{ description | html.escape }}</td></tr>{{ end }}
+                      </table>
+                      {{ if meeting_url != "" }}<p><a href="{{ meeting_url | html.escape }}" style="display:inline-block;background:#1b4d4f;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Rejoindre la réunion</a></p><p style="color:#666;font-size:12px">{{ meeting_url | html.escape }}</p>{{ end }}
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Invitation: {{ appointment_title }} — {{ appointment_date }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#1b4d4f">You are invited to an appointment</h2>
+                      <p>Hello {{ full_name | html.escape }},</p>
+                      <p>{{ organizer_name | html.escape }} invites you to the following appointment:</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Subject</td><td style="padding:8px;border:1px solid #eee">{{ appointment_title | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Date</td><td style="padding:8px;border:1px solid #eee">{{ appointment_date }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Time</td><td style="padding:8px;border:1px solid #eee">{{ appointment_time }} ({{ time_zone }})</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Format</td><td style="padding:8px;border:1px solid #eee">{{ mode_label }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Organiser</td><td style="padding:8px;border:1px solid #eee">{{ organizer_name | html.escape }}</td></tr>
+                        {{ if location != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Location</td><td style="padding:8px;border:1px solid #eee">{{ location | html.escape }}</td></tr>{{ end }}
+                        {{ if subject_label != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">About</td><td style="padding:8px;border:1px solid #eee">{{ subject_label | html.escape }}</td></tr>{{ end }}
+                        {{ if description != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Details</td><td style="padding:8px;border:1px solid #eee">{{ description | html.escape }}</td></tr>{{ end }}
+                      </table>
+                      {{ if meeting_url != "" }}<p><a href="{{ meeting_url | html.escape }}" style="display:inline-block;background:#1b4d4f;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Join the meeting</a></p><p style="color:#666;font-size:12px">{{ meeting_url | html.escape }}</p>{{ end }}
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── appointment.cancelled ─────────────────────────────────────────────────────
+    // Les valeurs libres sont échappées dans le corps (`html.escape`) : le moteur n'échappe rien, et
+    // un titre ou une description saisis par un agent finiraient en HTML dans la boîte d'un collègue.
+    // Variables (AppointmentInvitationConsumer, en français) : {{ full_name }}, {{ appointment_title }}, {{ appointment_date }}, {{ appointment_time }}, {{ time_zone }}, {{ duration_minutes }}, {{ organizer_name }}, {{ mode_label }}, {{ location }}, {{ meeting_url }}, {{ subject_label }}, {{ description }}, {{ cancellation_reason }}. Une valeur absente est une chaîne vide.
+    private static async Task SeedAppointmentCancelledAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "appointment.cancelled";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Annulé : {{ appointment_title }} — {{ appointment_date }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#dc2626">Rendez-vous annulé</h2>
+                      <p>Bonjour {{ full_name | html.escape }},</p>
+                      <p>Le rendez-vous suivant, auquel vous étiez invité(e), est annulé :</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Objet</td><td style="padding:8px;border:1px solid #eee">{{ appointment_title | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Date</td><td style="padding:8px;border:1px solid #eee">{{ appointment_date }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Heure</td><td style="padding:8px;border:1px solid #eee">{{ appointment_time }} ({{ time_zone }})</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Organisateur</td><td style="padding:8px;border:1px solid #eee">{{ organizer_name | html.escape }}</td></tr>
+                        {{ if cancellation_reason != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Motif</td><td style="padding:8px;border:1px solid #eee">{{ cancellation_reason | html.escape }}</td></tr>{{ end }}
+                      </table>
+                      
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Cancelled: {{ appointment_title }} — {{ appointment_date }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#dc2626">Appointment cancelled</h2>
+                      <p>Hello {{ full_name | html.escape }},</p>
+                      <p>The following appointment you were invited to has been cancelled:</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Subject</td><td style="padding:8px;border:1px solid #eee">{{ appointment_title | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Date</td><td style="padding:8px;border:1px solid #eee">{{ appointment_date }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Time</td><td style="padding:8px;border:1px solid #eee">{{ appointment_time }} ({{ time_zone }})</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Organiser</td><td style="padding:8px;border:1px solid #eee">{{ organizer_name | html.escape }}</td></tr>
+                        {{ if cancellation_reason != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Reason</td><td style="padding:8px;border:1px solid #eee">{{ cancellation_reason | html.escape }}</td></tr>{{ end }}
+                      </table>
+                      
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
                     </body>
                     </html>
                     """));

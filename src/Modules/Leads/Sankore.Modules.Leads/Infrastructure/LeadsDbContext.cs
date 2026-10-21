@@ -27,6 +27,7 @@ public sealed class LeadsDbContext(
     public DbSet<ScoreHistory> ScoreHistories => Set<ScoreHistory>();
     public DbSet<LeadActivity> LeadActivities => Set<LeadActivity>();
     public DbSet<LeadReminder> LeadReminders => Set<LeadReminder>();
+    public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<LeadTag> LeadTags => Set<LeadTag>();
     public DbSet<DuplicateDismissal> DuplicateDismissals => Set<DuplicateDismissal>();
     public DbSet<LeadMerge> LeadMerges => Set<LeadMerge>();
@@ -109,6 +110,9 @@ public sealed class LeadsDbContext(
 
         modelBuilder.Entity<LeadReminder>()
             .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<Appointment>()
+            .HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<LeadTag>()
             .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);

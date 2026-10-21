@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Administration.PublicApi;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
@@ -33,6 +35,8 @@ internal sealed class GetMyAgendaHandler(
     LeadsDbContext db,
     ICurrentUser currentUser,
     ILeadSettings settings,
+    IAdministrationModule admin,
+    ICustomersModule customers,
     TimeProvider clock)
     : IRequestHandler<GetMyAgendaQuery, Result<MyAgendaDto>>
 {
@@ -99,7 +103,48 @@ internal sealed class GetMyAgendaHandler(
             .ThenBy(a => a.Deadline)
             .ToList();
 
-        return Result.Ok(new MyAgendaDto(from, to, reminders, activities, alerts));
+        var appointments = await AppointmentsAsync(me, from, to, ct);
+
+        return Result.Ok(new MyAgendaDto(from, to, reminders, activities, alerts, appointments));
+    }
+
+    /// <summary>
+    /// Les rendez-vous planifiés dont je suis l'organisateur ou un invité. Les noms (organisateur,
+    /// invités, lead, client) sont résolus ici : l'agenda ne doit pas obliger l'écran à une requête
+    /// par ligne.
+    /// </summary>
+    private async Task<List<AgendaAppointmentDto>> AppointmentsAsync(
+        Guid me, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+    {
+        var rows = await db.Appointments.AsNoTracking()
+            .Where(a => a.Status == AppointmentStatus.Scheduled && a.StartAt >= from && a.StartAt < to)
+            .Where(a => a.OrganizerId == me || a.ParticipantIds.Contains(me))
+            .OrderBy(a => a.StartAt)
+            .ToListAsync(ct);
+        if (rows.Count == 0) return [];
+
+        var tenantId = currentUser.TenantId;
+        var userIds = rows.SelectMany(a => a.ParticipantIds.Append(a.OrganizerId)).Distinct().ToList();
+        var names = await admin.GetUserNamesAsync(tenantId, userIds, ct);
+
+        var leadIds = rows.Where(a => a.LeadId != null).Select(a => a.LeadId!.Value).Distinct().ToList();
+        var leadNames = leadIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.FullName, ct);
+
+        var clientIds = rows.Where(a => a.ClientId != null).Select(a => a.ClientId!.Value).Distinct().ToList();
+        IReadOnlyDictionary<Guid, ClientSummary> clients = clientIds.Count == 0
+            ? new Dictionary<Guid, ClientSummary>()
+            : await customers.GetClientSummariesAsync(tenantId, clientIds, ct);
+
+        return rows.Select(a => new AgendaAppointmentDto(
+            a.Id, a.Title, a.Description, a.StartAt, a.DurationMinutes, a.TimeZone, a.Mode,
+            a.MeetingProvider, a.MeetingUrl, a.Location,
+            a.LeadId, a.LeadId is { } l ? leadNames.GetValueOrDefault(l) : null,
+            a.ClientId, a.ClientId is { } c ? clients.GetValueOrDefault(c)?.DisplayName : null,
+            a.OrganizerId, names.GetValueOrDefault(a.OrganizerId) ?? "", a.OrganizerId == me,
+            a.ParticipantIds.Select(id => new AgendaParticipantDto(id, names.GetValueOrDefault(id) ?? "Utilisateur inconnu")).ToList()))
+            .ToList();
     }
 }
 
@@ -108,7 +153,30 @@ public sealed record MyAgendaDto(
     DateTimeOffset To,
     IReadOnlyList<AgendaReminderDto> Reminders,
     IReadOnlyList<AgendaActivityDto> Activities,
-    IReadOnlyList<AgendaAlertDto> Alerts);
+    IReadOnlyList<AgendaAlertDto> Alerts,
+    IReadOnlyList<AgendaAppointmentDto> Appointments);
+
+public sealed record AgendaAppointmentDto(
+    Guid Id,
+    string Title,
+    string? Description,
+    DateTimeOffset StartAt,
+    int DurationMinutes,
+    string TimeZone,
+    AppointmentMode Mode,
+    MeetingProvider? MeetingProvider,
+    string? MeetingUrl,
+    string? Location,
+    Guid? LeadId,
+    string? LeadName,
+    Guid? ClientId,
+    string? ClientName,
+    Guid OrganizerId,
+    string OrganizerName,
+    bool IsOrganizer,
+    IReadOnlyList<AgendaParticipantDto> Participants);
+
+public sealed record AgendaParticipantDto(Guid UserId, string FullName);
 
 public sealed record AgendaReminderDto(
     Guid Id,

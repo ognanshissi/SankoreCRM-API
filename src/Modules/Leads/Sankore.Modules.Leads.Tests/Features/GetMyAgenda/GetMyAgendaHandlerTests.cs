@@ -2,6 +2,8 @@ namespace Sankore.Modules.Leads.Tests.Features.GetMyAgenda;
 
 using FluentAssertions;
 using NSubstitute;
+using Sankore.Modules.Administration.PublicApi;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.GetMyAgenda;
 using Sankore.Modules.Leads.Infrastructure;
@@ -18,6 +20,8 @@ public sealed class GetMyAgendaHandlerTests : IDisposable
     private readonly TestDbContextFactory _db;
     private readonly ICurrentUser _currentUser = Substitute.For<ICurrentUser>();
     private readonly ILeadSettings _settings = Substitute.For<ILeadSettings>();
+    private readonly IAdministrationModule _admin = Substitute.For<IAdministrationModule>();
+    private readonly ICustomersModule _customers = Substitute.For<ICustomersModule>();
     private readonly DateTimeOffset _now = DateTimeOffset.UtcNow;
 
     public GetMyAgendaHandlerTests()
@@ -57,7 +61,7 @@ public sealed class GetMyAgendaHandlerTests : IDisposable
     private async Task<MyAgendaDto> RunAsync(DateTimeOffset? from = null, int days = 14)
     {
         await using var db = _db.CreateContext();
-        var handler = new GetMyAgendaHandler(db, _currentUser, _settings, TimeProvider.System);
+        var handler = new GetMyAgendaHandler(db, _currentUser, _settings, _admin, _customers, TimeProvider.System);
         var result = await handler.Handle(new GetMyAgendaQuery(from ?? _now.AddHours(-1), days), CancellationToken.None);
         result.IsSuccess.Should().BeTrue(result.Error);
         return result.Value!;
@@ -137,13 +141,42 @@ public sealed class GetMyAgendaHandlerTests : IDisposable
             (AgendaAlertKind.SlaAtRisk, "Menacé"));
     }
 
+    [Fact]
+    public async Task Appointments_list_those_I_organise_or_am_invited_to()
+    {
+        var other = Guid.NewGuid();
+        _admin.GetUserNamesAsync(_tenantId, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, string> { [_me] = "Ambroise Bazié", [_colleague] = "Awa Koné" });
+
+        Appointment Make(string title, Guid organizer, params Guid[] participants) => Appointment.Schedule(
+            _tenantId, organizer, title, _now.AddDays(1), 30, "Africa/Abidjan", AppointmentMode.Online, null,
+            "https://us02web.zoom.us/j/123", null, null, participants, null, _now).Value!;
+
+        await using (var db = _db.CreateContext())
+        {
+            db.Appointments.AddRange(
+                Make("J'organise", _me, _colleague),
+                Make("On m'invite", _colleague, _me),
+                Make("Sans moi", _colleague, other));
+            await db.SaveChangesAsync();
+        }
+
+        var agenda = await RunAsync();
+
+        agenda.Appointments.Select(a => a.Title).Should().BeEquivalentTo("J'organise", "On m'invite");
+        var mine = agenda.Appointments.Single(a => a.Title == "J'organise");
+        mine.IsOrganizer.Should().BeTrue();
+        mine.MeetingProvider.Should().Be(MeetingProvider.Zoom);
+        mine.Participants.Single().FullName.Should().Be("Awa Koné");
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(GetMyAgendaHandler.MaxDays + 1)]
     public async Task A_window_out_of_bounds_is_refused(int days)
     {
         await using var db = _db.CreateContext();
-        var handler = new GetMyAgendaHandler(db, _currentUser, _settings, TimeProvider.System);
+        var handler = new GetMyAgendaHandler(db, _currentUser, _settings, _admin, _customers, TimeProvider.System);
 
         var result = await handler.Handle(new GetMyAgendaQuery(_now, days), CancellationToken.None);
 
