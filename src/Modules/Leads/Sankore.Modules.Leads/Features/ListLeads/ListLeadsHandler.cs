@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.GetLead;
+using Sankore.Modules.Leads.Features.NextAction;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
@@ -164,6 +165,20 @@ internal sealed class ListLeadsHandler(
                 if (items[i].LeadSourceConfigId is { } id && byId.TryGetValue(id, out var src))
                     items[i] = items[i] with { LeadSourceCode = src.Code, LeadSourceLabel = src.Label };
             }
+        }
+
+        // The next step is what a list of leads is scanned for: resolved for the page in three
+        // queries, by the same resolver as the lead screen so the two never disagree.
+        var facts = items
+            .Select(i => new LeadFacts(
+                i.Id, Enum.Parse<LeadStatus>(i.Status), i.Score, i.QualificationCompleteness,
+                i.LastActivityAt, i.CurrentAssignmentId, i.CurrentAssignedId))
+            .ToList();
+        var nextSteps = await LeadNextSteps.ForLeadsAsync(db, facts, DateTimeOffset.UtcNow, ct);
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (nextSteps.TryGetValue(items[i].Id, out var step))
+                items[i] = items[i] with { NextStep = step };
         }
 
         return Result.Ok(new PagedResult<LeadDto>(items, total, page, size));

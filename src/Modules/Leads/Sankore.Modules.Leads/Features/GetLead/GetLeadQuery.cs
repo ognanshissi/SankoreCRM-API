@@ -4,6 +4,7 @@ using MediatR;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
+using Sankore.Modules.Leads.Features.NextAction;
 
 internal sealed record GetLeadQuery(Guid LeadId) : IRequest<Result<LeadDto>>;
 
@@ -95,7 +96,12 @@ public sealed record LeadDto(
     /// The score at or above which qualifying marks the lead <c>Qualified</c>
     /// (<c>Leads:QualificationThreshold</c>), so the screen can draw it next to the score.
     /// </param>
-    int? QualificationThreshold = null);
+    int? QualificationThreshold = null,
+    /// <param name="NextStep">
+    /// The one thing to do next and when (<see cref="LeadNextSteps"/>). Null on a closed lead.
+    /// Filled on the detail read AND in lists — it is what a list of leads is scanned for.
+    /// </param>
+    LeadNextStepDto? NextStep = null);
 
 /// <summary>The principal's address, as the identity screen edits it.</summary>
 /// <param name="PostalCode">Also the boîte postale — the only postal code most of the network has.</param>

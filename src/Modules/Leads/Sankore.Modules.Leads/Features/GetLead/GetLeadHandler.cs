@@ -3,6 +3,7 @@ namespace Sankore.Modules.Leads.Features.GetLead;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Sankore.Modules.Leads.Features.NextAction;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
@@ -28,6 +29,9 @@ internal sealed class GetLeadHandler(LeadsDbContext db, IOptions<LeadModuleSetti
                 .Select(s => new { s.Code, s.Label })
                 .FirstOrDefaultAsync(ct)
             : null;
+
+        var nextSteps = await LeadNextSteps.ForLeadsAsync(
+            db, [LeadNextSteps.FactsOf(lead)], DateTimeOffset.UtcNow, ct);
 
         return Result.Ok(new LeadDto(
             Id:                       lead.Id,
@@ -89,6 +93,7 @@ internal sealed class GetLeadHandler(LeadsDbContext db, IOptions<LeadModuleSetti
             UsageName:                lead.PrincipalUsageName,
             NameVerifiedAt:           lead.NameVerifiedAt,
             IdentitySourceActivityId: lead.IdentitySourceActivityId,
-            QualificationThreshold:   settings.Value.QualificationThreshold));
+            QualificationThreshold:   settings.Value.QualificationThreshold,
+            NextStep:                 nextSteps.GetValueOrDefault(lead.Id)));
     }
 }
