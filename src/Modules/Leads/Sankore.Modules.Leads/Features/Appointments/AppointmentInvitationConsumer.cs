@@ -13,7 +13,7 @@ using Sankore.Shared.Infrastructure.BackgroundJobs;
 
 /// <summary>
 /// Mails the invited colleagues: the invitation when an appointment is planned, the notice when it
-/// is cancelled. Through M12, which owns each user's address and language.
+/// is moved or cancelled. Through M12, which owns each user's address and language.
 ///
 /// <para>
 /// Dates are written in the ORGANISER's time zone, which the appointment carries, and the zone is
@@ -30,10 +30,11 @@ using Sankore.Shared.Infrastructure.BackgroundJobs;
 public sealed class AppointmentInvitationConsumer(
     IServiceScopeFactory scopeFactory,
     ILogger<AppointmentInvitationConsumer> logger)
-    : IConsumer<AppointmentScheduledEvent>, IConsumer<AppointmentCancelledEvent>
+    : IConsumer<AppointmentScheduledEvent>, IConsumer<AppointmentCancelledEvent>, IConsumer<AppointmentRescheduledEvent>
 {
     public const string InvitationTemplateKey = "appointment.invitation";
     public const string CancellationTemplateKey = "appointment.cancelled";
+    public const string RescheduleTemplateKey = "appointment.rescheduled";
 
     private static readonly CultureInfo French = CultureInfo.GetCultureInfo("fr-FR");
 
@@ -44,6 +45,11 @@ public sealed class AppointmentInvitationConsumer(
     public Task Consume(ConsumeContext<AppointmentCancelledEvent> context)
         => NotifyAsync(context.Message.TenantId, context.Message.AppointmentId, context.Message.ParticipantIds,
             CancellationTemplateKey, "appt-cancel", context.CancellationToken);
+
+    // Keyed on the new start too: each move is its own mail, a redelivery of one is not.
+    public Task Consume(ConsumeContext<AppointmentRescheduledEvent> context)
+        => NotifyAsync(context.Message.TenantId, context.Message.AppointmentId, context.Message.ParticipantIds,
+            RescheduleTemplateKey, $"appt-move-{context.Message.StartAt.UtcTicks}", context.CancellationToken);
 
     private async Task NotifyAsync(
         Guid tenantId, Guid appointmentId, IReadOnlyList<Guid> participantIds,

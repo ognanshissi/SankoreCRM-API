@@ -77,6 +77,8 @@ public sealed class InsuranceOnTheSocleTests : IDisposable
             .Where(t => !t.StartsWith("tel_", StringComparison.Ordinal))
             // `msg_` messaging (WA-BE-07): the WhatsApp family's raw webhook deliveries.
             .Where(t => !t.StartsWith("msg_", StringComparison.Ordinal))
+            // `cal_` connected agendas: a USER's Microsoft and Google accounts, not the institution's.
+            .Where(t => !t.StartsWith("cal_", StringComparison.Ordinal))
             .ToList();
 
         unclassified.Should().BeEquivalentTo(["outbox_messages", "inbox_messages"]);

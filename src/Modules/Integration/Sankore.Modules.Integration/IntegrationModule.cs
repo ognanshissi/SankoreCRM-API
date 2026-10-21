@@ -15,6 +15,7 @@ using Sankore.Modules.Integration.Features.Batch.Outbound;
 using Sankore.Modules.Integration.Features.CallLog;
 using Sankore.Modules.Integration.Features.Commands;
 using Sankore.Modules.Integration.Features.Connections;
+using Sankore.Modules.Integration.Features.ConnectedAccounts;
 using Sankore.Modules.Integration.Features.Dispatch;
 using Sankore.Modules.Integration.Features.Insurance;
 using Sankore.Modules.Integration.Features.Mappings;
@@ -118,6 +119,7 @@ public static class IntegrationModule
         services.AddRelayAgentsServices();
         services.AddTelephonyServices(config);
         services.AddMessagingServices();
+        services.AddConnectedAccountsServices(config);
 
         // The insurance family (ASS-03 →). On the SAME socle: no second DbContext, no second
         // outbox, no second dispatcher — which is the whole claim of ASS-01.
@@ -169,6 +171,7 @@ public static class IntegrationModule
         app.MapInsuranceEndpoints();
         app.MapTelephonyEndpoints();
         app.MapWhatsAppChannelEndpoints();
+        app.MapConnectedAccountEndpoints();
 
         return app;
     }
@@ -214,6 +217,10 @@ public static class IntegrationModule
         // is computed server-side. Until client certificates are enabled on the route both answer
         // the same refusal, which is the correct failure mode rather than a gap.
         app.MapRelayAgentPublicEndpoints();
+
+        // Connected agendas: the provider's OAuth callback. Under /integration/oauth, exempt from
+        // host tenant resolution — the tenant comes from the single-use state row.
+        app.MapConnectedAccountOAuthEndpoints();
 
         return app;
     }

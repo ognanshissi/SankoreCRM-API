@@ -40,6 +40,7 @@ internal static class NotificationsSeeder
         await SeedKycRemoteComplementAsync(db, logger, ct);
         await SeedAppointmentInvitationAsync(db, logger, ct);
         await SeedAppointmentCancelledAsync(db, logger, ct);
+        await SeedAppointmentRescheduledAsync(db, logger, ct);
         await SeedWhatsAppTemplatesAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
@@ -2493,6 +2494,91 @@ internal static class NotificationsSeeder
                         {{ if cancellation_reason != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Reason</td><td style="padding:8px;border:1px solid #eee">{{ cancellation_reason | html.escape }}</td></tr>{{ end }}
                       </table>
                       
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── appointment.rescheduled ───────────────────────────────────────────────────
+    // Same variables as appointment.invitation, the date and time being the NEW ones. Free values
+    // are escaped for the same reason.
+    private static async Task SeedAppointmentRescheduledAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "appointment.rescheduled";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Déplacé : {{ appointment_title }} — {{ appointment_date }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#d97706">Rendez-vous déplacé</h2>
+                      <p>Bonjour {{ full_name | html.escape }},</p>
+                      <p>Le rendez-vous suivant, auquel vous êtes invité(e), a été déplacé :</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Objet</td><td style="padding:8px;border:1px solid #eee">{{ appointment_title | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Nouvelle date</td><td style="padding:8px;border:1px solid #eee">{{ appointment_date }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Nouvelle heure</td><td style="padding:8px;border:1px solid #eee">{{ appointment_time }} ({{ time_zone }})</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Organisateur</td><td style="padding:8px;border:1px solid #eee">{{ organizer_name | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Modalité</td><td style="padding:8px;border:1px solid #eee">{{ mode_label }}</td></tr>
+                        {{ if location != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Lieu</td><td style="padding:8px;border:1px solid #eee">{{ location | html.escape }}</td></tr>{{ end }}
+                        {{ if meeting_url != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Lien</td><td style="padding:8px;border:1px solid #eee"><a href="{{ meeting_url | html.escape }}">{{ meeting_url | html.escape }}</a></td></tr>{{ end }}
+                      </table>
+
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "Moved: {{ appointment_title }} — {{ appointment_date }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#d97706">Appointment moved</h2>
+                      <p>Hello {{ full_name | html.escape }},</p>
+                      <p>The following appointment you are invited to has been moved:</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Subject</td><td style="padding:8px;border:1px solid #eee">{{ appointment_title | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">New date</td><td style="padding:8px;border:1px solid #eee">{{ appointment_date }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">New time</td><td style="padding:8px;border:1px solid #eee">{{ appointment_time }} ({{ time_zone }})</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Organiser</td><td style="padding:8px;border:1px solid #eee">{{ organizer_name | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Format</td><td style="padding:8px;border:1px solid #eee">{{ mode_label }}</td></tr>
+                        {{ if location != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Location</td><td style="padding:8px;border:1px solid #eee">{{ location | html.escape }}</td></tr>{{ end }}
+                        {{ if meeting_url != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Link</td><td style="padding:8px;border:1px solid #eee"><a href="{{ meeting_url | html.escape }}">{{ meeting_url | html.escape }}</a></td></tr>{{ end }}
+                      </table>
+
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
                     </body>

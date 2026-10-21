@@ -8,6 +8,7 @@ using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Infrastructure.Messaging;
@@ -93,6 +94,9 @@ internal sealed class ScheduleAppointmentHandler(
         if (appointment.ParticipantIds.Count > 0)
             await publisher.PublishAsync(
                 new AppointmentScheduledEvent(tenantId, appointment.Id, appointment.ParticipantIds.ToList()), ct);
+
+        // Every change, with or without invited colleagues: the organiser's own agenda copy follows it too.
+        await publisher.PublishAsync(new AppointmentChangedIntegrationEvent(tenantId, appointment.Id), ct);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok(appointment.Id);

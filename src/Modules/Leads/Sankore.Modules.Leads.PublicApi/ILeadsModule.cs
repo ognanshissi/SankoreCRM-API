@@ -209,6 +209,19 @@ public interface ILeadsModule
         Guid? connectionAgencyId,
         MessagingEventBatch batch,
         CancellationToken ct);
+
+    /// <summary>
+    /// One rendez-vous, cancelled or not, for the copy into connected agendas; null when it does
+    /// not exist in this tenant.
+    /// </summary>
+    Task<AppointmentCalendarEntry?> GetAppointmentForCalendarAsync(Guid tenantId, Guid appointmentId, CancellationToken ct);
+
+    /// <summary>
+    /// The SCHEDULED rendez-vous a user organises or is invited to, overlapping
+    /// [<paramref name="from"/>, <paramref name="to"/>) — what a newly chosen target agenda receives.
+    /// </summary>
+    Task<IReadOnlyList<AppointmentCalendarEntry>> ListAppointmentsForUserAsync(
+        Guid tenantId, Guid userId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct);
 }
 
 /// <summary>

@@ -146,4 +146,123 @@ public sealed class AppointmentTests : IDisposable
         (await CancelAsync()).IsSuccess.Should().BeTrue();
         await _publisher.Received(1).PublishAsync(Arg.Any<AppointmentCancelledEvent>(), Arg.Any<CancellationToken>());
     }
+
+    // ——— Déplacer ———
+
+    [Fact]
+    public void Moving_keeps_the_duration_unless_a_new_one_is_given()
+    {
+        var appointment = Schedule(AppointmentMode.InPerson, null).Value!;
+        var later = _now.AddDays(2);
+
+        appointment.Reschedule(later, null, _now).IsSuccess.Should().BeTrue();
+        appointment.StartAt.Should().Be(later);
+        appointment.DurationMinutes.Should().Be(45);
+
+        appointment.Reschedule(later, 30, _now).IsSuccess.Should().BeTrue();
+        appointment.DurationMinutes.Should().Be(30);
+    }
+
+    [Fact]
+    public void Moving_to_the_past_or_moving_a_cancelled_one_is_refused()
+    {
+        var appointment = Schedule(AppointmentMode.InPerson, null).Value!;
+        appointment.Reschedule(_now.AddMinutes(-5), null, _now).Error.Should().Be("APPOINTMENT_IN_PAST");
+        appointment.Reschedule(_now.AddDays(1), 2, _now).Error.Should().Be("APPOINTMENT_DURATION_INVALID");
+
+        appointment.Cancel(null, _now);
+        appointment.Reschedule(_now.AddDays(1), null, _now).Error.Should().Be("APPOINTMENT_ALREADY_CANCELLED");
+    }
+
+    [Fact]
+    public async Task Moving_mails_the_participants_once_and_a_move_to_the_same_slot_mails_nobody()
+    {
+        _currentUser.Id.Returns(_me);
+        var appointment = Appointment.Schedule(_tenantId, _me, "Point client", _now.AddDays(1), 60, null,
+            AppointmentMode.InPerson, null, null, null, null, [_colleague], null, _now).Value!;
+        await using (var db = _db.CreateContext())
+        {
+            db.Appointments.Add(appointment);
+            await db.SaveChangesAsync();
+        }
+
+        async Task<Result> MoveAsync(DateTimeOffset startAt)
+        {
+            await using var db = _db.CreateContext();
+            return await new RescheduleAppointmentHandler(db, _currentUser, _publisher, TimeProvider.System)
+                .Handle(new RescheduleAppointmentCommand(appointment.Id, startAt, null), CancellationToken.None);
+        }
+
+        var target = appointment.StartAt.AddHours(2);
+        (await MoveAsync(target)).IsSuccess.Should().BeTrue();
+        (await MoveAsync(target)).IsSuccess.Should().BeTrue();
+
+        await _publisher.Received(1).PublishAsync(
+            Arg.Is<AppointmentRescheduledEvent>(e => e.StartAt == target && e.ParticipantIds.Contains(_colleague)),
+            Arg.Any<CancellationToken>());
+        await using var check = _db.CreateContext();
+        (await check.Appointments.SingleAsync(a => a.Id == appointment.Id)).StartAt.Should().Be(target);
+    }
+
+    [Fact]
+    public async Task Only_the_organiser_or_a_supervisor_moves()
+    {
+        var appointment = Appointment.Schedule(_tenantId, _colleague, "Réunion d'agence", _now.AddDays(1), 60, null,
+            AppointmentMode.InPerson, null, null, null, null, [_me], null, _now).Value!;
+        await using (var db = _db.CreateContext())
+        {
+            db.Appointments.Add(appointment);
+            await db.SaveChangesAsync();
+        }
+
+        await using var ctx = _db.CreateContext();
+        var result = await new RescheduleAppointmentHandler(ctx, _currentUser, _publisher, TimeProvider.System)
+            .Handle(new RescheduleAppointmentCommand(appointment.Id, _now.AddDays(2), null), CancellationToken.None);
+        result.Error.Should().Be("NOT_APPOINTMENT_ORGANIZER");
+    }
+
+    // ——— Pour les agendas connectés ———
+
+    [Fact]
+    public async Task A_user_reads_the_live_appointments_they_organise_or_attend_in_a_window()
+    {
+        Appointment Plan(Guid organizer, Guid[] participants, int days) =>
+            Appointment.Schedule(_tenantId, organizer, $"J+{days}", _now.AddDays(days), 60, null,
+                AppointmentMode.InPerson, null, null, null, null, participants, null, _now).Value!;
+
+        var mine = Plan(_me, [], 1);
+        var invited = Plan(_colleague, [_me], 2);
+        var cancelled = Plan(_me, [], 3);
+        cancelled.Cancel(null, _now);
+        var notMine = Plan(_colleague, [], 1);
+        var tooFar = Plan(_me, [], 40);
+
+        await using (var db = _db.CreateContext())
+        {
+            db.Appointments.AddRange(mine, invited, cancelled, notMine, tooFar);
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = _db.CreateContext();
+        var facade = TestLeadsFacade.Build(read, tenantId: _tenantId);
+
+        var listed = await facade.ListAppointmentsForUserAsync(_tenantId, _me, _now, _now.AddDays(30), CancellationToken.None);
+        listed.Select(a => a.Id).Should().Equal(mine.Id, invited.Id);
+
+        var entry = await facade.GetAppointmentForCalendarAsync(_tenantId, cancelled.Id, CancellationToken.None);
+        entry!.IsCancelled.Should().BeTrue();
+        (await facade.GetAppointmentForCalendarAsync(Guid.NewGuid(), mine.Id, CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Every_change_is_announced_for_the_agenda_copies_even_without_participants()
+    {
+        var result = await ScheduleAsync(Request(participants: []));
+
+        result.IsSuccess.Should().BeTrue();
+        await _publisher.Received(1).PublishAsync(
+            Arg.Is<Sankore.Modules.Leads.PublicApi.AppointmentChangedIntegrationEvent>(e => e.AppointmentId == result.Value),
+            Arg.Any<CancellationToken>());
+        await _publisher.DidNotReceive().PublishAsync(Arg.Any<AppointmentScheduledEvent>(), Arg.Any<CancellationToken>());
+    }
 }

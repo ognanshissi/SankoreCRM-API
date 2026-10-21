@@ -144,6 +144,24 @@ public sealed class Appointment : ITenant
         return Result.Ok();
     }
 
+    /// <summary>
+    /// Moves the appointment, keeping its duration unless a new one is given. Refused once it is
+    /// cancelled or over, and towards the past — the same rule as <see cref="Schedule"/>.
+    /// </summary>
+    public Result Reschedule(DateTimeOffset startAt, int? durationMinutes, DateTimeOffset now)
+    {
+        if (Status == AppointmentStatus.Cancelled) return Result.Fail("APPOINTMENT_ALREADY_CANCELLED");
+        if (EndAt <= now) return Result.Fail("APPOINTMENT_ALREADY_HELD");
+        if (startAt <= now) return Result.Fail("APPOINTMENT_IN_PAST");
+
+        var duration = durationMinutes ?? DurationMinutes;
+        if (duration is < 5 or > 24 * 60) return Result.Fail("APPOINTMENT_DURATION_INVALID");
+
+        StartAt = startAt;
+        DurationMinutes = duration;
+        return Result.Ok();
+    }
+
     public static MeetingProvider ProviderOf(Uri url)
     {
         var host = url.Host.ToLowerInvariant();

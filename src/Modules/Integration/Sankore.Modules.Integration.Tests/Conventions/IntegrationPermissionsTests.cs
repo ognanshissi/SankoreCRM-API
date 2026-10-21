@@ -41,6 +41,12 @@ public sealed class IntegrationPermissionsTests
         "WhatsApp.Config",
     ];
 
+    /// <summary>Connected agendas: a user connecting their OWN Microsoft and Google accounts.</summary>
+    private static readonly string[] ConnectedAccountCodes =
+    [
+        "ConnectedAccounts.Use",
+    ];
+
     /// <summary>The seven codes of TEL-B-18's table, verbatim.</summary>
     private static readonly string[] TelephonyCodes =
     [
@@ -131,7 +137,7 @@ public sealed class IntegrationPermissionsTests
 
         // Guards the other direction: a permission invented in passing would widen the surface
         // an administrator has to reason about, and nothing else would report it.
-        declared.Should().BeEquivalentTo([.. IntegrationCodes, .. InsuranceCodes, .. TelephonyCodes, .. MessagingCodes]);
+        declared.Should().BeEquivalentTo([.. IntegrationCodes, .. InsuranceCodes, .. TelephonyCodes, .. MessagingCodes, .. ConnectedAccountCodes]);
     }
 
     [Fact]

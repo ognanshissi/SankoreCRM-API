@@ -53,6 +53,24 @@ public static class AppointmentsEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        // POST /appointments/{id}/reschedule
+        group.MapPost("{appointmentId:guid}/reschedule", async (Guid appointmentId, RescheduleAppointmentRequest req, ISender sender, CancellationToken ct) =>
+            {
+                var result = await sender.Send(new RescheduleAppointmentCommand(appointmentId, req.StartAt, req.DurationMinutes), ct);
+                return result.IsSuccess
+                    ? Results.NoContent()
+                    : result.Error == "APPOINTMENT_NOT_FOUND"
+                        ? Results.NotFound()
+                        : Results.Problem(title: "Reschedule appointment failed", detail: result.Error, statusCode: 422);
+            })
+            .WithName("RescheduleAppointment")
+            .WithTags("Appointments")
+            .RequireAuthorization(Permissions.CanLogLeadActivity.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         return app;
     }
 }

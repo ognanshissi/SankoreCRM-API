@@ -233,6 +233,18 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+    // The OAuth callback of connected accounts: a browser coming back from Microsoft or Google.
+    // Anonymous, so per IP; a person connects a handful of accounts, 20 a minute is generous.
+    options.AddPolicy("oauth-callback", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 20,
+                QueueLimit = 0,
+            }));
+
     // Strict limit for unauthenticated auth endpoints (login, forgot-password, etc.)
     // 5 requests per minute per IP address — mitigates brute-force and enumeration attacks.
     options.AddPolicy("auth", ctx =>
@@ -506,6 +518,9 @@ builder.Services.AddMassTransit(x =>
     // by M01 above; each module has its own inbox table, and this module's guard additionally
     // derives a per-consumer id so its two consumers can share one event.
     x.AddConsumer<Sankore.Modules.Integration.Features.Onboarding.KycValidatedOnboardingConsumer>();
+    // Connected agendas lot 4: a rendez-vous copied into each participant's target agenda.
+    x.AddConsumer<Sankore.Modules.Integration.Features.ConnectedAccounts.AppointmentCalendarCopyConsumer,
+        Sankore.Modules.Integration.Features.ConnectedAccounts.AppointmentCalendarCopyConsumerDefinition>();
     x.AddConsumer<Sankore.Modules.Integration.Features.Onboarding.CbsCustomerCreatedOnboardingConsumer>();
 
     // BNF-B-16 — the subscription chain, both directions. Integration turns a signed holding into
@@ -1087,6 +1102,13 @@ if (emitOpenApiTo is null) {
         // Every minute is the RESOLUTION of the schedule, not the sweep period: each (connection,
         // stream) pair carries its own interval in the connection's settings, and a slower cron
         // would silently round every configured interval up to itself.
+        // Connected agendas (lot 2): every user's ticked agendas at most 15 minutes behind, until the
+        // providers' push notifications are wired.
+        AddOrUpdate<Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator>(
+            Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator.CronExpression);
+
         AddOrUpdate<Sankore.Modules.Integration.Features.Sync.IntegrationSyncOrchestrator>(
             Sankore.Modules.Integration.Features.Sync.IntegrationSyncOrchestrator.RecurringJobId,
             job => job.ExecuteAsync(),
@@ -1172,6 +1194,7 @@ app.UseTenantResolution(
     "/sdk",                         // the forms.js builds those pages load
     "/integration/webhooks",        // M14 inbound sync hooks (connection id + HMAC)
     "/integration/relay-agents",    // M14 relay agent enrolment + heartbeat (client certificate)
+    "/integration/oauth",           // retour OAuth Microsoft/Google : le tenant vient de la ligne `state`
     SankoreRealtimeHub.Path);       // le hub : le tenant vient du claim du jeton, pas du domaine
 app.UseRequestLocalization(opts =>
 {

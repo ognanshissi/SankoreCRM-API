@@ -741,6 +741,15 @@ public static class Permissions
     /// bot's words are a commercial and compliance matter, the number is a technical one, and they
     /// are rarely the same person's job. No default role holds it — the administrator does.
     /// </summary>
+    /// <summary>
+    /// Connecting one's OWN Microsoft and Google accounts to see their agendas and import their
+    /// contacts. Granted to every default role: what it opens is the caller's own data, and a role
+    /// without it is an institution choosing to keep personal agendas out of the CRM.
+    /// </summary>
+    public static readonly PermissionItem CanUseConnectedAccounts =
+        new("ConnectedAccounts.Use", "Connect one's own Microsoft and Google accounts (agendas, contacts)",
+            ApplicationModules.Integration, "ConnectedAccounts.Use");
+
     public static readonly PermissionItem CanConfigureWhatsAppBot =
         new("WhatsApp.Bot.Config", "Configure the WhatsApp bot per product and switch it on",
             ApplicationModules.Leads, "WhatsApp.Bot.Config");
@@ -1016,6 +1025,7 @@ public static class Permissions
         CanSuperviseWhatsApp,
         CanConfigureWhatsApp,
         CanConfigureWhatsAppBot,
+        CanUseConnectedAccounts,
 
         // Insurance family (ASS-11), plus Ins.Product.View, Ins.Statement.Finalise and the
         // complaints pair — see their own remarks for why the specification's table of seven

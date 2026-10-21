@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Infrastructure.Messaging;
@@ -41,6 +42,9 @@ internal sealed class CancelAppointmentHandler(
         if (appointment.ParticipantIds.Count > 0)
             await publisher.PublishAsync(
                 new AppointmentCancelledEvent(appointment.TenantId, appointment.Id, appointment.ParticipantIds.ToList()), ct);
+
+        // Every change, with or without invited colleagues: the organiser's own agenda copy follows it too.
+        await publisher.PublishAsync(new AppointmentChangedIntegrationEvent(appointment.TenantId, appointment.Id), ct);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

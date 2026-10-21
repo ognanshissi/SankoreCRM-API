@@ -133,6 +133,14 @@ internal static class RoleSeeder
         (Roles.BranchManager.Code, "WhatsApp.Send"),
         (Roles.BranchManager.Code, "WhatsApp.Send.Force"),
         (Roles.BranchManager.Code, "WhatsApp.Supervise"),
+
+        // Connected agendas: one's own Microsoft and Google accounts, for every business role.
+        (Roles.Agent.Code, "ConnectedAccounts.Use"),
+        (Roles.CommercialAgent.Code, "ConnectedAccounts.Use"),
+        (Roles.SalesManager.Code, "ConnectedAccounts.Use"),
+        (Roles.BranchManager.Code, "ConnectedAccounts.Use"),
+        (Roles.Cashier.Code, "ConnectedAccounts.Use"),
+        (Roles.RegulationManager.Code, "ConnectedAccounts.Use"),
     ];
 
     private static async Task SeedDefaultGrantsAsync(AdministrationDbContext db, ILogger logger)

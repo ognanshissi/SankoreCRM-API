@@ -426,4 +426,38 @@ public sealed class LeadsModuleFacade(
         return sender.Send(
             new Features.WhatsApp.RecordMessagingEventsCommand(tenantId, connectionId, connectionAgencyId, batch), ct);
     }
+
+    public async Task<AppointmentCalendarEntry?> GetAppointmentForCalendarAsync(Guid tenantId, Guid appointmentId, CancellationToken ct)
+    {
+        var appointment = await db.Appointments
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.TenantId == tenantId && a.Id == appointmentId, ct);
+
+        return appointment is null ? null : ToCalendarEntry(appointment);
+    }
+
+    public async Task<IReadOnlyList<AppointmentCalendarEntry>> ListAppointmentsForUserAsync(
+        Guid tenantId, Guid userId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+    {
+        // The end is a computed property: filter the start in SQL with a day of margin (no
+        // appointment lasts longer), then exactly in memory.
+        var earliestStart = from.AddDays(-1);
+        var appointments = await db.Appointments
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(a => a.TenantId == tenantId
+                && a.Status == AppointmentStatus.Scheduled
+                && a.StartAt < to && a.StartAt >= earliestStart
+                && (a.OrganizerId == userId || a.ParticipantIds.Contains(userId)))
+            .OrderBy(a => a.StartAt)
+            .Take(500)
+            .ToListAsync(ct);
+
+        return appointments.Where(a => a.EndAt > from).Select(ToCalendarEntry).ToList();
+    }
+
+    private static AppointmentCalendarEntry ToCalendarEntry(Appointment a) => new(
+        a.Id, a.Title, a.StartAt, a.EndAt, a.Status == AppointmentStatus.Cancelled,
+        a.Location, a.MeetingUrl, a.OrganizerId, a.ParticipantIds.ToList());
 }

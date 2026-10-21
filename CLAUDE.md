@@ -2572,6 +2572,106 @@ overwritten — opened by `WhatsAppEscalation`, ended by takeover, close, return
 by the SLA sweep. Cost is per Meta category at the price in `whatsapp-template-unit-prices` (JSON,
 empty by default — no invented rate); the total is null while any used category has no price.
 
+### Connected agendas, lot 1: a user's own Microsoft and Google accounts
+
+**`ConnectedAccount` (table `cal_connected_account`, Integration module) belongs to a USER**, not the
+tenant — deliberately not an `IntegrationConnection`, which an administrator configures for the
+institution. Every read and write is `UserId == me`; there is no listing of a colleague's accounts.
+**Tokens live in the secrets vault only** (`ConnectedAccountSecrets`, scope `user-account`, entity =
+account id); the table holds who and what, never a credential.
+
+**The OAuth round trip** (authorization code + PKCE S256, one platform-wide OAuth app per provider,
+options `Integration:ConnectedAccounts`): `POST api/v1/integration/me/connected-accounts/authorize`
+records a single-use state row (`cal_oauth_state`, only the SHA-256 of the state, 10 min) with the
+caller's `Origin` checked against the CORS allow-list, and answers the provider's URL. The provider
+sends the browser to `GET /integration/oauth/{provider}/callback` — anonymous, exempt from host
+tenant resolution, rate-limited (`oauth-callback`) — which reads tenant and user off the state row
+(`IgnoreQueryFilters`), consumes it BEFORE trying anything, exchanges the code, stores the tokens and
+redirects to `{origin}/settings/account/agendas?connexion=ok|refuse|expire|erreur`. An unknown state
+gets a bare 400: there is no recorded origin to send it to, and reading one off the query would be an
+open redirect. **The PKCE verifier is never stored**: HKDF over `Jwt:SigningKey` and the state. The
+redirect URI is `{PublicBaseUrl or the request's base}/integration/oauth/{provider}/callback` and
+must be registered to the character at Microsoft and Google.
+
+**Tokens** go through `ConnectedAccountTokens.GetAccessTokenAsync` (refresh 2 min before expiry; a
+provider that issues no new refresh token keeps the old one). An `invalid_grant` marks the account
+`NeedsReconnect` — never retried; an unreachable provider leaves it as it is. Vault calls run under
+`TransactionScope.Suppress` (`OutsideTransactionAsync`): the vault has its own DbContext, and enlisting
+it in a command's transaction would promote it to a distributed one.
+
+**Removal** revokes at Google (Microsoft has no per-application revocation — the user withdraws
+consent at myaccount.microsoft.com), deletes the row, then the vault entries. Permission
+`ConnectedAccounts.Use`, granted to every business role. In Development,
+`UseFakeProviders: true` simulates both consent screens (the callback is reached at once with a fake
+code); a configured client id wins, and the simulation refuses to run outside Development.
+
+### Connected agendas, lot 2: reading the agendas
+
+`cal_calendar` (one row per agenda of a connected account, ticked or not) and `cal_event` (its
+events in the window −30 days / +180 days). **Title and location are encrypted** with the
+Integration field key (`CalendarEventProtector`) and returned decrypted to their OWNER only
+(`GET api/v1/integration/me/calendar-events?from&to`, 62 days at most); start, end and `ShowAs` stay
+clear because lot 6 shows colleagues a busy slot. A recurring series is stored as its occurrences:
+the providers expand it inside the window (Graph `calendarView/delta`, Google `singleEvents=true`).
+
+**`ConnectedCalendarSync`**: the account's agenda list first (a new agenda arrives ticked, one the
+provider no longer lists goes with its events), then each TICKED agenda. A FULL read — no cursor, a
+window older than 7 days (`WindowMaxAge`), a cursor the provider forgot (Graph 410/400, Google 410) —
+reads the whole window and deletes what was stored and not seen again; otherwise only the delta is
+applied. Google's incremental read ignores the window, so a change falling outside it is dropped.
+Cursors are opaque: Graph's next/delta link as given, Google's `page:{token}|{syncToken}` /
+`sync:{token}`. 50 pages per agenda per run at most. One agenda failing records its `LastError` and
+does not stop the others.
+
+**Unticking an agenda deletes its events and its cursor** (nothing kept that the user chose not to
+show); ticking enqueues `SyncConnectedAccountJob`, as does a successful consent. Removing an account
+deletes its agendas and events. `SyncConnectedCalendarsOrchestrator` (global, every 15 min) enqueues
+one job per tenant; push notifications (Graph subscriptions, Google watch channels) are not wired yet,
+so an agenda is at most 15 minutes behind.
+
+### Connected agendas, lot 3: the Calendrier screen, and moving a rendez-vous
+
+**`POST api/v1/leads/appointments/{id}/reschedule`** (`lead:activity:log`, the organiser or a
+supervisor, like a cancellation) moves an appointment through `Appointment.Reschedule` — refused once
+cancelled or over, and towards the past; the duration is kept unless one is given. The invited
+colleagues get `appointment.rescheduled` (seeded fr/en) through the outbox
+(`AppointmentRescheduledEvent`); the idempotency key carries the NEW start, so a second move mails
+again while a redelivery does not, and a move to the same slot publishes nothing.
+
+The front page is `/tasks/calendar` (`packages/crm/tasks/src/containers/calendar/`), a grid built by
+hand: `GET leads/me/agenda` + the agent's open tasks + `GET integration/me/calendar-events` for the
+period shown (day, week, or six full weeks for a month — all within the 62-day limit of both reads).
+`calendar-meta.ts` holds the pure parts, pinned by its spec: overlap columns, conflicts (a SANKORÉ
+appointment overlapping an external event shown Busy, Tentative or OutOfOffice — never an all-day
+one), and the first free slot of the same day between 08:00 and 19:00 for « Déplacer à HH:MM ».
+Display is in the BROWSER's zone; no user time-zone preference exists yet. Filter visibility is kept
+in `localStorage` only.
+
+### Connected agendas, lot 4: SANKORÉ rendez-vous copied into each participant's agenda
+
+Each user may pick ONE writable agenda as their target (`cal_calendar.is_appointment_target`,
+filtered unique index per user; `PUT api/v1/integration/me/connected-accounts/appointment-target`,
+`calendarId: null` stops it). Every rendez-vous they organise or are invited to is copied there:
+`cal_appointment_copy` remembers, per (appointment, user), the agenda and the provider's event id.
+
+**Leads publishes, Integration reconciles.** Schedule, reschedule and cancel publish
+`AppointmentChangedIntegrationEvent` (Leads.PublicApi, id only) through M13's outbox, ALWAYS —
+not only with participants, since the organiser's own copy follows too. `AppointmentCalendarCopyConsumer`
+(one message at a time, or two changes would both create a copy) reads the appointment as it stands
+through `ILeadsModule.GetAppointmentForCalendarAsync` and applies one rule per person: a live
+appointment + a target = a copy in THAT agenda with the current content (`ContentHash` skips
+unchanged writes), otherwise no copy. Choosing another target runs the same rule over the user's
+upcoming appointments (`ReconcileUserAppointmentCopiesJob`, via `ListAppointmentsForUserAsync`).
+
+**What leaves the institution**: title, times, place or meeting link, and a fixed sentence — never
+the description, the lead or the client (`AppointmentCalendarEntry` does not carry them). Edits
+made in Outlook/Google are not read back; the next SANKORÉ change overwrites them, and a copy
+deleted by hand is recreated on the next change. Provider failures are recorded on the row
+(`Failed`, `LastError`) and retried by the 15-minute agenda job, 10 attempts in a row at most.
+Removing an account deletes its copies at the provider first, while its token still works. A copy
+read back by the lot-2 sync is hidden from `me/calendar-events` (matched on agenda + event id), or
+the calendar screen would show every rendez-vous twice and in conflict with itself.
+
 ### Adding a new module
 
 Use `Sankore.Modules.Administration` as the template: PublicApi project (interface only) + main project (DbContext + domain + Features/) + Tests project. Register in `Program.cs` with `builder.Services.Add{Module}Module(...)` and `appVersion1.Map{Module}ModuleEndpoints()`. Initialize in the startup scope if the module needs migration or seeding.

@@ -31,6 +31,11 @@ public sealed class IntegrationDbContext(
     public DbSet<TelClickToCall> TelClickToCalls => Set<TelClickToCall>();
     public DbSet<TelWebhookEvent> TelWebhookEvents => Set<TelWebhookEvent>();
     public DbSet<MsgWebhookEvent> MsgWebhookEvents => Set<MsgWebhookEvent>();
+    public DbSet<ConnectedAccount> ConnectedAccounts => Set<ConnectedAccount>();
+    public DbSet<ConnectedAccountOAuthState> ConnectedAccountOAuthStates => Set<ConnectedAccountOAuthState>();
+    public DbSet<ConnectedCalendar> ConnectedCalendars => Set<ConnectedCalendar>();
+    public DbSet<ConnectedCalendarEvent> ConnectedCalendarEvents => Set<ConnectedCalendarEvent>();
+    public DbSet<AppointmentCalendarCopy> AppointmentCalendarCopies => Set<AppointmentCalendarCopy>();
     public DbSet<TelRecording> TelRecordings => Set<TelRecording>();
     public DbSet<TelCallOutcome> TelCallOutcomes => Set<TelCallOutcome>();
     public DbSet<TelRecordingPolicy> TelRecordingPolicies => Set<TelRecordingPolicy>();
@@ -131,6 +136,14 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<CbsSnapshot>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<KycLimitAlert>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<IntegrationRelayAgent>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+
+        // Connected agendas (`cal_`). The OAuth callback reads the state with IgnoreQueryFilters —
+        // it runs before any tenant is known — and every other read stays filtered.
+        modelBuilder.Entity<ConnectedAccount>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ConnectedAccountOAuthState>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ConnectedCalendar>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ConnectedCalendarEvent>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<AppointmentCalendarCopy>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
 
         // The insurance family. Every one of these is tenant-scoped, and the list is pinned by
         // InsuranceOnTheSocleTests: a new entity added without a line here fails that test rather

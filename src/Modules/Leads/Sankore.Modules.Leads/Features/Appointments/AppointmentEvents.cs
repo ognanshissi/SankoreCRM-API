@@ -16,3 +16,13 @@ public sealed record AppointmentCancelledEvent(
     Guid TenantId,
     Guid AppointmentId,
     IReadOnlyList<Guid> ParticipantIds) : IntegrationEventBase;
+
+/// <summary>
+/// Same reason as <see cref="AppointmentScheduledEvent"/>, for the new date. It carries the new
+/// start so a second move mails again while a redelivery of the same one does not.
+/// </summary>
+public sealed record AppointmentRescheduledEvent(
+    Guid TenantId,
+    Guid AppointmentId,
+    DateTimeOffset StartAt,
+    IReadOnlyList<Guid> ParticipantIds) : IntegrationEventBase;
