@@ -15,7 +15,8 @@ public sealed record AgentSettingsDto(
     List<string> SpokenLanguages,
     string? ManagerName,
     List<DelegationDto> Delegations,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    bool NotificationSound = true);
 
 public sealed record AbsenceDto(
     DateOnly From,

@@ -5,6 +5,7 @@ using Sankore.Modules.Integration.Adapters.Fake;
 using Sankore.Modules.Integration.Adapters.Orass;
 using Sankore.Modules.Integration.Adapters.PerfectVision;
 using Sankore.Modules.Integration.Adapters.Ringover;
+using Sankore.Modules.Integration.Adapters.Dialog360;
 using Sankore.Modules.Integration.Adapters.Sab;
 using Sankore.Modules.Integration.Adapters.Temenos;
 using Sankore.Modules.Integration.PublicApi;
@@ -94,6 +95,13 @@ internal static class IntegrationAdapterComposition
         // configured connection is recorded rather than lost. Needs AddSecretsVault to have run:
         // it probes the vault for its two per-connection secrets and registers none itself.
         services.AddRingoverAdapter(config);
+
+        // 360dialog (WA-BE-01), the messaging family's first adapter, and the first adapter of
+        // this list that operates fully: it is built against Meta's documented Cloud API, which
+        // 360dialog proxies. What remains to observe on a sandbox account is listed in
+        // Dialog360Specification.OpenQuestions. Needs AddSecretsVault: it reads the per-number API
+        // key and registers none of it.
+        services.AddDialog360Adapter(config);
 
         // The in-memory double (INT-10), Development only. Guarded HERE as well as inside
         // AddFakeAdapter, which throws outside Development: the host decides whether to offer the

@@ -181,6 +181,34 @@ public interface ILeadsModule
     /// </summary>
     Task<IReadOnlyList<CustomerOpenLead>> GetOpenLeadsForCustomerAsync(
         Guid tenantId, Guid customerId, CancellationToken ct);
+
+    /// <summary>
+    /// Records what a WhatsApp number received — customers' messages and the delivery statuses of
+    /// ours (WA-BE-07 → WA-BE-10). Called by the integration module's webhook job, under the SYSTEM
+    /// identity, once the delivery has been verified at the door.
+    ///
+    /// <para>
+    /// <b>The content arrives in CLEAR and is encrypted here</b>, with this module's key: the
+    /// conversation is M13's record, and the integration module keeps only the encrypted raw body
+    /// it received. Nothing in this batch reaches a log.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Idempotent on the provider's message id</b>, so a webhook replayed by its job — or
+    /// redelivered by the provider in another batch — records each message once and applies each
+    /// status at most once in the forward direction.
+    /// </para>
+    /// </summary>
+    /// <param name="connectionAgencyId">
+    /// The agency the receiving number serves, when it serves one. A lead created from an unknown
+    /// number is filed there.
+    /// </param>
+    Task<MessagingEventsOutcome> RecordMessagingEventsAsync(
+        Guid tenantId,
+        Guid connectionId,
+        Guid? connectionAgencyId,
+        MessagingEventBatch batch,
+        CancellationToken ct);
 }
 
 /// <summary>
@@ -250,3 +278,58 @@ public sealed record LeadHistoryItem(
     string Summary,
     string? ReferenceType,
     string? ReferenceId);
+
+/// <summary>What one webhook delivery carried, as M13 records it.</summary>
+public sealed record MessagingEventBatch(
+    IReadOnlyList<InboundMessagingMessage> Messages,
+    IReadOnlyList<MessagingDeliveryStatus> Statuses);
+
+/// <summary>
+/// One message a customer sent to the institution's number.
+/// </summary>
+/// <param name="FromE164">The sender, with the plus. Personal data.</param>
+/// <param name="ProfileName">What the sender's WhatsApp profile calls them. Not an identity.</param>
+/// <param name="Type">
+/// <c>text</c>, <c>image</c>, <c>document</c>, <c>audio</c>, <c>video</c>, <c>sticker</c>,
+/// <c>location</c>, <c>contacts</c>, <c>button</c>, <c>interactive</c>, <c>reaction</c> or
+/// <c>unsupported</c>.
+/// </param>
+/// <param name="Text">The text, the caption, or the label of the button pressed.</param>
+public sealed record InboundMessagingMessage(
+    string ProviderMessageId,
+    string FromE164,
+    string? ProfileName,
+    DateTimeOffset SentAt,
+    string Type,
+    string? Text,
+    string? MediaId,
+    string? MediaMimeType,
+    string? MediaFileName,
+    string? ReplyToProviderMessageId)
+{
+    /// <summary>Identifiers only: the generated form would print the number and the text.</summary>
+    public override string ToString() => $"InboundMessagingMessage {{ {ProviderMessageId}, {Type} }}";
+}
+
+/// <param name="Status"><c>sent</c>, <c>delivered</c>, <c>read</c> or <c>failed</c>.</param>
+/// <param name="ErrorCode">
+/// One of the integration module's <c>MESSAGING_*</c> codes, already translated — M13 never reads
+/// a provider's error number.
+/// </param>
+/// <param name="ErrorDetail">The provider's sentence about the failure, in English. Never personal data.</param>
+public sealed record MessagingDeliveryStatus(
+    string ProviderMessageId,
+    string Status,
+    DateTimeOffset At,
+    string? ErrorCode,
+    string? ErrorDetail);
+
+/// <param name="StatusesUnmatched">
+/// Statuses naming a message M13 does not know. Ordinary for a status that overtook the save of
+/// the message it describes — the caller retries a recent delivery for exactly that case.
+/// </param>
+public sealed record MessagingEventsOutcome(
+    int MessagesRecorded,
+    int MessagesDuplicate,
+    int StatusesApplied,
+    int StatusesUnmatched);

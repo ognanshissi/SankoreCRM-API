@@ -110,6 +110,18 @@ public sealed record ConsentConfig
 
     /// <summary>Reference of the provider contract, for <see cref="ConsentPolicy.ProviderAttested"/>.</summary>
     public string? ProviderContractRef { get; init; }
+
+    /// <summary>
+    /// Where the inbound payload says whether the prospect accepted to be contacted on WhatsApp
+    /// (WA-BE-05) — a JSONPath such as <c>$.consents.whatsapp</c>, for a webhook or a pulled
+    /// source. Null: the source carries no WhatsApp opt-in and none is recorded.
+    ///
+    /// <para>
+    /// The embedded-script SDK needs no path: from 1.3.0 it posts the box itself, and the ingest
+    /// endpoint files it under a reserved key (<c>InboundWhatsAppConsent.EmbeddedScriptKey</c>).
+    /// </para>
+    /// </summary>
+    public string? WhatsAppConsentFieldPath { get; init; }
 }
 
 /// <summary>
@@ -226,6 +238,13 @@ public sealed record HostedFormConfig
 
     /// <summary>Consent text version, for tracking changes.</summary>
     public string? ConsentVersion { get; init; }
+
+    /// <summary>
+    /// Wording of the OPTIONAL WhatsApp opt-in box (WA-BE-05), e.g. « J'accepte d'être contacté
+    /// sur WhatsApp au sujet de ma demande ». Null: the hosted form shows no such box. Rendered as
+    /// plain text by the SDK, never as HTML.
+    /// </summary>
+    public string? WhatsAppConsentText { get; init; }
 
     public string? SubmitLabel { get; init; }
 
@@ -463,6 +482,9 @@ public sealed record EmbeddedScriptSettings : SourceSettings
 
     [JsonIgnore]
     public string? ConsentVersion => HostedForm?.ConsentVersion;
+
+    [JsonIgnore]
+    public string? WhatsAppConsentText => HostedForm?.WhatsAppConsentText;
 
     [JsonIgnore]
     public string? SubmitButtonLabel => HostedForm?.SubmitLabel;

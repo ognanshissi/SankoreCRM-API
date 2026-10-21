@@ -185,4 +185,63 @@ public static class IntegrationErrors
     /// "unlinked", except for offerability, which reports the mismatch rather than hiding it.
     /// </summary>
     public const string InsuranceCrmProductInvalid = "INSURANCE_CRM_PRODUCT_INVALID";
+
+    // ── Messaging family (WA-BE-01, WA-BE-02) ───────────────────────────────
+    //
+    // The provider's own error codes are mapped onto these, so that M13 — which decides what an
+    // agent is told — never reads a Meta number. Each one names a different repair.
+
+    /// <summary>
+    /// Functional. The recipient is not a WhatsApp user, or the number cannot receive messages.
+    /// Not retried: the same number gives the same answer.
+    /// </summary>
+    public const string MessagingRecipientInvalid = "MESSAGING_RECIPIENT_INVALID";
+
+    /// <summary>
+    /// Functional. Meta refused the template: unknown, not approved in that language, paused, or
+    /// sent with the wrong number of variables. The administrator re-synchronises the catalogue.
+    /// </summary>
+    public const string MessagingTemplateRejected = "MESSAGING_TEMPLATE_REJECTED";
+
+    /// <summary>
+    /// Functional. A free message outside the 24-hour customer-service window — only a template
+    /// may open the conversation again.
+    /// </summary>
+    public const string MessagingOutsideWindow = "MESSAGING_OUTSIDE_WINDOW";
+
+    /// <summary>
+    /// Transient. The number's throughput or the pair rate limit was hit. Retried with backoff,
+    /// and reported as such when the attempts run out.
+    /// </summary>
+    public const string MessagingQuotaExceeded = "MESSAGING_QUOTA_EXCEEDED";
+
+    /// <summary>
+    /// Functional. Meta accepted the request and chose not to deliver — the account's quality
+    /// rating, a policy block, or an experiment. Nothing on our side changes the answer.
+    /// </summary>
+    public const string MessagingNotDelivered = "MESSAGING_NOT_DELIVERED";
+
+    /// <summary>
+    /// The tenant has no active messaging connection, or none serving that agency. Its own code so
+    /// that an agent's button can say « canal inactif » rather than a generic integration failure.
+    /// </summary>
+    public const string MessagingChannelInactive = "MESSAGING_CHANNEL_INACTIVE";
+
+    /// <summary>
+    /// The phone-number id is already connected — by this tenant or another. Globally unique
+    /// because it is how an inbound webhook finds its tenant: two rows claiming it would route one
+    /// institution's customers to the other.
+    /// </summary>
+    public const string MessagingNumberAlreadyConnected = "MESSAGING_NUMBER_ALREADY_CONNECTED";
+
+    /// <summary>
+    /// The media is larger than the platform accepts (10 MB) or of a type it refuses.
+    /// </summary>
+    public const string MessagingMediaRefused = "MESSAGING_MEDIA_REFUSED";
+
+    /// <summary>
+    /// The deployment has no public base URL configured, so no webhook address can be given to
+    /// the provider.
+    /// </summary>
+    public const string MessagingPublicUrlMissing = "MESSAGING_PUBLIC_URL_MISSING";
 }

@@ -28,6 +28,12 @@ public sealed class LeadsDbContext(
     public DbSet<LeadActivity> LeadActivities => Set<LeadActivity>();
     public DbSet<LeadReminder> LeadReminders => Set<LeadReminder>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<WhatsAppConversation> WhatsAppConversations => Set<WhatsAppConversation>();
+    public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
+    public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
+    public DbSet<WhatsAppBotProfile> WhatsAppBotProfiles => Set<WhatsAppBotProfile>();
+    public DbSet<WhatsAppBotTurn> WhatsAppBotTurns => Set<WhatsAppBotTurn>();
+    public DbSet<WhatsAppHandover> WhatsAppHandovers => Set<WhatsAppHandover>();
     public DbSet<LeadTag> LeadTags => Set<LeadTag>();
     public DbSet<DuplicateDismissal> DuplicateDismissals => Set<DuplicateDismissal>();
     public DbSet<LeadMerge> LeadMerges => Set<LeadMerge>();
@@ -82,9 +88,15 @@ public sealed class LeadsDbContext(
         modelBuilder.ApplyConfiguration(new Configurations.LeadHouseholdMemberConfiguration(encryptor));
         modelBuilder.ApplyConfiguration(new Configurations.QualificationResponseConfiguration(encryptor));
         modelBuilder.ApplyConfiguration(new Configurations.FatcaDeclarationConfiguration(encryptor));
+        modelBuilder.ApplyConfiguration(new Configurations.WhatsAppConversationConfiguration(encryptor));
+        modelBuilder.ApplyConfiguration(new Configurations.WhatsAppMessageConfiguration(encryptor));
+        modelBuilder.ApplyConfiguration(new Configurations.WhatsAppBotTurnConfiguration(encryptor));
         modelBuilder.ApplyConfigurationsFromAssembly(
             typeof(LeadsDbContext).Assembly,
             type => type != typeof(Configurations.LeadConfiguration)
+                 && type != typeof(Configurations.WhatsAppConversationConfiguration)
+                 && type != typeof(Configurations.WhatsAppMessageConfiguration)
+                 && type != typeof(Configurations.WhatsAppBotTurnConfiguration)
                  && type != typeof(Configurations.LeadHouseholdMemberConfiguration)
                  && type != typeof(Configurations.QualificationResponseConfiguration)
                  && type != typeof(Configurations.FatcaDeclarationConfiguration));
@@ -113,6 +125,24 @@ public sealed class LeadsDbContext(
 
         modelBuilder.Entity<Appointment>()
             .HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<WhatsAppConversation>()
+            .HasQueryFilter(c => c.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<WhatsAppMessage>()
+            .HasQueryFilter(m => m.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<WhatsAppTemplate>()
+            .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<WhatsAppBotProfile>()
+            .HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<WhatsAppBotTurn>()
+            .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<WhatsAppHandover>()
+            .HasQueryFilter(h => h.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<LeadTag>()
             .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);

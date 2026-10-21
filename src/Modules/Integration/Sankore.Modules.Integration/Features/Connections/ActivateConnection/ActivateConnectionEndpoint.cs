@@ -51,6 +51,8 @@ internal static class ActivateConnectionEndpoint
         {
             IntegrationErrors.ConnectionNotFound => Results.NotFound(new { error = result.Error }),
             IntegrationErrors.CoreBankingConnectionAlreadyActive
+                or IntegrationErrors.TelephonyConnectionAlreadyActive
+                or IntegrationErrors.MessagingNumberAlreadyConnected
                 or IntegrationErrors.ConcurrencyConflict => Results.Conflict(new { error = result.Error }),
             _ => Results.UnprocessableEntity(new { error = result.Error }),
         };

@@ -61,6 +61,7 @@
     <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration.Adapters.Sab\Sankore.Modules.Integration.Adapters.Sab.csproj" />
     <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration.Adapters.Orass\Sankore.Modules.Integration.Adapters.Orass.csproj" />
     <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration.Adapters.Ringover\Sankore.Modules.Integration.Adapters.Ringover.csproj" />
+    <ProjectReference Include="..\..\Modules\Integration\Sankore.Modules.Integration.Adapters.Dialog360\Sankore.Modules.Integration.Adapters.Dialog360.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -117,6 +117,22 @@ internal static class RoleSeeder
         (Roles.CommercialAgent.Code, "Ins.Product.View"),
         (Roles.SalesManager.Code, "Ins.Product.View"),
         (Roles.BranchManager.Code, "Ins.Product.View"),
+
+        // WhatsApp (WA lot 1) — the default roles the specification's table names: an agent
+        // opens the exchange, a supervisor may also re-send early and read the team's
+        // conversations. Configuring the number stays with the administrator.
+        (Roles.Agent.Code, "WhatsApp.Send"),
+        (Roles.Agent.Code, "WhatsApp.Reply"),
+        (Roles.CommercialAgent.Code, "WhatsApp.Send"),
+        (Roles.CommercialAgent.Code, "WhatsApp.Reply"),
+        (Roles.SalesManager.Code, "WhatsApp.Send"),
+        (Roles.SalesManager.Code, "WhatsApp.Reply"),
+        (Roles.BranchManager.Code, "WhatsApp.Reply"),
+        (Roles.SalesManager.Code, "WhatsApp.Send.Force"),
+        (Roles.SalesManager.Code, "WhatsApp.Supervise"),
+        (Roles.BranchManager.Code, "WhatsApp.Send"),
+        (Roles.BranchManager.Code, "WhatsApp.Send.Force"),
+        (Roles.BranchManager.Code, "WhatsApp.Supervise"),
     ];
 
     private static async Task SeedDefaultGrantsAsync(AdministrationDbContext db, ILogger logger)

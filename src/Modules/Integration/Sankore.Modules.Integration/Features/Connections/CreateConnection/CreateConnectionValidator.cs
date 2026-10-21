@@ -30,6 +30,22 @@ internal sealed class CreateConnectionValidator : ConnectionSettingsValidator<Cr
             .WithMessage(cmd =>
                 $"settings of kind {cmd.Settings!.ExpectedKind} cannot be stored on a {cmd.Kind} connection.");
 
+        // A WhatsApp number is a messaging channel and nothing else: a Dialog360 row filed under
+        // another family would be swept as a core banking system, and a messaging row of another
+        // kind would resolve an adapter that has no conversational port.
+        RuleFor(x => x.Family)
+            .Must((cmd, family) => cmd.Kind != PublicApi.IntegrationKind.Dialog360
+                                   || family == PublicApi.IntegrationFamily.Messaging)
+            .OverridePropertyName("family")
+            .WithMessage("a Dialog360 connection belongs to the Messaging family.");
+
+        RuleFor(x => x.Kind)
+            .Must((cmd, kind) => cmd.Family != PublicApi.IntegrationFamily.Messaging
+                                 || kind is PublicApi.IntegrationKind.Dialog360
+                                         or PublicApi.IntegrationKind.Fake)
+            .OverridePropertyName("kind")
+            .WithMessage("the Messaging family is served by Dialog360 (or Fake in Development).");
+
         // There is no rule about the relay agent: the id is not in the command at all. A Relay
         // connection is created without one and INT-27's enrolment flow attaches it, which is the
         // only place that can guarantee the agent belongs to this tenant.

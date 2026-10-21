@@ -29,6 +29,10 @@ internal static class ObjectStorageConcerns
         // dossier) and its own audience. Encrypted above the backend by EncryptedRecordingStore,
         // so what lands here is ciphertext whichever medium backs it.
         new(RecordingStorage.Concern, RecordingStorage.ResolveBasePath),
+        // WhatsApp media (WA lot 4). Envelope-encrypted above the backend by
+        // EncryptedWhatsAppMediaStore: a customer's photographs, documents and voice notes.
+        new(Sankore.Modules.Leads.Infrastructure.WhatsAppMedia.WhatsAppMediaStorage.Concern,
+            Sankore.Modules.Leads.Infrastructure.WhatsAppMedia.WhatsAppMediaStorage.ResolveBasePath),
     ];
 
     internal static Concern? Find(string? name) =>

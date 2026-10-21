@@ -54,6 +54,15 @@ public static class FakeAdapterOperations
     public const string ListCalls = "list-calls";
     public const string DownloadRecording = "download-recording";
     public const string DeleteRecording = "delete-recording";
+
+    // ── Messaging (WA-BE-01) ─────────────────────────────────────────────
+    public const string SendTemplate = "send-template";
+    public const string SendText = "send-text";
+    public const string SendMedia = "send-media";
+    public const string ListTemplates = "list-templates";
+    public const string DownloadMedia = "download-media";
+    public const string DeleteMedia = "delete-media";
+    public const string ConfigureWebhook = "configure-webhook";
 }
 
 /// <summary>

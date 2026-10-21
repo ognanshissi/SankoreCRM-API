@@ -53,7 +53,7 @@ internal abstract class ConnectionSettingsValidator<TCommand> : AbstractValidato
             .OverridePropertyName("settings")
             .WithMessage(
                 "settings is required and must carry a \"$kind\" naming the connection kind "
-                + "(Temenos, Amplitude, Sab, PerfectVision, Orass, Ringover, Fake).");
+                + "(Temenos, Amplitude, Sab, PerfectVision, Orass, Ringover, Fake, Dialog360).");
 
         // Mode and settings shape must agree: Batch means files over SFTP, and a kind whose
         // settings carry no SFTP coordinates cannot run that way at all.
@@ -229,6 +229,48 @@ internal abstract class ConnectionSettingsValidator<TCommand> : AbstractValidato
                     "settings.defaultCallerNumber must be in E.164 form (+ then 8 to 15 digits).");
         });
 
+        // ── 360dialog / WhatsApp (WA-BE-02) ───────────────────────────────
+        When(x => x.Settings is Dialog360Settings, () =>
+        {
+            // Digits only: it is compared byte for byte with what every webhook body carries, and
+            // a pasted space or a "+" would make every inbound message of the institution
+            // unroutable — refused at the door, with nothing on the screen saying why.
+            RuleFor(x => ((Dialog360Settings)x.Settings!).PhoneNumberId)
+                .NotEmpty()
+                .Must(BeDigits)
+                .MaximumLength(64)
+                .OverridePropertyName("settings.phoneNumberId")
+                .WithMessage(
+                    "settings.phoneNumberId is required: the digits of Meta's phone-number id, "
+                    + "as 360dialog's hub shows it.");
+
+            RuleFor(x => ((Dialog360Settings)x.Settings!).WabaId)
+                .Must(BeDigits)
+                .When(x => x.Settings is Dialog360Settings { WabaId.Length: > 0 })
+                .OverridePropertyName("settings.wabaId")
+                .WithMessage("settings.wabaId must contain digits only.");
+
+            RuleFor(x => ((Dialog360Settings)x.Settings!).DisplayPhoneNumber)
+                .Must(BeE164)
+                .OverridePropertyName("settings.displayPhoneNumber")
+                .WithMessage(
+                    "settings.displayPhoneNumber must be in E.164 form (+ then 8 to 15 digits).");
+
+            RuleFor(x => ((Dialog360Settings)x.Settings!).ApiBaseUrl)
+                .Must(Dialog360Settings.IsAllowedApiBaseUrl)
+                .When(x => x.Settings is Dialog360Settings { ApiBaseUrl.Length: > 0 })
+                .OverridePropertyName("settings.apiBaseUrl")
+                .WithMessage("settings.apiBaseUrl must be https://waba-v2.360dialog.io or https://waba-sandbox.360dialog.io.");
+        });
+
+        When(x => x.Settings is FakeSettings { PhoneNumberId.Length: > 0 }, () =>
+        {
+            RuleFor(x => ((FakeSettings)x.Settings!).PhoneNumberId)
+                .Must(BeDigits)
+                .OverridePropertyName("settings.phoneNumberId")
+                .WithMessage("settings.phoneNumberId must contain digits only.");
+        });
+
         // ── Every file-based kind (INT-24/INT-25) ─────────────────────────
         When(x => x.Settings is BatchCapableSettings, () =>
         {
@@ -303,6 +345,9 @@ internal abstract class ConnectionSettingsValidator<TCommand> : AbstractValidato
            && value.Length is >= 9 and <= 16
            && value[0] == '+'
            && value.AsSpan(1).ToString().All(char.IsAsciiDigit);
+
+    private static bool BeDigits(string? value)
+        => !string.IsNullOrEmpty(value) && value.All(char.IsAsciiDigit);
 
     private static bool BeAnHttpsUrl(string? url)
         => !string.IsNullOrWhiteSpace(url)

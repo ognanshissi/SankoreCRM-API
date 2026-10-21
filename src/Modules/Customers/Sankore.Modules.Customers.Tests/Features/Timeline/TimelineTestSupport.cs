@@ -119,6 +119,15 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
         Guid tenantId, string phoneNumber, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<LeadPhoneMatch>>([]);
 
+    /// <summary>
+    /// WA-BE-07's inbound recording. Nothing in the timeline receives WhatsApp messages; it records
+    /// nothing, which is the safe answer for a stub.
+    /// </summary>
+    public Task<MessagingEventsOutcome> RecordMessagingEventsAsync(
+        Guid tenantId, Guid connectionId, Guid? connectionAgencyId, MessagingEventBatch batch,
+        CancellationToken ct)
+        => Task.FromResult(new MessagingEventsOutcome(0, 0, 0, 0));
+
     public Task<IReadOnlyList<LeadHistoryItem>> GetLeadHistoryAsync(
         Guid tenantId, Guid leadId, CancellationToken ct)
     {

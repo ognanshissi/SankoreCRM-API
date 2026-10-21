@@ -72,7 +72,7 @@ internal sealed class DispatchLeadHandler(
 
         if (candidates.Count == 0)
         {
-            await QueueForRetryAsync(lead, () => publisher.PublishAsync(
+            await QueueForRetryAsync(cmd, lead, () => publisher.PublishAsync(
                 new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE"), ct), ct);
 
             logger.LogWarning("Lead {LeadId} could not be dispatched: no agent available", lead.Id);
@@ -172,14 +172,19 @@ internal sealed class DispatchLeadHandler(
                 SlaDeadline: manualAssignment.SlaDeadline));
         }
 
-        // 4. Filter out permanently excluded agents before strategy evaluation.
-        var eligible_candidates = rules.ExcludedAgentIds.Count > 0
-            ? candidates.Where(a => !rules.ExcludedAgentIds.Contains(a.Id)).ToList()
+        // 4. Filter out permanently excluded agents before strategy evaluation — and the ones this
+        //    dispatch was asked to skip (a takeover-SLA redispatch, WA-BE-15).
+        var excluded = cmd.ExcludedAgentIds is { Count: > 0 } skip
+            ? rules.ExcludedAgentIds.Concat(skip).ToHashSet()
+            : rules.ExcludedAgentIds.ToHashSet();
+
+        var eligible_candidates = excluded.Count > 0
+            ? candidates.Where(a => !excluded.Contains(a.Id)).ToList()
             : candidates;
 
         if (eligible_candidates.Count == 0)
         {
-            await QueueForRetryAsync(lead, () => publisher.PublishAsync(
+            await QueueForRetryAsync(cmd, lead, () => publisher.PublishAsync(
                 new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "NO_AGENT_AVAILABLE_AFTER_EXCLUSIONS"), ct), ct);
             return Result.Fail<DispatchLeadResult>("NO_AGENT_AVAILABLE");
         }
@@ -215,7 +220,7 @@ internal sealed class DispatchLeadHandler(
                 // agency happens to hold no card is not a capacity problem, and telling an
                 // operator it is would send them to the wrong screen entirely — the one they
                 // need is the credential register.
-                await QueueForRetryAsync(lead, () => publisher.PublishAsync(
+                await QueueForRetryAsync(cmd, lead, () => publisher.PublishAsync(
                     new LeadDispatchingFailedEvent(
                         lead.Id, cmd.TenantId, "NO_LICENSED_AGENT_AVAILABLE"), ct), ct);
 
@@ -297,7 +302,7 @@ internal sealed class DispatchLeadHandler(
 
         if (unsaturated.Count == 0)
         {
-            await QueueForRetryAsync(lead, () => publisher.PublishAsync(
+            await QueueForRetryAsync(cmd, lead, () => publisher.PublishAsync(
                 new LeadDispatchingFailedEvent(lead.Id, cmd.TenantId, "ALL_AGENTS_AT_TASK_CAPACITY"), ct), ct);
             logger.LogWarning(
                 "Lead {LeadId} blocked: all {Count} eligible agents are at task capacity ({Max})",
@@ -319,7 +324,7 @@ internal sealed class DispatchLeadHandler(
         {
             // The lead is left without an agent all the same, so it is a dispatch failure too: the
             // anti-monopoly signal alone reaches nobody who can place the lead.
-            await QueueForRetryAsync(lead, async () =>
+            await QueueForRetryAsync(cmd, lead, async () =>
             {
                 await publisher.PublishAsync(
                     new AntiMonopolyTriggeredEvent(lead.Id, rules.AntiMonopolyThreshold), ct);
@@ -409,8 +414,11 @@ internal sealed class DispatchLeadHandler(
     /// the outgoing assignment is touched, so the queue mark and the outbox rows are the only
     /// pending changes.
     /// </summary>
-    private async Task QueueForRetryAsync(Lead lead, Func<Task> publish, CancellationToken ct)
+    private async Task QueueForRetryAsync(DispatchLeadCommand cmd, Lead lead, Func<Task> publish, CancellationToken ct)
     {
+        if (!cmd.QueueWhenNoAgent)
+            return;
+
         if (!lead.MarkAwaitingDispatch(clock.GetUtcNow()))
             return;
 

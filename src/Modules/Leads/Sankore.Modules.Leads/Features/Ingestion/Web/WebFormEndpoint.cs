@@ -79,6 +79,7 @@ public static class WebFormEndpoint
                 .ToList() ?? [],
             ConsentText:    settings.ConsentText,
             ConsentVersion: settings.ConsentVersion,
+            WhatsAppConsentText: string.IsNullOrWhiteSpace(settings.WhatsAppConsentText) ? null : settings.WhatsAppConsentText.Trim(),
             Theme:          settings.Theme,
             SubmitLabel:    settings.SubmitButtonLabel ?? "Submit",
             CaptchaProvider: settings.CaptchaProviderName,
@@ -125,6 +126,11 @@ public sealed record WebFormResponse(
     IReadOnlyList<WebFormFieldDto> Fields,
     string? ConsentText,
     string? ConsentVersion,
+    /// <summary>
+    /// Wording of the optional WhatsApp opt-in box — SDK 1.3.0 renders it when present. Older
+    /// builds ignore the field.
+    /// </summary>
+    string? WhatsAppConsentText,
     string? Theme,
     string SubmitLabel,
     string? CaptchaProvider,

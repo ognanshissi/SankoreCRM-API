@@ -45,4 +45,24 @@ public interface INotificationsModule
     /// </para>
     /// </summary>
     Task<Result<Guid>> QueueSmsAsync(QueueSmsRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Puts a notification in a user's bell and nudges their open tabs (WA-FE-10). Idempotent on
+    /// <see cref="InAppNotificationRequest.IdempotencyKey"/>: the same key twice notifies once.
+    /// Never throws for a delivery problem — the push is best-effort, the row is the record.
+    /// </summary>
+    Task<Result<Guid>> NotifyInAppAsync(InAppNotificationRequest request, CancellationToken ct = default);
 }
+
+/// <param name="Category">Dotted and stable, e.g. <c>whatsapp.escalation</c>.</param>
+/// <param name="Title">One line. Shown in the bell and the toast.</param>
+/// <param name="Body">One sentence of context. No message content, no number.</param>
+/// <param name="Link">A CRM route the notification opens, starting with <c>/</c>.</param>
+public sealed record InAppNotificationRequest(
+    Guid TenantId,
+    Guid UserId,
+    string Category,
+    string Title,
+    string? Body,
+    string? Link,
+    string IdempotencyKey);

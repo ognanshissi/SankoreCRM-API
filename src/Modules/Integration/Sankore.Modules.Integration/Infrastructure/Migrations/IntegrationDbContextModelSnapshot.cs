@@ -1402,6 +1402,11 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ChannelAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("channel_address");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1479,6 +1484,11 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_integration_connection");
+
+                    b.HasIndex("ChannelAddress")
+                        .IsUnique()
+                        .HasDatabaseName("ux_integration_connection_active_channel_address")
+                        .HasFilter("is_active AND channel_address IS NOT NULL");
 
                     b.HasIndex("TenantId")
                         .IsUnique()
@@ -2027,6 +2037,61 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasDatabaseName("ux_ins_medical_questionnaire_subscription");
 
                     b.ToTable("ins_medical_questionnaire", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.MsgWebhookEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("DedupKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("dedup_key");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("outcome");
+
+                    b.Property<byte[]>("PayloadEnc")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("payload_enc");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_msg_webhook_event");
+
+                    b.HasIndex("TenantId", "ConnectionId", "DedupKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_msg_webhook_event_dedup");
+
+                    b.HasIndex("TenantId", "ProcessedAt", "ReceivedAt")
+                        .HasDatabaseName("ix_msg_webhook_event_pending");
+
+                    b.ToTable("msg_webhook_event", "integration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyCertificate", b =>

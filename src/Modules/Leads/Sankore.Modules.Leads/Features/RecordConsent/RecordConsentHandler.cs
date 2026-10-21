@@ -37,6 +37,26 @@ internal sealed class RecordConsentHandler(LeadsDbContext db, TimeProvider clock
                                                  && c.Status == ConsentStatus.Active, ct))
             return Result.Fail<RecordConsentResult>(WithdrawFirst);
 
+        // WhatsApp (WA-BE-05, WA-FE-03): an agent typing an opt-in says why — it is the only
+        // evidence Meta's policy can be shown — and after a withdrawal, a new agreement needs a
+        // NEW proof: the logged call or visit in which the customer changed their mind. Without it
+        // a click would undo an opt-out, which is the one thing a customer must be able to rely on.
+        if (cmd.Granted && cmd.Type == ConsentType.WhatsAppContact)
+        {
+            if (string.IsNullOrWhiteSpace(cmd.ProofReference))
+                return Result.Fail<RecordConsentResult>(Features.WhatsApp.WhatsAppErrors.ConsentReasonRequired);
+
+            var rows = await db.LeadConsents
+                .Where(c => c.LeadId == lead.Id && c.Type == ConsentType.WhatsAppContact && c.SubjectId == null)
+                .ToListAsync(ct);
+
+            var revoked = Features.WhatsApp.WhatsAppEligibility.ConsentStateOf(rows)
+                          == Features.WhatsApp.WhatsAppConsentState.Revoked;
+
+            if (revoked && cmd.ProofActivityId is null)
+                return Result.Fail<RecordConsentResult>(Features.WhatsApp.WhatsAppErrors.ConsentNewProofRequired);
+        }
+
         var consent = LeadConsent.Create(
             tenantId:       cmd.TenantId,
             leadId:         cmd.LeadId,

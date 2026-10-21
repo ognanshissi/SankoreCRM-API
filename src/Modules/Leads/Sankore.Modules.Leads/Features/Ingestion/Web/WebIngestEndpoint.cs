@@ -163,6 +163,11 @@ public static class WebIngestEndpoint
             ["_consentVersion"] = request.ConsentVersion,
             ["_origin"] = origin,
         };
+
+        // WA-BE-05: only when the form had a WhatsApp box (SDK 1.3.0). Absent means « not asked »,
+        // which records nothing — never a refusal, never an agreement.
+        if (request.WhatsAppConsent is { } whatsApp)
+            enrichedFields[InboundWhatsAppConsent.EmbeddedScriptKey] = whatsApp ? "true" : "false";
         var rawPayload = JsonSerializer.Serialize(enrichedFields, JsonOpts);
 
         // ── 11. Ingest via unified pipeline ─────────────────────────────
@@ -194,6 +199,10 @@ public sealed record WebIngestRequest
     public Dictionary<string, string?> Fields { get; init; } = new();
     public bool? Consent { get; init; }
     public string? ConsentVersion { get; init; }
+
+    /// <summary>The WhatsApp opt-in box (SDK ≥ 1.3.0): null when the form has none.</summary>
+    public bool? WhatsAppConsent { get; init; }
+
     public string? CaptchaToken { get; init; }
     public DateTimeOffset? FormLoadedAt { get; init; }
     public string? Page { get; init; }

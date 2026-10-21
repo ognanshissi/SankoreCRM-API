@@ -45,6 +45,19 @@ internal sealed class IntegrationConnectionConfiguration : IEntityTypeConfigurat
         b.HasIndex(c => new { c.TenantId, c.Family, c.IsActive })
             .HasDatabaseName("ix_integration_connection_tenant_family_active");
 
+        // Messagerie (WA-BE-02) : l'identifiant du numéro chez le fournisseur, unique PARMI LES
+        // CONNEXIONS ACTIVES et toutes institutions confondues — pas de tenant_id dans l'index, et
+        // c'est voulu. Un webhook WhatsApp arrive sans jeton ni identifiant de connexion : c'est par
+        // ce numéro qu'il trouve son tenant, donc deux lignes actives qui le revendiquent
+        // enverraient les clients d'une institution chez l'autre. Une ligne désactivée ne bloque
+        // rien : la recréer, ou la céder, reste possible.
+        b.Property(c => c.ChannelAddress).HasMaxLength(64);
+
+        b.HasIndex(c => c.ChannelAddress)
+            .IsUnique()
+            .HasFilter("is_active AND channel_address IS NOT NULL")
+            .HasDatabaseName("ux_integration_connection_active_channel_address");
+
         b.Ignore(c => c.DomainEvents);
     }
 }

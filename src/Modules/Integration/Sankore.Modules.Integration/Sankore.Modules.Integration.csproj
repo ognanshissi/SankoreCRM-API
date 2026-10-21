@@ -62,6 +62,7 @@
          that authenticates in both directions, because the provider calls US back. It journals
          nothing and translates nothing, because it makes no call. -->
     <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Ringover" />
+    <InternalsVisibleTo Include="Sankore.Modules.Integration.Adapters.Dialog360" />
     <!-- NSubstitute proxies internal interfaces. -->
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>

@@ -40,6 +40,7 @@ internal static class NotificationsSeeder
         await SeedKycRemoteComplementAsync(db, logger, ct);
         await SeedAppointmentInvitationAsync(db, logger, ct);
         await SeedAppointmentCancelledAsync(db, logger, ct);
+        await SeedWhatsAppTemplatesAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -2492,6 +2493,162 @@ internal static class NotificationsSeeder
                         {{ if cancellation_reason != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Reason</td><td style="padding:8px;border:1px solid #eee">{{ cancellation_reason | html.escape }}</td></tr>{{ end }}
                       </table>
                       
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    /// <summary>
+    /// The WhatsApp channel's two e-mails (WA-BE-15). Their SUBJECTS carry no name and no number —
+    /// a subject line is what a locked phone shows; the body names the prospect, never quotes them.
+    /// </summary>
+    private static async Task SeedWhatsAppTemplatesAsync(NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        await SeedWhatsAppEscalationAsync(db, logger, ct, "whatsapp.escalation");
+        await SeedWhatsAppTakeoverBreachAsync(db, logger, ct, "whatsapp.takeover-breach");
+    }
+
+    // ── whatsapp.escalation ──
+    // Variables: lead_name, product, reason_label, summary, sla_deadline, conversation_url.
+    private static async Task SeedWhatsAppEscalationAsync(NotificationsDbContext db, ILogger logger, CancellationToken ct, string key)
+    {
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Un prospect attend votre réponse sur WhatsApp",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#1b4d4f">Un prospect attend votre réponse</h2>
+                      <p>Bonjour {{ full_name | html.escape }},</p>
+                      <p><strong>{{ lead_name | html.escape }}</strong> vous a écrit sur WhatsApp et attend qu’un conseiller lui réponde.</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        {{ if product != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Produit</td><td style="padding:8px;border:1px solid #eee">{{ product | html.escape }}</td></tr>{{ end }}
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Motif</td><td style="padding:8px;border:1px solid #eee">{{ reason_label | html.escape }}</td></tr>
+                        {{ if summary != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Résumé</td><td style="padding:8px;border:1px solid #eee">{{ summary | html.escape }}</td></tr>{{ end }}
+                        {{ if sla_deadline != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">À prendre en charge avant</td><td style="padding:8px;border:1px solid #eee">{{ sla_deadline }}</td></tr>{{ end }}
+                      </table>
+                      <p><a href="{{ conversation_url }}" style="display:inline-block;background:#1b4d4f;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Ouvrir la conversation</a></p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "A prospect is waiting for your answer on WhatsApp",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#1b4d4f">A prospect is waiting for your answer</h2>
+                      <p>Hello {{ full_name | html.escape }},</p>
+                      <p><strong>{{ lead_name | html.escape }}</strong> wrote to you on WhatsApp and is waiting for an advisor to answer.</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        {{ if product != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Product</td><td style="padding:8px;border:1px solid #eee">{{ product | html.escape }}</td></tr>{{ end }}
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Reason</td><td style="padding:8px;border:1px solid #eee">{{ reason_label | html.escape }}</td></tr>
+                        {{ if summary != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Summary</td><td style="padding:8px;border:1px solid #eee">{{ summary | html.escape }}</td></tr>{{ end }}
+                        {{ if sla_deadline != "" }}<tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Take over before</td><td style="padding:8px;border:1px solid #eee">{{ sla_deadline }}</td></tr>{{ end }}
+                      </table>
+                      <p><a href="{{ conversation_url }}" style="display:inline-block;background:#1b4d4f;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open the conversation</a></p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── whatsapp.takeover-breach ──
+    // Variables: lead_name, agent_name, new_agent_name, waited_minutes, conversation_url.
+    private static async Task SeedWhatsAppTakeoverBreachAsync(NotificationsDbContext db, ILogger logger, CancellationToken ct, string key)
+    {
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "Conversation WhatsApp sans réponse dans les délais",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#dc2626">Conversation WhatsApp sans réponse</h2>
+                      <p>Bonjour {{ full_name | html.escape }},</p>
+                      <p><strong>{{ lead_name | html.escape }}</strong> attend une réponse sur WhatsApp depuis {{ waited_minutes }} minutes : le délai de prise en charge est dépassé.</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Agent attendu</td><td style="padding:8px;border:1px solid #eee">{{ agent_name | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Réattribuée à</td><td style="padding:8px;border:1px solid #eee">{{ new_agent_name | html.escape }}</td></tr>
+                      </table>
+                      <p><a href="{{ conversation_url }}" style="display:inline-block;background:#1b4d4f;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Ouvrir la conversation</a></p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "WhatsApp conversation not answered in time",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#dc2626">Unanswered WhatsApp conversation</h2>
+                      <p>Hello {{ full_name | html.escape }},</p>
+                      <p><strong>{{ lead_name | html.escape }}</strong> has been waiting {{ waited_minutes }} minutes for an answer on WhatsApp: the takeover deadline has passed.</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Expected agent</td><td style="padding:8px;border:1px solid #eee">{{ agent_name | html.escape }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600;width:35%">Reassigned to</td><td style="padding:8px;border:1px solid #eee">{{ new_agent_name | html.escape }}</td></tr>
+                      </table>
+                      <p><a href="{{ conversation_url }}" style="display:inline-block;background:#1b4d4f;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open the conversation</a></p>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">{{ company_name | html.escape }}</p>
                     </body>

@@ -108,7 +108,8 @@ internal sealed class GetMyAgentSettingsHandler(AdministrationDbContext db, ICur
             SpokenLanguages: user.SpokenLanguages,
             ManagerName: user.ReportsToUserId is { } m ? names.GetValueOrDefault(m) : null,
             Delegations: delegations,
-            UpdatedAt: settings?.UpdatedAt));
+            UpdatedAt: settings?.UpdatedAt,
+            NotificationSound: settings?.NotificationSound ?? true));
     }
 }
 

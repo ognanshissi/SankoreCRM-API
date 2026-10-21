@@ -20,6 +20,9 @@ public sealed class NotificationsDbContext(
     public DbSet<SmsTemplate> SmsTemplates => Set<SmsTemplate>();
     public DbSet<SmsDeliveryLog> SmsDeliveryLogs => Set<SmsDeliveryLog>();
 
+    /// <summary>The bell (WA-FE-10) — in-app notifications, one row per user and event.</summary>
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
+
     /// <summary>
     /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
     /// See <see cref="UtcTimestamps"/>.
@@ -47,6 +50,9 @@ public sealed class NotificationsDbContext(
 
         modelBuilder.Entity<SmsDeliveryLog>()
             .HasQueryFilter(l => l.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<UserNotification>()
+            .HasQueryFilter(n => n.TenantId == tenant.CurrentTenantId);
 
         // SmsTemplate carries NO filter, exactly like EmailTemplate: its TenantId is NULLABLE
         // because a platform default belongs to no tenant, and a filter comparing null to the

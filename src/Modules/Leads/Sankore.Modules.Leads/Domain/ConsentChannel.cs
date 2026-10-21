@@ -10,5 +10,11 @@ public enum ConsentChannel
     InPerson,
     Paper,
     Import,
-    Other
+    Other,
+
+    /// <summary>
+    /// Given on WhatsApp itself — the customer wrote to the institution's number (WA-BE-05, « message
+    /// entrant »). Appended.
+    /// </summary>
+    WhatsApp
 }

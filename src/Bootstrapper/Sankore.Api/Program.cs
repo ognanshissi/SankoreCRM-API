@@ -311,6 +311,27 @@ builder.Services.AddRateLimiter(options =>
                 });
         });
 
+    // WhatsApp (WA-BE-07). Par IP seulement : la route ne porte pas d'identifiant de connexion
+    // — le tenant vient du numéro, dans le corps. 1200/min parce qu'un numéro actif reçoit, pour
+    // chaque message envoyé, jusqu'à trois statuts (envoyé, livré, lu) en plus des réponses, et
+    // que tous les numéros servis par 360dialog arrivent des mêmes adresses. C'est une borne
+    // contre un expéditeur qui déraille ; ce qui autorise, c'est le jeton vérifié avant stockage.
+    options.AddPolicy(
+        Sankore.Modules.Integration.IntegrationModule.MessagingWebhookRateLimitPolicy,
+        ctx =>
+        {
+            var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: $"messaging-webhook:{ip}",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromMinutes(1),
+                    PermitLimit = 1200,
+                    QueueLimit = 0,
+                });
+        });
+
     // Remote KYC public surface (KRM-B-05, §8). Per IP.
     //
     // 30/min: a customer walking the journey makes a handful of calls, and each photograph is one
@@ -445,6 +466,12 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.AgentAbsenceTaskTransferConsumer>();
     // Rendez-vous de « Ma journée » : invitations et annulations aux collègues invités.
     x.AddConsumer<Sankore.Modules.Leads.Features.Appointments.AppointmentInvitationConsumer>();
+    // WA-BE-06 : hands a queued WhatsApp template to the provider, at most once.
+    x.AddConsumer<Sankore.Modules.Leads.Features.WhatsApp.SendWhatsAppMessageConsumer>();
+    // WA-BE-14/15 : trouve l'agent attendu (dispatching M13) et prévient — e-mail et cloche.
+    x.AddConsumer<Sankore.Modules.Leads.Features.WhatsApp.WhatsAppNotificationsConsumer>();
+    x.AddConsumer<Sankore.Modules.Leads.Features.WhatsApp.Bot.WhatsAppBotTurnConsumer>();
+    x.AddConsumer<Sankore.Modules.Leads.Features.WhatsApp.StoreWhatsAppMediaConsumer>();
 
     // TEL-B-11/B-12 : la qualification d'un appel devient l'activité « Appel » du lead et arrête
     // son horloge de premier contact. Sans ce consommateur, un agent qualifie ses appels et le
@@ -774,6 +801,19 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(tenantId),
             "*/15 * * * *");
 
+        // WA-BE-04 : le catalogue de templates WhatsApp, toutes les heures. Sans numéro actif, le
+        // job ne fait rien.
+        // WA-BE-15 : SLA de prise en charge et fenêtre de 24 h, toutes les deux minutes.
+        AddOrUpdate<Sankore.Modules.Leads.Features.WhatsApp.WhatsAppTakeoverJob>(
+            $"{Sankore.Modules.Leads.Features.WhatsApp.WhatsAppTakeoverJob.RecurringJobPrefix}-{suffix}",
+            job => job.ExecuteAsync(tenantId),
+            Sankore.Modules.Leads.Features.WhatsApp.WhatsAppTakeoverJob.CronExpression);
+
+        AddOrUpdate<Sankore.Modules.Leads.Features.WhatsApp.SyncWhatsAppTemplatesJob>(
+            $"{Sankore.Modules.Leads.Features.WhatsApp.SyncWhatsAppTemplatesJob.RecurringJobPrefix}-{suffix}",
+            job => job.ExecuteAsync(tenantId),
+            Sankore.Modules.Leads.Features.WhatsApp.SyncWhatsAppTemplatesJob.CronExpression);
+
         AddOrUpdate<Sankore.Modules.Leads.Features.NurturingExecution.ExecuteNurturingJob>(
             $"nurturing-execution-{suffix}",
             job => job.ExecuteAsync(tenantId),
@@ -808,6 +848,13 @@ if (emitOpenApiTo is null) {
             $"anonymize-closed-leads-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "45 3 * * *");
+
+        // WA-BE-21: AFTER the lead anonymisation, so the media of the conversations it just
+        // anonymised are purged the same night.
+        AddOrUpdate<Sankore.Modules.Leads.Features.WhatsApp.WhatsAppRetentionJob>(
+            $"{Sankore.Modules.Leads.Features.WhatsApp.WhatsAppRetentionJob.RecurringJobPrefix}-{suffix}",
+            job => job.ExecuteAsync(tenantId),
+            Sankore.Modules.Leads.Features.WhatsApp.WhatsAppRetentionJob.CronExpression);
 
         // Contract-anniversary KYC updates (CIMA LBC/FT: « les informations sont mises à jour à la
         // date anniversaire du contrat »). A different rule from the periodic review above, with a

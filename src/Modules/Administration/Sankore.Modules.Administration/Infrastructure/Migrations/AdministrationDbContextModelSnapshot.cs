@@ -297,6 +297,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnName("notification_preferences")
                         .HasDefaultValueSql("'[]'::jsonb");
 
+                    b.Property<bool>("NotificationSound")
+                        .HasColumnType("boolean")
+                        .HasColumnName("notification_sound");
+
                     b.Property<Guid?>("ReplacementUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("replacement_user_id");

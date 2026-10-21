@@ -38,7 +38,7 @@ using Sankore.Modules.Integration.PublicApi;
 /// can mutate them in a line. The dispatcher calls an adapter from one job at a time.
 /// </para>
 /// </summary>
-public sealed class FakeAdapter :
+public sealed partial class FakeAdapter :
     ICbsAdapter,
     ICbsCustomerPort,
     ICbsKycLevelPort,
@@ -48,7 +48,8 @@ public sealed class FakeAdapter :
     IInsuranceProductPort,
     IInsurancePolicyPort,
     IInsuranceClaimPort,
-    ITelephonyPort
+    ITelephonyPort,
+    IConversationalChannelPort
 {
     /// <summary>Currency of every seeded figure. XOF because the deployments are UEMOA ones.</summary>
     public const string SeededCurrency = "XOF";

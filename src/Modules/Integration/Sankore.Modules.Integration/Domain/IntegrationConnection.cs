@@ -36,6 +36,20 @@ public sealed class IntegrationConnection : AggregateRoot
     public ConnectionSettings? Settings { get; private set; }
 
     /// <summary>
+    /// The address an inbound event names this connection by — a WhatsApp phone-number id — copied
+    /// from <see cref="ConnectionSettings.ChannelAddress"/> whenever the settings are written.
+    ///
+    /// <para>
+    /// A column of its own, and not a query into the jsonb, because it carries a GLOBAL unique
+    /// index over active rows (<c>ux_integration_connection_active_channel_address</c>): an
+    /// anonymous webhook has no tenant to filter by, so this is the only way it finds one, and two
+    /// active connections answering to the same address would route one institution's customers
+    /// to another. Never bindable — it is derived from the settings, never sent.
+    /// </para>
+    /// </summary>
+    public string? ChannelAddress { get; private set; }
+
+    /// <summary>
     /// The on-premise relay this connection goes through, when <see cref="Mode"/> is
     /// <see cref="IntegrationMode.Relay"/>. An opaque reference with no foreign key: a revoked
     /// agent leaves a dangling id and the reader degrades to "relay unavailable" rather than
@@ -107,6 +121,7 @@ public sealed class IntegrationConnection : AggregateRoot
             Mode = mode,
             Name = name.Trim(),
             Settings = settings,
+            ChannelAddress = settings.ChannelAddress,
             // Guid.Empty is not an agent: a caller that passes it means "none", and storing it
             // would create a relay reference nothing can resolve while looking like a real one.
             RelayAgentId = relayAgentId == Guid.Empty ? null : relayAgentId,
@@ -174,6 +189,7 @@ public sealed class IntegrationConnection : AggregateRoot
         Name = name.Trim();
         Mode = mode;
         Settings = settings;
+        ChannelAddress = settings.ChannelAddress;
         RelayAgentId = normalisedAgent;
         UpdatedBy = updatedBy;
         UpdatedAt = clock.GetUtcNow();

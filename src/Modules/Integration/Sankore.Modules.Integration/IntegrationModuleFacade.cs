@@ -76,6 +76,14 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     private readonly MediatR.ISender? _sender;
 
     /// <summary>
+    /// The WhatsApp numbers' directory (WA-BE-02). Optional like the two above, for the same
+    /// reason: this module's own tests build the facade directly and never send a message. The
+    /// messaging gateway throws without it rather than answering "no channel", which would read as
+    /// a configuration problem instead of a wiring one.
+    /// </summary>
+    private readonly Features.Messaging.MessagingChannels? _messaging;
+
+    /// <summary>
     /// The constructor the container uses.
     ///
     /// <para>
@@ -111,7 +119,8 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             // the facade directly and almost none of them dispatch a query. The one gateway
             // member that needs it throws rather than answering null — a context read that
             // silently said "nobody is on this call" would be read as a resolution failure.
-            services.GetService<MediatR.ISender>())
+            services.GetService<MediatR.ISender>(),
+            services.GetService<Features.Messaging.MessagingChannels>())
     {
     }
 
@@ -126,7 +135,8 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         TimeProvider clock,
         ILogger<IntegrationModuleFacade> logger,
         Features.Balance.LiveBalanceGate? balanceGate = null,
-        MediatR.ISender? sender = null)
+        MediatR.ISender? sender = null,
+        Features.Messaging.MessagingChannels? messaging = null)
     {
         _db = db;
         _resolver = resolver;
@@ -138,10 +148,12 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         _logger = logger;
         _balanceGate = balanceGate;
         _sender = sender;
+        _messaging = messaging;
 
         CoreBanking = new CoreBankingGateway(this);
         Insurance = new InsuranceGateway(this);
         Telephony = new TelephonyGateway(this);
+        Messaging = new MessagingGateway(this);
     }
 
     public ICoreBankingGateway CoreBanking { get; }
@@ -149,6 +161,8 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     public IInsuranceGateway Insurance { get; }
 
     public ITelephonyGateway Telephony { get; }
+
+    public IMessagingGateway Messaging { get; }
 
     // ── The heart of INT-05: enqueueing inside the caller's transaction ─────
 
@@ -1237,5 +1251,153 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
 
             return adapter.IsSuccess ? adapter.Value.Capabilities : IntegrationCapabilities.None;
         }
+    }
+
+    /// <summary>
+    /// WhatsApp (WA-BE-01, WA-BE-02). Thin on purpose: the directory and the port resolution are
+    /// <see cref="Features.Messaging.MessagingChannels"/>'s, and the decisions — who may send what
+    /// to whom — are M13's. What this adds is the one rule that belongs to the channel: an inactive
+    /// number sends nothing.
+    /// </summary>
+    internal sealed class MessagingGateway(IntegrationModuleFacade facade) : IMessagingGateway
+    {
+        private Features.Messaging.MessagingChannels Channels
+            => facade._messaging ?? throw new InvalidOperationException(
+                "MessagingChannels is not registered: AddIntegrationModule must run before the "
+                + "messaging gateway is used.");
+
+        public async Task<MessagingChannelInfo?> ResolveChannelAsync(
+            Guid tenantId, Guid? agencyId, CancellationToken ct)
+        {
+            var connection = await Channels.ResolveForAgencyAsync(tenantId, agencyId, ct);
+            return connection is null ? null : Info(connection);
+        }
+
+        public async Task<MessagingChannelInfo?> GetChannelAsync(
+            Guid tenantId, Guid connectionId, CancellationToken ct)
+        {
+            var connection = await Channels.GetAsync(tenantId, connectionId, ct);
+            return connection is null ? null : Info(connection);
+        }
+
+        public async Task<IReadOnlyList<MessagingChannelInfo>> ListChannelsAsync(
+            Guid tenantId, CancellationToken ct)
+            => [.. (await Channels.ListAsync(tenantId, activeOnly: false, ct)).Select(Info)];
+
+        public async Task<IntegrationResult<IReadOnlyList<MessagingTemplateInfo>>> ListTemplatesAsync(
+            Guid tenantId, Guid connectionId, CancellationToken ct)
+        {
+            var port = await PortAsync(tenantId, connectionId, IntegrationCapability.TemplateCatalog, requireActive: false, ct);
+            if (port.Failure is { } failure) return Forward<IReadOnlyList<MessagingTemplateInfo>>(failure);
+
+            var templates = await port.Port!.ListTemplatesAsync(port.Connection!, ct);
+
+            return templates.IsSuccess
+                ? IntegrationResult.Ok<IReadOnlyList<MessagingTemplateInfo>>([.. templates.Value.Select(t =>
+                    new MessagingTemplateInfo(
+                        t.ProviderTemplateId, t.Name, t.Language, t.Category, t.Status,
+                        t.HeaderText, t.BodyText, t.FooterText, t.Buttons))])
+                : Forward<IReadOnlyList<MessagingTemplateInfo>>(templates);
+        }
+
+        public async Task<IntegrationResult<string>> SendTemplateAsync(
+            Guid tenantId, Guid connectionId, MessagingTemplateSend message, CancellationToken ct)
+        {
+            ArgumentNullException.ThrowIfNull(message);
+
+            var port = await PortAsync(tenantId, connectionId, IntegrationCapability.TemplateMessages, requireActive: true, ct);
+            if (port.Failure is { } failure) return Forward<string>(failure);
+
+            return await port.Port!.SendTemplateAsync(
+                port.Connection!,
+                new OutboundTemplate(message.ToE164, message.Name, message.Language, message.BodyParameters),
+                ct);
+        }
+
+        public async Task<IntegrationResult<string>> SendTextAsync(
+            Guid tenantId, Guid connectionId, string toE164, string text, CancellationToken ct)
+        {
+            var port = await PortAsync(tenantId, connectionId, IntegrationCapability.FreeformMessages, requireActive: true, ct);
+            if (port.Failure is { } failure) return Forward<string>(failure);
+
+            return await port.Port!.SendTextAsync(port.Connection!, toE164, text, ct);
+        }
+
+        public async Task<IntegrationResult<MessagingMediaSent>> SendMediaAsync(
+            Guid tenantId, Guid connectionId, string toE164, MessagingMediaContent media, string? caption, CancellationToken ct)
+        {
+            ArgumentNullException.ThrowIfNull(media);
+
+            var port = await PortAsync(tenantId, connectionId, IntegrationCapability.MediaMessages, requireActive: true, ct);
+            if (port.Failure is { } failure) return Forward<MessagingMediaSent>(failure);
+
+            var sent = await port.Port!.SendMediaAsync(
+                port.Connection!, toE164,
+                new OutboundMedia(media.Content, media.ContentType, media.FileName ?? "fichier", caption), ct);
+
+            return sent.IsSuccess
+                ? IntegrationResult.Ok(new MessagingMediaSent(sent.Value.ProviderMessageId, sent.Value.MediaId))
+                : Forward<MessagingMediaSent>(sent);
+        }
+
+        public async Task<IntegrationResult<MessagingMediaContent>> DownloadMediaAsync(
+            Guid tenantId, Guid connectionId, string mediaId, CancellationToken ct)
+        {
+            // Not gated on the number being ACTIVE: a media received last week must stay readable
+            // after the number was switched off, for as long as the provider keeps it.
+            var port = await PortAsync(tenantId, connectionId, IntegrationCapability.MediaMessages, requireActive: false, ct);
+            if (port.Failure is { } failure) return Forward<MessagingMediaContent>(failure);
+
+            var media = await port.Port!.DownloadMediaAsync(port.Connection!, mediaId, ct);
+
+            return media.IsSuccess
+                ? IntegrationResult.Ok(new MessagingMediaContent(media.Value.Content, media.Value.ContentType, media.Value.FileName))
+                : Forward<MessagingMediaContent>(media);
+        }
+
+        public async Task<IntegrationResult> DeleteMediaAsync(
+            Guid tenantId, Guid connectionId, string mediaId, CancellationToken ct)
+        {
+            // Not gated on ACTIVE either: retention must reach a number switched off since.
+            var port = await PortAsync(tenantId, connectionId, IntegrationCapability.MediaMessages, requireActive: false, ct);
+            if (port.Failure is { } failure) return failure;
+
+            return await port.Port!.DeleteMediaAsync(port.Connection!, mediaId, ct);
+        }
+
+        private async Task<(IntegrationConnection? Connection, IConversationalChannelPort? Port, IntegrationResult? Failure)> PortAsync(
+            Guid tenantId, Guid connectionId, IntegrationCapability capability, bool requireActive, CancellationToken ct)
+        {
+            var connection = await Channels.GetAsync(tenantId, connectionId, ct);
+
+            if (connection is null || (requireActive && !connection.IsActive))
+            {
+                return (null, null, IntegrationResult.Technical(
+                    IntegrationErrors.MessagingChannelInactive,
+                    "This WhatsApp number is not connected, or has been switched off."));
+            }
+
+            var port = Channels.PortFor(connection, capability);
+
+            return port.IsFailure
+                ? (null, null, port)
+                : (connection, port.Value, null);
+        }
+
+        private static MessagingChannelInfo Info(IntegrationConnection connection)
+            => new(
+                connection.Id,
+                connection.Name,
+                connection.Kind.ToString(),
+                Features.Messaging.MessagingChannels.DisplayNumberOf(connection),
+                Features.Messaging.MessagingChannels.AgencyOf(connection),
+                connection.IsActive);
+
+        private static IntegrationResult<T> Forward<T>(IntegrationResult failure) => failure.Family switch
+        {
+            ErrorFamily.Transient => IntegrationResult.Transient<T>(failure.Code!, failure.Detail),
+            ErrorFamily.Functional => IntegrationResult.Functional<T>(failure.Code!, failure.Detail),
+            _ => IntegrationResult.Technical<T>(failure.Code!, failure.Detail),
+        };
     }
 }

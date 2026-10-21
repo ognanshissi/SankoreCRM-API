@@ -685,6 +685,66 @@ public static class Permissions
         new("Telephony.Settings.Manage", "Manage user links, call outcomes and telephony settings",
             ApplicationModules.Integration, "Settings.Manage");
 
+    // ── WhatsApp channel (WA lot 1) ───────────────────────────────────────
+    //
+    // Spelled like the telephony family because the specification tabulates them the same way
+    // (whatsapp.send, whatsapp.config…), with their default roles. Five of the six the
+    // specification lists: Bot.Config arrives with the bot, so that no role is granted a right
+    // that nothing yet enforces.
+
+    /// <summary>
+    /// Sending an approved template to a lead of one's own perimeter (WA-BE-06). Also what lets
+    /// an agent READ a lead's conversation: a person who may open the exchange must see its
+    /// answers, and the read is the one place the decrypted messages leave the module.
+    /// </summary>
+    public static readonly PermissionItem CanSendWhatsApp =
+        new("WhatsApp.Send", "Send an approved WhatsApp template to a lead of one's perimeter",
+            ApplicationModules.Leads, "WhatsApp.Send");
+
+    /// <summary>
+    /// Sending a second template within 24 hours of an unanswered one. Separate from
+    /// <see cref="CanSendWhatsApp"/> because the 24-hour rule protects the institution's sender
+    /// quality rating at Meta: a number reported as spam is throttled for every agent at once.
+    /// </summary>
+    public static readonly PermissionItem CanForceWhatsAppSend =
+        new("WhatsApp.Send.Force", "Send a WhatsApp template again before 24 hours without an answer",
+            ApplicationModules.Leads, "WhatsApp.Send.Force");
+
+    /// <summary>
+    /// Writing freely — text, image, PDF — inside the 24-hour window, once one holds the
+    /// conversation (WA-BE-16). Separate from <see cref="CanSendWhatsApp"/>: a template is
+    /// pre-approved by Meta, a free message is whatever the agent types.
+    /// </summary>
+    public static readonly PermissionItem CanReplyWhatsApp =
+        new("WhatsApp.Reply", "Reply freely on WhatsApp in a conversation one holds",
+            ApplicationModules.Leads, "WhatsApp.Reply");
+
+    /// <summary>
+    /// Reading the conversations of the agencies one supervises, whoever holds the lead.
+    /// </summary>
+    public static readonly PermissionItem CanSuperviseWhatsApp =
+        new("WhatsApp.Supervise", "Read the WhatsApp conversations of one's agencies",
+            ApplicationModules.Leads, "WhatsApp.Supervise");
+
+    /// <summary>
+    /// Connecting the institution's WhatsApp number and managing its templates. Separate from
+    /// <see cref="CanManageIntegrationConnection"/> so that a marketing administrator can map
+    /// templates to products without being handed the core banking credentials.
+    /// </summary>
+    public static readonly PermissionItem CanConfigureWhatsApp =
+        new("WhatsApp.Config", "Connect the WhatsApp number and manage its templates",
+            ApplicationModules.Integration, "WhatsApp.Config");
+
+    /// <summary>
+    /// Setting what the WhatsApp bot says and when it hands over, per product (WA-FE-11), and
+    /// switching it on for the institution. Separate from <see cref="CanConfigureWhatsApp"/>: the
+    /// bot's words are a commercial and compliance matter, the number is a technical one, and they
+    /// are rarely the same person's job. No default role holds it — the administrator does.
+    /// </summary>
+    public static readonly PermissionItem CanConfigureWhatsAppBot =
+        new("WhatsApp.Bot.Config", "Configure the WhatsApp bot per product and switch it on",
+            ApplicationModules.Leads, "WhatsApp.Bot.Config");
+
     // ── Insurance family (ASS-11) ─────────────────────────────────────────
 
     public static readonly PermissionItem CanManageInsuranceProduct =
@@ -948,6 +1008,14 @@ public static class Permissions
         CanExportTelephonyRecording,
         CanViewTelephonyStats,
         CanManageTelephonySettings,
+
+        // WhatsApp channel (WA lot 1).
+        CanSendWhatsApp,
+        CanForceWhatsAppSend,
+        CanReplyWhatsApp,
+        CanSuperviseWhatsApp,
+        CanConfigureWhatsApp,
+        CanConfigureWhatsAppBot,
 
         // Insurance family (ASS-11), plus Ins.Product.View, Ins.Statement.Finalise and the
         // complaints pair — see their own remarks for why the specification's table of seven

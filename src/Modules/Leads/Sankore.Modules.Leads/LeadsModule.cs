@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sankore.Modules.Leads.Features.CaptureLead;
 using Sankore.Modules.Leads.Features.CloseLead;
@@ -47,6 +48,8 @@ using Sankore.Modules.Leads.Features.GetAgentPerformance;
 using Sankore.Modules.Leads.Features.GetMyPerformance;
 using Sankore.Modules.Leads.Features.GetMyAgenda;
 using Sankore.Modules.Leads.Features.Appointments;
+using Sankore.Modules.Leads.Features.WhatsApp;
+using Sankore.Modules.Leads.Features.WhatsApp.Bot;
 using Sankore.Modules.Leads.Features.GetFunnelMetrics;
 using Sankore.Modules.Leads.Features.DispatchingRules;
 using Sankore.Modules.Leads.Features.GetAssignmentHistory;
@@ -189,6 +192,73 @@ public static class LeadsModule
         // Public contract of M13. Consumed by the Customers module (M01) to import a
         // converted lead's commercial history into the client timeline (F13.29).
         services.AddScoped<PublicApi.ILeadsModule, LeadsModuleFacade>();
+
+        // WhatsApp (WA lot 1): the read guard shared by the thread's slices, and the catalogue
+        // synchroniser shared by the hourly job and the « Synchroniser » button.
+        services.AddScoped<Features.WhatsApp.WhatsAppLeadAccess>();
+        services.AddScoped<Features.WhatsApp.WhatsAppTemplateSynchronizer>();
+        services.AddScoped<Features.WhatsApp.SyncWhatsAppTemplatesJob>();
+        services.AddScoped<Features.WhatsApp.WhatsAppConversationLoader>();
+        services.AddScoped<Features.WhatsApp.WhatsAppTakeoverJob>();
+        services.AddScoped<Features.WhatsApp.WhatsAppEscalation>();
+
+        // The WhatsApp bot (WA lot 3). The model is chosen per DEPLOYMENT: Anthropic with a key,
+        // the scripted fake in Development, otherwise none — and « none » is a model that says
+        // so, which makes every conversation escalate directly instead of failing on each one.
+        services.Configure<Features.WhatsApp.Bot.WhatsAppBotOptions>(config.GetSection(Features.WhatsApp.Bot.WhatsAppBotOptions.Section));
+        var bot = config.GetSection(Features.WhatsApp.Bot.WhatsAppBotOptions.Section).Get<Features.WhatsApp.Bot.WhatsAppBotOptions>()
+                  ?? new Features.WhatsApp.Bot.WhatsAppBotOptions();
+
+        switch (bot.Provider?.Trim().ToLowerInvariant())
+        {
+            case "fake":
+                services.AddSingleton<Features.WhatsApp.Bot.IWhatsAppBotModel, Features.WhatsApp.Bot.FakeWhatsAppBotModel>();
+                break;
+            case "anthropic" when !string.IsNullOrWhiteSpace(bot.ApiKey):
+                services.AddHttpClient<Features.WhatsApp.Bot.IWhatsAppBotModel, Features.WhatsApp.Bot.AnthropicWhatsAppBotModel>(
+                    Features.WhatsApp.Bot.AnthropicWhatsAppBotModel.HttpClientName,
+                    // A backstop only: the engine's own token cancels the whole turn at
+                    // TimeoutSeconds, every call included.
+                    client => client.Timeout = TimeSpan.FromSeconds(Math.Max(5, bot.TimeoutSeconds) + 5));
+                break;
+            default:
+                services.AddSingleton<Features.WhatsApp.Bot.IWhatsAppBotModel, Features.WhatsApp.Bot.UnavailableWhatsAppBotModel>();
+                break;
+        }
+
+        // WhatsApp media (WA lot 4): a keyed medium for this concern — the host registers a bucket
+        // under the same key first when one is configured, this is only the fallback — and the
+        // store ONLY when a key exists. Without it, media are fetched from the provider on demand.
+        services.Configure<Infrastructure.WhatsAppMedia.WhatsAppMediaStorageOptions>(
+            config.GetSection(Infrastructure.WhatsAppMedia.WhatsAppMediaStorageOptions.SectionName));
+
+        services.TryAddKeyedSingleton<Sankore.Shared.ObjectStorage.IObjectBackend>(
+            Infrastructure.WhatsAppMedia.WhatsAppMediaStorage.Concern, (sp, _) =>
+            {
+                var options = sp.GetRequiredService<IOptions<Infrastructure.WhatsAppMedia.WhatsAppMediaStorageOptions>>().Value;
+                var root = string.IsNullOrWhiteSpace(options.BasePath)
+                    ? Path.Combine(AppContext.BaseDirectory, Infrastructure.WhatsAppMedia.WhatsAppMediaStorage.Concern)
+                    : Path.GetFullPath(options.BasePath);
+                return new Sankore.Shared.ObjectStorage.LocalObjectBackend(
+                    root, sp.GetRequiredService<ILogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>>());
+            });
+
+        if (!string.IsNullOrWhiteSpace(config[$"{Infrastructure.WhatsAppMedia.WhatsAppMediaStorageOptions.SectionName}:EncryptionKey"]))
+        {
+            services.TryAddSingleton<Infrastructure.WhatsAppMedia.IWhatsAppMediaStore>(sp =>
+                new Infrastructure.WhatsAppMedia.EncryptedWhatsAppMediaStore(
+                    sp.GetRequiredKeyedService<Sankore.Shared.ObjectStorage.IObjectBackend>(Infrastructure.WhatsAppMedia.WhatsAppMediaStorage.Concern),
+                    sp.GetRequiredService<IOptions<Infrastructure.WhatsAppMedia.WhatsAppMediaStorageOptions>>(),
+                    sp.GetRequiredService<ILogger<Infrastructure.WhatsAppMedia.EncryptedWhatsAppMediaStore>>()));
+        }
+
+        services.AddScoped<Features.WhatsApp.WhatsAppMediaReader>();
+        services.AddScoped<Features.WhatsApp.WhatsAppPerimeter>();
+        services.AddScoped<Features.WhatsApp.WhatsAppAudit>();
+        services.AddScoped<Features.WhatsApp.WhatsAppRetentionJob>();
+
+        services.AddScoped<Features.WhatsApp.Bot.WhatsAppBotProfiles>();
+        services.AddScoped<Features.WhatsApp.Bot.WhatsAppBotEngine>();
         services.AddOutboxForModule<LeadsDbContext>();
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 
@@ -388,6 +458,8 @@ public static class LeadsModule
         group.MapGetMyPerformance();
         group.MapGetMyAgenda();
         group.MapAppointmentsEndpoints();
+        group.MapWhatsAppEndpoints();
+        group.MapWhatsAppBotEndpoints();
         group.MapGetFunnelMetrics();
 
         // Phase 13 — CRM Tasks & Task Generation Rules (US-M13-080)

@@ -21,7 +21,8 @@ public sealed record UpdateMyAgentSettingsRequest(
     List<WorkingDayDto>? WorkingHours,
     int? MaxActiveLeads,
     List<NotificationPreferenceDto>? NotificationPreferences,
-    List<string>? SpokenLanguages);
+    List<string>? SpokenLanguages,
+    bool? NotificationSound = null);
 
 public sealed record AbsenceRequest(DateOnly From, DateOnly To, Guid? ReplacementUserId, bool TransferTasks);
 
@@ -94,6 +95,11 @@ internal sealed class UpdateMyAgentSettingsHandler(
 
             if (req.SpokenLanguages is not null)
                 user.UpdateDetails(null, null, req.SpokenLanguages, null, null);
+
+            // Null leaves the bell as it was: a screen that does not show the switch must not
+            // turn the sound back on by omission.
+            if (req.NotificationSound is { } sound)
+                settings.SetNotificationSound(sound);
         }
         catch (DomainException ex)
         {

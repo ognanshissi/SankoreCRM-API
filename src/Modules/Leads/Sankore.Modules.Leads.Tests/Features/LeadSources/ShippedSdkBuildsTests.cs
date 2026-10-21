@@ -104,6 +104,21 @@ public sealed class ShippedSdkBuildsTests
         minified.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length.Should().BeLessThan(5);
     }
 
+    [Fact]
+    public void The_WhatsApp_build_is_minified_declares_its_version_and_sends_the_opt_in()
+    {
+        // 1.3.0 (WA-BE-05): the optional WhatsApp box. The payload key is the contract with
+        // WebIngestRequest.WhatsAppConsent, and the definition key the one WebFormResponse serves.
+        var dir = Path.Combine(SdkRoot().FullName, "1.3.0");
+        var source = File.ReadAllText(Path.Combine(dir, "forms.js"));
+        var minified = File.ReadAllText(Path.Combine(dir, RequiredFileName));
+
+        source.Should().Contain("var SDK_VERSION = '1.3.0';");
+        minified.Should().Contain("\"1.3.0\"");
+        minified.Should().Contain("whatsAppConsent").And.Contain("whatsAppConsentText");
+        minified.Length.Should().BeLessThan(source.Length / 2, "forms.min.js must actually be minified");
+    }
+
     [Theory]
     [InlineData("1.0.0")]
     [InlineData("1.1.0")]

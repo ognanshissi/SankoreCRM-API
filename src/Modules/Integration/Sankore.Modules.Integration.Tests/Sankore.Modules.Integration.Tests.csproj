@@ -29,6 +29,7 @@
     <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Amplitude\Sankore.Modules.Integration.Adapters.Amplitude.csproj" />
     <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Orass\Sankore.Modules.Integration.Adapters.Orass.csproj" />
     <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Ringover\Sankore.Modules.Integration.Adapters.Ringover.csproj" />
+    <ProjectReference Include="..\Sankore.Modules.Integration.Adapters.Dialog360\Sankore.Modules.Integration.Adapters.Dialog360.csproj" />
   </ItemGroup>
 
 </Project>

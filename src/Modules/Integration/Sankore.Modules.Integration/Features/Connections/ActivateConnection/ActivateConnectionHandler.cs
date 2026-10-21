@@ -22,6 +22,7 @@ internal sealed class ActivateConnectionHandler(
     /// </summary>
     private const string ActiveCoreBankingIndex = "ux_integration_connection_active_core_banking";
     private const string ActiveTelephonyIndex = "ux_integration_connection_active_telephony";
+    private const string ActiveChannelAddressIndex = "ux_integration_connection_active_channel_address";
 
     /// <summary>
     /// The families of which a tenant may hold at most one active connection, and the code each
@@ -76,6 +77,23 @@ internal sealed class ActivateConnectionHandler(
                 return Result.Fail(alreadyActiveError);
         }
 
+        // A WhatsApp number answers to one institution at a time (WA-BE-02), and the question is
+        // asked ACROSS tenants — hence IgnoreQueryFilters. Same pairing as above: this read is the
+        // friendly answer, the global index is the guarantee.
+        if (connection.ChannelAddress is { } address)
+        {
+            var claimed = await db.Connections
+                .IgnoreQueryFilters()
+                .AnyAsync(
+                    c => c.ChannelAddress == address
+                      && c.IsActive
+                      && c.Id != connection.Id,
+                    ct);
+
+            if (claimed)
+                return Result.Fail(IntegrationErrors.MessagingNumberAlreadyConnected);
+        }
+
         // Activation requires a passed health check. The aggregate owns the rule; the handler
         // only relays its refusal.
         var activation = connection.Activate(currentUser.Id, clock);
@@ -117,6 +135,7 @@ internal sealed class ActivateConnectionHandler(
     {
         if (Names(ex, ActiveCoreBankingIndex)) return IntegrationErrors.CoreBankingConnectionAlreadyActive;
         if (Names(ex, ActiveTelephonyIndex)) return IntegrationErrors.TelephonyConnectionAlreadyActive;
+        if (Names(ex, ActiveChannelAddressIndex)) return IntegrationErrors.MessagingNumberAlreadyConnected;
 
         return null;
 

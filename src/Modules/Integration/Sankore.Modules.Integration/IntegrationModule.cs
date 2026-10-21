@@ -18,6 +18,9 @@ using Sankore.Modules.Integration.Features.Connections;
 using Sankore.Modules.Integration.Features.Dispatch;
 using Sankore.Modules.Integration.Features.Insurance;
 using Sankore.Modules.Integration.Features.Mappings;
+using Sankore.Modules.Integration.Features.Messaging;
+using Sankore.Modules.Integration.Features.Messaging.Channels;
+using Sankore.Modules.Integration.Features.Messaging.Webhook;
 using Sankore.Modules.Integration.Features.Onboarding;
 using Sankore.Modules.Integration.Features.Reconciliation;
 using Sankore.Modules.Integration.Features.RelayAgents;
@@ -54,6 +57,13 @@ public static class IntegrationModule
     /// </summary>
     public const string TelephonyWebhookRateLimitPolicy =
         Features.Telephony.Webhook.TelephonyWebhookEndpoints.RateLimitPolicy;
+
+    /// <summary>
+    /// The named rate-limit policy the WhatsApp webhook requires (WA-BE-07). Re-exported for the
+    /// same reason as the telephony one: the host declares it, and the two must not drift.
+    /// </summary>
+    public const string MessagingWebhookRateLimitPolicy =
+        Features.Messaging.Webhook.MessagingWebhookEndpoints.RateLimitPolicy;
 
     public static IServiceCollection AddIntegrationModule(
         this IServiceCollection services, IConfiguration config)
@@ -107,6 +117,7 @@ public static class IntegrationModule
         services.AddInboundBatchServices();
         services.AddRelayAgentsServices();
         services.AddTelephonyServices(config);
+        services.AddMessagingServices();
 
         // The insurance family (ASS-03 →). On the SAME socle: no second DbContext, no second
         // outbox, no second dispatcher — which is the whole claim of ASS-01.
@@ -157,6 +168,7 @@ public static class IntegrationModule
         app.MapReconciliationEndpoints();
         app.MapInsuranceEndpoints();
         app.MapTelephonyEndpoints();
+        app.MapWhatsAppChannelEndpoints();
 
         return app;
     }
@@ -191,6 +203,10 @@ public static class IntegrationModule
         // window with a core banking system's notifications would throttle whichever family
         // happened to be busier — invisibly, since a throttled webhook looks like a quiet line.
         app.MapTelephonyWebhookEndpoints();
+
+        // WA-BE-07. Under /integration/webhooks, which the host already exempts from FQDN tenant
+        // resolution: the tenant comes from the phone-number id in the body, never from a header.
+        app.MapMessagingWebhookEndpoints();
 
         // The relay agent's own two routes (INT-27): the enrolment exchange and the heartbeat.
         // Public because the caller is a service on the IMF's hardware with no user and no JWT —

@@ -65,6 +65,14 @@ public sealed class LeadAccessGuard(ICurrentUser currentUser, IAdministrationMod
     /// lying around.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Whether the user holds one of the roles that reach every lead of the tenant — the same
+    /// list this guard applies, for a caller that asks a different question with the same answer
+    /// (a WhatsApp reassignment reaching beyond a supervisor's own team).
+    /// </summary>
+    public static bool HasBypassRole(ICurrentUser user)
+        => user.Roles.Intersect(BypassRoles, StringComparer.OrdinalIgnoreCase).Any();
+
     public async Task<Result> EnsureCanWorkAsync(Lead lead, CancellationToken ct)
     {
         if (currentUser.Roles.Intersect(BypassRoles, StringComparer.OrdinalIgnoreCase).Any())

@@ -23,7 +23,20 @@ public enum IntegrationFamily
     /// groups and opening hours stay configured at the provider; what this family adds is
     /// click-to-call, a call journal attached to leads and clients, and the screen pop.
     /// </summary>
-    Telephony
+    Telephony,
+
+    /// <summary>
+    /// A conversational messaging channel — the institution's WhatsApp Business number (WA lot 1).
+    ///
+    /// <para>
+    /// <b>No exclusivity index, unlike the two families above.</b> Whether an institution runs one
+    /// number or one per branch is still an open question of the specification, and the
+    /// connection already carries an optional agency: two active numbers is a configuration this
+    /// family must be able to hold. What IS unique is the provider's phone-number id, globally
+    /// and not per tenant — it is how an inbound webhook finds its tenant.
+    /// </para>
+    /// </summary>
+    Messaging
 }
 
 /// <summary>
@@ -45,7 +58,14 @@ public enum IntegrationKind
 
     /// <summary>The first telephony provider (TEL-B-04), on its public API v2.</summary>
     Ringover,
-    Fake
+    Fake,
+
+    /// <summary>
+    /// 360dialog, the WhatsApp Business Solution Provider of the Partner programme (WA-BE-01). It
+    /// fronts Meta's Cloud API: the messages, the statuses and the webhook bodies are Meta's own
+    /// format, behind a per-number API key.
+    /// </summary>
+    Dialog360
 }
 
 /// <summary>
@@ -157,7 +177,24 @@ public enum IntegrationCapability
     RecordingDeletion,
 
     /// <summary>Listing the provider's own users, so CRM accounts can be linked to them.</summary>
-    UserDirectory
+    UserDirectory,
+
+    // ── Messaging (WA-BE-01) ─────────────────────────────────────────────
+
+    /// <summary>Sending a pre-approved template — the only message allowed outside the 24 h window.</summary>
+    TemplateMessages,
+
+    /// <summary>Sending free text inside the 24 h customer-service window.</summary>
+    FreeformMessages,
+
+    /// <summary>Sending and receiving images and documents.</summary>
+    MediaMessages,
+
+    /// <summary>Pushing inbound messages and delivery statuses to a webhook.</summary>
+    MessageEvents,
+
+    /// <summary>Listing the account's templates with their approval status.</summary>
+    TemplateCatalog
 }
 
 /// <summary>KYC tier as the external system understands it. Mapped from M02's own tiers.</summary>

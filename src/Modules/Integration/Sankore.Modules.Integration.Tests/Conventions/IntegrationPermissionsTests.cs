@@ -31,6 +31,16 @@ public sealed class IntegrationPermissionsTests
         "CoreBanking.Balance.ViewLive",
     ];
 
+    /// <summary>
+    /// The one code of the WhatsApp specification's permission table that belongs to this module —
+    /// configuring the number and its templates. The agent-side codes (send, force, supervise) are
+    /// declared under M13, which owns the conversations.
+    /// </summary>
+    private static readonly string[] MessagingCodes =
+    [
+        "WhatsApp.Config",
+    ];
+
     /// <summary>The seven codes of TEL-B-18's table, verbatim.</summary>
     private static readonly string[] TelephonyCodes =
     [
@@ -112,7 +122,7 @@ public sealed class IntegrationPermissionsTests
     }
 
     [Fact]
-    public void The_module_declares_no_permission_beyond_the_three_specification_tables()
+    public void The_module_declares_no_permission_beyond_the_specification_tables()
     {
         var declared = Permissions.All
             .Where(p => p.Module == ApplicationModules.Integration)
@@ -121,7 +131,7 @@ public sealed class IntegrationPermissionsTests
 
         // Guards the other direction: a permission invented in passing would widen the surface
         // an administrator has to reason about, and nothing else would report it.
-        declared.Should().BeEquivalentTo([.. IntegrationCodes, .. InsuranceCodes, .. TelephonyCodes]);
+        declared.Should().BeEquivalentTo([.. IntegrationCodes, .. InsuranceCodes, .. TelephonyCodes, .. MessagingCodes]);
     }
 
     [Fact]

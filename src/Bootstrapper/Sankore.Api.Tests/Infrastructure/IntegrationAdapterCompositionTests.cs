@@ -80,6 +80,9 @@ public sealed class IntegrationAdapterCompositionTests
         // without the assembly.
         [IntegrationKind.Ringover] = true,
 
+        // 360dialog (WA-BE-01) — operating, built against Meta's documented Cloud API.
+        [IntegrationKind.Dialog360] = true,
+
         // The in-memory double (INT-10). Development only — asserted separately, in both
         // directions, because this entry describes a NON-Development host.
         [IntegrationKind.Fake] = false,

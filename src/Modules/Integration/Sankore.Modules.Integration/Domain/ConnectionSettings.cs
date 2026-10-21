@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Integration.Domain;
 
+using System.Text.Json.Serialization;
 using Sankore.Modules.Integration.PublicApi;
 
 /// <summary>
@@ -87,6 +88,21 @@ public abstract record ConnectionSettings
     /// default rather than meaning "continuously": a misconfigured zero would otherwise turn the
     /// orchestrator into a hot loop against somebody's production CBS.
     /// </summary>
+    /// <summary>
+    /// The provider-side address an INBOUND event names this connection by, when the kind has one
+    /// — a WhatsApp phone-number id. Null for every kind that is only ever called out to.
+    ///
+    /// <para>
+    /// Copied onto <c>IntegrationConnection.ChannelAddress</c>, which carries a globally unique
+    /// index: a webhook that arrives with no JWT and no connection id in its path finds its tenant
+    /// through it, so two active rows claiming the same address would hand one institution's
+    /// customers to the other. Not serialised — it is derived, and a settings object read back
+    /// from a request must not be able to set it.
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public virtual string? ChannelAddress => null;
+
     public TimeSpan SyncIntervalFor(SyncStream stream)
     {
         var minutes = SyncIntervalMinutes is not null
@@ -267,6 +283,74 @@ public sealed record RingoverSettings : ConnectionSettings
 }
 
 /// <summary>
+/// 360dialog — the institution's WhatsApp Business number (WA-BE-02).
+///
+/// <para>
+/// Coordinates only, like every settings record: the number's API key goes to the vault under
+/// <c>IntegrationSecrets.CredentialKey</c> and the token 360dialog sends back on every webhook
+/// under <c>IntegrationSecrets.WebhookSecretKey</c>, both keyed per CONNECTION — 360dialog issues
+/// one key per number, and an institution with a number per branch holds several.
+/// </para>
+/// </summary>
+public sealed record Dialog360Settings : ConnectionSettings
+{
+    /// <summary>The documented host of 360dialog's Cloud API proxy.</summary>
+    public const string DefaultApiBaseUrl = "https://waba-v2.360dialog.io";
+
+    public override IntegrationKind ExpectedKind => IntegrationKind.Dialog360;
+
+    /// <summary>
+    /// Meta's identifier of the number — the <c>metadata.phone_number_id</c> every webhook body
+    /// carries. Digits only. It is what routes an inbound message to this tenant.
+    /// </summary>
+    public string PhoneNumberId { get; init; } = string.Empty;
+
+    /// <summary>The WhatsApp Business Account the number belongs to. Informational.</summary>
+    public string? WabaId { get; init; }
+
+    /// <summary>The number as customers see it, in E.164. Shown on the settings card.</summary>
+    public string DisplayPhoneNumber { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The agency this number serves, when the institution runs one number per branch. Null is
+    /// the institution-wide number, which serves every agency that has none of its own.
+    /// </summary>
+    public Guid? AgencyId { get; init; }
+
+    /// <summary>
+    /// The only hosts the number's API key is ever sent to: production and 360dialog's sandbox.
+    ///
+    /// <para>
+    /// <b>A closed list, not « any https URL ».</b> The key lives in the vault and is never shown
+    /// back, but every call carries it in <c>D360-API-KEY</c> to whatever base URL the connection
+    /// names. A free-form URL would let anybody holding <c>WhatsApp.Config</c> point the
+    /// connection at their own server and receive a credential they cannot otherwise read.
+    /// </para>
+    /// </summary>
+    public static readonly IReadOnlySet<string> AllowedApiHosts =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "waba-v2.360dialog.io", "waba-sandbox.360dialog.io" };
+
+    /// <summary>Whether <paramref name="url"/> is https on one of <see cref="AllowedApiHosts"/>, default port.</summary>
+    public static bool IsAllowedApiBaseUrl(string? url) =>
+        Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && uri.IsDefaultPort
+        && string.IsNullOrEmpty(uri.UserInfo)
+        && AllowedApiHosts.Contains(uri.Host);
+
+    /// <summary>
+    /// Override of <see cref="DefaultApiBaseUrl"/>, for 360dialog's sandbox. Null takes the
+    /// default. Restricted to <see cref="AllowedApiHosts"/>.
+    /// </summary>
+    public string? ApiBaseUrl { get; init; }
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string? ChannelAddress
+        => string.IsNullOrWhiteSpace(PhoneNumberId) ? null : PhoneNumberId.Trim();
+}
+
+/// <summary>
 /// The in-memory adapter. Development only — <c>IntegrationModule</c> refuses to register it
 /// outside Development, because a deployment that reached it would report writes that never
 /// happened (INT-10).
@@ -280,6 +364,20 @@ public sealed record FakeSettings : ConnectionSettings
 
     /// <summary>Forces every call to answer this error code, for exercising the failure paths.</summary>
     public string? ForcedErrorCode { get; init; }
+
+    /// <summary>
+    /// The phone-number id a fake MESSAGING connection answers to, so the webhook simulator can
+    /// route a made-up inbound message exactly as a real one is routed. Ignored for every other
+    /// family.
+    /// </summary>
+    public string? PhoneNumberId { get; init; }
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string? ChannelAddress
+        => Family == IntegrationFamily.Messaging && !string.IsNullOrWhiteSpace(PhoneNumberId)
+            ? PhoneNumberId.Trim()
+            : null;
 
     /// <summary>Family of the forced error. Ignored when no code is forced.</summary>
     public ErrorFamily? ForcedErrorFamily { get; init; }

@@ -25,6 +25,14 @@ internal static class SyncStreams
     private static readonly SyncStream[] TelephonyStreams = [SyncStream.Calls];
 
     /// <summary>
+    /// None, and stated rather than forgotten. A messaging channel is not swept: its inbound side
+    /// is the webhook alone (Meta offers no history of messages to catch up from), and its one
+    /// readable catalogue — the templates — is synchronised by M13, which owns what they are
+    /// mapped to.
+    /// </summary>
+    private static readonly SyncStream[] MessagingStreams = [];
+
+    /// <summary>
     /// The streams a connection of this family is swept on.
     ///
     /// <para>
@@ -39,6 +47,7 @@ internal static class SyncStreams
         IntegrationFamily.CoreBanking => CoreBankingStreams,
         IntegrationFamily.Insurance => InsuranceStreams,
         IntegrationFamily.Telephony => TelephonyStreams,
+        IntegrationFamily.Messaging => MessagingStreams,
         _ => throw new ArgumentOutOfRangeException(
             nameof(family), family,
             "No sync streams are declared for this integration family. Declare them in "

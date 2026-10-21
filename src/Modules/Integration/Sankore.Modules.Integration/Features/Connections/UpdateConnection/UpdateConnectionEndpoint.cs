@@ -69,7 +69,8 @@ internal static class UpdateConnectionEndpoint
         return result.Error switch
         {
             IntegrationErrors.ConnectionNotFound => Results.NotFound(new { error = result.Error }),
-            IntegrationErrors.ConcurrencyConflict => Results.Conflict(new { error = result.Error }),
+            IntegrationErrors.ConcurrencyConflict
+                or IntegrationErrors.MessagingNumberAlreadyConnected => Results.Conflict(new { error = result.Error }),
             _ => Results.BadRequest(new { error = result.Error }),
         };
     }

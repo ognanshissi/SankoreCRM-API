@@ -25,7 +25,118 @@ public interface IIntegrationModule
     /// caller would have to test before using.
     /// </summary>
     ITelephonyGateway Telephony { get; }
+
+    /// <summary>
+    /// The WhatsApp channel (WA-BE-01, WA-BE-02). Never null, like its siblings: a tenant with no
+    /// number gets answers that say so.
+    /// </summary>
+    IMessagingGateway Messaging { get; }
 }
+
+/// <summary>
+/// The institution's WhatsApp numbers, as M13 sees them: which number writes to a lead, what it
+/// may send, and the send itself.
+///
+/// <para>
+/// <b>Answers now or fails now</b>, like the telephony gateway and unlike core banking: M13
+/// queues the message in its own outbox and calls this from the consumer, so the queue, the retry
+/// decision and the message's status are M13's. A provider's error number never crosses this
+/// contract — only the <c>MESSAGING_*</c> codes of <see cref="IntegrationErrors"/>.
+/// </para>
+///
+/// <para>
+/// <b>The tenant is a parameter on every member</b>: the callers are an outbox consumer and a
+/// Hangfire job, where the ambient identity is SYSTEM.
+/// </para>
+/// </summary>
+public interface IMessagingGateway
+{
+    /// <summary>
+    /// The ACTIVE number that writes to a lead of this agency — the agency's own, else the
+    /// institution-wide one — or null when the channel is off for it.
+    /// </summary>
+    Task<MessagingChannelInfo?> ResolveChannelAsync(Guid tenantId, Guid? agencyId, CancellationToken ct);
+
+    /// <summary>One number of the tenant, active or not, or null.</summary>
+    Task<MessagingChannelInfo?> GetChannelAsync(Guid tenantId, Guid connectionId, CancellationToken ct);
+
+    /// <summary>The tenant's numbers, active or not.</summary>
+    Task<IReadOnlyList<MessagingChannelInfo>> ListChannelsAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>The templates of one number, whatever their approval status.</summary>
+    Task<IntegrationResult<IReadOnlyList<MessagingTemplateInfo>>> ListTemplatesAsync(
+        Guid tenantId, Guid connectionId, CancellationToken ct);
+
+    /// <summary>Sends an approved template. Answers the provider's message id.</summary>
+    Task<IntegrationResult<string>> SendTemplateAsync(
+        Guid tenantId, Guid connectionId, MessagingTemplateSend message, CancellationToken ct);
+
+    /// <summary>Sends free text, inside the 24-hour window. Answers the provider's message id.</summary>
+    Task<IntegrationResult<string>> SendTextAsync(
+        Guid tenantId, Guid connectionId, string toE164, string text, CancellationToken ct);
+
+    /// <summary>
+    /// Uploads and sends an image or a PDF, inside the 24-hour window. Answers the message id and
+    /// the media id the thread shows the file again by.
+    /// </summary>
+    Task<IntegrationResult<MessagingMediaSent>> SendMediaAsync(
+        Guid tenantId, Guid connectionId, string toE164, MessagingMediaContent media, string? caption, CancellationToken ct);
+
+    /// <summary>The bytes of a media of the conversation, at most 10 MB.</summary>
+    Task<IntegrationResult<MessagingMediaContent>> DownloadMediaAsync(
+        Guid tenantId, Guid connectionId, string mediaId, CancellationToken ct);
+
+    /// <summary>
+    /// Deletes a media at the provider (WA-BE-21). Best effort for the caller: a failure is
+    /// reported, never thrown, and a media already gone is a success.
+    /// </summary>
+    Task<IntegrationResult> DeleteMediaAsync(
+        Guid tenantId, Guid connectionId, string mediaId, CancellationToken ct);
+}
+
+/// <param name="Kind">The provider, e.g. <c>Dialog360</c>.</param>
+/// <param name="DisplayPhoneNumber">The number as customers see it. Not a secret.</param>
+/// <param name="AgencyId">The agency it serves; null for the institution-wide number.</param>
+public sealed record MessagingChannelInfo(
+    Guid ConnectionId,
+    string Name,
+    string Kind,
+    string? DisplayPhoneNumber,
+    Guid? AgencyId,
+    bool IsActive);
+
+/// <param name="Status">
+/// The provider's word, upper-cased: <c>APPROVED</c>, <c>PENDING</c>, <c>REJECTED</c>,
+/// <c>PAUSED</c>, <c>DISABLED</c>…
+/// </param>
+public sealed record MessagingTemplateInfo(
+    string? ProviderTemplateId,
+    string Name,
+    string Language,
+    string Category,
+    string Status,
+    string? HeaderText,
+    string BodyText,
+    string? FooterText,
+    IReadOnlyList<string> Buttons);
+
+/// <param name="ToE164">The recipient, with the plus. Personal data.</param>
+/// <param name="BodyParameters">The values of <c>{{1}}</c>, <c>{{2}}</c>… in order. Personal data.</param>
+public sealed record MessagingTemplateSend(
+    string ToE164,
+    string Name,
+    string Language,
+    IReadOnlyList<string> BodyParameters)
+{
+    /// <summary>The template only: the generated form would print the number and the values.</summary>
+    public override string ToString() => $"MessagingTemplateSend {{ {Name} ({Language}) }}";
+}
+
+/// <summary>The bytes of one media and what they are.</summary>
+public sealed record MessagingMediaContent(byte[] Content, string ContentType, string? FileName);
+
+/// <summary>A media the provider accepted: the message id, and the uploaded file's id.</summary>
+public sealed record MessagingMediaSent(string ProviderMessageId, string MediaId);
 
 /// <summary>
 /// Core banking, as the rest of the platform sees it.

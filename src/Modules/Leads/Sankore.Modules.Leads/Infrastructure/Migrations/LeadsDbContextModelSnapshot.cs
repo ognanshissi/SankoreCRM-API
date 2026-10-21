@@ -2898,6 +2898,706 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("task_type_configs", "leads");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.WhatsAppBotProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AgentHours")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("agent_hours")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.PrimitiveCollection<List<string>>("EscalationKeywords")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("escalation_keywords");
+
+                    b.Property<string>("Faq")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("faq")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.PrimitiveCollection<List<string>>("FieldsToCollect")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("fields_to_collect");
+
+                    b.Property<string>("Instructions")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("instructions");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<int>("MaxTurnsWithoutAnswer")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_turns_without_answer");
+
+                    b.Property<string>("OutOfHoursMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("out_of_hours_message");
+
+                    b.Property<Guid>("ProductLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_line_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("time_zone_id");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<string>("WelcomeMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("welcome_message");
+
+                    b.Property<int>("WindowExpiryThresholdMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("window_expiry_threshold_minutes");
+
+                    b.HasKey("Id")
+                        .HasName("pk_whatsapp_bot_profiles");
+
+                    b.HasIndex("TenantId", "ProductLineId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ux_whatsapp_bot_profiles_version");
+
+                    b.ToTable("whatsapp_bot_profiles", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.WhatsAppBotTurn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool?>("Answered")
+                        .HasColumnType("boolean")
+                        .HasColumnName("answered");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("EscalationReason")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("escalation_reason");
+
+                    b.Property<Guid>("InboundMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("inbound_message_id");
+
+                    b.Property<string>("Input")
+                        .HasColumnType("text")
+                        .HasColumnName("input_enc");
+
+                    b.Property<int?>("InputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<int>("LatencyMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("latency_ms");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("Output")
+                        .HasColumnType("text")
+                        .HasColumnName("output_enc");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<Guid?>("ProductLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_line_id");
+
+                    b.Property<int>("ProfileVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("profile_version");
+
+                    b.Property<Guid?>("ReplyMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reply_message_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("ToolCalls")
+                        .HasColumnType("text")
+                        .HasColumnName("tool_calls_enc");
+
+                    b.HasKey("Id")
+                        .HasName("pk_whatsapp_bot_turns");
+
+                    b.HasIndex("TenantId", "InboundMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_whatsapp_bot_turns_inbound_message");
+
+                    b.HasIndex("TenantId", "ConversationId", "CreatedAt")
+                        .HasDatabaseName("ix_whatsapp_bot_turns_tenant_id_conversation_id_created_at");
+
+                    b.ToTable("whatsapp_bot_turns", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.WhatsAppConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("AmbiguousMatch")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ambiguous_match");
+
+                    b.Property<DateTimeOffset?>("AnonymizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("anonymized_at");
+
+                    b.PrimitiveCollection<List<string>>("BotCollectedFields")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("bot_collected_fields")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<int>("BotUnansweredTurns")
+                        .HasColumnType("integer")
+                        .HasColumnName("bot_unanswered_turns");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("CloseReason")
+                        .HasColumnType("text")
+                        .HasColumnName("close_reason_enc");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("ContactName")
+                        .HasColumnType("text")
+                        .HasColumnName("contact_name_enc");
+
+                    b.Property<string>("ContactPhone")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("contact_phone_enc");
+
+                    b.Property<string>("ContactPhoneBlindIndex")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("contact_phone_blind_index");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EscalationReason")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("escalation_reason");
+
+                    b.Property<string>("EscalationSummary")
+                        .HasColumnType("text")
+                        .HasColumnName("escalation_summary_enc");
+
+                    b.Property<DateTimeOffset?>("LastInboundAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_inbound_at");
+
+                    b.Property<DateTimeOffset>("LastMessageAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_message_at");
+
+                    b.Property<DateTimeOffset?>("LastOutboundAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_outbound_at");
+
+                    b.Property<DateTimeOffset?>("LastTemplateSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_template_sent_at");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lead_id");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<DateTimeOffset?>("PendingSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_since");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("TakenOverAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("taken_over_at");
+
+                    b.Property<DateTimeOffset?>("TakeoverBreachedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("takeover_breached_at");
+
+                    b.Property<DateTimeOffset?>("TakeoverDeadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("takeover_deadline");
+
+                    b.Property<Guid?>("TargetAgentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_agent_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("UnreadCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("unread_count");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset?>("WindowExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("window_expires_at");
+
+                    b.Property<DateTimeOffset?>("WindowWarningSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("window_warning_sent_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_whatsapp_conversations");
+
+                    b.HasIndex("TenantId", "ClientId")
+                        .HasDatabaseName("ix_whatsapp_conversations_tenant_id_client_id");
+
+                    b.HasIndex("TenantId", "LeadId")
+                        .HasDatabaseName("ix_whatsapp_conversations_tenant_id_lead_id");
+
+                    b.HasIndex("TenantId", "OwnerUserId")
+                        .HasDatabaseName("ix_whatsapp_conversations_tenant_id_owner_user_id");
+
+                    b.HasIndex("TenantId", "TargetAgentId")
+                        .HasDatabaseName("ix_whatsapp_conversations_tenant_id_target_agent_id");
+
+                    b.HasIndex("TenantId", "ConnectionId", "ContactPhoneBlindIndex")
+                        .IsUnique()
+                        .HasDatabaseName("ux_whatsapp_conversations_contact");
+
+                    b.HasIndex("TenantId", "LeadId", "LastMessageAt")
+                        .HasDatabaseName("ix_whatsapp_conversations_tenant_id_lead_id_last_message_at")
+                        .HasFilter("anonymized_at IS NULL");
+
+                    b.HasIndex("TenantId", "Status", "LastMessageAt")
+                        .HasDatabaseName("ix_whatsapp_conversations_tenant_id_status_last_message_at");
+
+                    b.HasIndex("TenantId", "Status", "TakeoverDeadline")
+                        .HasDatabaseName("ix_whatsapp_conversations_tenant_id_status_takeover_deadline");
+
+                    b.ToTable("whatsapp_conversations", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.WhatsAppHandover", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("BreachedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("breached_at");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("EndedBy")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ended_by");
+
+                    b.Property<DateTimeOffset>("EscalatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escalated_at");
+
+                    b.Property<bool>("FromBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("from_bot");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lead_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("TakenOverBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("taken_over_by");
+
+                    b.Property<DateTimeOffset?>("TakeoverDeadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("takeover_deadline");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_whatsapp_handovers");
+
+                    b.HasIndex("TenantId", "ConversationId")
+                        .HasDatabaseName("ix_whatsapp_handovers_tenant_id_conversation_id")
+                        .HasFilter("ended_at IS NULL");
+
+                    b.HasIndex("TenantId", "EscalatedAt")
+                        .HasDatabaseName("ix_whatsapp_handovers_tenant_id_escalated_at");
+
+                    b.ToTable("whatsapp_handovers", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.WhatsAppMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Author")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("author");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_user_id");
+
+                    b.Property<string>("Body")
+                        .HasColumnType("text")
+                        .HasColumnName("body_enc");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delivered_at");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("direction");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorDetail")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("error_detail");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("failed_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("MediaFileName")
+                        .HasColumnType("text")
+                        .HasColumnName("media_file_name_enc");
+
+                    b.Property<string>("MediaId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("media_id");
+
+                    b.Property<string>("MediaMimeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("media_mime_type");
+
+                    b.Property<DateTimeOffset?>("MediaPurgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("media_purged_at");
+
+                    b.Property<string>("MediaSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("media_sha256");
+
+                    b.Property<long?>("MediaSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("media_size_bytes");
+
+                    b.Property<string>("MediaStorageRef")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("media_storage_ref");
+
+                    b.Property<DateTimeOffset?>("MediaStoredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("media_stored_at");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("ProviderMessageId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("provider_message_id");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.Property<string>("ReplyToProviderMessageId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("reply_to_provider_message_id");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<string>("TemplateLanguage")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("template_language");
+
+                    b.Property<string>("TemplateName")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("template_name");
+
+                    b.Property<string>("TemplateParameters")
+                        .HasColumnType("text")
+                        .HasColumnName("template_parameters_enc");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_whatsapp_messages");
+
+                    b.HasIndex("ConversationId", "OccurredAt")
+                        .HasDatabaseName("ix_whatsapp_messages_conversation_id_occurred_at");
+
+                    b.HasIndex("TenantId", "MediaStoredAt")
+                        .HasDatabaseName("ix_whatsapp_messages_tenant_id_media_stored_at")
+                        .HasFilter("media_storage_ref IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ProviderMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_whatsapp_messages_provider_id")
+                        .HasFilter("provider_message_id IS NOT NULL");
+
+                    b.ToTable("whatsapp_messages", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.WhatsAppTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BodyText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body_text");
+
+                    b.PrimitiveCollection<List<string>>("Buttons")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("buttons");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("category");
+
+                    b.Property<DateTimeOffset?>("ConfiguredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("configured_at");
+
+                    b.Property<Guid?>("ConfiguredBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("configured_by");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("FooterText")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("footer_text");
+
+                    b.Property<string>("HeaderText")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("header_text");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_available");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("language");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("name");
+
+                    b.PrimitiveCollection<List<Guid>>("ProductLineIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("product_line_ids");
+
+                    b.Property<string>("ProviderTemplateId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("provider_template_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("synced_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("VariableCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("variable_count");
+
+                    b.Property<string>("VariableMappings")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("variable_mappings")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.HasKey("Id")
+                        .HasName("pk_whatsapp_templates");
+
+                    b.HasIndex("TenantId", "ConnectionId", "Name", "Language")
+                        .IsUnique()
+                        .HasDatabaseName("ux_whatsapp_templates_name_language");
+
+                    b.ToTable("whatsapp_templates", "leads");
+                });
+
             modelBuilder.Entity("Sankore.Shared.Infrastructure.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")

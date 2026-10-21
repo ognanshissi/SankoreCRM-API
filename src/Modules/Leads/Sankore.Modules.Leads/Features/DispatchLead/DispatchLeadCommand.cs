@@ -32,12 +32,22 @@ using Sankore.Shared.Kernel;
 /// <param name="OverrideReason">
 /// Why this agent was chosen by hand. Required with <paramref name="AgentId"/>, refused without.
 /// </param>
+/// <param name="ExcludedAgentIds">
+/// Agents to leave out of THIS dispatch, on top of the rule's own exclusion list — the agent who
+/// let a WhatsApp conversation wait past its SLA (WA-BE-15) must not be handed it back.
+/// </param>
+/// <param name="QueueWhenNoAgent">
+/// False for a REdispatch of a lead that already has an agent: finding nobody else must leave the
+/// lead where it is, not mark it as waiting in the dispatch queue it is not in.
+/// </param>
 public sealed record DispatchLeadCommand(
     Guid LeadId,
     Guid TenantId,
     DispatchingStrategy? Strategy = null,
     Guid? AgentId = null,
-    string? OverrideReason = null
+    string? OverrideReason = null,
+    IReadOnlyCollection<Guid>? ExcludedAgentIds = null,
+    bool QueueWhenNoAgent = true
 ) : IRequest<Result<DispatchLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

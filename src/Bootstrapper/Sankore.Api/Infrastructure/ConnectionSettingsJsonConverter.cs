@@ -64,6 +64,7 @@ public sealed class ConnectionSettingsJsonConverter : JsonConverter<ConnectionSe
             [nameof(IntegrationKind.Orass)] = typeof(OrassSettings),
             [nameof(IntegrationKind.Ringover)] = typeof(RingoverSettings),
             [nameof(IntegrationKind.Fake)] = typeof(FakeSettings),
+            [nameof(IntegrationKind.Dialog360)] = typeof(Dialog360Settings),
         };
 
     public override ConnectionSettings? Read(

@@ -59,6 +59,7 @@ internal sealed class ConnectionSettingsConverter()
         "Orass" => typeof(OrassSettings),
         "Ringover" => typeof(RingoverSettings),
         "Fake" => typeof(FakeSettings),
+        "Dialog360" => typeof(Dialog360Settings),
         _ => null,
     };
 }

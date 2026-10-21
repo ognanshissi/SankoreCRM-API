@@ -46,5 +46,18 @@ public enum ConsentType
     /// request. Appended: the column stores the NAME, but an appended value is the habit that keeps
     /// every other representation stable too.
     /// </summary>
-    CreditBureauCheck
+    CreditBureauCheck,
+
+    /// <summary>
+    /// Being written to on WhatsApp by the institution (WA-BE-05) — the opt-in Meta's policy
+    /// requires before a business-initiated message. Its own type and not « contact by SMS »: a
+    /// customer may accept texts and refuse WhatsApp, and Meta asks for the WhatsApp one by name.
+    ///
+    /// <para>
+    /// The specification's three states map onto this row: no row is « non renseigné », an
+    /// <c>Active</c> row « consenti », a <c>Withdrawn</c> one « révoqué ». Appended, like the one
+    /// above.
+    /// </para>
+    /// </summary>
+    WhatsAppContact
 }

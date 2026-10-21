@@ -122,6 +122,20 @@ internal sealed class IngestInboundLeadHandler(
                 clock, cmd.RunId, cmd.RawPayloadJson, cmd.ExternalId);
             dupIngestion.MarkDuplicate();
             db.LeadIngestions.Add(dupIngestion);
+
+            // WA-BE-05: the same person filled the form again and, this time, ticked the WhatsApp
+            // box — the opt-in belongs to the lead they already are.
+            var existingLead = await db.Leads
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync(l => l.TenantId == cmd.TenantId && l.Id == dupId, ct);
+
+            if (existingLead is not null && !existingLead.IsAnonymized)
+            {
+                await InboundWhatsAppConsent.RecordIfGivenAsync(
+                    db, source, cmd.RawPayloadJson, existingLead, dupIngestion.Id, clock, ct);
+            }
+
             await db.SaveChangesAsync(ct);
             return Result.Ok(new IngestInboundLeadResult(
                 dupIngestion.Id, dupId, dupIngestion.Status));
@@ -141,6 +155,12 @@ internal sealed class IngestInboundLeadHandler(
             cmd.TenantId, lead.Id, cmd.SourceId,
             clock, cmd.RunId, cmd.RawPayloadJson, cmd.ExternalId);
         db.LeadIngestions.Add(ingestion);
+
+        // WA-BE-05: the WhatsApp opt-in of the form, in the lead's own transaction — a lead saved
+        // without the consent its prospect gave would have its « Contacter » button greyed out
+        // for a consent that exists.
+        await InboundWhatsAppConsent.RecordIfGivenAsync(
+            db, source, cmd.RawPayloadJson, lead, ingestion.Id, clock, ct);
 
         await db.SaveChangesAsync(ct);
 

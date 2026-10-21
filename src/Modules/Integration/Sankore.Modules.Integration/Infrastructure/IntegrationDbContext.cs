@@ -30,6 +30,7 @@ public sealed class IntegrationDbContext(
     public DbSet<TelCall> TelCalls => Set<TelCall>();
     public DbSet<TelClickToCall> TelClickToCalls => Set<TelClickToCall>();
     public DbSet<TelWebhookEvent> TelWebhookEvents => Set<TelWebhookEvent>();
+    public DbSet<MsgWebhookEvent> MsgWebhookEvents => Set<MsgWebhookEvent>();
     public DbSet<TelRecording> TelRecordings => Set<TelRecording>();
     public DbSet<TelCallOutcome> TelCallOutcomes => Set<TelCallOutcome>();
     public DbSet<TelRecordingPolicy> TelRecordingPolicies => Set<TelRecordingPolicy>();
@@ -155,6 +156,7 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<TelCall>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TelClickToCall>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TelWebhookEvent>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<MsgWebhookEvent>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TelRecording>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TelCallOutcome>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TelRecordingPolicy>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);

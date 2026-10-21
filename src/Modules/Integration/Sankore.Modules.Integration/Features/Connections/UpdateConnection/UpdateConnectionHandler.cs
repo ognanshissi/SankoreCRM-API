@@ -46,6 +46,19 @@ internal sealed class UpdateConnectionHandler(
         if (cmd.Settings.ExpectedKind != connection.Kind)
             return Result.Fail(IntegrationErrors.SettingsInvalid);
 
+        // An ACTIVE number moved onto an address another active row already answers to: refused
+        // here in words, and by the global index if two edits race. Asked across tenants, like the
+        // activation — see ActivateConnectionHandler.
+        if (connection.IsActive
+            && cmd.Settings.ChannelAddress is { } address
+            && address != connection.ChannelAddress
+            && await db.Connections
+                .IgnoreQueryFilters()
+                .AnyAsync(c => c.ChannelAddress == address && c.IsActive && c.Id != connection.Id, ct))
+        {
+            return Result.Fail(IntegrationErrors.MessagingNumberAlreadyConnected);
+        }
+
         connection.UpdateSettings(
             name: cmd.Name,
             mode: cmd.Mode,
@@ -66,6 +79,12 @@ internal sealed class UpdateConnectionHandler(
         {
             // Someone committed between our read and our write: the row's xmin moved.
             return Result.Fail(IntegrationErrors.ConcurrencyConflict);
+        }
+        catch (DbUpdateException ex) when (
+            (ex.InnerException?.Message ?? ex.Message).Contains(
+                "ux_integration_connection_active_channel_address", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Fail(IntegrationErrors.MessagingNumberAlreadyConnected);
         }
 
         return Result.Ok();

@@ -24,6 +24,13 @@ internal sealed class CreateLeadSourceValidator
             .When(x => x.CostPerLead.HasValue);
 
         // ── Polymorphic SourceSettings validation ─────────────────────────
+        // WA-BE-05: where a webhook or pulled payload carries the WhatsApp opt-in.
+        RuleFor(x => x.Settings!.Consent!.WhatsAppConsentFieldPath)
+            .Must(WhatsAppConsentSettingsRules.IsReadablePath)
+            .When(x => x.Settings?.Consent?.WhatsAppConsentFieldPath is not null)
+            .WithClientField("settings.consent.whatsAppConsentFieldPath")
+            .WithMessage("settings.consent.whatsAppConsentFieldPath must be a JSONPath such as $.consents.whatsapp (200 characters at most).");
+
         When(x => x.Settings is EmbeddedScriptSettings, () =>
         {
             // The two values that leave this system and land in a <style> element on somebody
@@ -42,6 +49,12 @@ internal sealed class CreateLeadSourceValidator
                     ((EmbeddedScriptSettings)x.Settings!).HostedForm?.FontFamily))
                 .WithClientField("settings.hostedForm.fontFamily")
                 .WithMessage("settings.hostedForm.fontFamily must be a plain font stack, e.g. \"Inter, system-ui, sans-serif\".");
+
+            // WA-BE-05: shown as plain text beside an optional box that authorises messages.
+            RuleFor(x => ((EmbeddedScriptSettings)x.Settings!).HostedForm!.WhatsAppConsentText)
+                .MaximumLength(WhatsAppConsentSettingsRules.MaxTextLength)
+                .When(x => ((EmbeddedScriptSettings)x.Settings!).HostedForm?.WhatsAppConsentText is not null)
+                .WithClientField("settings.hostedForm.whatsAppConsentText");
 
             RuleForEach(x => ((EmbeddedScriptSettings)x.Settings!).AllowedOrigins)
                 .Must(BeAValidUrl)

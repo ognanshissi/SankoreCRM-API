@@ -82,6 +82,11 @@ dotnet user-secrets set "Telephony:Recordings:EncryptionKey" "$(openssl rand -ba
 # Point Telephony:Recordings:BasePath at a mounted volume too, or configure a bucket — the default
 # lands under the content root, which a redeploy destroys.
 
+# WhatsApp media (WA lot 4) — master key of an ENVELOPE-encrypted store: each media gets its own
+# random data key, wrapped by this one. A dev value sits in appsettings.Development.json. Unset =
+# no store registered: media are fetched from 360dialog when opened, as before lot 4.
+dotnet user-secrets set "Leads:WhatsApp:Media:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+
 # Antivirus for claim pieces — host:port of a clamd. UNSET by default and that is the fail-closed
 # default: with no scanner, every piece is recorded ScanFailed and NOTHING is transmitted to an
 # insurer. A deployment that distributes insurance must set it.
@@ -2385,6 +2390,187 @@ telephony connection whose every call fails. That is answered by the adapter ins
 `CheckHealthAsync` always answers unhealthy and `ActivateConnectionHandler` requires a passing
 check, so the connection still cannot be activated — and the refusal now names the test account
 instead of claiming the deployment shipped without the assembly.
+
+### The WhatsApp channel, lot 1: a fourth Integration family, conversations in M13 (WA-BE-01 → 10)
+
+**Transport in Integration, conversation in Leads.** A number is an `integration_connection` of the
+`Messaging` family, kind `Dialog360` (or `Fake` in Development) — settings, vault secrets
+(`connection-credential` = the number's 360dialog API key, `webhook-secret` = our webhook token),
+health check and activation are the connection socle's, driven from `integration/messaging/channels`
+under `WhatsApp.Config`. The conversations, messages and templates live in M13
+(`whatsapp_conversations`, `whatsapp_messages`, `whatsapp_templates`), encrypted with M13's key,
+because consent, ownership, SLA and the bot are M13's. M13 calls `IIntegrationModule.Messaging`;
+Integration's webhook job calls `ILeadsModule.RecordMessagingEventsAsync`.
+
+**The tenant comes from the phone-number id, never from a header.** `ConnectionSettings.ChannelAddress`
+(the phone-number id) is copied onto `integration_connection.channel_address`, unique **globally
+among active rows** (`ux_integration_connection_active_channel_address`). The webhook
+`POST /integration/webhooks/whatsapp/{provider}` (exempt prefix, policy `messaging-webhook`) reads
+the id with a forward-only token scan — the one read before verification — finds the connection
+(Redis `wa:pnid:{id}`, self-healing: the row is re-checked before it is trusted), then verifies
+`X-Sankore-Webhook-Token` (or Meta's `X-Hub-Signature-256`) against the vault, stores the body
+encrypted in `msg_webhook_event` and enqueues `ProcessMessagingWebhookJob` with three ids. 360dialog
+does not sign bodies with anything the institution holds — see `Dialog360Specification.OpenQuestions`.
+« Configurer le webhook » generates the token, stores it first, then calls 360dialog's
+`/v1/configs/webhook` with the header; the URL comes from `Integration:Messaging:PublicBaseUrl`
+or, unset, from the address the administrator's request used.
+
+**Sending is at most once.** The send command saves the message `Queued` and an outbox event;
+`SendWhatsAppMessageConsumer` moves it to `Sending` and SAVES before calling the provider, so a
+redelivered event or a crash mid-call never sends twice. The safe retries (429, 500/503, a refused
+connection) happen inside `Dialog360Transport`; a 502/504 on a write is never retried — a proxy
+timing out says nothing about whether Meta accepted.
+
+**A status can overtake its message.** Meta reports `sent` within a second; if the webhook job finds
+no message for a status, M13 reports it unmatched and the job throws for a Hangfire retry while the
+delivery is under ten minutes old. Statuses are forward-only (`WhatsAppMessage.ApplyStatus`).
+
+**Consent is a `LeadConsent` of type `WhatsAppContact`**, not a field on `Lead`. An agent's entry
+requires a reason (`WHATSAPP_CONSENT_REASON_REQUIRED`); after a withdrawal, a new one requires a
+proof activity (`WHATSAPP_CONSENT_NEW_PROOF_REQUIRED`). A customer's inbound message records one
+(channel `WhatsApp`) only when the lead has none — never over a withdrawal.
+
+**Who may send and read.** `WhatsAppEligibility.Blockers` is the single rule set behind both the
+button and the send. Reading a thread needs `WhatsApp.Send` or `WhatsApp.Supervise` (read off the
+token's claims) AND `LeadAccessGuard`. `WhatsApp.Send.Force` lifts the 24-hour rule.
+
+**An unknown number** becomes a lead (source WhatsApp, profile name or a dated placeholder,
+`LeadCapturedEvent` published so auto-dispatch applies) unless the lead setting
+`whatsapp-create-lead-for-unknown-number` is off. Inbound media are fetched from the provider when
+opened and stored nowhere (lot 4 brings encrypted storage and its retention); `AnonymizeClosedLeadsJob`
+blanks the conversations and messages of the leads it anonymises.
+
+**The web form's opt-in (SDK 1.3.0).** The hosted form renders an optional, unchecked box when
+`HostedFormConfig.WhatsAppConsentText` is set; an existing form may carry a `whatsapp_consent`
+checkbox. The SDK posts `whatsAppConsent` (null when there is no box), the ingest endpoint files it
+under `_whatsappConsent`, and `InboundWhatsAppConsent` records an ACTIVE `WhatsAppContact` consent
+(channel WebForm, proof = source code + ingestion id + text version) on the new lead or on the
+duplicate it was filed on. A webhook or pulled source names the field in
+`ConsentConfig.WhatsAppConsentFieldPath`. Only an agreement is recorded — an unticked optional box
+is not a refusal. Snippets pin their version: a site must re-copy its snippet to get 1.3.0.
+
+**In Development**, create a number with `simulated: true` (the `Fake` adapter: two approved
+templates, every send accepted), run « Configurer le webhook », then
+`POST integration/messaging/channels/{id}/simulate/inbound` and `/simulate/status` drive the real
+webhook path end to end.
+
+### WhatsApp lot 2: human takeover, the bell, the takeover SLA (WA-BE-14 → 18, WA-FE-07 → 10)
+
+**A conversation has one holder.** `WhatsAppConversation.OwnerUserId` (status `Human`) is set by
+`TakeOver`; another agent's `TakeOver` answers `WHATSAPP_CONVERSATION_HELD_BY_ANOTHER` and only a
+supervisor's `Reassign` (`WhatsApp.Supervise`, target within `GetTeamAgentIdsAsync` unless a bypass
+role) moves it. Free replies (`WhatsApp.Reply`) need the holder, an open window and no opt-out
+(`ReplyRules`); text goes through the outbox like templates, an image/PDF is uploaded and sent
+synchronously (the bytes exist only in the request; magic bytes checked; JPEG/PNG 5 MB, PDF 10 MB)
+and keeps the provider's media id so the thread shows it again.
+
+**Escalation.** `RecordInbound` returns whether it ESCALATED (not already waiting). Then the
+expected agent is the lead's assignee → owner → the client's advisor; the SLA
+(`whatsapp-takeover-sla-minutes`, default 30, 0 = none) starts; the waiting message
+(`whatsapp-waiting-message`, a `System`-authored text, empty = none) is queued; and
+`WhatsAppConversationEscalatedEvent` goes to the outbox. `WhatsAppNotificationsConsumer` dispatches
+an agent-less lead through M13 (`DispatchLeadCommand`), falls back to the agency manager, and tells
+the recipient by e-mail (`whatsapp.escalation`) and in the bell. Subjects name nobody.
+
+**STOP comes first** (`WhatsAppOptOut.IsStop`, the WHOLE message, accents ignored): active WhatsApp
+consents are withdrawn (a refusal is recorded when there was none), the confirmation
+(`whatsapp-optout-confirmation`) is sent, the conversation closes with `OPT_OUT`, nothing escalates.
+
+**The takeover SLA** is swept by `WhatsAppTakeoverJob` every 2 minutes per tenant. A breach is marked
+once, the lead is redispatched with `DispatchLeadCommand(ExcludedAgentIds: [the late agent],
+QueueWhenNoAgent: false)` — the two parameters added for this, so a redispatch never re-queues an
+assigned lead — and the new agent gets a fresh SLA; with nobody else, the agency manager becomes the
+expected agent WITHOUT an SLA (the end of the chain). `whatsapp.takeover-breach` goes to the
+supervisor. The same job tells a holder, once per window, that it closes within the hour.
+
+**The bell is M08's, generic.** `INotificationsModule.NotifyInAppAsync` stores a `user_notifications`
+row (idempotent on `(tenant, user, key)`, internal links only) and pushes `notification.created`;
+`GET/POST /api/v1/my-notifications` serve the signed-in user only. The sound preference is
+`AgentSettings.NotificationSound` (migration defaults existing agents to true — EF scaffolds false).
+
+**Inbox** `GET leads/whatsapp/conversations`: tabs by status, urgency order (SLA deadline, then
+window), offset cursor, counts per tab. Perimeter: an agent sees what they hold, what waits for
+them and their leads'; a supervisor their team's plus the conversations nobody is expected on;
+bypass roles the tenant.
+
+### WhatsApp lot 3: the bot (WA-BE-11 → 13, WA-FE-11/12)
+
+**Three switches, all required, resolved in one place** (`WhatsAppBotProfiles.ResolveActiveAsync`):
+the deployment has a model (`Leads:WhatsAppBot:Provider` = `Anthropic` with `ApiKey`, `Fake` in
+Development, otherwise none), the tenant turned it on (lead setting `whatsapp-bot-enabled`, default
+**false**), and the profile that applies to the lead is enabled. The profile is the lead's product
+line's when that line HAS one — even disabled, so an administrator's « off » for a product is not
+overridden by the general profile — else the general profile (`ProductLineId = Guid.Empty`, a
+sentinel because a null would escape the unique version index). A client's or an unattached
+conversation never gets the bot. The BCEAO data-processing validation was deliberately left out, on
+the product owner's instruction.
+
+**Profiles are versioned, never edited** (`whatsapp_bot_profiles`, one row per save, current = highest
+version, `ExpectedVersion` → `WHATSAPP_BOT_PROFILE_CONFLICT`). Each `WhatsAppBotTurn` records the
+version it ran under, its model, latency, tokens, tool calls and outcome; input (the minimised
+transcript), output and tool calls are encrypted with M13's key and blanked by `AnonymizeClosedLeadsJob`.
+
+**Routing** is `WhatsAppConversation.RecordInbound(…, botAvailable)` → `WhatsAppInboundRouting`. A
+reply to an agent's TEMPLATE goes to a person even with a bot (the agent is waiting for it). On
+`BotStarted` the welcome message is queued from the webhook handler; the turn itself runs in
+`WhatsAppBotTurnConsumer` (outbox event `WhatsAppBotTurnRequestedEvent`), never inline.
+
+**A turn** (`WhatsAppBotEngine`): deterministic rules first (`WhatsAppBotRules.BeforeModel` — non-text
+message, explicit human request, sensitive keyword, lead `Qualified`, the unanswered counter), then
+the model with four tools and `tool_choice: any` — every answer is `send_reply(text,
+answered_question)` or `escalate_to_human(reason, summary)` from a closed reason list, so nothing
+the model writes outside a tool reaches a customer. 15 s for the whole turn; a timeout, an error or
+no decision hands over with the waiting message (`BOT_FAILURE`). The answer is DROPPED when a person
+took over or the customer wrote again meanwhile (that message's own turn answers both); a turn row
+per inbound message makes redelivery a no-op. The window rule cannot fire on a message (it reopens
+the window) and lives in `WhatsAppTakeoverJob`, without a waiting message.
+
+**Minimisation** (`WhatsAppBotRedactor`): e-mails, identifiers mixing letters and digits, and digit
+runs of 8+ are masked before anything leaves — except a run followed by a currency, because the
+amount is what the bot talks about. The lead is described by WHICH fields are filled, never their
+values. `update_lead_field` writes only the profile's closed list (`WhatsAppBotFields`); the
+conversation keeps the CODES it wrote, values are read off the lead for the handover block.
+
+**Escalation is one service** (`WhatsAppEscalation`) for the four paths — customer message, rule,
+model, window sweep — and never saves. Out of the agents' hours the profile's own message replaces
+the tenant's waiting message. Labels for every reason code: `WhatsAppBotReasons.Label`.
+
+### WhatsApp lot 4: compliance and operations (WA-BE-19 → 22)
+
+**Media are stored, envelope-encrypted** (`EncryptedWhatsAppMediaStore`, concern `whatsapp-media`,
+`Leads:WhatsApp:Media`). Each object has its own random data key, wrapped by the master key in the
+header (`WAM1 | wrapNonce | wrapTag | wrappedKey | nonce | tag | ciphertext`), tenant and reference
+as associated data of both. Inbound media are copied by `StoreWhatsAppMediaConsumer`
+(`WhatsAppMediaReceivedEvent`, published by the webhook handler); an agent's sent media is copied in
+the send handler — the bytes exist only in that request. `WhatsAppMediaReader` serves our copy first,
+the provider otherwise. Message bodies stay under M13's field key (lot 1's choice), not an envelope.
+
+**Retention** (`WhatsAppRetentionJob`, 04:15, after the lead anonymisation): a conversation on a LEAD
+follows the lead; one on NO lead is anonymised after `whatsapp-retention-months` (24) of silence;
+media go after `whatsapp-media-retention-days` (180), or at once when their conversation is
+anonymised (`WhatsAppConversation.AnonymizedAt` — a column because the number is ciphertext; the
+migration backfills it from the `anonymized:` blind index). Our copy is always deleted, the provider
+is asked too (`IMessagingGateway.DeleteMediaAsync`, best effort, a 404 is a success — see
+`Dialog360Specification` point 5), and the message records `MediaPurgedAt` so the thread says
+« supprimée ». A stored copy with no store configured is NOT marked purged. Zero or negative skips.
+
+**Audit** (`WhatsAppAudit`, through `IAuditWriter`, best effort, identifiers only): a supervisor
+reading a conversation they are not involved in (`WhatsAppPerimeter.IsInvolved` — holder, expected
+agent, lead's assignee or owner; first page only), a customer's STOP and a consent recorded from a
+first message (SYSTEM). Everything else an agent does is already a command.
+
+**Read API.** `WhatsAppPerimeter` is the ONE visibility rule — inbox, conversation detail, attach and
+metrics. `GET leads/whatsapp/conversations/{id}` (+ `/messages`, `/messages/{id}/media`) opens a
+conversation by id, « not found » outside the perimeter; `POST …/{id}/attach` files a lead-less
+conversation on a lead the caller may work (audited, never moves one already filed). The inbox's
+recency tabs page by keyset (`k:` cursor); the two urgency queues by offset (`o:`); a bare number
+still reads as an offset.
+
+**Metrics** (`GET leads/whatsapp/metrics`, `WhatsApp.Supervise`, 366 days max) are computed on read.
+`whatsapp_handovers` is the history they need — `PendingSince`/`TakenOverAt` on the conversation are
+overwritten — opened by `WhatsAppEscalation`, ended by takeover, close, return-to-bot or STOP, marked
+by the SLA sweep. Cost is per Meta category at the price in `whatsapp-template-unit-prices` (JSON,
+empty by default — no invented rate); the total is null while any used category has no price.
 
 ### Adding a new module
 

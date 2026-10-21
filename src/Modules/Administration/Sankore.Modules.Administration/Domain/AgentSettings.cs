@@ -73,6 +73,13 @@ public sealed class AgentSettings
 
     public List<NotificationPreference> NotificationPreferences { get; private set; } = [];
 
+    /// <summary>
+    /// Whether the bell plays a sound when a notification arrives (WA-FE-10, « son désactivable
+    /// dans les préférences »). One switch for the whole bell, not per event: it is about the
+    /// person's surroundings — an open-plan agency — not about what is being notified.
+    /// </summary>
+    public bool NotificationSound { get; private set; } = true;
+
     // ── Absence (renseignée seulement quand Availability = Absent) ─────────
     public DateOnly? AbsenceFrom { get; private set; }
     public DateOnly? AbsenceTo { get; private set; }
@@ -97,6 +104,11 @@ public sealed class AgentSettings
     /// Applique la déclaration de l'agent. Renvoie vrai quand l'absence est nouvelle ou a changé —
     /// c'est ce qui doit prévenir le superviseur et déclencher le transfert, pas chaque enregistrement.
     /// </summary>
+    public void SetNotificationSound(bool enabled)
+    {
+        NotificationSound = enabled;
+    }
+
     public bool UpdateBySelf(
         AgentAvailability availability,
         AbsenceDeclaration? absence,

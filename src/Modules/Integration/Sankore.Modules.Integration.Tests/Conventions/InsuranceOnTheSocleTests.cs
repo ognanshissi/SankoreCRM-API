@@ -63,7 +63,7 @@ public sealed class InsuranceOnTheSocleTests : IDisposable
         cbsTables.Should().BeEquivalentTo(["cbs_customer_snapshot"]);
 
         // Every other table is either the shared socle or a declared family — `ins_` insurance
-        // (ASS-01), `tel_` telephony (TEL-B-03). `outbox_messages` and `inbox_messages` are shared
+        // (ASS-01), `tel_` telephony (TEL-B-03), `msg_` messaging (WA-BE-07). `outbox_messages` and `inbox_messages` are shared
         // infrastructure and carry no prefix by the repo's own convention: M01 and M02 name them
         // identically in their own schemas.
         //
@@ -75,6 +75,8 @@ public sealed class InsuranceOnTheSocleTests : IDisposable
             .Where(t => !t.StartsWith("integration_", StringComparison.Ordinal))
             .Where(t => !t.StartsWith("ins_", StringComparison.Ordinal))
             .Where(t => !t.StartsWith("tel_", StringComparison.Ordinal))
+            // `msg_` messaging (WA-BE-07): the WhatsApp family's raw webhook deliveries.
+            .Where(t => !t.StartsWith("msg_", StringComparison.Ordinal))
             .ToList();
 
         unclassified.Should().BeEquivalentTo(["outbox_messages", "inbox_messages"]);

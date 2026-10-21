@@ -2,6 +2,7 @@ namespace Sankore.Modules.Notifications;
 
 using FluentValidation;
 using MediatR;
+using Sankore.Modules.Notifications.Features.InApp;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
@@ -150,6 +151,9 @@ public static class NotificationsModule
         app.MapWebhooksEndpoints();
         app.MapDeliveryLogsEndpoints();
         app.MapGroup("notification-settings").WithTags("Notification Settings").MapSendTestEmail();
+        // La cloche (WA-FE-10) : les notifications in-app de l'utilisateur connecté.
+        app.MapInAppNotificationsEndpoints();
+
         return app;
     }
 }

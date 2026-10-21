@@ -75,6 +75,72 @@ public static class LeadSettingKeys
     /// </summary>
     public const string SlaWarningThresholdPercent = "sla-warning-threshold-percent";
 
+    /// <summary>
+    /// Whether a WhatsApp message from a number that matches no open lead and no client creates a
+    /// lead (WA-BE-09) — source WhatsApp, named from the sender's profile, filed in the receiving
+    /// number's agency. Off, the conversation is kept unattached for an agent to file.
+    ///
+    /// <para>
+    /// <b>Default true</b>, and that answers one of the specification's open questions in the
+    /// direction that loses nobody: a prospect who writes first is the warmest lead an institution
+    /// gets, and an unattached conversation is one nobody sees until the inbox of lot 2 exists.
+    /// </para>
+    /// </summary>
+    public const string WhatsAppCreateLeadForUnknownNumber = "whatsapp-create-lead-for-unknown-number";
+
+    /// <summary>
+    /// Minutes an agent has to take over a WhatsApp conversation once the customer is waiting for
+    /// a person (WA-BE-14). Past it, the supervisor is told and the lead is redispatched to another
+    /// agent (WA-BE-15). 0 disables the SLA.
+    /// </summary>
+    public const string WhatsAppTakeoverSlaMinutes = "whatsapp-takeover-sla-minutes";
+
+    /// <summary>
+    /// What the customer is told, automatically, when their message goes to a person and nobody
+    /// holds the conversation yet (WA-BE-14, « message d'attente au lead, paramétrable »). Empty
+    /// sends nothing.
+    /// </summary>
+    public const string WhatsAppWaitingMessage = "whatsapp-waiting-message";
+
+    /// <summary>
+    /// What a customer who wrote STOP is told (WA-BE-18). Sent even though their consent is now
+    /// withdrawn: it is the acknowledgement of the withdrawal itself.
+    /// </summary>
+    public const string WhatsAppOptOutConfirmation = "whatsapp-optout-confirmation";
+
+    /// <summary>
+    /// Whether the WhatsApp bot answers for this institution at all (WA-BE-12, « activable par
+    /// tenant »). Default FALSE: a machine speaking in the institution's name is a decision an
+    /// administrator takes, not one a deployment takes for them. Off, every customer message goes
+    /// straight to a person, whatever the product profiles say.
+    /// </summary>
+    public const string WhatsAppBotEnabled = "whatsapp-bot-enabled";
+
+    /// <summary>
+    /// Months of silence after which a WhatsApp conversation filed on NO lead — a client's, an
+    /// unattached number's — is anonymised (WA-BE-21). A lead's conversations follow the lead's
+    /// own retention instead. Zero or negative skips the run.
+    /// </summary>
+    public const string WhatsAppRetentionMonths = "whatsapp-retention-months";
+
+    /// <summary>
+    /// Days a WhatsApp media (photo, document, voice note) is kept, in our store and at the
+    /// provider (WA-BE-21). Shorter than the conversation's by design: it is the most sensitive
+    /// part of a thread. Zero or negative skips the purge.
+    /// </summary>
+    public const string WhatsAppMediaRetentionDays = "whatsapp-media-retention-days";
+
+    /// <summary>
+    /// What one template costs, per Meta category, for the cost estimate of the metrics (WA-BE-22):
+    /// a JSON object such as <c>{"MARKETING": 45, "UTILITY": 10}</c>. Empty by default, and the
+    /// metrics then show counts without inventing a price — Meta's rates depend on the country and
+    /// change, and a wrong figure on a dashboard is worse than none.
+    /// </summary>
+    public const string WhatsAppTemplateUnitPrices = "whatsapp-template-unit-prices";
+
+    /// <summary>The currency of <see cref="WhatsAppTemplateUnitPrices"/>.</summary>
+    public const string WhatsAppPriceCurrency = "whatsapp-price-currency";
+
     // ── Value types ─────────────────────────────────────────────────────────
     public const string TypeString  = "string";
     public const string TypeInt     = "int";
@@ -99,6 +165,32 @@ public static class LeadSettingKeys
         new(SlaWarningThresholdPercent, "75", TypeInt,
             "Share of the first-contact deadline elapsed, in percent, at which the agent is warned "
             + "that the SLA is about to be breached. 0 disables the warning."),
+        new(WhatsAppCreateLeadForUnknownNumber, "true", TypeBool,
+            "Create a lead when an unknown number writes to the institution's WhatsApp number. "
+            + "Off, the conversation stays unattached until an agent files it."),
+        new(WhatsAppTakeoverSlaMinutes, "30", TypeInt,
+            "Minutes an agent has to take over a WhatsApp conversation once the customer waits for a "
+            + "person. Past it, the supervisor is told and the lead is redispatched. 0 disables it."),
+        new(WhatsAppWaitingMessage,
+            "Merci pour votre message. Un conseiller vous répond dans les plus brefs délais.", TypeString,
+            "Sent automatically when a customer's WhatsApp message waits for an agent. Empty sends nothing."),
+        new(WhatsAppOptOutConfirmation,
+            "C’est noté : vous ne recevrez plus de messages de notre part sur WhatsApp.", TypeString,
+            "Sent to a customer who writes STOP, acknowledging the withdrawal of their consent."),
+        new(WhatsAppBotEnabled, "false", TypeBool,
+            "Let the WhatsApp bot answer customers, for the products whose bot profile is enabled. "
+            + "Off, every message goes straight to an agent."),
+        new(WhatsAppRetentionMonths, "24", TypeInt,
+            "Months of silence after which a WhatsApp conversation filed on no lead is anonymised. "
+            + "A lead's conversations follow the lead's retention. 0 disables it."),
+        new(WhatsAppMediaRetentionDays, "180", TypeInt,
+            "Days a WhatsApp photo, document or voice note is kept, here and at the provider. "
+            + "0 disables the purge."),
+        new(WhatsAppTemplateUnitPrices, "{}", TypeJson,
+            "Price of one WhatsApp template per Meta category, for the cost estimate, e.g. "
+            + "{\"MARKETING\": 45, \"UTILITY\": 10}. Empty: counts only."),
+        new(WhatsAppPriceCurrency, "XOF", TypeString,
+            "Currency of the WhatsApp template prices."),
     ];
 
     /// <summary>

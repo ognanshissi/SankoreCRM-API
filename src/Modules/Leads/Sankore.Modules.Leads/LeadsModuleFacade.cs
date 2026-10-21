@@ -22,7 +22,8 @@ public sealed class LeadsModuleFacade(
     LeadsDbContext db,
     IPhoneBlindIndexer phoneBlindIndexer,
     ICurrentUser currentUser,
-    Features.Household.LeadAccessGuard accessGuard)
+    Features.Household.LeadAccessGuard accessGuard,
+    MediatR.ISender? sender = null)
     : ILeadsModule
 {
     /// <summary>
@@ -138,34 +139,8 @@ public sealed class LeadsModuleFacade(
         if (tenantId == Guid.Empty || string.IsNullOrWhiteSpace(phoneNumber))
             return [];
 
-        var trimmed = phoneNumber.Trim();
-        var phoneIndex = phoneBlindIndexer.Compute(trimmed);
-        var phoneDigits = IdentityMatchScorer.NormalizePhone(trimmed);
-
-        // A number that normalises to nothing — punctuation, a provider's "anonymous" marker —
-        // would make the legacy branch an EndsWith("") that matches every un-backfilled lead in
-        // the tenant. An incoming call with no caller id is ordinary, so it answers empty.
-        if (phoneDigits.Length == 0)
-            return [];
-
-        return await db.Leads
-            .IgnoreQueryFilters()
-            .Where(l => l.TenantId == tenantId
-                     && !l.IsAnonymized
-                     && l.Status != LeadStatus.Converted
-                     && l.Status != LeadStatus.Lost
-                     && l.Status != LeadStatus.Disqualified
-                     && l.Status != LeadStatus.Archived
-                     && ((l.PhoneBlindIndex != null && l.PhoneBlindIndex == phoneIndex)
-                      || (l.PhoneBlindIndex == null && l.PhoneNumber.EndsWith(phoneDigits))))
-            .OrderByDescending(l => l.LastActivityAt ?? l.CapturedAt)
-            .Select(l => new LeadPhoneMatch(
-                l.Id,
-                l.FullName,
-                l.Status.ToString(),
-                l.AgencyId,
-                l.CurrentAssignedId))
-            .ToListAsync(ct);
+        return await Features.FindDuplicates.OpenLeadsByPhone.FindAsync(
+            db, phoneBlindIndexer, tenantId, phoneNumber, ct);
     }
 
     /// <inheritdoc />
@@ -423,5 +398,32 @@ public sealed class LeadsModuleFacade(
         if (string.IsNullOrWhiteSpace(value)) return "(sans objet)";
         var trimmed = value.Trim();
         return trimmed.Length <= 180 ? trimmed : trimmed[..180] + "…";
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <b>Through MediatR, unlike the rest of this facade</b>, because this is the « thick command »
+    /// the integration module's « thin job » hands its work to: attaching a message, opening a
+    /// conversation, creating a lead from an unknown number and recording consent are this
+    /// module's decisions and belong in a handler, not in a facade method. Optional in the
+    /// constructor only for this module's tests, which build the facade by hand and never call it.
+    /// </remarks>
+    public Task<MessagingEventsOutcome> RecordMessagingEventsAsync(
+        Guid tenantId,
+        Guid connectionId,
+        Guid? connectionAgencyId,
+        MessagingEventBatch batch,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+
+        if (sender is null)
+            throw new InvalidOperationException("ISender is not available to the Leads facade.");
+
+        if (tenantId == Guid.Empty || (batch.Messages.Count == 0 && batch.Statuses.Count == 0))
+            return Task.FromResult(new MessagingEventsOutcome(0, 0, 0, 0));
+
+        return sender.Send(
+            new Features.WhatsApp.RecordMessagingEventsCommand(tenantId, connectionId, connectionAgencyId, batch), ct);
     }
 }

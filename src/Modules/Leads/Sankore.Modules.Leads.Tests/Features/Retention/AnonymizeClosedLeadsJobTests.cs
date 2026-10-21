@@ -210,6 +210,37 @@ public sealed class AnonymizeClosedLeadsJobTests : IDisposable
     }
 
     [Fact]
+    public async Task The_WhatsApp_thread_loses_the_number_and_every_word_and_keeps_its_dates()
+    {
+        var lead = await SeedClosedAsync();
+        var connection = Guid.NewGuid();
+
+        await using (var seed = _factory.CreateContext())
+        {
+            var conversation = WhatsAppConversation.Open(
+                _tenant, connection, "+2250700000001", "idx-awa", lead.Id, null, "Awa", false, Now.AddMonths(-31));
+            seed.WhatsAppConversations.Add(conversation);
+            seed.WhatsAppMessages.Add(WhatsAppMessage.Inbound(
+                _tenant, conversation.Id, "wamid.awa", WhatsAppMessageKind.Text, "Je suis malade, rappelez-moi",
+                null, null, null, null, Now.AddMonths(-31), Now.AddMonths(-31)));
+            await seed.SaveChangesAsync(CancellationToken.None);
+        }
+
+        await RunAsync();
+
+        await using var db = _factory.CreateContext();
+
+        var thread = await db.WhatsAppConversations.FirstAsync(c => c.LeadId == lead.Id, CancellationToken.None);
+        thread.ContactPhone.Should().NotContain("0700000001");
+        thread.ContactPhoneBlindIndex.Should().NotBe("idx-awa", "the number must not find this thread again");
+        thread.ContactName.Should().BeNull();
+
+        var message = await db.WhatsAppMessages.FirstAsync(CancellationToken.None);
+        message.Body.Should().BeNull();
+        message.OccurredAt.Should().Be(Now.AddMonths(-31), "that an exchange happened, and when, is kept");
+    }
+
+    [Fact]
     public async Task All_five_tables_are_cleared_in_one_pass()
     {
         var lead = await SeedClosedAsync();
