@@ -166,6 +166,22 @@ public sealed class CrmTask : ITenant
     }
 
     /// <summary>
+    /// The agent moves when they will do the work — « reporter à demain », or a day's first
+    /// contacts spread over the week. Only the due date moves: <see cref="SlaDeadline"/> is a
+    /// commitment made to the prospect, and an agent postponing their own task must not quietly
+    /// postpone it too. A task moved past its SLA therefore shows as late, which is the truth.
+    /// </summary>
+    public Result Reschedule(DateTimeOffset newDueAt, DateTimeOffset now)
+    {
+        if (Status == CrmTaskStatus.Completed) return Result.Fail("TASK_ALREADY_COMPLETED");
+        if (Status == CrmTaskStatus.Cancelled)  return Result.Fail("TASK_CANCELLED");
+        if (newDueAt <= now)                    return Result.Fail("TASK_DUE_IN_PAST");
+
+        DueAt = newDueAt;
+        return Result.Ok();
+    }
+
+    /// <summary>
     /// SLA escalation: the agent keeps the task and its deadline moves to the escalated
     /// assignment's. The due date follows when it would otherwise fall before the new deadline —
     /// a task due before its own SLA reads as late on the agent's list for no reason.

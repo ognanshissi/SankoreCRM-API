@@ -15,6 +15,7 @@ using Sankore.Modules.Leads.Features.Tasks.GetTaskAssignments;
 using Sankore.Modules.Leads.Features.Tasks.ListTasks;
 using Sankore.Modules.Leads.Features.Tasks.DeclineTask;
 using Sankore.Modules.Leads.Features.Tasks.ReassignTask;
+using Sankore.Modules.Leads.Features.Tasks.RescheduleTasks;
 using Sankore.Modules.Leads.Features.Tasks.StartTask;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
@@ -58,6 +59,16 @@ public static class TasksEndpoints
             .RequireAuthorization(Permissions.CanReadCrmTasks.Code)
             .Produces<IReadOnlyList<TaskAssignmentEntryDto>>()
             .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        // POST /tasks/reschedule — moves due dates, all or nothing (« Ma journée »)
+        group.MapPost("reschedule", RescheduleTasks)
+            .WithName("RescheduleCrmTasks")
+            .WithTags("Tasks")
+            .RequireAuthorization(Permissions.CanManageCrmTasks.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
         // POST /tasks/{taskId}/complete
@@ -178,6 +189,17 @@ public static class TasksEndpoints
                 : Results.Problem(title: "Complete failed", detail: result.Error, statusCode: 422);
     }
 
+    private static async Task<IResult> RescheduleTasks(
+        RescheduleTasksRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new RescheduleTasksCommand(req.Items ?? []), ct);
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error == "TASK_NOT_FOUND"
+                ? Results.NotFound()
+                : Results.Problem(title: "Reschedule failed", detail: result.Error, statusCode: 422);
+    }
+
     private static async Task<IResult> CancelTask(Guid taskId, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new CancelTaskCommand(taskId), ct);
@@ -258,6 +280,8 @@ public sealed record CreateTaskRequest(
     string? Description = null);
 
 public sealed record AssignTaskRequest(Guid AgentId);
+
+public sealed record RescheduleTasksRequest(IReadOnlyList<TaskDueDateInput>? Items);
 
 public sealed record DispatchTaskRequest(
     Guid TenantId,

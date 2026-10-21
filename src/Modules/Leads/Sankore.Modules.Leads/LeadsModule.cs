@@ -45,6 +45,7 @@ using Sankore.Modules.Leads.Features.ExportLeads;
 using Sankore.Modules.Leads.Features.GetSlaBreaches;
 using Sankore.Modules.Leads.Features.GetAgentPerformance;
 using Sankore.Modules.Leads.Features.GetMyPerformance;
+using Sankore.Modules.Leads.Features.GetMyAgenda;
 using Sankore.Modules.Leads.Features.GetFunnelMetrics;
 using Sankore.Modules.Leads.Features.DispatchingRules;
 using Sankore.Modules.Leads.Features.GetAssignmentHistory;
@@ -384,6 +385,7 @@ public static class LeadsModule
         group.MapGetSlaBreaches();
         group.MapGetAgentPerformance();
         group.MapGetMyPerformance();
+        group.MapGetMyAgenda();
         group.MapGetFunnelMetrics();
 
         // Phase 13 — CRM Tasks & Task Generation Rules (US-M13-080)
