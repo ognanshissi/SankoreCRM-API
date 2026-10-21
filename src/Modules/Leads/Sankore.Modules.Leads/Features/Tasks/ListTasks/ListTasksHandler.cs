@@ -41,7 +41,11 @@ internal sealed class ListTasksHandler(
                 // An empty team means nobody to supervise, not "everyone": the filter used to be
                 // skipped then, and a branch manager alone in their agency saw every task of the
                 // tenant. A super-user's team is already the whole tenant (GetTeamAgentIdsAsync).
-                var team = teamIds.ToList();
+                //
+                // The supervisor is added back: GetTeamAgentIdsAsync answers "whom do I manage" and
+                // leaves the caller out, so a manager never saw the tasks assigned to THEM — on the
+                // lead's Tâches tab, which lists by lead only, their own first-contact task vanished.
+                var team = teamIds.Append(query.CurrentUserId.Value).Distinct().ToList();
                 q = q.Where(t => t.AssignedAgentId != null && team.Contains(t.AssignedAgentId.Value));
             }
         }

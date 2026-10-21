@@ -47,6 +47,29 @@ public sealed class ListTasksScopingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_supervisor_also_sees_the_tasks_assigned_to_themselves()
+    {
+        // GetTeamAgentIdsAsync leaves the caller out: a branch manager who held a lead's
+        // first-contact task saw it neither on the lead's Tâches tab nor in the team view.
+        await AddTasksAsync();
+        var leadId = Guid.NewGuid();
+        await using (var db = _db.CreateContext())
+        {
+            db.CrmTasks.Add(CrmTask.Create(
+                _tenantId, CrmTaskType.FirstContact, CrmTaskPriority.High, "Premier contact",
+                DateTimeOffset.UtcNow.AddDays(1), leadId: leadId, assignedAgentId: _manager));
+            await db.SaveChangesAsync();
+        }
+        Team(_awa);
+
+        var all = await ListAsync(_manager, "BranchManager");
+        all.Select(t => t.AssignedAgentId).Should().BeEquivalentTo(new Guid?[] { _awa, _manager });
+
+        var onLead = await ListAsync(_manager, "BranchManager", leadId);
+        onLead.Should().ContainSingle().Which.AssignedAgentId.Should().Be(_manager);
+    }
+
+    [Fact]
     public async Task An_agent_sees_only_their_own_tasks()
     {
         await AddTasksAsync();
@@ -61,11 +84,11 @@ public sealed class ListTasksScopingTests : IDisposable
             .Returns(agents.ToList());
 
     private async Task<IReadOnlyList<Sankore.Modules.Leads.Features.Tasks.GetTask.CrmTaskDto>> ListAsync(
-        Guid userId, string role)
+        Guid userId, string role, Guid? leadId = null)
     {
         await using var db = _db.CreateContext();
         var result = await new ListTasksHandler(db, new FixedTenantContext(_tenantId), _admin).Handle(
-            new ListTasksQuery(CurrentUserId: userId, CurrentUserRoles: [role]), default);
+            new ListTasksQuery(LeadId: leadId, CurrentUserId: userId, CurrentUserRoles: [role]), default);
         return result.Value!;
     }
 
