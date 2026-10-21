@@ -15,7 +15,11 @@ public sealed record LeadDispatchedEvent(
     Guid AgentId,
     DispatchingStrategy Strategy,
     double Score,
-    DateTimeOffset SlaDeadline) : IntegrationEventBase;
+    DateTimeOffset SlaDeadline,
+    // Who placed the lead by hand, and why — null for the engine, the queue and the advisor
+    // routing. Carried so the task that follows the lead records who moved it.
+    Guid? ActorId = null,
+    string? Reason = null) : IntegrationEventBase;
 
 /// <summary>
 /// Published when no compatible agent could be found (F13.9 scenario 2).

@@ -7,7 +7,8 @@ using Sankore.Modules.Leads.Features.NextAction;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetLeadHandler(LeadsDbContext db, IOptions<LeadModuleSettings> settings)
+internal sealed class GetLeadHandler(
+    LeadsDbContext db, IOptions<LeadModuleSettings> settings, ILeadSettings? leadSettings = null)
     : IRequestHandler<GetLeadQuery, Result<LeadDto>>
 {
     public async Task<Result<LeadDto>> Handle(GetLeadQuery query, CancellationToken ct)
@@ -32,6 +33,11 @@ internal sealed class GetLeadHandler(LeadsDbContext db, IOptions<LeadModuleSetti
 
         var nextSteps = await LeadNextSteps.ForLeadsAsync(
             db, [LeadNextSteps.FactsOf(lead)], DateTimeOffset.UtcNow, ct);
+
+        var sla = lead.CurrentAssignmentId is { } assignmentId
+            ? (await LeadSlas.ForAssignmentsAsync(db, leadSettings, lead.TenantId, [assignmentId], ct))
+                .GetValueOrDefault(assignmentId)
+            : null;
 
         return Result.Ok(new LeadDto(
             Id:                       lead.Id,
@@ -94,6 +100,7 @@ internal sealed class GetLeadHandler(LeadsDbContext db, IOptions<LeadModuleSetti
             NameVerifiedAt:           lead.NameVerifiedAt,
             IdentitySourceActivityId: lead.IdentitySourceActivityId,
             QualificationThreshold:   settings.Value.QualificationThreshold,
-            NextStep:                 nextSteps.GetValueOrDefault(lead.Id)));
+            NextStep:                 nextSteps.GetValueOrDefault(lead.Id),
+            Sla:                      sla));
     }
 }

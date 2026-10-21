@@ -101,7 +101,12 @@ public sealed record LeadDto(
     /// The one thing to do next and when (<see cref="LeadNextSteps"/>). Null on a closed lead.
     /// Filled on the detail read AND in lists — it is what a list of leads is scanned for.
     /// </param>
-    LeadNextStepDto? NextStep = null);
+    LeadNextStepDto? NextStep = null,
+    /// <param name="Sla">
+    /// The first-contact SLA of the current assignment. Null when the lead has no agent. Filled on
+    /// the detail read AND in lists — the lead board flags late and soon-late leads from it.
+    /// </param>
+    LeadSlaDto? Sla = null);
 
 /// <summary>The principal's address, as the identity screen edits it.</summary>
 /// <param name="PostalCode">Also the boîte postale — the only postal code most of the network has.</param>

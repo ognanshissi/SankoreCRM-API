@@ -42,6 +42,7 @@ public sealed class AgentAbsenceTaskTransferConsumer(
         var reason = $"Absence du {evt.From:dd/MM/yyyy} au {evt.To:dd/MM/yyyy}";
         foreach (var task in tasks)
         {
+            var slaBefore = task.SlaDeadline;
             var result = task.Reassign(replacementId);
             if (result.IsFailure) continue;
 
@@ -53,7 +54,8 @@ public sealed class AgentAbsenceTaskTransferConsumer(
                 reason:          reason,
                 actorId:         evt.AgentId,
                 slaExtended:     false,
-                newSlaDeadline:  null));
+                newSlaDeadline:  null,
+                previousSlaDeadline: slaBefore));
         }
 
         // Le cache de charge (AgentCapacityService, interne au module et donc hors de portée d'un

@@ -11,7 +11,8 @@ using Sankore.Shared.Kernel;
 internal sealed class ListLeadsHandler(
     LeadsDbContext db,
     Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
-    ITenantContext? tenant = null)
+    ITenantContext? tenant = null,
+    ILeadSettings? settings = null)
     : IRequestHandler<ListLeadsQuery, Result<PagedResult<LeadDto>>>
 {
     public async Task<Result<PagedResult<LeadDto>>> Handle(
@@ -179,6 +180,20 @@ internal sealed class ListLeadsHandler(
         {
             if (nextSteps.TryGetValue(items[i].Id, out var step))
                 items[i] = items[i] with { NextStep = step };
+        }
+
+        var assignmentIds = items
+            .Where(i => i.CurrentAssignmentId.HasValue)
+            .Select(i => i.CurrentAssignmentId!.Value)
+            .ToList();
+        if (assignmentIds.Count > 0)
+        {
+            var slas = await LeadSlas.ForAssignmentsAsync(db, settings, items[0].TenantId, assignmentIds, ct);
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (items[i].CurrentAssignmentId is { } aid && slas.TryGetValue(aid, out var sla))
+                    items[i] = items[i] with { Sla = sla };
+            }
         }
 
         return Result.Ok(new PagedResult<LeadDto>(items, total, page, size));

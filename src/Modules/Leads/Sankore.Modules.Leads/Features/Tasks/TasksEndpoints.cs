@@ -11,6 +11,7 @@ using Sankore.Modules.Leads.Features.Tasks.CompleteTask;
 using Sankore.Modules.Leads.Features.Tasks.CreateTask;
 using Sankore.Modules.Leads.Features.Tasks.DispatchTask;
 using Sankore.Modules.Leads.Features.Tasks.GetTask;
+using Sankore.Modules.Leads.Features.Tasks.GetTaskAssignments;
 using Sankore.Modules.Leads.Features.Tasks.ListTasks;
 using Sankore.Modules.Leads.Features.Tasks.DeclineTask;
 using Sankore.Modules.Leads.Features.Tasks.ReassignTask;
@@ -47,6 +48,15 @@ public static class TasksEndpoints
             .WithTags("Tasks")
             .RequireAuthorization(Permissions.CanReadCrmTasks.Code)
             .Produces<CrmTaskDto>()
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        // GET /tasks/{taskId}/assignments — who held the task, from when, against which deadline
+        group.MapGet("{taskId:guid}/assignments", GetTaskAssignments)
+            .WithName("GetCrmTaskAssignments")
+            .WithTags("Tasks")
+            .RequireAuthorization(Permissions.CanReadCrmTasks.Code)
+            .Produces<IReadOnlyList<TaskAssignmentEntryDto>>()
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -149,6 +159,12 @@ public static class TasksEndpoints
     private static async Task<IResult> GetTask(Guid taskId, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new GetTaskQuery(taskId), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound();
+    }
+
+    private static async Task<IResult> GetTaskAssignments(Guid taskId, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetTaskAssignmentsQuery(taskId), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound();
     }
 

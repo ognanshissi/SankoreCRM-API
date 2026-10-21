@@ -40,7 +40,8 @@ public sealed class LeadDispatchedTaskConsumer(
             .ToListAsync(ct);
 
         var created = await AssignmentTasks.SyncOnAssignedAsync(
-            db, evt.TenantId, evt.LeadId, evt.AgentId, evt.SlaDeadline, rules, DateTimeOffset.UtcNow, ct);
+            db, evt.TenantId, evt.LeadId, evt.AgentId, evt.SlaDeadline, rules, DateTimeOffset.UtcNow, ct,
+            actorId: evt.ActorId, reason: evt.Reason);
 
         await db.SaveChangesAsync(ct);
 

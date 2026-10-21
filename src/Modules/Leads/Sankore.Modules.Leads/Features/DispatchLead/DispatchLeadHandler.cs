@@ -13,6 +13,7 @@ using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Infrastructure.Compliance;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -34,7 +35,8 @@ internal sealed class DispatchLeadHandler(
     InsuranceDistributionGuard distributionGuard,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     ILogger<DispatchLeadHandler> logger,
-    TimeProvider clock)
+    TimeProvider clock,
+    ICurrentUser? currentUser = null)
     : IRequestHandler<DispatchLeadCommand, Result<DispatchLeadResult>>
 {
     public async Task<Result<DispatchLeadResult>> Handle(
@@ -149,7 +151,10 @@ internal sealed class DispatchLeadHandler(
                     // choice — is a placeholder, not a claim that scoring ran.
                     Strategy: manualAssignment.Strategy,
                     Score: manualAssignment.CompatibilityScore,
-                    SlaDeadline: manualAssignment.SlaDeadline),
+                    SlaDeadline: manualAssignment.SlaDeadline,
+                    // Guid.Empty is the SYSTEM identity of a background caller, not a person.
+                    ActorId: currentUser?.Id is { } actor && actor != Guid.Empty ? actor : null,
+                    Reason: cmd.OverrideReason),
                 ct);
 
             await db.SaveChangesAsync(ct);

@@ -6,6 +6,12 @@ using Sankore.Shared.Kernel;
 /// Immutable audit record for every task reassignment (US-M13-083).
 /// ActorId == null means SYSTEM (e.g. SLA breach auto-trigger).
 /// ActorId != null identifies the manager who performed the manual reassignment.
+///
+/// <para>
+/// Together with the task's own creation these rows ARE the task's attribution history: who held
+/// it, from when, and against which deadline. A row whose previous and new agent are the same is
+/// an SLA escalation — the agent keeps the task and only its deadline moves.
+/// </para>
 /// </summary>
 public sealed class TaskReassignment : ITenant
 {
@@ -25,6 +31,12 @@ public sealed class TaskReassignment : ITenant
     public bool SlaExtended { get; private set; }
     public DateTimeOffset? NewSlaDeadline { get; private set; }
 
+    /// <summary>
+    /// The task's deadline before this row. Null on rows written before it was recorded — the
+    /// history then shows the change without its starting point rather than inventing one.
+    /// </summary>
+    public DateTimeOffset? PreviousSlaDeadline { get; private set; }
+
     private TaskReassignment() { }
 
     public static TaskReassignment Create(
@@ -35,7 +47,9 @@ public sealed class TaskReassignment : ITenant
         string reason,
         Guid? actorId,
         bool slaExtended = false,
-        DateTimeOffset? newSlaDeadline = null)
+        DateTimeOffset? newSlaDeadline = null,
+        DateTimeOffset? previousSlaDeadline = null,
+        DateTimeOffset? reassignedAt = null)
         => new()
         {
             Id             = Guid.NewGuid(),
@@ -45,8 +59,9 @@ public sealed class TaskReassignment : ITenant
             NewAgentId     = newAgentId,
             Reason         = reason,
             ActorId        = actorId,
-            ReassignedAt   = DateTimeOffset.UtcNow,
+            ReassignedAt   = reassignedAt ?? DateTimeOffset.UtcNow,
             SlaExtended    = slaExtended,
-            NewSlaDeadline = newSlaDeadline
+            NewSlaDeadline = newSlaDeadline,
+            PreviousSlaDeadline = previousSlaDeadline
         };
 }

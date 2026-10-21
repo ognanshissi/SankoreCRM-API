@@ -5,11 +5,19 @@ using Sankore.Modules.Leads.Infrastructure;
 namespace Sankore.Modules.Leads.Features.Tasks;
 
 /// <summary>
-/// The tasks that follow a lead's assignment: created when a lead reaches an agent, cancelled when
-/// it leaves them, completed when the first contact is made. One place, because three code paths
-/// touch them (dispatch, first contact declared by the agent, first contact from a qualified call)
-/// and each used to know only its own part — a lead reassigned left its old task open on the
-/// previous agent's "Mes tâches", and a first contact never closed anything.
+/// The tasks that follow a lead's assignment: created when a lead first reaches an agent,
+/// TRANSFERRED when it moves to another one, extended when its SLA is escalated, completed when the
+/// first contact is made. One place, because several code paths touch them (dispatch, SLA
+/// escalation, first contact declared by the agent, first contact from a qualified call) and each
+/// used to know only its own part — a lead reassigned left its old task open on the previous
+/// agent's "Mes tâches", and a first contact never closed anything.
+///
+/// <para>
+/// A reassignment used to CANCEL the previous agent's task and create a fresh one for the new
+/// agent: the work was the same, but its history was split across two rows and nobody could tell
+/// who had held it before, nor against which deadline. The task is now one row that changes hands,
+/// and every change leaves a <see cref="TaskReassignment"/> carrying both deadlines.
+/// </para>
 ///
 /// <para>
 /// Every query here filters the tenant EXPLICITLY and ignores the query filters: the dispatch
@@ -24,6 +32,8 @@ internal static class AssignmentTasks
     /// Brings the lead's assignment tasks in line with its new agent, and returns how many were
     /// created. The caller saves.
     /// </summary>
+    /// <param name="actorId">The manager who moved the lead by hand; null when the system did.</param>
+    /// <param name="reason">Their stated reason, written into the transferred tasks' history.</param>
     /// <param name="rules">
     /// The tenant's active <c>LeadDispatched</c> generation rules. None configured — the common case —
     /// gives the default first-contact task, so an assignment is never silent on the agent's list.
@@ -36,7 +46,9 @@ internal static class AssignmentTasks
         DateTimeOffset slaDeadline,
         IReadOnlyList<TaskGenerationRule> rules,
         DateTimeOffset now,
-        CancellationToken ct)
+        CancellationToken ct,
+        Guid? actorId = null,
+        string? reason = null)
     {
         var openTasks = await db.CrmTasks
             .IgnoreQueryFilters()
@@ -47,9 +59,42 @@ internal static class AssignmentTasks
                      && Open.Contains(t.Status))
             .ToListAsync(ct);
 
-        // The lead left those agents: their "call this lead" tasks are no longer theirs to do.
-        foreach (var stale in openTasks.Where(t => t.AssignedAgentId != agentId))
-            stale.Cancel();
+        var alreadyMine = openTasks.Where(t => t.AssignedAgentId == agentId).ToList();
+
+        // The lead left those agents: their "call this lead" tasks follow it to the new one. A
+        // duplicate of a task the new agent already holds — legacy rows from before the transfer —
+        // is cancelled instead, so the agent does not end up with the same work twice.
+        foreach (var task in openTasks.Where(t => t.AssignedAgentId != agentId))
+        {
+            if (alreadyMine.Any(t => t.Type == task.Type))
+            {
+                task.Cancel();
+                continue;
+            }
+
+            // Rescheduled exactly as a task created now would be: the matching rule's durations,
+            // else the assignment's own deadline.
+            var rule = rules.FirstOrDefault(r => r.TaskType == task.Type);
+            var newSla = rule is null ? slaDeadline : now.Add(rule.SlaDuration);
+            var newDue = rule is null ? slaDeadline : now.Add(rule.DueDuration);
+            var slaBefore = task.SlaDeadline;
+
+            var moved = task.Reassign(agentId, newSla, newDue);
+            if (moved.IsFailure) continue;
+
+            db.TaskReassignments.Add(TaskReassignment.Create(
+                tenantId:            tenantId,
+                taskId:              task.Id,
+                previousAgentId:     moved.Value,
+                newAgentId:          agentId,
+                reason:              TransferReason(reason),
+                actorId:             actorId,
+                slaExtended:         newSla != slaBefore,
+                newSlaDeadline:      newSla,
+                previousSlaDeadline: slaBefore,
+                reassignedAt:        now));
+            alreadyMine.Add(task);
+        }
 
         // The lead found an agent: the "nobody could take it, place it by hand" tasks are done,
         // whether the queue, the engine or a manager placed it.
@@ -63,8 +108,6 @@ internal static class AssignmentTasks
             .ToListAsync(ct);
         foreach (var task in waiting)
             task.Complete();
-
-        var alreadyMine = openTasks.Where(t => t.AssignedAgentId == agentId).ToList();
 
         var lead = await db.Leads
             .IgnoreQueryFilters()
@@ -144,6 +187,69 @@ internal static class AssignmentTasks
 
         foreach (var task in tasks)
             task.Complete();
+    }
+
+    /// <summary>
+    /// The lead's first-contact SLA was escalated: the agent keeps their open assignment tasks, and
+    /// those whose deadline has passed take the escalated one. Each extension is recorded in the
+    /// task's attribution history with both deadlines. The caller saves; returns how many tasks
+    /// were extended.
+    /// </summary>
+    public static async Task<int> ExtendOnEscalationAsync(
+        LeadsDbContext db,
+        Guid tenantId,
+        Guid leadId,
+        Guid agentId,
+        DateTimeOffset newSlaDeadline,
+        int escalationDepth,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        // Only the overdue ones: a task whose own deadline is still ahead was not what breached,
+        // and moving it would shorten or lengthen a delay nobody escalated.
+        var overdue = await db.CrmTasks
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .Where(t => t.TenantId == tenantId
+                     && t.LeadId == leadId
+                     && t.AssignedAgentId == agentId
+                     && t.TriggerEventType == TaskTriggerEvents.LeadDispatched
+                     && Open.Contains(t.Status)
+                     && t.SlaDeadline != null
+                     && t.SlaDeadline <= now)
+            .ToListAsync(ct);
+
+        var extended = 0;
+        foreach (var task in overdue)
+        {
+            var slaBefore = task.SlaDeadline;
+            if (task.ExtendSla(newSlaDeadline).IsFailure) continue;
+
+            db.TaskReassignments.Add(TaskReassignment.Create(
+                tenantId:            tenantId,
+                taskId:              task.Id,
+                previousAgentId:     agentId,
+                newAgentId:          agentId,
+                reason:              $"Escalade SLA niveau {escalationDepth} — premier contact non enregistré",
+                actorId:             null,
+                slaExtended:         true,
+                newSlaDeadline:      newSlaDeadline,
+                previousSlaDeadline: slaBefore,
+                reassignedAt:        now));
+            extended++;
+        }
+
+        return extended;
+    }
+
+    /// <summary>
+    /// The manager's reason may already use the whole 500 characters the dispatch validator allows,
+    /// which is also the column's width — cut rather than fail the transfer on the prefix.
+    /// </summary>
+    private static string TransferReason(string? reason)
+    {
+        var text = string.IsNullOrWhiteSpace(reason) ? "Lead réattribué" : $"Lead réattribué — {reason.Trim()}";
+        return text.Length <= 500 ? text : text[..500];
     }
 
     /// <summary><c>{LeadId}</c> was the only placeholder; <c>{LeadName}</c> reads better on a task list.</summary>

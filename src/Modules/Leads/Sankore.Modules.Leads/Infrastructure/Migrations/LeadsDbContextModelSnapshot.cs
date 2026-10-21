@@ -935,6 +935,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("sla_deadline");
 
+                    b.Property<DateTimeOffset?>("SlaWarnedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sla_warned_at");
+
                     b.Property<string>("Strategy")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -2685,6 +2689,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<Guid?>("PreviousAgentId")
                         .HasColumnType("uuid")
                         .HasColumnName("previous_agent_id");
+
+                    b.Property<DateTimeOffset?>("PreviousSlaDeadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("previous_sla_deadline");
 
                     b.Property<string>("Reason")
                         .IsRequired()

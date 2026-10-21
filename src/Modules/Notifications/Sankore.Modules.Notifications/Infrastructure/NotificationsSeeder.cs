@@ -17,6 +17,8 @@ internal static class NotificationsSeeder
         await SeedPasswordForgotAsync(db, logger, ct);
         await SeedTaskAssignedAsync(db, logger, ct);
         await SeedLeadSlaBreachAsync(db, logger, ct);
+        await SeedLeadSlaWarningAsync(db, logger, ct);
+        await SeedLeadSlaBreachManagerAsync(db, logger, ct);
         await SeedLeadSourceSnippetAsync(db, logger, ct);
         await SeedAgencyManagerAssignedAsync(db, logger, ct);
         await SeedAgencyManagerUnassignedAsync(db, logger, ct);
@@ -361,6 +363,164 @@ internal static class NotificationsSeeder
                         <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Overdue by</td><td style="padding:8px;border:1px solid #eee">{{ breach_hours }} hour(s)</td></tr>
                       </table>
                       <p>Please contact this lead as soon as possible.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Lead ref: {{ lead_id }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── lead.sla-warning ──────────────────────────────────────────────────────
+    // Variables: {{ lead_name }}, {{ lead_id }}, {{ full_name }}, {{ sla_deadline }}, {{ remaining_hours }}
+    // Sent once per assignment, when the tenant's sla-warning-threshold-percent of the window has elapsed.
+
+    private static async Task SeedLeadSlaWarningAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "lead.sla-warning";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "⏳ SLA bientôt dépassé — Lead {{ lead_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#d97706">SLA bientôt dépassé</h2>
+                      <p>Bonjour {{ full_name }},</p>
+                      <p>Le délai de premier contact pour le lead suivant arrive bientôt à échéance :</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_name }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Échéance SLA</td><td style="padding:8px;border:1px solid #eee">{{ sla_deadline }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Temps restant</td><td style="padding:8px;border:1px solid #eee">{{ remaining_hours }} heure(s)</td></tr>
+                      </table>
+                      <p>Contactez ce lead avant l’échéance pour rester dans les délais.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Réf. lead : {{ lead_id }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "⏳ SLA about to be breached — Lead {{ lead_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#d97706">SLA about to be breached</h2>
+                      <p>Hello {{ full_name }},</p>
+                      <p>The first-contact deadline for the following lead is approaching:</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_name }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">SLA deadline</td><td style="padding:8px;border:1px solid #eee">{{ sla_deadline }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Time left</td><td style="padding:8px;border:1px solid #eee">{{ remaining_hours }} hour(s)</td></tr>
+                      </table>
+                      <p>Please contact this lead before the deadline.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Lead ref: {{ lead_id }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [en]", key);
+        }
+    }
+
+    // ── lead.sla-breach-manager ──────────────────────────────────────────────────────
+    // Variables: {{ lead_name }}, {{ lead_id }}, {{ full_name }}, {{ agent_name }}, {{ sla_deadline }}, {{ breach_hours }}
+    // The copy sent to the head of the agency; the agent keeps the lead and gets lead.sla-breach.
+
+    private static async Task SeedLeadSlaBreachManagerAsync(
+        NotificationsDbContext db, ILogger logger, CancellationToken ct)
+    {
+        const string key = "lead.sla-breach-manager";
+
+        var existing = await db.EmailTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TemplateKey == key && t.TenantId == null)
+            .Select(t => t.Locale)
+            .ToListAsync(ct);
+
+        if (!existing.Contains("fr"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "fr",
+                version: 1,
+                isSystem: true,
+                subject: "⚠ Dépassement SLA dans votre agence — Lead {{ lead_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="fr">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#dc2626">SLA dépassé dans votre agence</h2>
+                      <p>Bonjour {{ full_name }},</p>
+                      <p>Le délai de premier contact du lead suivant a été dépassé. L’agent reste en charge du lead ; ce message vous est adressé en copie.</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_name }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Agent</td><td style="padding:8px;border:1px solid #eee">{{ agent_name }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Échéance SLA</td><td style="padding:8px;border:1px solid #eee">{{ sla_deadline }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Retard</td><td style="padding:8px;border:1px solid #eee">{{ breach_hours }} heure(s)</td></tr>
+                      </table>
+                      <p>Vous pouvez relancer l’agent ou réattribuer le lead depuis le CRM.</p>
+                      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
+                      <p style="color:#999;font-size:12px">Réf. lead : {{ lead_id }}</p>
+                    </body>
+                    </html>
+                    """));
+
+            logger.LogInformation("NotificationsSeeder: seeded platform template '{Key}' [fr]", key);
+        }
+
+        if (!existing.Contains("en"))
+        {
+            db.EmailTemplates.Add(EmailTemplate.Create(
+                tenantId: null,
+                templateKey: key,
+                locale: "en",
+                version: 1,
+                isSystem: true,
+                subject: "⚠ SLA breach in your agency — Lead {{ lead_name }}",
+                htmlBody: """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <body style="font-family:sans-serif;color:#111;max-width:600px;margin:auto;padding:24px">
+                      <h2 style="color:#dc2626">SLA breach in your agency</h2>
+                      <p>Hello {{ full_name }},</p>
+                      <p>The first-contact deadline for the following lead has been exceeded. The agent keeps the lead; you are receiving this as a copy.</p>
+                      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Lead</td><td style="padding:8px;border:1px solid #eee">{{ lead_name }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Agent</td><td style="padding:8px;border:1px solid #eee">{{ agent_name }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">SLA deadline</td><td style="padding:8px;border:1px solid #eee">{{ sla_deadline }}</td></tr>
+                        <tr><td style="padding:8px;border:1px solid #eee;font-weight:600">Overdue by</td><td style="padding:8px;border:1px solid #eee">{{ breach_hours }} hour(s)</td></tr>
+                      </table>
+                      <p>You can follow up with the agent or reassign the lead from the CRM.</p>
                       <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
                       <p style="color:#999;font-size:12px">Lead ref: {{ lead_id }}</p>
                     </body>

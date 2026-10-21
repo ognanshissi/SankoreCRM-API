@@ -56,16 +56,71 @@ public sealed class LeadDispatchedTaskConsumerTests : IDisposable
     }
 
     [Fact]
-    public async Task A_reassignment_cancels_the_previous_agents_task_and_gives_the_new_one_theirs()
+    public async Task A_reassignment_transfers_the_task_to_the_new_agent_instead_of_replacing_it()
+    {
+        // It used to cancel Awa's task and create a second one for Koffi: the same work split over
+        // two rows, with nothing saying who had held it before.
+        var lead = await AddLeadAsync();
+        var first = DateTimeOffset.UtcNow.AddHours(4);
+        var second = DateTimeOffset.UtcNow.AddHours(6);
+
+        await DispatchAsync(lead.Id, _awa, first);
+        await DispatchAsync(lead.Id, _koffi, second);
+
+        var task = (await TasksAsync(lead.Id)).Should().ContainSingle().Subject;
+        task.AssignedAgentId.Should().Be(_koffi);
+        task.Status.Should().Be(CrmTaskStatus.Pending);
+        task.SlaDeadline.Should().Be(second);
+        task.DueAt.Should().Be(second);
+
+        await using var db = _db.CreateContext();
+        var step = (await db.TaskReassignments.Where(r => r.TaskId == task.Id).ToListAsync())
+            .Should().ContainSingle().Subject;
+        step.PreviousAgentId.Should().Be(_awa);
+        step.NewAgentId.Should().Be(_koffi);
+        step.PreviousSlaDeadline.Should().Be(first);
+        step.NewSlaDeadline.Should().Be(second);
+    }
+
+    [Fact]
+    public async Task A_manual_reassignment_records_who_moved_the_task_and_why()
     {
         var lead = await AddLeadAsync();
+        var manager = Guid.NewGuid();
 
         await DispatchAsync(lead.Id, _awa, DateTimeOffset.UtcNow.AddHours(4));
-        await DispatchAsync(lead.Id, _koffi, DateTimeOffset.UtcNow.AddHours(4));
+        await DispatchAsync(lead.Id, _koffi, DateTimeOffset.UtcNow.AddHours(4), manager, "Awa en congé");
 
-        var tasks = await TasksAsync(lead.Id);
-        tasks.Single(t => t.AssignedAgentId == _awa).Status.Should().Be(CrmTaskStatus.Cancelled);
-        tasks.Single(t => t.AssignedAgentId == _koffi).Status.Should().Be(CrmTaskStatus.Pending);
+        await using var db = _db.CreateContext();
+        var step = await db.TaskReassignments.SingleAsync();
+        step.ActorId.Should().Be(manager);
+        step.Reason.Should().Be("Lead réattribué — Awa en congé");
+    }
+
+    [Fact]
+    public async Task The_attribution_history_starts_at_the_creation_and_lists_every_change()
+    {
+        var lead = await AddLeadAsync();
+        var first = DateTimeOffset.UtcNow.AddHours(4);
+        var second = DateTimeOffset.UtcNow.AddHours(6);
+
+        await DispatchAsync(lead.Id, _awa, first);
+        await DispatchAsync(lead.Id, _koffi, second);
+        var task = (await TasksAsync(lead.Id)).Single();
+
+        await using var db = _db.CreateContext();
+        var result = await new Sankore.Modules.Leads.Features.Tasks.GetTaskAssignments.GetTaskAssignmentsHandler(db)
+            .Handle(new Sankore.Modules.Leads.Features.Tasks.GetTaskAssignments.GetTaskAssignmentsQuery(task.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().HaveCount(2);
+        result.Value[0].Kind.Should().Be("Initial");
+        result.Value[0].AgentId.Should().Be(_awa);
+        result.Value[0].SlaDeadline.Should().Be(first);
+        result.Value[1].Kind.Should().Be("Reassigned");
+        result.Value[1].PreviousAgentId.Should().Be(_awa);
+        result.Value[1].AgentId.Should().Be(_koffi);
+        result.Value[1].SlaDeadline.Should().Be(second);
     }
 
     [Fact]
@@ -125,10 +180,12 @@ public sealed class LeadDispatchedTaskConsumerTests : IDisposable
         return lead;
     }
 
-    private async Task DispatchAsync(Guid leadId, Guid agentId, DateTimeOffset slaDeadline)
+    private async Task DispatchAsync(
+        Guid leadId, Guid agentId, DateTimeOffset slaDeadline, Guid? actorId = null, string? reason = null)
     {
         var context = Substitute.For<ConsumeContext<LeadDispatchedEvent>>();
-        context.Message.Returns(new LeadDispatchedEvent(leadId, _tenantId, agentId, DispatchingStrategy.RoundRobin, 50, slaDeadline));
+        context.Message.Returns(new LeadDispatchedEvent(
+            leadId, _tenantId, agentId, DispatchingStrategy.RoundRobin, 50, slaDeadline, actorId, reason));
         context.CancellationToken.Returns(CancellationToken.None);
 
         await using var db = _db.CreateContext();

@@ -146,4 +146,36 @@ public sealed class LeadAssignment
     /// </summary>
     public bool HasBreachedSla(DateTimeOffset now)
         => !IsSuperseded && FirstContactAt is null && now > SlaDeadline;
+
+    /// <summary>
+    /// When the agent was warned that this assignment's SLA was about to be breached; null until
+    /// then. A column rather than M08's idempotency alone: the sweep runs every 15 minutes, and
+    /// without it every run would re-resolve and re-submit each warned assignment until it breached.
+    /// </summary>
+    public DateTimeOffset? SlaWarnedAt { get; private set; }
+
+    /// <summary>
+    /// The instant from which the SLA counts as "about to be breached": <paramref name="percent"/>
+    /// of the window between the assignment and its deadline. Null when the warning is disabled
+    /// (outside 1–99, see <c>LeadSettingKeys.SlaWarningThresholdPercent</c>).
+    /// </summary>
+    public DateTimeOffset? SlaWarningAt(int percent)
+        => percent is < 1 or > 99
+            ? null
+            : CreatedAt + TimeSpan.FromTicks((SlaDeadline - CreatedAt).Ticks / 100 * percent);
+
+    /// <summary>
+    /// Open, not yet contacted, past the warning instant but not yet breached, and not warned
+    /// already. Past the deadline the breach alert takes over.
+    /// </summary>
+    public bool ShouldWarnSla(DateTimeOffset now, int percent)
+        => !IsSuperseded
+        && FirstContactAt is null
+        && SlaWarnedAt is null
+        && now <= SlaDeadline
+        && SlaWarningAt(percent) is { } warnAt
+        && now >= warnAt;
+
+    /// <summary>Records that the warning went out. Idempotent: the first instant is kept.</summary>
+    public void MarkSlaWarned(DateTimeOffset at) => SlaWarnedAt ??= at;
 }

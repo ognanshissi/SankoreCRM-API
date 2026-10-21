@@ -148,7 +148,8 @@ public sealed class CrmTask : ITenant
     /// extends the SLA deadline. Cannot reassign a completed or cancelled task.
     /// Returns the previous agent id so the caller can invalidate capacity caches.
     /// </summary>
-    public Result<Guid?> Reassign(Guid newAgentId, DateTimeOffset? newSlaDeadline = null)
+    public Result<Guid?> Reassign(
+        Guid newAgentId, DateTimeOffset? newSlaDeadline = null, DateTimeOffset? newDueAt = null)
     {
         if (Status == CrmTaskStatus.Completed) return Result.Fail<Guid?>("TASK_ALREADY_COMPLETED");
         if (Status == CrmTaskStatus.Cancelled)  return Result.Fail<Guid?>("TASK_CANCELLED");
@@ -158,7 +159,26 @@ public sealed class CrmTask : ITenant
 
         if (newSlaDeadline.HasValue)
             SlaDeadline = newSlaDeadline;
+        if (newDueAt.HasValue)
+            DueAt = newDueAt.Value;
 
         return Result.Ok(previous);
+    }
+
+    /// <summary>
+    /// SLA escalation: the agent keeps the task and its deadline moves to the escalated
+    /// assignment's. The due date follows when it would otherwise fall before the new deadline —
+    /// a task due before its own SLA reads as late on the agent's list for no reason.
+    /// </summary>
+    public Result ExtendSla(DateTimeOffset newSlaDeadline)
+    {
+        if (Status == CrmTaskStatus.Completed) return Result.Fail("TASK_ALREADY_COMPLETED");
+        if (Status == CrmTaskStatus.Cancelled)  return Result.Fail("TASK_CANCELLED");
+
+        SlaDeadline = newSlaDeadline;
+        if (DueAt < newSlaDeadline)
+            DueAt = newSlaDeadline;
+
+        return Result.Ok();
     }
 }

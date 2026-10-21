@@ -30,9 +30,12 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
 {
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly Guid _agentId = Guid.NewGuid();
+    private readonly Guid _agencyId = Guid.NewGuid();
+    private readonly Guid _managerId = Guid.NewGuid();
     private readonly TestDbFactory _db;
     private readonly INotificationsModule _notifications = Substitute.For<INotificationsModule>();
     private readonly IAdministrationModule _admin = Substitute.For<IAdministrationModule>();
+    private readonly ILeadSettings _settings = Substitute.For<ILeadSettings>();
 
     public CheckSlaBreachesJobTests()
     {
@@ -40,11 +43,10 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
 
         _admin.GetAgentAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new AgentSummary(
-                _agentId, "Awa Ouattara", Guid.NewGuid(), ["fr"], ["Loan"], null, 1, 0, 0.2, true));
+                _agentId, "Awa Ouattara", _agencyId, ["fr"], ["Loan"], null, 1, 0, 0.2, true));
 
-        // A supervisor exists, so escalation is allowed to proceed.
-        _admin.GetTeamAgentIdsAsync(_tenantId, _agentId, Arg.Any<CancellationToken>())
-            .Returns(new List<Guid> { Guid.NewGuid() });
+        _settings.GetIntAsync(_tenantId, LeadSettingKeys.SlaWarningThresholdPercent, Arg.Any<CancellationToken>())
+            .Returns(75);
 
         _notifications.QueueEmailAsync(Arg.Any<QueueEmailRequest>(), Arg.Any<CancellationToken>())
             .Returns(Result.Ok(Guid.NewGuid()));
@@ -76,6 +78,7 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
         services.AddScoped(_ => _db.Create());
         services.AddSingleton(_admin);
         services.AddSingleton(_notifications);
+        services.AddSingleton(_settings);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddLogging();
@@ -84,7 +87,12 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>());
     }
 
-    private async Task<(Lead Lead, LeadAssignment Assignment)> SeedBreachedAsync()
+    private Task<(Lead Lead, LeadAssignment Assignment)> SeedBreachedAsync()
+        // Already past: the job must see it as breached.
+        => SeedAsync(createdAt: DateTimeOffset.UtcNow.AddHours(-5), slaDeadline: DateTimeOffset.UtcNow.AddHours(-3));
+
+    private async Task<(Lead Lead, LeadAssignment Assignment)> SeedAsync(
+        DateTimeOffset createdAt, DateTimeOffset slaDeadline)
     {
         var lead = Lead.Capture(
             tenantId: _tenantId,
@@ -103,9 +111,8 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
             agentId: _agentId,
             strategy: DispatchingStrategy.RoundRobin,
             compatibilityScore: 42,
-            // Already past: the job must see it as breached.
-            slaDeadline: DateTimeOffset.UtcNow.AddHours(-3),
-            createdAt: DateTimeOffset.UtcNow.AddHours(-5));
+            slaDeadline: slaDeadline,
+            createdAt: createdAt);
 
         lead.AssignTo(assignment, currentAssignment: null);
 
@@ -212,5 +219,150 @@ public sealed class CheckSlaBreachesJobTests : IDisposable
             .FirstOrDefaultAsync(a => a.Id != assignment.Id && a.LeadId == lead.Id);
 
         escalated.Should().NotBeNull();
+    }
+
+    // ── Pre-breach warning ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task An_assignment_past_the_warning_threshold_warns_its_agent_once()
+    {
+        // 4 h of a 5 h window gone: 80 %, past the 75 % threshold, deadline still ahead.
+        var (_, assignment) = await SeedAsync(
+            createdAt: DateTimeOffset.UtcNow.AddHours(-4), slaDeadline: DateTimeOffset.UtcNow.AddHours(1));
+
+        await Job().ExecuteAsync(_tenantId);
+        await Job().ExecuteAsync(_tenantId);
+
+        await _admin.Received(1).NotifyUserAsync(
+            Arg.Is<NotifyUserRequest>(r =>
+                r.TemplateKey == "lead.sla-warning"
+                && r.UserId == _agentId
+                && r.TemplateData != null
+                && r.TemplateData.ContainsKey("remaining_hours")),
+            Arg.Any<CancellationToken>());
+
+        await using var db = _db.Create();
+        (await db.LeadAssignments.FirstAsync(a => a.Id == assignment.Id))
+            .SlaWarnedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task An_assignment_below_the_threshold_is_not_warned()
+    {
+        // 1 h of a 5 h window gone: 20 %.
+        await SeedAsync(
+            createdAt: DateTimeOffset.UtcNow.AddHours(-1), slaDeadline: DateTimeOffset.UtcNow.AddHours(4));
+
+        await Job().ExecuteAsync(_tenantId);
+
+        await _admin.DidNotReceive().NotifyUserAsync(
+            Arg.Any<NotifyUserRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_threshold_of_zero_disables_the_warning()
+    {
+        _settings.GetIntAsync(_tenantId, LeadSettingKeys.SlaWarningThresholdPercent, Arg.Any<CancellationToken>())
+            .Returns(0);
+        await SeedAsync(
+            createdAt: DateTimeOffset.UtcNow.AddHours(-4), slaDeadline: DateTimeOffset.UtcNow.AddHours(1));
+
+        await Job().ExecuteAsync(_tenantId);
+
+        await _admin.DidNotReceive().NotifyUserAsync(
+            Arg.Any<NotifyUserRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── Breach: manager copy, agent keeps the lead ──────────────────────
+
+    [Fact]
+    public async Task A_breach_is_copied_to_the_head_of_the_agency()
+    {
+        _admin.ResolveAgencyRecipientAsync(_tenantId, _agencyId, null, Arg.Any<CancellationToken>())
+            .Returns(_managerId);
+        await SeedBreachedAsync();
+
+        await Job().ExecuteAsync(_tenantId);
+
+        await _admin.Received(1).NotifyUserAsync(
+            Arg.Is<NotifyUserRequest>(r =>
+                r.TemplateKey == "lead.sla-breach-manager"
+                && r.UserId == _managerId
+                && r.TemplateData != null
+                && (string)r.TemplateData["agent_name"] == "Awa Ouattara"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task An_agent_who_heads_the_agency_is_not_copied_to_themselves()
+    {
+        _admin.ResolveAgencyRecipientAsync(_tenantId, _agencyId, null, Arg.Any<CancellationToken>())
+            .Returns(_agentId);
+        await SeedBreachedAsync();
+
+        await Job().ExecuteAsync(_tenantId);
+
+        await _admin.DidNotReceive().NotifyUserAsync(
+            Arg.Is<NotifyUserRequest>(r => r.TemplateKey == "lead.sla-breach-manager"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task An_escalation_keeps_the_agent_even_without_any_team()
+    {
+        // The escalation used to be skipped whenever GetTeamAgentIdsAsync — the agents a user
+        // supervises, asked about the agent — came back empty, i.e. for every ordinary agent.
+        var (lead, assignment) = await SeedBreachedAsync();
+
+        await Job().ExecuteAsync(_tenantId);
+
+        await using var db = _db.Create();
+        var escalated = await db.LeadAssignments
+            .FirstAsync(a => a.Id != assignment.Id && a.LeadId == lead.Id);
+        escalated.AgentId.Should().Be(_agentId);
+        escalated.SlaDeadline.Should().BeAfter(DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public async Task An_escalation_keeps_the_task_and_records_the_new_deadline_in_its_history()
+    {
+        var (lead, assignment) = await SeedBreachedAsync();
+        CrmTask task;
+        await using (var seed = _db.Create())
+        {
+            task = CrmTask.Create(
+                tenantId: _tenantId,
+                type: CrmTaskType.FirstContact,
+                priority: CrmTaskPriority.High,
+                title: "Premier contact",
+                dueAt: assignment.SlaDeadline,
+                leadId: lead.Id,
+                assignedAgentId: _agentId,
+                slaDeadline: assignment.SlaDeadline,
+                triggerEventType: TaskTriggerEvents.LeadDispatched,
+                triggerEventId: lead.Id);
+            seed.CrmTasks.Add(task);
+            await seed.SaveChangesAsync();
+        }
+
+        await Job().ExecuteAsync(_tenantId);
+
+        await using var db = _db.Create();
+        var escalated = await db.LeadAssignments
+            .FirstAsync(a => a.Id != assignment.Id && a.LeadId == lead.Id);
+
+        var stored = await db.CrmTasks.FirstAsync(t => t.Id == task.Id);
+        stored.Status.Should().Be(CrmTaskStatus.Pending, "the task is kept, not cancelled");
+        stored.AssignedAgentId.Should().Be(_agentId);
+        stored.SlaDeadline.Should().Be(escalated.SlaDeadline);
+        stored.DueAt.Should().Be(escalated.SlaDeadline);
+
+        var history = await db.TaskReassignments.Where(r => r.TaskId == task.Id).ToListAsync();
+        var step = history.Should().ContainSingle().Subject;
+        step.PreviousAgentId.Should().Be(_agentId);
+        step.NewAgentId.Should().Be(_agentId);
+        step.PreviousSlaDeadline.Should().Be(assignment.SlaDeadline);
+        step.NewSlaDeadline.Should().Be(escalated.SlaDeadline);
+        step.Reason.Should().Contain("Escalade SLA niveau 1");
     }
 }

@@ -35,6 +35,7 @@ internal sealed class ReassignTaskHandler(
             ? DateTimeOffset.UtcNow.AddHours(cmd.SlaExtensionHours.Value)
             : null;
 
+        var slaBefore      = task.SlaDeadline;
         var reassignResult = task.Reassign(cmd.NewAgentId, newSlaDeadline);
         if (reassignResult.IsFailure)
             return Result.Fail(reassignResult.Error!);
@@ -51,7 +52,8 @@ internal sealed class ReassignTaskHandler(
             reason:         cmd.Reason,
             actorId:        cmd.ActorId,
             slaExtended:    slaExtended,
-            newSlaDeadline: newSlaDeadline);
+            newSlaDeadline: newSlaDeadline,
+            previousSlaDeadline: slaBefore);
 
         db.TaskReassignments.Add(history);
 

@@ -66,6 +66,15 @@ public static class LeadSettingKeys
     /// </summary>
     public const string SlaComplianceTargetPercent = "sla-compliance-target-percent";
 
+    /// <summary>
+    /// Part du délai de premier contact écoulée, en pourcentage, à partir de laquelle l'agent est
+    /// prévenu que son SLA va être dépassé (<c>CheckSlaBreachesJob</c>). Exprimée en part du délai
+    /// et non en heures : un même seuil reste juste pour un SLA de 2 h comme pour un de 48 h.
+    /// 0 désactive la préalerte, et une valeur hors de 1–99 aussi — prévenir à 100 % serait
+    /// prévenir au moment du dépassement, que l'alerte de dépassement couvre déjà.
+    /// </summary>
+    public const string SlaWarningThresholdPercent = "sla-warning-threshold-percent";
+
     // ── Value types ─────────────────────────────────────────────────────────
     public const string TypeString  = "string";
     public const string TypeInt     = "int";
@@ -87,6 +96,9 @@ public static class LeadSettingKeys
         new(SlaComplianceTargetPercent, "90", TypeInt,
             "Share of steps the institution expects within their deadline, in percent. Shown as "
             + "the target on each agent's performance tab."),
+        new(SlaWarningThresholdPercent, "75", TypeInt,
+            "Share of the first-contact deadline elapsed, in percent, at which the agent is warned "
+            + "that the SLA is about to be breached. 0 disables the warning."),
     ];
 
     /// <summary>
