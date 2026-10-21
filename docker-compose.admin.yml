@@ -197,11 +197,18 @@ services:
     # depuis l'extérieur. L'API l'atteint par `dokploy-network`, pas par ce port publié, qui ne
     # sert plus qu'à un tunnel SSH d'administration.
     #
-    # Pas de labels `traefik.*` ici, délibérément : un référentiel de tenants exposé sur un
-    # domaine public n'est gardé que par sa clé d'API. Si la pile API est sur une AUTRE machine
-    # et qu'il faut donc bien un domaine, reprendre le gabarit de `env-dashboard` dans
-    # `docker-compose.yml` — routeur HTTPS + `basicauth` DEVANT l'application — et ne pas se
-    # contenter de l'onglet Domains de Dokploy, qui n'ajoute pas le middleware.
+    # Exposé par Traefik (décision du propriétaire, 2026-10-21) : le front d'administration est
+    # une application navigateur qui appelle cette API directement, il lui faut donc une adresse
+    # publique. La route vient de l'onglet Domains de Dokploy (port 8080, le port DU CONTENEUR) ;
+    # ce fichier n'apporte que ce que l'onglet ne fait pas : le rattachement à `dokploy-network`
+    # et le choix de ce réseau par Traefik (label ci-dessous). Garde : la clé d'API ou le jeton
+    # d'un administrateur plateforme sur toutes les routes sauf `/health` et la connexion, et le
+    # CORS limité à `ADMIN_FRONT_ORIGIN`.
+    labels:
+      # Le conteneur est sur trois réseaux : sans ce label, Traefik choisit une IP lui-même et
+      # peut prendre celle de `sankore-shared`, qu'il ne joint pas — un domaine qui répond par
+      # intermittence.
+      traefik.docker.network: "dokploy-network"
     ports:
       - "${TOOLS_BIND_ADDRESS:-127.0.0.1}:${SANKORE_ADMIN_PUBLISHED_PORT:-18200}:${SANKORE_ADMIN_PORT:-8080}"
     depends_on:
@@ -226,8 +233,17 @@ services:
       # à ce qui doit effectivement se parler, et ce service n'a par ailleurs aucune raison
       # d'être visible de Traefik puisqu'il ne porte aucun domaine.
       - "sankore-shared"
+      # Le seul réseau que Traefik voit : sans lui, l'onglet Domains publie une route vers un
+      # conteneur injoignable et Traefik répond « 404 page not found ». Ajouté quand le registre
+      # a été exposé au front d'administration — ce qui assume la surface décrite ci-dessus.
+      - "dokploy-network"
 
 networks:
+  # Créé et possédé par Dokploy : Compose s'y rattache sans le gérer. En local sans Dokploy,
+  # `docker network create dokploy-network` suffit.
+  dokploy-network:
+    external: true
+
   # Interne à cette pile : le registre et sa base, et rien d'autre. Pilote par défaut et NON
   # `internal: true`, bien que le nom y invite : `internal` coupe tout accès sortant, ce dont
   # ce service n'a pas besoin aujourd'hui mais qui serait un changement de comportement déduit
