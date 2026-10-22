@@ -419,6 +419,23 @@ public static class Permissions
     public static readonly PermissionItem CanManageCompliance =
         new("admin:compliance:manage", "Configure FATCA and PEP Compliance Parameters", ApplicationModules.Administration, "manage");
 
+    // ── Tenant modules (Administration module) ─────────────────────────────
+    //
+    // The paid modules a tenant subscribes to (« Banking - Microfinance », « Assurance »). The
+    // tenant asks, the PLATFORM authorises — every module has a cost — so none of these activates
+    // anything by itself. Deactivation is immediate and traced, and it is the administrator's act:
+    // these three are granted to System and Administrator only, by the everything-grant of
+    // RoleSeeder, and deliberately absent from its DefaultGrants table.
+
+    public static readonly PermissionItem CanReadTenantModules =
+        new("tenant:modules:read", "Read the Tenant's Modules, Their Cost and Subscription Status", ApplicationModules.Administration, "modules:read");
+
+    public static readonly PermissionItem CanRequestTenantModule =
+        new("tenant:modules:request", "Request the Activation of a Paid Module, or Cancel a Pending Request", ApplicationModules.Administration, "modules:request");
+
+    public static readonly PermissionItem CanDeactivateTenantModule =
+        new("tenant:modules:deactivate", "Deactivate a Module, Effective Immediately", ApplicationModules.Administration, "modules:deactivate");
+
     // ── Notifications module ───────────────────────────────────────────────
 
     public static readonly PermissionItem CanReadEmailTemplates =
@@ -936,6 +953,9 @@ public static class Permissions
         CanManageNotificationSettings,
         CanReadCompliance,
         CanManageCompliance,
+        CanReadTenantModules,
+        CanRequestTenantModule,
+        CanDeactivateTenantModule,
         CanManageEmailQuota,
         CanReadCompanyInfo,
         CanUpdateCompanyInfo,

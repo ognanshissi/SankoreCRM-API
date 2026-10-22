@@ -92,8 +92,14 @@ internal static class RoleSeeder
     /// docs/integration-module-plan.md; it is a reading of the specification, not something the
     /// specification states.
     /// </para>
+    ///
+    /// <para>
+    /// The <c>tenant:modules:*</c> permissions are NOT in this table, on purpose: requesting a paid
+    /// module and deactivating one are the administrator's acts, and Administrator already holds
+    /// them through the everything-grant above. <c>TenantModulePermissionsTests</c> pins it.
+    /// </para>
     /// </summary>
-    private static readonly (string RoleCode, string PermissionCode)[] DefaultGrants =
+    internal static readonly (string RoleCode, string PermissionCode)[] DefaultGrants =
     [
         // INT-11 — reading the integration state is a supervision task, acting on it is not.
         (Roles.SalesManager.Code, "Integration.Command.View"),
