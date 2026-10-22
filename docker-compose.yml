@@ -478,10 +478,22 @@ services:
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
       REDIS_URI: "redis://:${REDIS_PASSWORD}@redis:6379"
       SANKORE_TEMPO_OTLP_ENDPOINT: "http://tempo:4317"
-      Notifications__Smtp__Host: "maildev"
-      Notifications__Smtp__Port: "1025"
-      Notifications__Smtp__UseSsl: "false"
-      Notifications__Smtp__UseStartTls: "false"
+      # ── E-mail de la plateforme ────────────────────────────────────────
+      # Ce que suit un tenant qui n'a pas configuré son propre fournisseur. Choisi à
+      # l'installation : `Smtp` (le relais ci-dessous, maildev par défaut) ou `Brevo` (l'API
+      # Brevo avec la clé et l'expéditeur ci-dessous). Avec Brevo, l'API REFUSE DE DÉMARRER si
+      # la clé ou l'expéditeur manque — un expéditeur non vérifié chez Brevo est refusé à
+      # chaque envoi, et rien ne partirait, pas même les e-mails d'activation.
+      Notifications__Platform__Provider: "${NOTIFICATIONS_EMAIL_PROVIDER:-Smtp}"
+      Notifications__Platform__BrevoApiKey: "${NOTIFICATIONS_BREVO_API_KEY}"
+      Notifications__Platform__FromEmail: "${NOTIFICATIONS_FROM_EMAIL}"
+      Notifications__Platform__FromName: "${NOTIFICATIONS_FROM_NAME}"
+      Notifications__Smtp__Host: "${NOTIFICATIONS_SMTP_HOST:-maildev}"
+      Notifications__Smtp__Port: "${NOTIFICATIONS_SMTP_PORT:-1025}"
+      Notifications__Smtp__Username: "${NOTIFICATIONS_SMTP_USERNAME:-}"
+      Notifications__Smtp__Password: "${NOTIFICATIONS_SMTP_PASSWORD:-}"
+      Notifications__Smtp__UseSsl: "${NOTIFICATIONS_SMTP_USE_SSL:-false}"
+      Notifications__Smtp__UseStartTls: "${NOTIFICATIONS_SMTP_USE_STARTTLS:-false}"
       # ── Jetons d'authentification ──────────────────────────────────────
       Jwt__SigningKey: "${JWT_SIGNING_KEY}"
       Jwt__Issuer: "${JWT_ISSUER}"
@@ -502,9 +514,13 @@ services:
       Kyc__BlindIndexKey: "${KYC_BLIND_INDEX_KEY}"
       Integration__FieldEncryptionKey: "${INTEGRATION_FIELD_ENCRYPTION_KEY}"
       Integration__BlindIndexKey: "${INTEGRATION_BLIND_INDEX_KEY}"
+      # M12 : numéro de carte professionnelle d'un agrément de distribution (CIMA art. 510).
+      # Absentes, la première écriture d'une carte échoue — le reste de l'API n'en dépend pas.
+      Administration__FieldEncryptionKey: "${ADMINISTRATION_FIELD_ENCRYPTION_KEY}"
+      Administration__BlindIndexKey: "${ADMINISTRATION_BLIND_INDEX_KEY}"
 
       # ── Magasins d'objets chiffrés ─────────────────────────────────────
-      # Cinq préoccupations, cinq clés. Les BasePath pointent sur des VOLUMES : par défaut
+      # Sept préoccupations, sept clés. Les BasePath pointent sur des VOLUMES : par défaut
       # ils atterrissent sous la racine de contenu, qu'un redéploiement détruit — les images
       # KYC et les enregistrements d'appels seraient perdus à chaque mise à jour.
       Kyc__Storage__EncryptionKey: "${KYC_STORAGE_ENCRYPTION_KEY}"
@@ -521,8 +537,17 @@ services:
       Telephony__Recordings__EncryptionKey: "${TELEPHONY_RECORDINGS_ENCRYPTION_KEY}"
       Telephony__Recordings__BasePath: "/var/sankore/recordings"
 
+      # Médias WhatsApp (lot 4) et pièces jointes des tâches : chiffrement d'enveloppe, une clé
+      # de données par objet enveloppée par celle-ci. Vide = aucun magasin enregistré — les
+      # médias WhatsApp sont alors relus chez 360dialog à l'ouverture, et l'envoi d'une pièce
+      # jointe à une tâche répond « indisponible ».
+      Leads__WhatsApp__Media__EncryptionKey: "${LEADS_WHATSAPP_MEDIA_ENCRYPTION_KEY}"
+      Leads__WhatsApp__Media__BasePath: "/var/sankore/whatsapp-media"
+      Leads__Tasks__Attachments__EncryptionKey: "${LEADS_TASK_ATTACHMENTS_ENCRYPTION_KEY}"
+      Leads__Tasks__Attachments__BasePath: "/var/sankore/task-attachments"
+
       # ── Stockage objet Cloudflare R2 ───────────────────────────────────
-      # Choisit le support des cinq magasins ci-dessus : un bucket R2 par préoccupation si
+      # Choisit le support des sept magasins ci-dessus : un bucket R2 par préoccupation si
       # ceci est renseigné, les volumes locaux sinon. Le chiffrement reste le même dans les
       # deux cas — ces clés-ci ne remplacent aucune des clés de chiffrement ci-dessus.
       #
@@ -531,9 +556,9 @@ services:
       # de retomber silencieusement sur un volume qu'un redéploiement jette. Vides, les trois
       # sont lues comme absentes (`Trimmed`) et on garde le comportement actuel.
       #
-      # Les buckets ne sont PAS créés par l'API : les cinq doivent exister chez R2, nommés
+      # Les buckets ne sont PAS créés par l'API : les sept doivent exister chez R2, nommés
       # exactement comme la préoccupation — kyc-documents, imports, integration-batch-files,
-      # insurance-claim-documents, telephony-recordings.
+      # insurance-claim-documents, telephony-recordings, whatsapp-media, task-attachments.
       ObjectStorage__R2__AccountId: "${R2_ACCOUNT_ID}"
       ObjectStorage__R2__AccessKeyId: "${R2_ACCESS_KEY_ID}"
       ObjectStorage__R2__SecretAccessKey: "${R2_SECRET_ACCESS_KEY}"
@@ -592,6 +617,37 @@ services:
       # assureur.
       Integration__Insurance__Antivirus__Address: "${INTEGRATION_ANTIVIRUS_ADDRESS}"
 
+      # ── Biométrie KYC ──────────────────────────────────────────────────
+      # URL du service biométrie. Vide = le client répond BIOMETRY_NOT_CONFIGURED sans toucher
+      # le réseau. Le jeton n'est PAS ici : il est par tenant, dans le coffre
+      # (PUT api/v1/kyc-settings/biometry-token).
+      Kyc__Biometry__BaseUrl: "${KYC_BIOMETRY_BASE_URL}"
+
+      # ── Adresse publique de l'API ──────────────────────────────────────
+      # Base des URL que des tiers rappellent : webhook WhatsApp (360dialog) et retour OAuth des
+      # agendas connectés. Vide = l'adresse par laquelle la requête de l'administrateur est
+      # arrivée, ce qui est faux derrière un proxy qui réécrit l'hôte.
+      Integration__Messaging__PublicBaseUrl: "${API_PUBLIC_BASE_URL}"
+      Integration__ConnectedAccounts__PublicBaseUrl: "${API_PUBLIC_BASE_URL}"
+
+      # ── Agendas connectés (OAuth Microsoft et Google) ──────────────────
+      # Une application OAuth par fournisseur pour toute la plateforme. L'URI de redirection à
+      # déclarer chez eux, au caractère près :
+      #   {API_PUBLIC_BASE_URL}/integration/oauth/microsoft/callback
+      #   {API_PUBLIC_BASE_URL}/integration/oauth/google/callback
+      # Vides = le fournisseur n'est pas proposé.
+      Integration__ConnectedAccounts__Microsoft__ClientId: "${CONNECTED_ACCOUNTS_MICROSOFT_CLIENT_ID}"
+      Integration__ConnectedAccounts__Microsoft__ClientSecret: "${CONNECTED_ACCOUNTS_MICROSOFT_CLIENT_SECRET}"
+      Integration__ConnectedAccounts__Microsoft__Tenant: "${CONNECTED_ACCOUNTS_MICROSOFT_TENANT:-common}"
+      Integration__ConnectedAccounts__Google__ClientId: "${CONNECTED_ACCOUNTS_GOOGLE_CLIENT_ID}"
+      Integration__ConnectedAccounts__Google__ClientSecret: "${CONNECTED_ACCOUNTS_GOOGLE_CLIENT_SECRET}"
+
+      # ── Bot WhatsApp (lot 3) ───────────────────────────────────────────
+      # `Anthropic` avec une clé, sinon aucun modèle : chaque conversation passe alors
+      # directement à un humain. Le tenant doit EN PLUS activer `whatsapp-bot-enabled`.
+      Leads__WhatsAppBot__Provider: "${WHATSAPP_BOT_PROVIDER:-Anthropic}"
+      Leads__WhatsAppBot__ApiKey: "${WHATSAPP_BOT_API_KEY}"
+
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://env-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "sankore-api"
@@ -639,6 +695,12 @@ services:
       - type: "volume"
         source: "sankore-recordings"
         target: "/var/sankore/recordings"
+      - type: "volume"
+        source: "sankore-whatsapp-media"
+        target: "/var/sankore/whatsapp-media"
+      - type: "volume"
+        source: "sankore-task-attachments"
+        target: "/var/sankore/task-attachments"
     depends_on:
       rabbitmq:
         condition: "service_healthy"
@@ -832,7 +894,7 @@ volumes:
     driver: "local"
     name: "${POSTGRES_VOLUME:-sankore-postgres-data}"
 
-  # Un volume par préoccupation chiffrée de l'API. Séparés et non un seul : ce sont cinq clés
+  # Un volume par préoccupation chiffrée de l'API. Séparés et non un seul : ce sont sept clés
   # distinctes, et les monter ensemble ferait d'une sauvegarde partielle une sauvegarde dont
   # on ne sait pas ce qu'elle contient.
   sankore-kyc-storage:
@@ -844,4 +906,8 @@ volumes:
   sankore-claim-storage:
     driver: "local"
   sankore-recordings:
+    driver: "local"
+  sankore-whatsapp-media:
+    driver: "local"
+  sankore-task-attachments:
     driver: "local"

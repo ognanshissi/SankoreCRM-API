@@ -9,7 +9,7 @@ using Sankore.Modules.Administration.PublicApi;
 /// Cache-aside resolver:
 ///   1. Hit Redis → return immediately.
 ///   2. Miss → call IAdministrationModule, write to cache, return.
-///   3. No custom config in Administration → return platform default (SES).
+///   3. No custom config in Administration → return platform default (Notifications:Platform, SMTP or Brevo).
 /// Cache is invalidated synchronously by the Administration handlers on change
 /// and asynchronously via TenantNotificationSettingsChangedConsumer.
 /// </summary>

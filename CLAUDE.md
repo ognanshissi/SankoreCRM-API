@@ -1287,7 +1287,7 @@ mental model covers both — and the places it deliberately does not are all dow
 | Resolver cache key | `notifications:provider:{t}` | `notifications:sms-provider:{t}` |
 | Change event | `TenantNotificationSettingsChangedEvent` | `TenantSmsSettingsChangedEvent` |
 | Processor | 30 s, batch 50, 3 attempts | **10 s, batch 20, 2 attempts** |
-| Platform fallback | the platform's SMTP account | **none — no channel means no send** |
+| Platform fallback | the platform's account, SMTP or Brevo (`Notifications:Platform`) | **none — no channel means no send** |
 
 **Separate tables rather than a `Channel` column, every time.** One settings row mixing both would
 make `UpdateProvider`, `ResetToDefault` and `TryConsumeMonthlyQuota` silently mean "email" — which

@@ -28,6 +28,7 @@ using Sankore.Modules.Administration.PublicApi;
 internal sealed class EmailOutboxProcessor(
     IServiceScopeFactory scopeFactory,
     IOptions<EmailOutboxProcessorOptions> options,
+    IOptions<PlatformEmailOptions> platform,
     ILogger<EmailOutboxProcessor> logger)
     : BackgroundService
 {
@@ -175,15 +176,13 @@ internal sealed class EmailOutboxProcessor(
             var rendered = await renderer.RenderAsync(
                 message.TenantId, message.TemplateKey, message.Locale, message.TemplateDataJson, ct);
 
-            var fromEmail = provider is { IsDefault: true }
-                ? "noreply@sankore.io"
-                : provider.FromEmail ?? "noreply@sankore.io";
+            var (fromEmail, fromName) = platform.Value.SenderFor(provider);
 
             var request = new SendEmailRequest(
                 MessageId: message.Id,
                 TenantId: message.TenantId,
                 FromEmail: fromEmail,
-                FromName: provider.FromName ?? "Sankore",
+                FromName: fromName,
                 ReplyToEmail: provider.ReplyToEmail,
                 ToEmail: message.RecipientEmail,
                 ToName: message.RecipientName,

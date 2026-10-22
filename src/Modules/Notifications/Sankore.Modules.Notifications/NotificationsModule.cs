@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Notifications.Features.DeliveryLogs;
 using Sankore.Modules.Notifications.Features.EmailTemplates;
 using Sankore.Modules.Notifications.Features.SmsTemplates;
@@ -91,6 +92,31 @@ public static class NotificationsModule
 
         // SMTP options — bind from Notifications:Smtp in appsettings / user-secrets
         services.Configure<SmtpOptions>(config.GetSection(SmtpOptions.SectionName));
+
+        // The platform account — what a tenant with no provider of its own sends through.
+        // Validated at START-UP, unlike the per-tenant settings: a deployment installed on Brevo
+        // without its key would otherwise boot fine and dead-letter every activation e-mail, with
+        // the cause visible only in the delivery log of a tenant nobody has opened yet.
+        services.AddOptions<PlatformEmailOptions>()
+            .Bind(config.GetSection(PlatformEmailOptions.SectionName))
+            .PostConfigure<IOptions<SmtpOptions>>((platform, smtp) =>
+            {
+                if (string.IsNullOrWhiteSpace(platform.FromEmail)) platform.FromEmail = smtp.Value.FromEmail;
+                if (string.IsNullOrWhiteSpace(platform.FromName)) platform.FromName = smtp.Value.FromName;
+            })
+            .Validate(
+                p => p.IsBrevo || string.Equals(p.Provider?.Trim(), PlatformEmailOptions.Smtp, StringComparison.OrdinalIgnoreCase),
+                $"{PlatformEmailOptions.SectionName}:Provider must be '{PlatformEmailOptions.Smtp}' or '{PlatformEmailOptions.Brevo}'.")
+            .Validate(
+                p => !p.IsBrevo || !string.IsNullOrWhiteSpace(p.BrevoApiKey),
+                $"{PlatformEmailOptions.SectionName}:Provider is Brevo but {PlatformEmailOptions.SectionName}:BrevoApiKey is empty.")
+            // Read off the raw section, not the bound options: the post-configure above fills the
+            // sender with the SMTP default, `noreply@sankore.io`, which Brevo refuses as unverified.
+            .Validate(
+                p => !p.IsBrevo || !string.IsNullOrWhiteSpace(config[$"{PlatformEmailOptions.SectionName}:FromEmail"]),
+                $"{PlatformEmailOptions.SectionName}:Provider is Brevo but {PlatformEmailOptions.SectionName}:FromEmail is empty "
+                + "— Brevo only sends from an address verified on the account.")
+            .ValidateOnStart();
 
         // Outbox processor options + background service
         services.Configure<EmailOutboxProcessorOptions>(

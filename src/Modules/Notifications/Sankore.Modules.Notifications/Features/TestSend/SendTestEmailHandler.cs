@@ -2,6 +2,7 @@ namespace Sankore.Modules.Notifications.Features.TestSend;
 
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Notifications.Infrastructure.Providers;
 using Sankore.Modules.Notifications.Infrastructure.Senders;
 using Sankore.Shared.Infrastructure.Auth;
@@ -12,6 +13,7 @@ internal sealed class SendTestEmailHandler(
     IEmailSender sender,
     ICurrentUser currentUser,
     ITenantContext tenant,
+    IOptions<PlatformEmailOptions> platform,
     ILogger<SendTestEmailHandler> logger)
     : IRequestHandler<SendTestEmailCommand, Result<TestEmailResult>>
 {
@@ -23,11 +25,15 @@ internal sealed class SendTestEmailHandler(
 
         var usedTenantProvider = !provider.IsDefault;
 
+        // The same identity as the outbox processor, so a passing test proves what real mail
+        // will carry — it used to send as the tenant's address even on the platform account.
+        var (fromEmail, fromName) = platform.Value.SenderFor(provider);
+
         var message = new SendEmailRequest(
             MessageId: Guid.NewGuid(),
             TenantId: tenantId,
-            FromEmail: provider.FromEmail ?? "noreply@sankore.io",
-            FromName: provider.FromName ?? "Sankore",
+            FromEmail: fromEmail,
+            FromName: fromName,
             ReplyToEmail: provider.ReplyToEmail,
             ToEmail: request.RecipientEmail,
             ToName: currentUser.DisplayName,

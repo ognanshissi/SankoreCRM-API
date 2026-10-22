@@ -13,7 +13,8 @@ using Sankore.Modules.Notifications.Infrastructure.Providers;
 /// structured error, which is what the delivery log and the webhook correlation need. A tenant
 /// who prefers the relay can still configure Brevo's SMTP host under the "Smtp" provider.
 ///
-/// The API key is fetched from the vault per send, never cached.
+/// The API key is fetched per send, never cached: from the tenant's vault, or the platform's
+/// configuration when Brevo is the platform provider (see <see cref="INotificationCredentials"/>).
 /// </summary>
 internal sealed class BrevoEmailSender(
     IHttpClientFactory httpClientFactory,
@@ -36,8 +37,9 @@ internal sealed class BrevoEmailSender(
         {
             // Throwing hands the message back to the outbox, which retries and eventually
             // dead-letters it. Silently doing nothing would report it as delivered.
-            throw new InvalidOperationException(
-                "Brevo is selected for this tenant but no API key is stored in the vault.");
+            throw new InvalidOperationException(provider.IsDefault
+                ? "Brevo is the platform email provider but Notifications:Platform:BrevoApiKey is empty."
+                : "Brevo is selected for this tenant but no API key is stored in the vault.");
         }
 
         var client = httpClientFactory.CreateClient(HttpClientName);

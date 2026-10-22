@@ -61,7 +61,8 @@ are mapped as plain double columns. Dokploy's stock PostgreSQL image is enough.
 
 1. **A domain per application**, with DNS `A` records pointing at the Dokploy host.
 2. **Git access** to this repository from Dokploy (deploy key or PAT).
-3. **An SMTP account or Brevo key** for the platform's own outgoing mail (§6).
+3. **An SMTP account or a Brevo API key with a verified sender** for the platform's own outgoing
+   mail (§6, `Notifications__Platform__Provider`).
 4. Read §9 before going to production. Three items there are code-level, not configuration.
 
 ### Generate the secrets first — write them down before creating anything
@@ -428,6 +429,14 @@ TenantStore__ApiKey=<the SAME value as Sankore.Admin's ApiKey>
 Messaging__UseRabbitMq=false
 
 # ── platform outbound mail (fallback when a tenant has no provider) ─────
+# `Smtp` (the relay below) or `Brevo` (Brevo's API). With Brevo the API REFUSES TO START unless
+# the key and FromEmail are both set, and FromEmail must be verified on the Brevo account.
+Notifications__Platform__Provider=Brevo
+Notifications__Platform__BrevoApiKey=<xkeysib-...>
+Notifications__Platform__FromEmail=noreply@example.com
+Notifications__Platform__FromName=Sankore
+# Only read when Provider is Smtp. Its FromEmail/FromName are the fallback sender when the
+# Platform ones are unset (they used to be ignored: the sender was hard-coded).
 Notifications__Smtp__Host=<smtp host>
 Notifications__Smtp__Port=587
 Notifications__Smtp__Username=<user>
@@ -700,8 +709,8 @@ curl -s https://api.example.com/api/v1/users/auth-context \
 A `401` on permission-gated endpoints right after a first deploy almost always means the role
 seeding ran after your token was issued: log in again.
 
-**4 — configure outbound mail for the tenant** (optional; the platform SMTP above is the
-fallback). `PUT /api/v1/notification-settings` with `providerType` `Smtp` or `Brevo` and the
+**4 — configure outbound mail for the tenant** (optional; the platform provider above — SMTP or
+Brevo — is the fallback). `PUT /api/v1/notification-settings` with `providerType` `Smtp` or `Brevo` and the
 credential; it is written to the vault, never to a column. Then
 `POST /api/v1/notification-settings/test-send` — it answers **HTTP 200 even on failure**, so
 read `delivered`, not the status code. See the "Secrets vault" section of `CLAUDE.md`.
