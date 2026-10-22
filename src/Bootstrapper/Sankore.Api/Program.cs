@@ -246,14 +246,14 @@ builder.Services.AddRateLimiter(options =>
             }));
 
     // Strict limit for unauthenticated auth endpoints (login, forgot-password, etc.)
-    // 5 requests per minute per IP address — mitigates brute-force and enumeration attacks.
+    // 20 requests per minute per IP address — mitigates brute-force and enumeration attacks.
     options.AddPolicy("auth", ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 Window = TimeSpan.FromMinutes(1),
-                PermitLimit = 5,
+                PermitLimit = 20,
                 QueueLimit = 0,
             }));
 
