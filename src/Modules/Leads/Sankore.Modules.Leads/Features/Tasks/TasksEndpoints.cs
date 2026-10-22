@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Tasks.AssignTask;
 using Sankore.Modules.Leads.Features.Tasks.CancelTask;
+using Sankore.Modules.Leads.Features.Tasks.Collaboration;
 using Sankore.Modules.Leads.Features.Tasks.CompleteTask;
 using Sankore.Modules.Leads.Features.Tasks.CreateTask;
 using Sankore.Modules.Leads.Features.Tasks.DispatchTask;
@@ -140,6 +141,8 @@ public static class TasksEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        group.MapTaskCollaborationEndpoints();
+
         return app;
     }
 
@@ -160,7 +163,8 @@ public static class TasksEndpoints
         CancellationToken ct)
     {
         var result = await sender.Send(new CreateTaskCommand(req.Type, req.Priority, req.Title, req.DueAt,
-            req.LeadId, req.AssignedAgentId, req.SlaDeadline, req.Description), ct);
+            req.LeadId, req.AssignedAgentId, req.SlaDeadline, req.Description,
+            req.EntityType, req.EntityId, req.ParticipantIds, req.Criteria, req.Tags), ct);
 
         return result.IsSuccess
             ? Results.Created($"tasks/{result.Value}", result.Value)
@@ -243,10 +247,12 @@ public static class TasksEndpoints
     }
 
     private static async Task<IResult> ReassignTask(
-        Guid taskId, ReassignTaskRequest req, ISender sender, CancellationToken ct)
+        Guid taskId, ReassignTaskRequest req, ISender sender, ICurrentUser currentUser, CancellationToken ct)
     {
+        // The actor is who is signed in, never what the body says: req.ActorId is kept for older
+        // clients and ignored — an audit actor that a caller chooses is not an audit.
         var result = await sender.Send(
-            new ReassignTaskCommand(taskId, req.NewAgentId, req.Reason, req.ActorId, req.SlaExtensionHours), ct);
+            new ReassignTaskCommand(taskId, req.NewAgentId, req.Reason, currentUser.Id, req.SlaExtensionHours), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -277,7 +283,12 @@ public sealed record CreateTaskRequest(
     Guid? LeadId = null,
     Guid? AssignedAgentId = null,
     DateTimeOffset? SlaDeadline = null,
-    string? Description = null);
+    string? Description = null,
+    TaskEntityType? EntityType = null,
+    Guid? EntityId = null,
+    IReadOnlyList<Guid>? ParticipantIds = null,
+    IReadOnlyList<string>? Criteria = null,
+    IReadOnlyList<string>? Tags = null);
 
 public sealed record AssignTaskRequest(Guid AgentId);
 

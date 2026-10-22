@@ -119,6 +119,13 @@ public interface IAdministrationModule
         CancellationToken ct);
 
     /// <summary>
+    /// Who answers for a user: their line manager (<c>ReportsToUserId</c>, « le responsable ») and
+    /// the head of their agency (« le chef d'agence »). Either is null when unset or no longer an
+    /// active account of the tenant. Used to let those two people into a task the user holds.
+    /// </summary>
+    Task<UserSupervisors> GetUserSupervisorsAsync(Guid tenantId, Guid userId, CancellationToken ct);
+
+    /// <summary>
     /// Le nom affiché de chaque utilisateur demandé, en un appel — pour une liste qui montre un
     /// conseiller par ligne. Un identifiant inconnu (ou d'un autre tenant) est absent du résultat.
     /// </summary>
@@ -563,6 +570,11 @@ public sealed record AgencySummary(
 /// One CRM account matched by its address (TEL-B-05). <paramref name="Email"/> comes back as the
 /// column holds it, not as the caller spelled it, so a screen shows the account's own address.
 /// </summary>
+public sealed record UserSupervisors(Guid? LineManagerId, Guid? AgencyManagerId)
+{
+    public static readonly UserSupervisors None = new(null, null);
+}
+
 public sealed record UserEmailMatch(
     Guid UserId,
     string Email,

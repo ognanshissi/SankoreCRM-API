@@ -15,7 +15,22 @@ public sealed class CrmTask : ITenant
     public CrmTaskPriority Priority { get; private set; }
     public string Title { get; private set; } = default!;
     public string? Description { get; private set; }
+
+    /// <summary>
+    /// What the task is about: a lead, a client or a KYC file — or nothing (an internal task).
+    /// An opaque reference across modules, no foreign key, like <c>Appointment.ClientId</c>.
+    /// </summary>
+    public TaskEntityType? EntityType { get; private set; }
+    public Guid? EntityId { get; private set; }
+
+    /// <summary>
+    /// Kept for the lead: dispatching, the lead's Tâches tab and every generated task read it.
+    /// Always equal to <see cref="EntityId"/> when <see cref="EntityType"/> is Lead, null otherwise.
+    /// </summary>
     public Guid? LeadId { get; private set; }
+
+    /// <summary>Who created it; null for a task the system generated.</summary>
+    public Guid? CreatedBy { get; private set; }
     public Guid? AssignedAgentId { get; private set; }
     public CrmTaskStatus Status { get; private set; }
     public DateTimeOffset DueAt { get; private set; }
@@ -64,6 +79,8 @@ public sealed class CrmTask : ITenant
             Title            = title,
             Description      = description,
             LeadId           = leadId,
+            EntityType       = leadId.HasValue ? TaskEntityType.Lead : null,
+            EntityId         = leadId,
             AssignedAgentId  = assignedAgentId,
             Status           = CrmTaskStatus.Pending,
             DueAt            = dueAt,
@@ -72,6 +89,61 @@ public sealed class CrmTask : ITenant
             TriggerEventType = triggerEventType,
             TriggerEventId   = triggerEventId
         };
+
+    public const int TitleMaxLength = 200;
+    public const int DescriptionMaxLength = 4000;
+
+    /// <summary>
+    /// A task created by a person, about anything or nothing. A lead also sets <see cref="LeadId"/>,
+    /// so everything that reads the lead's tasks keeps seeing it.
+    /// </summary>
+    public static Result<CrmTask> CreateManual(
+        Guid tenantId,
+        Guid createdBy,
+        CrmTaskType type,
+        CrmTaskPriority priority,
+        string title,
+        DateTimeOffset dueAt,
+        TaskEntityType? entityType,
+        Guid? entityId,
+        Guid? assignedAgentId,
+        string? description,
+        DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return Result.Fail<CrmTask>("TASK_TITLE_REQUIRED");
+        if (title.Trim().Length > TitleMaxLength) return Result.Fail<CrmTask>("TASK_TITLE_TOO_LONG");
+        if (description?.Trim().Length > DescriptionMaxLength) return Result.Fail<CrmTask>("TASK_DESCRIPTION_TOO_LONG");
+        if (dueAt <= now) return Result.Fail<CrmTask>("TASK_DUE_IN_PAST");
+        if (entityType.HasValue != (entityId is { } id && id != Guid.Empty)) return Result.Fail<CrmTask>("TASK_ENTITY_INCOMPLETE");
+
+        var task = Create(
+            tenantId, type, priority, title.Trim(), dueAt,
+            leadId: entityType == TaskEntityType.Lead ? entityId : null,
+            assignedAgentId: assignedAgentId,
+            description: string.IsNullOrWhiteSpace(description) ? null : description.Trim());
+
+        task.EntityType = entityType;
+        task.EntityId = entityType.HasValue ? entityId : null;
+        task.CreatedBy = createdBy;
+        task.CreatedAt = now;
+        return Result.Ok(task);
+    }
+
+    /// <summary>Title, description and priority — refused once the task is closed.</summary>
+    public Result UpdateDetails(string title, string? description, CrmTaskPriority priority)
+    {
+        if (Status is CrmTaskStatus.Completed or CrmTaskStatus.Cancelled) return Result.Fail("TASK_CLOSED");
+        if (string.IsNullOrWhiteSpace(title)) return Result.Fail("TASK_TITLE_REQUIRED");
+        if (title.Trim().Length > TitleMaxLength) return Result.Fail("TASK_TITLE_TOO_LONG");
+        if (description?.Trim().Length > DescriptionMaxLength) return Result.Fail("TASK_DESCRIPTION_TOO_LONG");
+
+        Title = title.Trim();
+        Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        Priority = priority;
+        return Result.Ok();
+    }
+
+    public bool IsClosed => Status is CrmTaskStatus.Completed or CrmTaskStatus.Cancelled;
 
     public Result Complete()
     {

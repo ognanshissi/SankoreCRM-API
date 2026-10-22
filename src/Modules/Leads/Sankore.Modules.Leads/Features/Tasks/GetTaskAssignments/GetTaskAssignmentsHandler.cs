@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.Tasks.GetTaskAssignments;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Leads.Features.Tasks.Collaboration;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
@@ -14,20 +15,16 @@ using Sankore.Shared.Kernel;
 /// (what the task was before it), else off the task itself when it never changed.
 /// </para>
 /// </summary>
-internal sealed class GetTaskAssignmentsHandler(LeadsDbContext db)
+internal sealed class GetTaskAssignmentsHandler(LeadsDbContext db, TaskAccess access)
     : IRequestHandler<GetTaskAssignmentsQuery, Result<IReadOnlyList<TaskAssignmentEntryDto>>>
 {
     public async Task<Result<IReadOnlyList<TaskAssignmentEntryDto>>> Handle(
         GetTaskAssignmentsQuery query, CancellationToken ct)
     {
-        var task = await db.CrmTasks
-            .AsNoTracking()
-            .Where(t => t.Id == query.TaskId)
-            .Select(t => new { t.Id, t.TenantId, t.CreatedAt, t.AssignedAgentId, t.SlaDeadline })
-            .FirstOrDefaultAsync(ct);
-
-        if (task is null)
-            return Result.Fail<IReadOnlyList<TaskAssignmentEntryDto>>("TASK_NOT_FOUND");
+        var loaded = await access.LoadAsync(query.TaskId, tracking: false, ct);
+        if (loaded.IsFailure)
+            return Result.Fail<IReadOnlyList<TaskAssignmentEntryDto>>(loaded.Error!);
+        var task = loaded.Value!;
 
         var changes = await db.TaskReassignments
             .AsNoTracking()

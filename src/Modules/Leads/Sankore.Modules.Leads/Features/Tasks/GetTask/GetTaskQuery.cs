@@ -22,4 +22,7 @@ public sealed record CrmTaskDto(
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
     string? TriggerEventType,
-    Guid? TriggerEventId);
+    Guid? TriggerEventId,
+    TaskEntityType? EntityType = null,
+    Guid? EntityId = null,
+    Guid? CreatedBy = null);

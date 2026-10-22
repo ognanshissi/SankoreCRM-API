@@ -478,6 +478,8 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.AgentAbsenceTaskTransferConsumer>();
     // Rendez-vous de « Ma journée » : invitations et annulations aux collègues invités.
     x.AddConsumer<Sankore.Modules.Leads.Features.Appointments.AppointmentInvitationConsumer>();
+    // Task activity (assigned, associated, commented, file attached) → the bell.
+    x.AddConsumer<Sankore.Modules.Leads.Features.Tasks.Collaboration.CrmTaskActivityConsumer>();
     // WA-BE-06 : hands a queued WhatsApp template to the provider, at most once.
     x.AddConsumer<Sankore.Modules.Leads.Features.WhatsApp.SendWhatsAppMessageConsumer>();
     // WA-BE-14/15 : trouve l'agent attendu (dispatching M13) et prévient — e-mail et cloche.

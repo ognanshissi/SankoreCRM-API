@@ -165,14 +165,27 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
                     b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
                         .HasColumnName("description");
 
                     b.Property<DateTimeOffset>("DueAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("due_at");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("entity_type");
 
                     b.Property<Guid?>("LeadId")
                         .HasColumnType("uuid")
@@ -232,10 +245,258 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.HasIndex("LeadId", "Status")
                         .HasDatabaseName("ix_crm_tasks_lead_id_status");
 
+                    b.HasIndex("TenantId", "EntityType", "EntityId")
+                        .HasDatabaseName("ix_crm_tasks_tenant_id_entity_type_entity_id");
+
                     b.HasIndex("TenantId", "Status", "DueAt")
                         .HasDatabaseName("ix_crm_tasks_tenant_id_status_due_at");
 
                     b.ToTable("crm_tasks", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("StorageRef")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("storage_ref");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("task_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_crm_task_attachments");
+
+                    b.HasIndex("TaskId", "UploadedAt")
+                        .HasDatabaseName("ix_crm_task_attachments_task_id_uploaded_at");
+
+                    b.ToTable("crm_task_attachments", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset?>("EditedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("edited_at");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("task_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_crm_task_comments");
+
+                    b.HasIndex("TaskId", "CreatedAt")
+                        .HasDatabaseName("ix_crm_task_comments_task_id_created_at");
+
+                    b.ToTable("crm_task_comments", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskCriterion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IsMet")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_met");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("label");
+
+                    b.Property<DateTimeOffset?>("MetAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("met_at");
+
+                    b.Property<Guid?>("MetBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("met_by");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("task_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_crm_task_criteria");
+
+                    b.HasIndex("TaskId", "Position")
+                        .HasDatabaseName("ix_crm_task_criteria_task_id_position");
+
+                    b.ToTable("crm_task_criteria", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskParticipant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<Guid>("AddedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("added_by");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("task_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_crm_task_participants");
+
+                    b.HasIndex("TaskId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_crm_task_participants_task_id_user_id");
+
+                    b.HasIndex("TenantId", "UserId")
+                        .HasDatabaseName("ix_crm_task_participants_tenant_id_user_id");
+
+                    b.ToTable("crm_task_participants", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskTag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<Guid>("AddedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("added_by");
+
+                    b.Property<string>("Tag")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tag");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("task_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_crm_task_tags");
+
+                    b.HasIndex("TaskId", "Tag")
+                        .IsUnique()
+                        .HasDatabaseName("ix_crm_task_tags_task_id_tag");
+
+                    b.HasIndex("TenantId", "Tag")
+                        .HasDatabaseName("ix_crm_task_tags_tenant_id_tag");
+
+                    b.ToTable("crm_task_tags", "leads");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.DispatchingRule", b =>
@@ -3647,6 +3908,56 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasForeignKey("LeadId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_crm_tasks_leads_lead_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskAttachment", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.CrmTask", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_crm_task_attachments_crm_tasks_task_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskComment", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.CrmTask", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_crm_task_comments_crm_tasks_task_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskCriterion", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.CrmTask", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_crm_task_criteria_crm_tasks_task_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskParticipant", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.CrmTask", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_crm_task_participants_crm_tasks_task_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.CrmTaskTag", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.CrmTask", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_crm_task_tags_crm_tasks_task_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.DispatchingRule", b =>

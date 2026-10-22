@@ -252,6 +252,35 @@ public static class LeadsModule
                     sp.GetRequiredService<ILogger<Infrastructure.WhatsAppMedia.EncryptedWhatsAppMediaStore>>()));
         }
 
+        // Task attachments: same arrangement — a keyed medium (bucket first, local folder as the
+        // fallback), and the store ONLY when its own key exists.
+        services.Configure<Infrastructure.TaskAttachments.TaskAttachmentStorageOptions>(
+            config.GetSection(Infrastructure.TaskAttachments.TaskAttachmentStorageOptions.SectionName));
+
+        services.TryAddKeyedSingleton<Sankore.Shared.ObjectStorage.IObjectBackend>(
+            Infrastructure.TaskAttachments.TaskAttachmentStorage.Concern, (sp, _) =>
+            {
+                var options = sp.GetRequiredService<IOptions<Infrastructure.TaskAttachments.TaskAttachmentStorageOptions>>().Value;
+                var root = string.IsNullOrWhiteSpace(options.BasePath)
+                    ? Path.Combine(AppContext.BaseDirectory, Infrastructure.TaskAttachments.TaskAttachmentStorage.Concern)
+                    : Path.GetFullPath(options.BasePath);
+                return new Sankore.Shared.ObjectStorage.LocalObjectBackend(
+                    root, sp.GetRequiredService<ILogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>>());
+            });
+
+        if (!string.IsNullOrWhiteSpace(config[$"{Infrastructure.TaskAttachments.TaskAttachmentStorageOptions.SectionName}:EncryptionKey"]))
+        {
+            services.TryAddSingleton<Infrastructure.TaskAttachments.ITaskAttachmentStore>(sp =>
+                new Infrastructure.TaskAttachments.EncryptedTaskAttachmentStore(
+                    sp.GetRequiredKeyedService<Sankore.Shared.ObjectStorage.IObjectBackend>(Infrastructure.TaskAttachments.TaskAttachmentStorage.Concern),
+                    sp.GetRequiredService<IOptions<Infrastructure.TaskAttachments.TaskAttachmentStorageOptions>>(),
+                    sp.GetRequiredService<ILogger<Infrastructure.TaskAttachments.EncryptedTaskAttachmentStore>>()));
+        }
+
+        // Tasks: who may open one, and what it can be attached to.
+        services.AddScoped<Features.Tasks.Collaboration.TaskAccess>();
+        services.AddScoped<Features.Tasks.Collaboration.TaskSubjects>();
+
         services.AddScoped<Features.WhatsApp.WhatsAppMediaReader>();
         services.AddScoped<Features.WhatsApp.WhatsAppPerimeter>();
         services.AddScoped<Features.WhatsApp.WhatsAppAudit>();

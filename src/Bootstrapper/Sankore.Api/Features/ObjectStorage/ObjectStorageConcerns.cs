@@ -33,6 +33,10 @@ internal static class ObjectStorageConcerns
         // EncryptedWhatsAppMediaStore: a customer's photographs, documents and voice notes.
         new(Sankore.Modules.Leads.Infrastructure.WhatsAppMedia.WhatsAppMediaStorage.Concern,
             Sankore.Modules.Leads.Infrastructure.WhatsAppMedia.WhatsAppMediaStorage.ResolveBasePath),
+
+        // EncryptedTaskAttachmentStore: the files agents attach to a task.
+        new(Sankore.Modules.Leads.Infrastructure.TaskAttachments.TaskAttachmentStorage.Concern,
+            Sankore.Modules.Leads.Infrastructure.TaskAttachments.TaskAttachmentStorage.ResolveBasePath),
     ];
 
     internal static Concern? Find(string? name) =>

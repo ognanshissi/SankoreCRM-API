@@ -62,7 +62,8 @@ internal sealed class ListTasksHandler(
                 t.Id, t.TenantId, t.Type, t.Priority, t.Title,
                 t.Description, t.LeadId, t.AssignedAgentId, t.Status,
                 t.DueAt, t.SlaDeadline, t.CreatedAt, t.StartedAt,
-                t.CompletedAt, t.TriggerEventType, t.TriggerEventId))
+                t.CompletedAt, t.TriggerEventType, t.TriggerEventId,
+                t.EntityType, t.EntityId, t.CreatedBy))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<CrmTaskDto>>(tasks);

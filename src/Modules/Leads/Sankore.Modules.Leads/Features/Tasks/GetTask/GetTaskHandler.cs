@@ -1,25 +1,25 @@
 namespace Sankore.Modules.Leads.Features.Tasks.GetTask;
 
 using MediatR;
-using Microsoft.EntityFrameworkCore;
-using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Tasks.Collaboration;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetTaskHandler(LeadsDbContext db)
+internal sealed class GetTaskHandler(TaskAccess access)
     : IRequestHandler<GetTaskQuery, Result<CrmTaskDto>>
 {
     public async Task<Result<CrmTaskDto>> Handle(GetTaskQuery query, CancellationToken ct)
     {
-        var task = await db.CrmTasks
-            .FirstOrDefaultAsync(t => t.Id == query.TaskId, ct);
-
-        if (task is null)
-            return Result.Fail<CrmTaskDto>("TASK_NOT_FOUND");
+        // Through TaskAccess: before it, any holder of lead:task:read could read any task by id.
+        var loaded = await access.LoadAsync(query.TaskId, tracking: false, ct);
+        if (loaded.IsFailure)
+            return Result.Fail<CrmTaskDto>(loaded.Error!);
+        var task = loaded.Value!;
 
         return Result.Ok(new CrmTaskDto(
             task.Id, task.TenantId, task.Type, task.Priority, task.Title,
             task.Description, task.LeadId, task.AssignedAgentId, task.Status,
             task.DueAt, task.SlaDeadline, task.CreatedAt, task.StartedAt,
-            task.CompletedAt, task.TriggerEventType, task.TriggerEventId));
+            task.CompletedAt, task.TriggerEventType, task.TriggerEventId,
+            task.EntityType, task.EntityId, task.CreatedBy));
     }
 }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.DispatchLead;
+using Sankore.Modules.Leads.Features.Tasks.Collaboration;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
@@ -16,16 +17,16 @@ internal sealed class ReassignTaskHandler(
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     AgentCapacityService capacityService,
     IBus bus,
-    ILogger<ReassignTaskHandler> logger)
+    ILogger<ReassignTaskHandler> logger,
+    TaskAccess access)
     : IRequestHandler<ReassignTaskCommand, Result>
 {
     public async Task<Result> Handle(ReassignTaskCommand cmd, CancellationToken ct)
     {
-        var task = await db.CrmTasks.AsTracking()
-            .FirstOrDefaultAsync(t => t.Id == cmd.TaskId, ct);
-
-        if (task is null)
-            return Result.Fail("TASK_NOT_FOUND");
+        var loaded = await access.LoadAsync(cmd.TaskId, tracking: true, ct);
+        if (loaded.IsFailure)
+            return Result.Fail(loaded.Error!);
+        var task = loaded.Value!;
 
         if (task.AssignedAgentId == cmd.NewAgentId)
             return Result.Fail("ALREADY_ASSIGNED_TO_AGENT");

@@ -848,6 +848,44 @@ internal sealed class AdministrationModuleFacade(
     /// KRM-B-09's recipient cascade. Two queries at most, and it answers null rather than
     /// guessing — see the contract for why the specification's third rung does not exist here.
     /// </summary>
+    public async Task<UserSupervisors> GetUserSupervisorsAsync(Guid tenantId, Guid userId, CancellationToken ct)
+    {
+        var user = await db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.TenantId == tenantId && u.Id == userId)
+            .Select(u => new { u.ReportsToUserId, u.AgencyId })
+            .FirstOrDefaultAsync(ct);
+
+        if (user is null) return UserSupervisors.None;
+
+        var agencyManager = user.AgencyId is { } agencyId && agencyId != Guid.Empty
+            ? await db.Agencies
+                .IgnoreQueryFilters()
+                .Where(a => a.TenantId == tenantId && a.Id == agencyId && !a.IsDeleted)
+                .Select(a => a.ManagerUserId)
+                .FirstOrDefaultAsync(ct)
+            : null;
+
+        var candidates = new[] { user.ReportsToUserId, agencyManager }
+            .Where(id => id is { } g && g != Guid.Empty)
+            .Select(id => id!.Value)
+            .ToList();
+
+        // A manager who left keeps a stale assignment until somebody changes it: only ACTIVE
+        // accounts are returned, or a disabled account would keep reading the user's tasks.
+        var active = candidates.Count == 0
+            ? []
+            : await db.Users
+                .IgnoreQueryFilters()
+                .Where(u => u.TenantId == tenantId && candidates.Contains(u.Id) && u.Status == UserStatus.Active)
+                .Select(u => u.Id)
+                .ToListAsync(ct);
+
+        return new UserSupervisors(
+            user.ReportsToUserId is { } line && active.Contains(line) ? line : null,
+            agencyManager is { } chief && active.Contains(chief) ? chief : null);
+    }
+
     public async Task<Guid?> ResolveAgencyRecipientAsync(
         Guid tenantId, Guid agencyId, Guid? preferredUserId, CancellationToken ct)
     {

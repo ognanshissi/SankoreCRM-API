@@ -2684,6 +2684,39 @@ Removing an account deletes its copies at the provider first, while its token st
 read back by the lot-2 sync is hidden from `me/calendar-events` (matched on agenda + event id), or
 the calendar screen would show every rendez-vous twice and in conflict with itself.
 
+### Tasks people work on together: subject, people, criteria, comments, tags, files
+
+`CrmTask` (M13) is attached to its subject by **`EntityType` + `EntityId`** — Lead, Client, KycFile
+or nothing — an opaque pair across modules like `Appointment.ClientId`. **`LeadId` stays** and is
+kept equal to `EntityId` for a lead (`CrmTask.CreateManual` does it; the migration backfilled the
+pair from `lead_id`): dispatching, `AssignmentTasks` and the lead's Tâches tab read it.
+`CreatedBy` is the creator (null = generated). The subject is checked at creation by
+`TaskSubjects`: a lead through `LeadAccessGuard`, a client through `ResolveClientIdAsync` +
+`CanActorAccessClientAsync`, a KYC file through `IKycModule.CanActorAccessKycFileAsync` (new) —
+out of reach reads as `*_NOT_FOUND`.
+
+**`TaskAccess` is the one visibility rule** for every task route, old ones included (`GetTask`,
+assignments, cancel, assign, reassign used to need only the permission): the holder, the creator,
+the associated colleagues (`crm_task_participants`), the holder's line manager and agency head
+(`IAdministrationModule.GetUserSupervisorsAsync`, new — falls back on the creator for an unheld
+task), a BranchManager whose team contains the holder, and the bypass roles. Anyone else: 404.
+The Administration lookups fail closed and run under `TransactionScope.Suppress`.
+`lead:task:read` / `lead:task:manage` are now default grants of the four business roles.
+
+Criteria (`crm_task_criteria`, who ticked and when, frozen once the task is closed), comments
+(`crm_task_comments`, author-only edit, logical delete, cursor `before`), tags (`crm_task_tags`,
+normalised like lead tags, set as a whole), files (`crm_task_attachments` + `EncryptedTaskAttachmentStore`,
+concern `task-attachments`, its OWN key `Leads:Tasks:Attachments:EncryptionKey`, envelope `TAT1`;
+types judged by their bytes — PDF, JPEG, PNG, Office with matching extension, txt/csv; 10 MB, 30
+per task). The upload is `StoreTaskAttachment`, deliberately NOT an `ICommand`: AuditBehavior would
+serialise the file. A direct assignment now writes a `TaskReassignment` row too, and a reassignment's
+actor is the signed-in user (the body's `ActorId` is ignored). Activity → `CrmTaskActivityEvent`
+(outbox) → the bell (`task.activity`, link `/tasks/{id}`); the holder of a task created for them
+also gets the `task.assigned` e-mail.
+
+Front: « Nouvelle tâche » on Ma journée (`NewTaskDrawer`), the page `/tasks/:taskId`
+(`TaskPage`), « Ouvrir la fiche » from the work drawer.
+
 ### Adding a new module
 
 Use `Sankore.Modules.Administration` as the template: PublicApi project (interface only) + main project (DbContext + domain + Features/) + Tests project. Register in `Program.cs` with `builder.Services.Add{Module}Module(...)` and `appVersion1.Map{Module}ModuleEndpoints()`. Initialize in the startup scope if the module needs migration or seeding.

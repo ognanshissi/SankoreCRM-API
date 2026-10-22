@@ -109,7 +109,7 @@ public sealed class LeadDispatchedTaskConsumerTests : IDisposable
         var task = (await TasksAsync(lead.Id)).Single();
 
         await using var db = _db.CreateContext();
-        var result = await new Sankore.Modules.Leads.Features.Tasks.GetTaskAssignments.GetTaskAssignmentsHandler(db)
+        var result = await new Sankore.Modules.Leads.Features.Tasks.GetTaskAssignments.GetTaskAssignmentsHandler(db, TestTaskAccess.Administrator(db))
             .Handle(new Sankore.Modules.Leads.Features.Tasks.GetTaskAssignments.GetTaskAssignmentsQuery(task.Id), default);
 
         result.IsSuccess.Should().BeTrue();

@@ -136,6 +136,17 @@ internal static class RoleSeeder
 
         // Connected agendas: one's own Microsoft and Google accounts, for every business role.
         (Roles.Agent.Code, "ConnectedAccounts.Use"),
+
+        // Tasks: every business role creates its own tasks (« Ma journée ») and works in the ones it
+        // is part of; TaskAccess decides WHICH tasks, the permission only says it may.
+        (Roles.Agent.Code, "lead:task:read"),
+        (Roles.Agent.Code, "lead:task:manage"),
+        (Roles.CommercialAgent.Code, "lead:task:read"),
+        (Roles.CommercialAgent.Code, "lead:task:manage"),
+        (Roles.SalesManager.Code, "lead:task:read"),
+        (Roles.SalesManager.Code, "lead:task:manage"),
+        (Roles.BranchManager.Code, "lead:task:read"),
+        (Roles.BranchManager.Code, "lead:task:manage"),
         (Roles.CommercialAgent.Code, "ConnectedAccounts.Use"),
         (Roles.SalesManager.Code, "ConnectedAccounts.Use"),
         (Roles.BranchManager.Code, "ConnectedAccounts.Use"),

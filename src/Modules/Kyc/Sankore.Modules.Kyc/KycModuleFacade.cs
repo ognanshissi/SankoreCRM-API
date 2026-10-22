@@ -8,6 +8,7 @@ using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.PublicApi;
+using Sankore.Shared.Kernel.Authorization;
 
 /// <summary>
 /// Implementation of <see cref="IKycModule"/>. Callers in other modules see only the interface.
@@ -22,8 +23,34 @@ public sealed class KycModuleFacade(
     KycDbContext db,
     IKycSettings settings,
     IDistributedCache cache,
-    ILogger<KycModuleFacade> logger) : IKycModule
+    ILogger<KycModuleFacade> logger,
+    IAgencyScopeProvider? agencyScope = null) : IKycModule
 {
+    public Task<KycFileSummary?> GetKycFileSummaryAsync(Guid tenantId, Guid kycFileId, CancellationToken ct) =>
+        db.KycFiles
+            .IgnoreQueryFilters()
+            .Where(f => f.TenantId == tenantId && f.Id == kycFileId)
+            .Select(f => new KycFileSummary(f.Id, f.CustomerId, f.AgencyId, f.Status.ToString()))
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<bool> CanActorAccessKycFileAsync(Guid tenantId, Guid kycFileId, Guid actorUserId, CancellationToken ct)
+    {
+        var file = await db.KycFiles
+            .IgnoreQueryFilters()
+            .Where(f => f.TenantId == tenantId && f.Id == kycFileId)
+            .Select(f => new { f.AgencyId })
+            .FirstOrDefaultAsync(ct);
+
+        if (file is null) return false;
+
+        // Same rule as KycFileAccess, for an actor named by the caller instead of the HTTP user.
+        // No scope provider registered = no way to check = refused.
+        if (agencyScope is null) return false;
+
+        var perimeter = await agencyScope.GetAccessibleAgencyIdsAsync(tenantId, actorUserId, ct);
+        return perimeter is null || (file.AgencyId is { } agency && perimeter.Contains(agency));
+    }
+
     public async Task<KycStatus?> GetStatusAsync(
         Guid tenantId, Guid customerEntityId, CancellationToken ct)
     {

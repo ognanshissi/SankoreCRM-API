@@ -64,7 +64,24 @@ public interface IKycModule
     /// </summary>
     Task<IReadOnlyDictionary<Guid, KycJourneySummary>> GetJourneySummariesAsync(
         Guid tenantId, IReadOnlyCollection<Guid> customerIds, CancellationToken ct);
+
+    /// <summary>
+    /// One file by id — its customer, agency and internal status — or null when it does not exist
+    /// in this tenant. For another module that REFERENCES a file (a task attached to it); nothing
+    /// sensitive is carried.
+    /// </summary>
+    Task<KycFileSummary?> GetKycFileSummaryAsync(Guid tenantId, Guid kycFileId, CancellationToken ct);
+
+    /// <summary>
+    /// Whether this user may act on the file: the agency perimeter of <c>KycFileAccess</c>, for a
+    /// caller that is not the current HTTP user's. False when the file does not exist — the two
+    /// answers are the same to a caller, so a file's existence does not leak.
+    /// </summary>
+    Task<bool> CanActorAccessKycFileAsync(Guid tenantId, Guid kycFileId, Guid actorUserId, CancellationToken ct);
 }
+
+/// <param name="Status">Internal status (Collecting, Verifying, Validating…), as in <see cref="KycJourneySummary.Stage"/>.</param>
+public sealed record KycFileSummary(Guid Id, Guid CustomerId, Guid? AgencyId, string Status);
 
 /// <param name="Stage">
 /// Statut interne du dossier : Collecting, ComplementRequired, Verifying, Validating, Simplified,
