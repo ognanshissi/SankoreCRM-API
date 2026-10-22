@@ -2341,6 +2341,18 @@ and recording-policy sections only. There is no webhook-URL endpoint and no serv
 regeneration (TEL-F-01), and nothing discovers which phone slots a record has filled (TEL-F-04's
 number menu is blind to `Primary`/`Secondary`).
 
+### « Lier mon compte » : an agent pairs themselves, by e-mail only
+
+`POST api/v1/integration/telephony/me/link` (signed in, no body) pairs the CALLER with the provider
+account whose address belongs to exactly one CRM user — them. The account is never named by the
+caller: pairing attributes every following call (number, note, recording), so choosing from a list
+would let an agent read a colleague's calls. No match → `TELEPHONY_SELF_LINK_NO_MATCH`; two provider
+accounts or two CRM users on the address → `TELEPHONY_SELF_LINK_AMBIGUOUS`; both mean an
+administrator pairs by hand on `settings/telephony/user-links`. The write itself is
+`LinkTelephonyUserCommand` (same uniqueness, revival and audit as the admin path). In Development
+the simulated directory only holds `agent@example.test`, so a real user gets NO_MATCH. The front
+offers it from the profile menu (`TelephonyTopBarState.action`, set by the telephony lib).
+
 ### The Ringover adapter is blocked on a test ACCOUNT, not a document (TEL-B-04)
 
 Same shape as `OrassAdapter`, `AmplitudeAdapter`, `SabAdapter` and `PerfectVisionAdapter` —

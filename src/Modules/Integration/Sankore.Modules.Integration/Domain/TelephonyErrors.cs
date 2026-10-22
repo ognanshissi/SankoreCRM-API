@@ -75,6 +75,12 @@ public static class TelephonyErrors
     /// <summary>A provider account already belongs to another CRM user, or the reverse.</summary>
     public const string UserLinkAlreadyTaken = "TELEPHONY_USER_LINK_ALREADY_TAKEN";
 
+    /// <summary>« Lier mon compte »: no provider account carries an address that is the caller's alone.</summary>
+    public const string SelfLinkNoMatch = "TELEPHONY_SELF_LINK_NO_MATCH";
+
+    /// <summary>« Lier mon compte »: two provider accounts, or two CRM users, share the address — an administrator decides.</summary>
+    public const string SelfLinkAmbiguous = "TELEPHONY_SELF_LINK_AMBIGUOUS";
+
     public const string UserLinkNotFound = "TELEPHONY_USER_LINK_NOT_FOUND";
 
     /// <summary>

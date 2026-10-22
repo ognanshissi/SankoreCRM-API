@@ -47,6 +47,7 @@ internal static class TelephonyEndpoints
         // First in the group because it is the first thing a shell reads, and because it is the
         // only telephony route an ordinary agent can call without a Telephony.* permission.
         group.MapMyTelephonyStatus();
+        group.MapLinkMyTelephonyAccount();
 
         group.MapGetTelephonyDirectory();
         group.MapListTelephonyUserLinks();
