@@ -39,6 +39,10 @@ COPY ["global.json", "Directory.Packages.props", "Directory.Build.props", "./"]
 # source — c'est-à-dire que tout le bénéfice de cette section disparaît sans un seul message
 # d'erreur. Elle était tombée à 8 projets sur 28.
 #
+# Et avec `--no-restore` plus bas, une omission ne dégrade plus seulement le cache : elle CASSE
+# la publication (« Assets file … project.assets.json not found »), puisque rien ne restaure le
+# projet oublié. C'est arrivé avec l'adaptateur Dialog360, ajouté au graphe sans être ajouté ici.
+#
 # Pour la régénérer après l'ajout d'un projet :
 #   python3 - <<'EOF'
 #   import re, os
@@ -62,6 +66,7 @@ COPY ["src/Modules/Administration/Sankore.Modules.Administration/Sankore.Modules
 COPY ["src/Modules/Customers/Sankore.Modules.Customers.PublicApi/Sankore.Modules.Customers.PublicApi.csproj", "src/Modules/Customers/Sankore.Modules.Customers.PublicApi/"]
 COPY ["src/Modules/Customers/Sankore.Modules.Customers/Sankore.Modules.Customers.csproj", "src/Modules/Customers/Sankore.Modules.Customers/"]
 COPY ["src/Modules/Integration/Sankore.Modules.Integration.Adapters.Amplitude/Sankore.Modules.Integration.Adapters.Amplitude.csproj", "src/Modules/Integration/Sankore.Modules.Integration.Adapters.Amplitude/"]
+COPY ["src/Modules/Integration/Sankore.Modules.Integration.Adapters.Dialog360/Sankore.Modules.Integration.Adapters.Dialog360.csproj", "src/Modules/Integration/Sankore.Modules.Integration.Adapters.Dialog360/"]
 COPY ["src/Modules/Integration/Sankore.Modules.Integration.Adapters.Fake/Sankore.Modules.Integration.Adapters.Fake.csproj", "src/Modules/Integration/Sankore.Modules.Integration.Adapters.Fake/"]
 COPY ["src/Modules/Integration/Sankore.Modules.Integration.Adapters.Orass/Sankore.Modules.Integration.Adapters.Orass.csproj", "src/Modules/Integration/Sankore.Modules.Integration.Adapters.Orass/"]
 COPY ["src/Modules/Integration/Sankore.Modules.Integration.Adapters.PerfectVision/Sankore.Modules.Integration.Adapters.PerfectVision.csproj", "src/Modules/Integration/Sankore.Modules.Integration.Adapters.PerfectVision/"]
