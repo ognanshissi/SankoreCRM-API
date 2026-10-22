@@ -45,6 +45,10 @@ internal sealed class WhatsAppConversationConfiguration(IFieldEncryptor encrypto
         // what lets the column be added to a table that already has rows.
         b.Property(c => c.BotCollectedFields).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]");
 
+        b.Property(c => c.PendingLeadFieldsJson)
+            .HasColumnName("pending_lead_fields_enc")
+            .HasConversion(EncryptedConverters.Text(encryptor));
+
         b.Property(c => c.ContactPhoneBlindIndex).HasMaxLength(128).IsRequired();
         b.Property(c => c.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         b.Property(c => c.Version).IsRowVersion();
@@ -183,6 +187,7 @@ internal sealed class WhatsAppBotProfileConfiguration : IEntityTypeConfiguration
         b.Property(p => p.TimeZoneId).HasMaxLength(64).IsRequired();
 
         b.Property(p => p.FieldsToCollect).HasColumnType("text[]");
+        b.Property(p => p.FieldsRequiredForLead).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]");
         b.Property(p => p.EscalationKeywords).HasColumnType("text[]");
 
         Jsonb(b.Property(p => p.Faq));

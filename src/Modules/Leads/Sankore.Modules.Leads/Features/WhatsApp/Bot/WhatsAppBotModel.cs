@@ -36,6 +36,21 @@ public sealed class WhatsAppBotOptions
     public int MaxHistoryMessages { get; set; } = 12;
 
     public int MaxOutputTokens { get; set; } = 1024;
+
+    /// <summary>
+    /// <c>output_config.effort</c>. <c>low</c> by default: a WhatsApp answer is a short chat turn
+    /// within a 15-second budget, which is the case the provider documents low effort for.
+    /// Empty = the model's own default.
+    /// </summary>
+    public string? Effort { get; set; } = "low";
+
+    /// <summary>
+    /// The <c>thinking</c> parameter's type. <c>between_tools</c> turns reasoning off on Claude
+    /// Sonnet 5.5 — the bot's turns are one decision, and reasoning would spend the turn's budget.
+    /// Empty = the parameter is not sent (the model's default, adaptive on current models). Change
+    /// it with the model: other models do not accept every value.
+    /// </summary>
+    public string? Thinking { get; set; } = "between_tools";
 }
 
 // ── The conversation shape a model reads and writes ──────────────────────────────────────────
@@ -48,12 +63,37 @@ internal sealed record BotToolUseBlock(string Id, string Name, JsonElement Input
 
 internal sealed record BotToolResultBlock(string ToolUseId, string Content, bool IsError) : BotBlock;
 
+/// <summary>
+/// A block the engine does not read — a thinking block above all — kept exactly as the provider
+/// sent it, because a second call in the same turn must hand it back unchanged.
+/// </summary>
+internal sealed record BotRawBlock(JsonElement Json) : BotBlock;
+
 /// <param name="Role"><c>user</c> (the customer, and tool results) or <c>assistant</c>.</param>
 internal sealed record BotMessage(string Role, IReadOnlyList<BotBlock> Content);
 
 internal sealed record BotTool(string Name, string Description, JsonObject InputSchema);
 
-internal sealed record BotModelRequest(string System, IReadOnlyList<BotMessage> Messages, IReadOnlyList<BotTool> Tools);
+/// <summary>
+/// The system prompt in two parts. <see cref="Stable"/> — rules, product, FAQ, catalogue,
+/// instructions — is the same for every message of a conversation and is sent first, marked for
+/// the provider's prompt cache; <see cref="Turn"/> — the fields still missing, the hour, what was
+/// just sent — changes every message and comes after it, so it never invalidates the cached part.
+/// </summary>
+internal sealed record BotSystemPrompt(string Stable, string Turn)
+{
+    public override string ToString() => string.IsNullOrEmpty(Turn) ? Stable : Stable + "\n" + Turn;
+}
+
+/// <param name="Faq">
+/// The FAQ the stable prompt was written from, for a scripted model that matches questions
+/// instead of reading prose. A real model reads the prompt; this carries nothing it does not say.
+/// </param>
+internal sealed record BotModelRequest(
+    BotSystemPrompt System,
+    IReadOnlyList<BotMessage> Messages,
+    IReadOnlyList<BotTool> Tools,
+    IReadOnlyList<WhatsAppBotFaqEntry> Faq);
 
 internal sealed record BotModelResponse(IReadOnlyList<BotBlock> Content, string? StopReason, int? InputTokens, int? OutputTokens);
 
@@ -111,11 +151,24 @@ internal sealed class AnthropicWhatsAppBotModel(HttpClient http, IOptions<WhatsA
     {
         if (!IsAvailable) throw new BotModelException("BOT_MODEL_UNAVAILABLE", "No Anthropic API key is configured.");
 
+        // The stable part carries the cache breakpoint: tools then this block form the cached
+        // prefix, read back at a fraction of the price on the next message of the conversation.
+        // Below the provider's minimum length nothing is cached, and nothing fails either.
+        var system = new JsonArray(new JsonObject
+        {
+            ["type"] = "text",
+            ["text"] = request.System.Stable,
+            ["cache_control"] = new JsonObject { ["type"] = "ephemeral" },
+        });
+
+        if (!string.IsNullOrWhiteSpace(request.System.Turn))
+            system.Add(new JsonObject { ["type"] = "text", ["text"] = request.System.Turn });
+
         var body = new JsonObject
         {
             ["model"] = _options.Model,
             ["max_tokens"] = _options.MaxOutputTokens,
-            ["system"] = request.System,
+            ["system"] = system,
             ["messages"] = new JsonArray(request.Messages.Select(ToJson).ToArray<JsonNode?>()),
             ["tools"] = new JsonArray(request.Tools.Select(t => (JsonNode?)new JsonObject
             {
@@ -123,10 +176,18 @@ internal sealed class AnthropicWhatsAppBotModel(HttpClient http, IOptions<WhatsA
                 ["description"] = t.Description,
                 ["input_schema"] = t.InputSchema.DeepClone(),
             }).ToArray()),
-            // Every answer is a tool call — send_reply or escalate_to_human end the turn — so the
-            // outcome is structured, never free text the engine would have to interpret.
-            ["tool_choice"] = new JsonObject { ["type"] = "any" },
+            // `auto`, not `any`: current models refuse a forced tool call (400 « tool_choice: type
+            // "tool" and "any" are not supported for this model » — every turn failed on Claude
+            // Sonnet 5.5). The prompt requires `respond`, and a turn ending in plain text is sent back
+            // to the model once by the engine; nothing outside the tool ever reaches a customer.
+            ["tool_choice"] = new JsonObject { ["type"] = "auto" },
         };
+
+        if (!string.IsNullOrWhiteSpace(_options.Effort))
+            body["output_config"] = new JsonObject { ["effort"] = _options.Effort.Trim() };
+
+        if (!string.IsNullOrWhiteSpace(_options.Thinking))
+            body["thinking"] = new JsonObject { ["type"] = _options.Thinking.Trim() };
 
         using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(_options.BaseUrl), "v1/messages"))
         {
@@ -223,16 +284,25 @@ internal sealed class AnthropicWhatsAppBotModel(HttpClient http, IOptions<WhatsA
                         block.GetProperty("name").GetString() ?? string.Empty,
                         block.GetProperty("input").Clone()));
                     break;
+                default:
+                    blocks.Add(new BotRawBlock(block.Clone()));
+                    break;
             }
         }
 
         int? Usage(string name) =>
             root.TryGetProperty("usage", out var usage) && usage.TryGetProperty(name, out var v) && v.TryGetInt32(out var n) ? n : null;
 
+        // `input_tokens` excludes what the prompt cache served or stored: the three together are
+        // what the model read, which is what a turn records.
+        int? input = Usage("input_tokens") is { } fresh
+            ? fresh + (Usage("cache_read_input_tokens") ?? 0) + (Usage("cache_creation_input_tokens") ?? 0)
+            : null;
+
         return new BotModelResponse(
             blocks,
             root.TryGetProperty("stop_reason", out var stop) ? stop.GetString() : null,
-            Usage("input_tokens"),
+            input,
             Usage("output_tokens"));
     }
 
@@ -256,16 +326,17 @@ internal sealed class AnthropicWhatsAppBotModel(HttpClient http, IOptions<WhatsA
                 ["content"] = result.Content,
                 ["is_error"] = result.IsError,
             },
+            BotRawBlock raw => JsonNode.Parse(raw.Json.GetRawText())!,
             _ => throw new InvalidOperationException($"Unknown block {b.GetType().Name}."),
         })).ToArray()),
     };
 }
 
 /// <summary>
-/// A scripted model for Development and tests — no key, no network. It reads the product's FAQ
-/// through <c>get_product_info</c> like the real one would, answers when a question shares words
-/// with an FAQ entry, and says it could not otherwise, so every path of the engine — the tool
-/// loop, a useful answer, the « no useful answer » counter — can be walked on a laptop.
+/// A scripted model for Development and tests — no key, no network. It answers in one call, like
+/// the real one should: the FAQ entry sharing the most words with the customer's last message, or
+/// « not found » with <c>answered_question: false</c>, so every path of the engine — a useful
+/// answer, the « no useful answer » counter — can be walked on a laptop.
 /// </summary>
 internal sealed class FakeWhatsAppBotModel : IWhatsAppBotModel
 {
@@ -275,12 +346,6 @@ internal sealed class FakeWhatsAppBotModel : IWhatsAppBotModel
 
     public Task<BotModelResponse> CompleteAsync(BotModelRequest request, CancellationToken ct)
     {
-        var last = request.Messages[^1];
-        var result = last.Content.OfType<BotToolResultBlock>().FirstOrDefault();
-
-        if (result is null)
-            return Task.FromResult(Use(WhatsAppBotTools.GetProductInfo, new JsonObject()));
-
         var question = request.Messages
             .Where(m => m.Role == "user")
             .SelectMany(m => m.Content.OfType<BotTextBlock>())
@@ -288,37 +353,22 @@ internal sealed class FakeWhatsAppBotModel : IWhatsAppBotModel
 
         var words = WhatsAppBotText.Normalize(question).Split(' ').Where(w => w.Length >= 4).ToHashSet();
 
-        string? answer = null;
+        var answer = request.Faq
+            .Select(e => (e.Answer, Score: WhatsAppBotText.Normalize(e.Question).Split(' ').Count(words.Contains)))
+            .Where(e => e.Score > 0)
+            .OrderByDescending(e => e.Score)
+            .Select(e => e.Answer)
+            .FirstOrDefault();
 
-        try
+        var input = new JsonObject
         {
-            using var doc = JsonDocument.Parse(result.Content);
-
-            if (doc.RootElement.TryGetProperty("faq", out var faq))
-            {
-                answer = faq.EnumerateArray()
-                    .Select(e => (
-                        Answer: e.GetProperty("answer").GetString(),
-                        Score: WhatsAppBotText.Normalize(e.GetProperty("question").GetString()).Split(' ').Count(words.Contains)))
-                    .Where(e => e.Score > 0)
-                    .OrderByDescending(e => e.Score)
-                    .Select(e => e.Answer)
-                    .FirstOrDefault();
-            }
-        }
-        catch (JsonException)
-        {
-            // Not a product-info result: acknowledge whatever the previous tool was.
-            answer = "C’est noté, merci.";
-        }
-
-        return Task.FromResult(Use(WhatsAppBotTools.SendReply, new JsonObject
-        {
+            ["action"] = WhatsAppBotTools.Reply,
             ["text"] = answer ?? "Je n’ai pas trouvé cette information. Pouvez-vous préciser votre question ?",
             ["answered_question"] = answer is not null,
-        }));
-    }
+        };
 
-    private static BotModelResponse Use(string tool, JsonObject input) =>
-        new([new BotToolUseBlock($"fake_{Guid.NewGuid():N}", tool, JsonSerializer.SerializeToElement(input))], "tool_use", null, null);
+        return Task.FromResult(new BotModelResponse(
+            [new BotToolUseBlock($"fake_{Guid.NewGuid():N}", WhatsAppBotTools.Respond, JsonSerializer.SerializeToElement(input))],
+            "tool_use", null, null));
+    }
 }

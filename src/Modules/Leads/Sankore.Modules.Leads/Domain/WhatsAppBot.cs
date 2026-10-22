@@ -68,6 +68,13 @@ public sealed class WhatsAppBotProfile : ITenant
     /// <summary>Codes of <see cref="WhatsAppBotFields"/> the bot may write on the lead.</summary>
     public List<string> FieldsToCollect { get; private set; } = [];
 
+    /// <summary>
+    /// The minimum (a subset of <see cref="FieldsToCollect"/>) whose completion creates the lead of
+    /// an unknown number, then hands the conversation to a person. Empty = the lead is created only
+    /// at a handover, and a conversation completing nothing never hands over on that ground.
+    /// </summary>
+    public List<string> FieldsRequiredForLead { get; private set; } = [];
+
     /// <summary>When a person can take over. Empty = no hours declared, never « out of hours ».</summary>
     public List<WhatsAppBotOpeningSlot> AgentHours { get; private set; } = [];
 
@@ -122,7 +129,8 @@ public sealed class WhatsAppBotProfile : ITenant
         int maxTurnsWithoutAnswer,
         int windowExpiryThresholdMinutes,
         Guid createdBy,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        IReadOnlyList<string>? fieldsRequiredForLead = null)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
         if (version < 1) throw new DomainException("A saved version starts at 1.");
@@ -145,9 +153,13 @@ public sealed class WhatsAppBotProfile : ITenant
         if (entries.Any(e => e.Question.Length > FaqTextMaxLength || e.Answer.Length > FaqTextMaxLength))
             return Result.Fail<WhatsAppBotProfile>("WHATSAPP_BOT_FAQ_TOO_LONG");
 
-        var fields = (fieldsToCollect ?? []).Select(f => f.Trim().ToUpperInvariant()).Distinct().ToList();
+        var fields = (fieldsToCollect ?? []).Select(WhatsAppBotFields.Normalize).Distinct().ToList();
         if (fields.Any(f => !WhatsAppBotFields.IsKnown(f)))
             return Result.Fail<WhatsAppBotProfile>("WHATSAPP_BOT_FIELD_UNKNOWN");
+
+        var required = (fieldsRequiredForLead ?? []).Select(WhatsAppBotFields.Normalize).Distinct().ToList();
+        if (required.Any(f => !fields.Contains(f)))
+            return Result.Fail<WhatsAppBotProfile>("WHATSAPP_BOT_REQUIRED_NOT_COLLECTED");
 
         var slots = (agentHours ?? []).ToList();
         if (slots.Any(s => !s.IsValid)) return Result.Fail<WhatsAppBotProfile>("WHATSAPP_BOT_HOURS_INVALID");
@@ -183,6 +195,7 @@ public sealed class WhatsAppBotProfile : ITenant
             Instructions = Clip(instructions, InstructionsMaxLength),
             Faq = entries,
             FieldsToCollect = fields,
+            FieldsRequiredForLead = required,
             AgentHours = slots,
             TimeZoneId = zone,
             EscalationKeywords = keywords,
@@ -243,8 +256,11 @@ public static class WhatsAppBotFields
 {
     public const string FirstName = "FIRST_NAME";
     public const string LastName = "LAST_NAME";
+    public const string Gender = "GENDER";
     public const string Email = "EMAIL";
     public const string City = "CITY";
+    public const string Neighbourhood = "NEIGHBOURHOOD";
+    public const string Product = "PRODUCT";
     public const string DesiredAmount = "DESIRED_AMOUNT";
 
     /// <summary>Code → French label, in the order the settings screen lists them.</summary>
@@ -252,14 +268,41 @@ public static class WhatsAppBotFields
     [
         (FirstName, "Prénom"),
         (LastName, "Nom"),
+        (Gender, "Genre"),
         (Email, "Adresse e-mail"),
         (City, "Ville"),
+        (Neighbourhood, "Quartier"),
+        (Product, "Produit souhaité"),
         (DesiredAmount, "Montant souhaité"),
     ];
 
-    public static bool IsKnown(string code) => All.Any(f => f.Code == code);
+    /// <summary>
+    /// A custom field of the tenant's lead form (dynamic forms), as <c>custom.&lt;key&gt;</c> — the
+    /// prefix the imports and the ingestion mappings already use. Its key is the form's, kept as
+    /// written: custom keys are case-sensitive. Whether the key exists is checked against the form
+    /// when the profile is saved; at a turn, a field the form no longer has is simply not offered.
+    /// </summary>
+    public const string CustomPrefix = "custom.";
 
-    public static string LabelOf(string code) => All.FirstOrDefault(f => f.Code == code).Label ?? code;
+    public static bool IsCustom(string code) => code.StartsWith(CustomPrefix, StringComparison.Ordinal);
+
+    public static string CustomKey(string code) => code[CustomPrefix.Length..];
+
+    /// <summary>Native codes upper-cased, a custom code's prefix lower-cased and its key untouched.</summary>
+    public static string Normalize(string code)
+    {
+        var trimmed = code.Trim();
+        return trimmed.StartsWith(CustomPrefix, StringComparison.OrdinalIgnoreCase)
+            ? CustomPrefix + trimmed[CustomPrefix.Length..].Trim()
+            : trimmed.ToUpperInvariant();
+    }
+
+    public static bool IsKnown(string code) =>
+        All.Any(f => f.Code == code) || (IsCustom(code) && CustomKey(code).Length > 0);
+
+    /// <summary>The French label of a native code; a custom code's label is its form's, resolved by the caller.</summary>
+    public static string LabelOf(string code) =>
+        All.FirstOrDefault(f => f.Code == code).Label ?? (IsCustom(code) ? CustomKey(code) : code);
 }
 
 /// <summary>What one bot turn ended with.</summary>

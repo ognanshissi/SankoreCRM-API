@@ -165,6 +165,7 @@ internal sealed class GetWhatsAppPanelHandler(
     IAdministrationModule admin,
     IIntegrationModule integration,
     [FromKeyedServices(LeadsFieldProtection.Key)] IBlindIndexer blindIndexer,
+    Bot.WhatsAppBotFieldValues fieldValues,
     TimeProvider clock)
     : IRequestHandler<GetWhatsAppPanelQuery, Result<WhatsAppPanelDto>>
 {
@@ -230,6 +231,12 @@ internal sealed class GetWhatsAppPanelHandler(
 
         var isHolder = conversation is { Status: WhatsAppConversationStatus.Human } && conversation.OwnerUserId == currentUser.Id;
 
+        // The catalogue and the lead form name a product and a custom field — read only when the
+        // handover block lists one of them.
+        var botFields = conversation?.BotCollectedFields.Any(c => c == WhatsAppBotFields.Product || WhatsAppBotFields.IsCustom(c)) == true
+            ? await fieldValues.ContextAsync(tenantId, ct)
+            : null;
+
         return Result.Ok(new WhatsAppPanelDto(
             ConsentState: state.ToString(),
             ConsentAt: decisive is null ? null : decisive.Status == ConsentStatus.Active ? decisive.GrantedAt : decisive.WithdrawnAt ?? decisive.GrantedAt,
@@ -264,7 +271,10 @@ internal sealed class GetWhatsAppPanelHandler(
                 CanReply: isHolder && query.MayReply && conversation.IsWindowOpen(now) && state != WhatsAppConsentState.Revoked,
                 EscalationReasonLabel: conversation.EscalationReason is null ? null : Bot.WhatsAppBotReasons.Label(conversation.EscalationReason),
                 BotCollectedFields: conversation.BotCollectedFields
-                    .Select(code => new WhatsAppBotCollectedFieldDto(code, WhatsAppBotFields.LabelOf(code), CollectedValue(lead, code)))
+                    .Select(code => new WhatsAppBotCollectedFieldDto(
+                        code,
+                        botFields?.LabelOf(code) ?? WhatsAppBotFields.LabelOf(code),
+                        Bot.WhatsAppBotFieldValues.Display(lead, new Dictionary<string, string>(), code, botFields)))
                     .ToList(),
                 // The number THIS conversation runs on — not necessarily the lead's (an attached
                 // conversation, a second handset): a reply goes here, so this is what is shown.
@@ -272,18 +282,6 @@ internal sealed class GetWhatsAppPanelHandler(
             MayReply: query.MayReply,
             MaySupervise: query.MaySupervise));
     }
-
-    private static string? CollectedValue(Lead lead, string code) => code switch
-    {
-        WhatsAppBotFields.FirstName => lead.FirstName,
-        WhatsAppBotFields.LastName => lead.LastName,
-        WhatsAppBotFields.Email => lead.Email,
-        WhatsAppBotFields.City => lead.PrincipalCity,
-        WhatsAppBotFields.DesiredAmount => lead.DesiredAmount is { } m
-            ? $"{m.Amount.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("fr-FR"))} {m.Currency}"
-            : null,
-        _ => null,
-    };
 }
 
 // ── Thread ───────────────────────────────────────────────────────────────────────────────────

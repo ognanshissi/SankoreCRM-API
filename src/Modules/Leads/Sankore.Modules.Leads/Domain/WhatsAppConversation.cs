@@ -135,6 +135,29 @@ public sealed class WhatsAppConversation : ITenant
     /// </summary>
     public List<string> BotCollectedFields { get; private set; } = [];
 
+    // ── Prospect collected before a lead exists ──────────────────────────
+
+    /// <summary>
+    /// An unknown number the bot is talking to BEFORE any lead exists
+    /// (<see cref="LeadSettingKeys.WhatsAppCreateLeadAfterCollection"/>): what the bot collects is
+    /// held in <see cref="PendingLeadFieldsJson"/> until the lead is created. Distinguishes this
+    /// conversation from an unattached one the tenant chose not to turn into a lead, which gets no bot.
+    /// </summary>
+    public bool CollectingProspect { get; private set; }
+
+    /// <summary>
+    /// Code → normalised value of what the bot collected while no lead existed, as a JSON object.
+    /// Encrypted in its column: names, an e-mail, an amount. Emptied when the lead is created —
+    /// from then on the lead holds them, and they are not kept twice.
+    /// </summary>
+    public string? PendingLeadFieldsJson { get; private set; }
+
+    /// <summary>
+    /// When the bot's collection completed the minimum the profile requires — once, so returning a
+    /// conversation to the bot never hands it over again on that ground.
+    /// </summary>
+    public DateTimeOffset? BotLeadReadyAt { get; private set; }
+
     /// <summary>
     /// When the customer's identity was blanked (BNF-B-19, WA-BE-21). A column and not a reading
     /// of the number: the number is ciphertext and cannot be compared in SQL, and the media purge
@@ -156,7 +179,8 @@ public sealed class WhatsAppConversation : ITenant
         Guid? clientId,
         string? contactName,
         bool ambiguousMatch,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool collectingProspect = false)
     {
         if (tenantId == Guid.Empty) throw new DomainException("TenantId is required.");
         if (connectionId == Guid.Empty) throw new DomainException("A conversation runs on a number.");
@@ -176,6 +200,7 @@ public sealed class WhatsAppConversation : ITenant
             ClientId = leadId is null ? clientId : null,
             ContactName = Clip(contactName, 200),
             AmbiguousMatch = ambiguousMatch,
+            CollectingProspect = collectingProspect && leadId is null && clientId is null,
             Status = WhatsAppConversationStatus.AwaitingReply,
             LastMessageAt = now,
             CreatedAt = now,
@@ -302,6 +327,33 @@ public sealed class WhatsAppConversation : ITenant
     {
         if (!BotCollectedFields.Contains(fieldCode))
             BotCollectedFields = [.. BotCollectedFields, fieldCode];
+    }
+
+    /// <summary>What the bot collected while no lead existed — empty once the lead is created.</summary>
+    public IReadOnlyDictionary<string, string> PendingLeadFields() =>
+        string.IsNullOrWhiteSpace(PendingLeadFieldsJson)
+            ? new Dictionary<string, string>()
+            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(PendingLeadFieldsJson) ?? [];
+
+    /// <summary>Keeps one collected value until the lead exists. The latest value of a field wins.</summary>
+    public void RecordPendingField(string code, string value)
+    {
+        if (!CollectingProspect || LeadId is not null) return;
+
+        var fields = new Dictionary<string, string>(PendingLeadFields()) { [code] = value };
+        PendingLeadFieldsJson = System.Text.Json.JsonSerializer.Serialize(fields);
+        RecordBotCollected(code);
+    }
+
+    /// <summary>
+    /// The minimum is complete, for the first time. Returns false when it already was — the
+    /// handover on that ground happens once per conversation.
+    /// </summary>
+    public bool MarkLeadReady(DateTimeOffset now)
+    {
+        if (BotLeadReadyAt is not null) return false;
+        BotLeadReadyAt = now;
+        return true;
     }
 
     /// <summary>
@@ -446,6 +498,11 @@ public sealed class WhatsAppConversation : ITenant
         LeadId = leadId;
         ClientId = null;
         AmbiguousMatch = false;
+
+        // Whatever was pending is on the lead now (WhatsAppProspects copies it before attaching),
+        // or was never wanted on it (an agent filing by hand). Either way it is not kept twice.
+        CollectingProspect = false;
+        PendingLeadFieldsJson = null;
     }
 
     /// <summary>
@@ -466,6 +523,7 @@ public sealed class WhatsAppConversation : ITenant
         ContactName = null;
         EscalationSummary = null;
         CloseReason = null;
+        PendingLeadFieldsJson = null;
         Status = WhatsAppConversationStatus.Closed;
         UnreadCount = 0;
     }

@@ -3192,6 +3192,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnName("faq")
                         .HasDefaultValueSql("'[]'::jsonb");
 
+                    b.PrimitiveCollection<List<string>>("FieldsRequiredForLead")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("fields_required_for_lead")
+                        .HasDefaultValueSql("'{}'::text[]");
+
                     b.PrimitiveCollection<List<string>>("FieldsToCollect")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -3370,6 +3377,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnName("bot_collected_fields")
                         .HasDefaultValueSql("'{}'::text[]");
 
+                    b.Property<DateTimeOffset?>("BotLeadReadyAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("bot_lead_ready_at");
+
                     b.Property<int>("BotUnansweredTurns")
                         .HasColumnType("integer")
                         .HasColumnName("bot_unanswered_turns");
@@ -3389,6 +3400,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<Guid?>("ClosedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("closed_by");
+
+                    b.Property<bool>("CollectingProspect")
+                        .HasColumnType("boolean")
+                        .HasColumnName("collecting_prospect");
 
                     b.Property<Guid>("ConnectionId")
                         .HasColumnType("uuid")
@@ -3445,6 +3460,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<Guid?>("OwnerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
+
+                    b.Property<string>("PendingLeadFieldsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_lead_fields_enc");
 
                     b.Property<DateTimeOffset?>("PendingSince")
                         .HasColumnType("timestamp with time zone")

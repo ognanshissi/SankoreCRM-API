@@ -394,7 +394,7 @@ public sealed class WhatsAppComplianceTests : IDisposable
         _currentUser.Roles.Returns(["Agent"]);
 
         await using var db = _db.CreateContext();
-        var result = await new GetWhatsAppConversationHandler(new WhatsAppPerimeter(db, _currentUser, _admin), _currentUser, _admin, _customers, Audit())
+        var result = await new GetWhatsAppConversationHandler(new WhatsAppPerimeter(db, _currentUser, _admin), _currentUser, _admin, _customers, Audit(), WhatsAppTestServices.FieldValues(_admin))
             .Handle(new GetWhatsAppConversationQuery(conversationId, HasWhatsAppPermission: true, MaySupervise: false), CancellationToken.None);
 
         result.Error.Should().Be(WhatsAppConversationErrors.ConversationNotFound);
@@ -424,7 +424,7 @@ public sealed class WhatsAppComplianceTests : IDisposable
         await using var ctx = _db.CreateContext();
         var panel = (await new GetWhatsAppPanelHandler(
                 ctx, new WhatsAppLeadAccess(ctx, new LeadAccessGuard(_currentUser, _admin)), _currentUser, _admin, _integration,
-                _blindIndexer, new FixedClock(_now))
+                _blindIndexer, WhatsAppTestServices.FieldValues(_admin), new FixedClock(_now))
             .Handle(new GetWhatsAppPanelQuery(lead.Id, true, false), CancellationToken.None)).Value!;
 
         panel.Conversation!.Status.Should().Be("Human", "a held conversation must not hide behind a closed one");
@@ -540,6 +540,8 @@ public sealed class WhatsAppComplianceTests : IDisposable
                 db, _phoneIndexer, _blindIndexer, _customers, _settings, _realtime, _publisher,
                 new WhatsAppEscalation(db, _customers, _settings, _publisher, NullLogger<WhatsAppEscalation>.Instance),
                 new WhatsAppBotProfiles(db, _settings, new UnavailableWhatsAppBotModel()),
+                WhatsAppTestServices.Prospects(db, _phoneIndexer, _publisher, WhatsAppTestServices.FieldValues(_admin)),
+                WhatsAppTestServices.FieldValues(_admin),
                 Audit(),
                 new FixedClock(_now), NullLogger<RecordMessagingEventsHandler>.Instance)
             .Handle(new RecordMessagingEventsCommand(_tenantId, _connectionId, null, new MessagingEventBatch([message], [])), CancellationToken.None);

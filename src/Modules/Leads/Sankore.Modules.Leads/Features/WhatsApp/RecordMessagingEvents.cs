@@ -38,7 +38,10 @@ internal sealed record RecordMessagingEventsCommand(
 /// customer number). A number seen for the first time is looked up: the open lead most recently
 /// active first, then a client; several matches attach to the first and flag the conversation
 /// as ambiguous, so the screen says so. An unknown number becomes a lead when the tenant's
-/// setting says so — the default — or stays unattached otherwise.
+/// setting says so — the default — or stays unattached otherwise. When the bot can answer it and
+/// <see cref="LeadSettingKeys.WhatsAppCreateLeadAfterCollection"/> is on, the lead waits: the
+/// conversation opens as a PROSPECT the bot talks to, and the lead is created once the bot has
+/// collected the minimum, or as soon as a person is needed.
 ///
 /// <para>
 /// <b>Consent from an inbound message (WA-BE-05, « source : message entrant »).</b> A customer who
@@ -57,6 +60,8 @@ internal sealed class RecordMessagingEventsHandler(
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     WhatsAppEscalation escalation,
     Bot.WhatsAppBotProfiles botProfiles,
+    WhatsAppProspects prospects,
+    Bot.WhatsAppBotFieldValues fieldValues,
     WhatsAppAudit audit,
     TimeProvider clock,
     ILogger<RecordMessagingEventsHandler> logger)
@@ -153,9 +158,20 @@ internal sealed class RecordMessagingEventsHandler(
             // never needs the profile, and reading it per message would cost a query for nothing.
             var botProfile = conversation.Status is WhatsAppConversationStatus.Human or WhatsAppConversationStatus.PendingHuman
                 ? null
-                : await botProfiles.ResolveActiveAsync(cmd.TenantId, lead, ct);
+                : await botProfiles.ResolveForConversationAsync(cmd.TenantId, conversation, lead, ct);
 
             var routing = conversation.RecordInbound(inbound.SentAt, inbound.ProfileName, botAvailable: botProfile is not null);
+
+            // A prospect the bot can no longer answer — switched off since — goes to a person, and a
+            // person needs a record to work on: the lead is created now, with what was collected.
+            if (routing == WhatsAppInboundRouting.Escalate && conversation is { CollectingProspect: true, LeadId: null })
+            {
+                var (created, consentRecorded) = await prospects.CreateFromConversationAsync(
+                    cmd.TenantId, conversation, await fieldValues.ContextAsync(cmd.TenantId, ct), cmd.ConnectionAgencyId, ct);
+
+                lead = created;
+                if (consentRecorded) audits.Add((WhatsAppAudit.ConsentFromInboundMessage, conversation.Id, lead.Id));
+            }
 
             if (lead is not null)
             {
@@ -323,47 +339,27 @@ internal sealed class RecordMessagingEventsHandler(
 
         var createLead = await settings.GetBoolAsync(cmd.TenantId, LeadSettingKeys.WhatsAppCreateLeadForUnknownNumber, ct);
 
-        Guid? newLeadId = null;
-
-        if (createLead)
+        if (!createLead)
         {
-            var lead = Lead.Capture(
-                tenantId: cmd.TenantId,
-                // A profile name is what the customer chose to show, not an identity; the agent
-                // confirms it on the first real exchange. Without one, a dated placeholder nobody
-                // can mistake for a name somebody gave.
-                fullName: string.IsNullOrWhiteSpace(inbound.ProfileName)
-                    ? $"Contact WhatsApp du {inbound.SentAt:dd/MM/yyyy HH:mm}"
-                    : inbound.ProfileName.Trim(),
-                phoneNumber: phone,
-                source: LeadSource.WhatsApp,
-                // "Unknown" resolves to no product line by design — see CaptureFromMissedCallAsync.
-                interestedProduct: "Unknown",
-                preferredLanguage: LanguageCode.Default,
-                location: new GeoPoint(0, 0),
-                preferredAgencyId: cmd.ConnectionAgencyId,
-                clock: clock,
-                channel: LeadChannel.WhatsApp,
-                agencyId: cmd.ConnectionAgencyId,
-                phoneBlindIndex: leadPhoneIndexer.Compute(phone));
-
-            db.Leads.Add(lead);
-            newLeadId = lead.Id;
-
-            // The capture's own event, so auto-dispatch (when the tenant turned it on) routes the
-            // new lead to an agent exactly as it would a web-form lead.
-            await publisher.PublishAsync(
-                new CaptureLead.Events.LeadCapturedEvent(
-                    LeadId: lead.Id,
-                    TenantId: cmd.TenantId,
-                    Source: lead.Source.ToString(),
-                    HasExplicitOwner: false,
-                    DuplicateSuspected: false),
-                ct);
+            return WhatsAppConversation.Open(
+                cmd.TenantId, cmd.ConnectionId, phone, phoneIndex, leadId: null, clientId: null,
+                inbound.ProfileName, ambiguousMatch: false, now);
         }
 
+        // The lead can wait only when somebody will collect it: without a bot answering this
+        // number, waiting would leave the customer filed on nothing at all.
+        if (await settings.GetBoolAsync(cmd.TenantId, LeadSettingKeys.WhatsAppCreateLeadAfterCollection, ct)
+            && await botProfiles.ResolveForUnknownNumberAsync(cmd.TenantId, ct) is not null)
+        {
+            return WhatsAppConversation.Open(
+                cmd.TenantId, cmd.ConnectionId, phone, phoneIndex, leadId: null, clientId: null,
+                inbound.ProfileName, ambiguousMatch: false, now, collectingProspect: true);
+        }
+
+        var lead = await prospects.CaptureAsync(cmd.TenantId, phone, inbound.ProfileName, inbound.SentAt, cmd.ConnectionAgencyId, ct);
+
         return WhatsAppConversation.Open(
-            cmd.TenantId, cmd.ConnectionId, phone, phoneIndex, newLeadId, clientId: null,
+            cmd.TenantId, cmd.ConnectionId, phone, phoneIndex, lead.Id, clientId: null,
             inbound.ProfileName, ambiguousMatch: false, now);
     }
 

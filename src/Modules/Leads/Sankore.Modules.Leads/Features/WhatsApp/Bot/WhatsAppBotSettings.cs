@@ -36,7 +36,8 @@ public sealed record WhatsAppBotProfileRowDto(
     DateTimeOffset? UpdatedAt,
     string? UpdatedByName);
 
-public sealed record WhatsAppBotFieldDto(string Code, string Label);
+/// <param name="IsCustom">A custom field of the tenant's lead form (<c>custom.&lt;key&gt;</c>).</param>
+public sealed record WhatsAppBotFieldDto(string Code, string Label, bool IsCustom = false);
 
 public sealed record WhatsAppBotFaqEntryDto(string Question, string Answer);
 
@@ -63,6 +64,7 @@ public sealed record WhatsAppBotProfileDto(
     IReadOnlyList<string> EscalationKeywords,
     int MaxTurnsWithoutAnswer,
     int WindowExpiryThresholdMinutes,
+    IReadOnlyList<string> FieldsRequiredForLead,
     DateTimeOffset? CreatedAt,
     string? CreatedByName,
     IReadOnlyList<WhatsAppBotVersionDto> History,
@@ -81,7 +83,8 @@ public sealed record SaveWhatsAppBotProfileRequest(
     string? TimeZoneId,
     IReadOnlyList<string>? EscalationKeywords,
     int MaxTurnsWithoutAnswer,
-    int WindowExpiryThresholdMinutes);
+    int WindowExpiryThresholdMinutes,
+    IReadOnlyList<string>? FieldsRequiredForLead = null);
 
 public sealed record SetWhatsAppBotEnabledRequest(bool Enabled);
 
@@ -109,6 +112,7 @@ internal sealed class GetWhatsAppBotOverviewHandler(
     ILeadSettings settings,
     IWhatsAppBotModel model,
     IAdministrationModule admin,
+    WhatsAppBotFieldValues fieldValues,
     ICurrentUser currentUser)
     : IRequestHandler<GetWhatsAppBotOverviewQuery, Result<WhatsAppBotOverviewDto>>
 {
@@ -158,11 +162,20 @@ internal sealed class GetWhatsAppBotOverviewHandler(
             model.Provider,
             model.IsAvailable ? model.Name : null,
             rows,
-            Fields()));
+            Fields((await fieldValues.ContextAsync(tenantId, ct)).LeadForm)));
     }
 
-    internal static IReadOnlyList<WhatsAppBotFieldDto> Fields() =>
-        WhatsAppBotFields.All.Select(f => new WhatsAppBotFieldDto(f.Code, f.Label)).ToList();
+    /// <summary>
+    /// The native fields, then the lead form's custom fields the bot may collect — an unreadable
+    /// form lists the native ones only.
+    /// </summary>
+    internal static IReadOnlyList<WhatsAppBotFieldDto> Fields(Sankore.Modules.Administration.PublicApi.Forms.EntityFormDto? leadForm) =>
+        WhatsAppBotFields.All.Select(f => new WhatsAppBotFieldDto(f.Code, f.Label))
+            .Concat((leadForm?.Fields ?? [])
+                .Where(BotFieldContext.IsCollectable)
+                .OrderBy(f => f.Order)
+                .Select(f => new WhatsAppBotFieldDto(WhatsAppBotFields.CustomPrefix + f.Key, f.Label, IsCustom: true)))
+            .ToList();
 }
 
 // ── One profile ──────────────────────────────────────────────────────────────────────────────
@@ -173,6 +186,7 @@ internal sealed record GetWhatsAppBotProfileQuery(Guid ProductLineId, int? Versi
 internal sealed class GetWhatsAppBotProfileHandler(
     LeadsDbContext db,
     IAdministrationModule admin,
+    WhatsAppBotFieldValues fieldValues,
     ICurrentUser currentUser)
     : IRequestHandler<GetWhatsAppBotProfileQuery, Result<WhatsAppBotProfileDto>>
 {
@@ -202,14 +216,18 @@ internal sealed class GetWhatsAppBotProfileHandler(
         var authors = versions.Select(v => v.CreatedBy).Where(id => id != Guid.Empty).Distinct().ToList();
         var names = authors.Count == 0 ? new Dictionary<Guid, string>() : await admin.GetUserNamesAsync(tenantId, authors, ct);
 
+        var fields = GetWhatsAppBotOverviewHandler.Fields((await fieldValues.ContextAsync(tenantId, ct)).LeadForm);
+
         return Result.Ok(ToDto(profile, name.Value!, names,
             query.Version is null
                 ? versions.Select(v => new WhatsAppBotVersionDto(v.Version, v.IsEnabled, v.CreatedBy, names.GetValueOrDefault(v.CreatedBy), v.CreatedAt)).ToList()
-                : []));
+                : [],
+            fields));
     }
 
     internal static WhatsAppBotProfileDto ToDto(
-        WhatsAppBotProfile p, string name, IReadOnlyDictionary<Guid, string> names, IReadOnlyList<WhatsAppBotVersionDto> history) => new(
+        WhatsAppBotProfile p, string name, IReadOnlyDictionary<Guid, string> names, IReadOnlyList<WhatsAppBotVersionDto> history,
+        IReadOnlyList<WhatsAppBotFieldDto> fields) => new(
         p.IsGeneral ? null : p.ProductLineId,
         name,
         p.Version,
@@ -224,10 +242,11 @@ internal sealed class GetWhatsAppBotProfileHandler(
         p.EscalationKeywords,
         p.MaxTurnsWithoutAnswer,
         p.WindowExpiryThresholdMinutes,
+        p.FieldsRequiredForLead,
         p.Version == 0 ? null : p.CreatedAt,
         p.Version == 0 ? null : names.GetValueOrDefault(p.CreatedBy),
         history,
-        GetWhatsAppBotOverviewHandler.Fields());
+        fields);
 }
 
 // ── Save: a new version ──────────────────────────────────────────────────────────────────────
@@ -247,6 +266,7 @@ internal sealed record SaveWhatsAppBotProfileCommand(Guid ProductLineId, SaveWha
 internal sealed class SaveWhatsAppBotProfileHandler(
     LeadsDbContext db,
     IAdministrationModule admin,
+    WhatsAppBotFieldValues fieldValues,
     ICurrentUser currentUser,
     TimeProvider clock)
     : IRequestHandler<SaveWhatsAppBotProfileCommand, Result<WhatsAppBotProfileDto>>
@@ -269,6 +289,15 @@ internal sealed class SaveWhatsAppBotProfileHandler(
         }
 
         if (name.IsFailure) return Result.Fail<WhatsAppBotProfileDto>(name.Error!);
+
+        // A custom field must be one the bot can collect NOW: present on the lead form, live, not
+        // sensitive. Checked at the save, against what the screen offered; a field archived later is
+        // simply no longer offered at a turn.
+        var fields = GetWhatsAppBotOverviewHandler.Fields((await fieldValues.ContextAsync(tenantId, ct)).LeadForm);
+        var custom = (r.FieldsToCollect ?? []).Select(WhatsAppBotFields.Normalize).Where(WhatsAppBotFields.IsCustom);
+
+        if (custom.Any(code => fields.All(f => f.Code != code)))
+            return Result.Fail<WhatsAppBotProfileDto>("WHATSAPP_BOT_FIELD_UNKNOWN");
 
         var current = await db.WhatsAppBotProfiles
             .Where(p => p.ProductLineId == cmd.ProductLineId)
@@ -295,7 +324,8 @@ internal sealed class SaveWhatsAppBotProfileHandler(
             r.MaxTurnsWithoutAnswer,
             r.WindowExpiryThresholdMinutes,
             currentUser.Id,
-            clock.GetUtcNow());
+            clock.GetUtcNow(),
+            r.FieldsRequiredForLead);
 
         if (created.IsFailure) return Result.Fail<WhatsAppBotProfileDto>(created.Error!);
 
@@ -311,7 +341,7 @@ internal sealed class SaveWhatsAppBotProfileHandler(
             return Result.Fail<WhatsAppBotProfileDto>(WhatsAppBotErrors.Conflict);
         }
 
-        return Result.Ok(GetWhatsAppBotProfileHandler.ToDto(created.Value!, name.Value!, new Dictionary<Guid, string>(), []));
+        return Result.Ok(GetWhatsAppBotProfileHandler.ToDto(created.Value!, name.Value!, new Dictionary<Guid, string>(), [], fields));
     }
 }
 

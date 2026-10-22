@@ -21,6 +21,8 @@ using Sankore.Shared.Kernel;
 /// <param name="MaskedPhone">The customer's number, masked — enough to recognise, not to dial.</param>
 /// <param name="Route">The lead's WhatsApp tab when it is filed on one.</param>
 /// <param name="CanAttach">Filed on no lead and not anonymised: an agent may file it on one.</param>
+/// <param name="CollectingProspect">The bot is collecting an unknown number's lead, which does not exist yet.</param>
+/// <param name="PendingFields">What the bot collected for that lead so far — empty once the lead exists.</param>
 public sealed record WhatsAppConversationDetailDto(
     Guid Id,
     Guid? LeadId,
@@ -41,7 +43,9 @@ public sealed record WhatsAppConversationDetailDto(
     string? EscalationSummary,
     bool Anonymized,
     string? Route,
-    bool CanAttach);
+    bool CanAttach,
+    bool CollectingProspect = false,
+    IReadOnlyList<WhatsAppBotCollectedFieldDto>? PendingFields = null);
 
 public sealed record AttachWhatsAppConversationRequest(Guid LeadId);
 
@@ -61,7 +65,8 @@ internal sealed class GetWhatsAppConversationHandler(
     ICurrentUser me,
     IAdministrationModule admin,
     ICustomersModule customers,
-    WhatsAppAudit audit)
+    WhatsAppAudit audit,
+    Bot.WhatsAppBotFieldValues fieldValues)
     : IRequestHandler<GetWhatsAppConversationQuery, Result<WhatsAppConversationDetailDto>>
 {
     public async Task<Result<WhatsAppConversationDetailDto>> Handle(GetWhatsAppConversationQuery query, CancellationToken ct)
@@ -97,6 +102,11 @@ internal sealed class GetWhatsAppConversationHandler(
 
         var anonymized = c.AnonymizedAt is not null;
 
+        // A prospect's pending values name a product and custom fields: the catalogue and the lead
+        // form are read only when there is something pending to show.
+        var pending = c.PendingLeadFields();
+        var fields = pending.Count > 0 ? await fieldValues.ContextAsync(c.TenantId, ct) : null;
+
         return Result.Ok(new WhatsAppConversationDetailDto(
             c.Id,
             c.LeadId,
@@ -117,7 +127,12 @@ internal sealed class GetWhatsAppConversationHandler(
             c.EscalationSummary,
             anonymized,
             c.LeadId is { } lead ? $"/leads/{lead}/suivi/whatsapp" : null,
-            CanAttach: c.LeadId is null && !anonymized));
+            CanAttach: c.LeadId is null && !anonymized,
+            CollectingProspect: c is { CollectingProspect: true, LeadId: null },
+            PendingFields: pending
+                .Select(p => new WhatsAppBotCollectedFieldDto(p.Key, fields?.LabelOf(p.Key) ?? WhatsAppBotFields.LabelOf(p.Key),
+                    Bot.WhatsAppBotFieldValues.Display(null, pending, p.Key, fields)))
+                .ToList()));
     }
 }
 

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using MassTransit;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,7 @@ using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.FindDuplicates;
+using Sankore.Modules.Leads.Features.RecalculateLeadScore;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 using Sankore.Shared.Kernel.Realtime;
@@ -40,15 +42,33 @@ public sealed class WhatsAppBotTurnConsumer(IServiceScopeFactory scopeFactory)
 }
 
 /// <summary>
-/// One bot turn (WA-BE-11 → WA-BE-13): the deterministic rules, then the model with its four
-/// tools, then the reply or the handover — and a <see cref="WhatsAppBotTurn"/> either way.
+/// One bot turn (WA-BE-11 → WA-BE-13): the deterministic rules, then the model with its one
+/// tool, then the reply or the handover — and a <see cref="WhatsAppBotTurn"/> either way.
 ///
 /// <para>
-/// <b>Every answer is a tool call.</b> The model must end its turn with <c>send_reply</c> (text
-/// plus « did I answer the question ») or <c>escalate_to_human</c> (a reason from a closed list
-/// plus a summary). Nothing it writes outside a tool reaches the customer, so the engine never
-/// has to guess whether a paragraph was meant as an answer, and the « no useful answer » rule
-/// counts a declaration instead of a guess.
+/// <b>Every answer is a tool call.</b> The model ends its turn with <c>respond</c>: a reply (text
+/// plus « did I answer the question ») or a handover (a reason from a closed list plus a summary),
+/// with what the customer just gave alongside. Nothing it writes outside the tool reaches the
+/// customer, so the engine never has to guess whether a paragraph was meant as an answer, and the
+/// « no useful answer » rule counts a declaration instead of a guess.
+/// </para>
+///
+/// <para>
+/// <b>One call per message, two at most.</b> The FAQ is in the prompt and the fields ride on the
+/// decision, so a well-formed answer is the whole turn. The second call exists only for a decision
+/// the engine refuses (a reply without text, a handover without a reason). A field the engine
+/// refuses — an e-mail that is not one — costs nothing: it is dropped, the reply still goes, and
+/// the field is still « missing » in the next turn's prompt, so the bot asks again naturally.
+/// </para>
+///
+/// <para>
+/// <b>A prospect has no lead yet.</b> For an unknown number the bot may talk BEFORE any lead
+/// exists (<see cref="LeadSettingKeys.WhatsAppCreateLeadAfterCollection"/>): what it collects
+/// waits on the conversation, and <see cref="WhatsAppProspects"/> creates the lead when the
+/// profile's minimum is complete — or at ANY handover first, because the person who takes over
+/// needs a record to work on. Once the minimum is complete the bot thanks the customer and hands
+/// over (<see cref="WhatsAppBotReasons.LeadReady"/>), once per conversation; on a conversation that
+/// already had a lead the same rule applies when THIS turn's collection completed it.
 /// </para>
 ///
 /// <para>
@@ -70,15 +90,17 @@ internal sealed class WhatsAppBotEngine(
     WhatsAppBotProfiles profiles,
     IWhatsAppBotModel model,
     WhatsAppEscalation escalation,
-    IAdministrationModule admin,
-    ILeadEmailIndexer emailIndexer,
+    WhatsAppBotFieldValues fieldValues,
+    WhatsAppProspects prospects,
+    WhatsAppAudit audit,
     IRealtimeNotifier realtime,
     IOptions<WhatsAppBotOptions> options,
+    ISender sender,
     TimeProvider clock,
     ILogger<WhatsAppBotEngine> logger)
 {
-    /// <summary>Model calls in one turn: a product lookup, a field or two, then the answer.</summary>
-    internal const int MaxModelCalls = 4;
+    /// <summary>Model calls in one turn: the decision, and one correction if it was malformed or not a call to respond.</summary>
+    internal const int MaxModelCalls = 2;
 
     private const string RulesModel = "rules";
 
@@ -105,19 +127,22 @@ internal sealed class WhatsAppBotEngine(
             : null;
 
         var now = clock.GetUtcNow();
-        var profile = await profiles.ResolveActiveAsync(tenantId, lead, ct);
+        var ctx = await fieldValues.ContextAsync(tenantId, ct);
+        var profile = await profiles.ResolveForConversationAsync(tenantId, conversation, lead, ct);
+        var turn = new TurnState(lead);
 
         if (profile is null)
         {
             // Switched off between the message and its turn: the specification's « désactivé =
             // escalade directe », applied late rather than not at all.
-            await escalation.EscalateAsync(tenantId, conversation, lead, WhatsAppBotReasons.Disabled,
+            await EnsureLeadAsync(tenantId, conversation, ctx, turn, ct);
+            await escalation.EscalateAsync(tenantId, conversation, turn.Lead, WhatsAppBotReasons.Disabled,
                 "Le bot n’est plus actif pour ce prospect.", now, profile: null, tellCustomer: true, ct);
 
-            await CommitAsync(tenantId, conversation, lead, WhatsAppBotTurn.Record(
-                tenantId, conversation.Id, trigger.Id, lead?.ProductLineId, profileVersion: 0, RulesModel,
+            await FinishAsync(tenantId, conversation, turn, WhatsAppBotTurn.Record(
+                tenantId, conversation.Id, trigger.Id, turn.Lead?.ProductLineId, profileVersion: 0, RulesModel,
                 input: null, output: null, toolCalls: null, WhatsAppBotTurnOutcome.RuleEscalated, WhatsAppBotReasons.Disabled,
-                answered: null, latencyMs: 0, null, null, errorCode: null, replyMessageId: null, now), ct);
+                answered: null, latencyMs: 0, null, null, errorCode: null, replyMessageId: null, now), collected: false, ct);
             return;
         }
 
@@ -126,17 +151,18 @@ internal sealed class WhatsAppBotEngine(
 
         if (verdict is not null)
         {
-            await escalation.EscalateAsync(tenantId, conversation, lead, verdict.Reason, verdict.Summary, now, profile, tellCustomer: true, ct);
+            await EnsureLeadAsync(tenantId, conversation, ctx, turn, ct);
+            await escalation.EscalateAsync(tenantId, conversation, turn.Lead, verdict.Reason, verdict.Summary, now, profile, tellCustomer: true, ct);
 
-            await CommitAsync(tenantId, conversation, lead, WhatsAppBotTurn.Record(
-                tenantId, conversation.Id, trigger.Id, lead?.ProductLineId, profile.Version, RulesModel,
+            await FinishAsync(tenantId, conversation, turn, WhatsAppBotTurn.Record(
+                tenantId, conversation.Id, trigger.Id, turn.Lead?.ProductLineId, profile.Version, RulesModel,
                 input: null, output: null, toolCalls: null, WhatsAppBotTurnOutcome.RuleEscalated, verdict.Reason,
-                answered: null, latencyMs: 0, null, null, errorCode: null, replyMessageId: null, now), ct);
+                answered: null, latencyMs: 0, null, null, errorCode: null, replyMessageId: null, now), collected: false, ct);
             return;
         }
 
         var watch = Stopwatch.StartNew();
-        var run = await AskAsync(tenantId, conversation, lead, trigger, profile, ct);
+        var run = await AskAsync(conversation, lead, trigger, profile, ctx, ct);
         watch.Stop();
 
         // Re-read what may have moved while the model was thinking. Only the conversation: the
@@ -144,6 +170,7 @@ internal sealed class WhatsAppBotEngine(
         await db.Entry(conversation).ReloadAsync(ct);
 
         foreach (var code in run.Collected) conversation.RecordBotCollected(code);
+        await KeepPendingAsync(conversation, run, ctx, turn, ct);
 
         now = clock.GetUtcNow();
         var stillWanted = conversation.Status == WhatsAppConversationStatus.Bot && !await HasNewerInboundAsync(conversation.Id, trigger, ct);
@@ -160,7 +187,8 @@ internal sealed class WhatsAppBotEngine(
         {
             outcome = WhatsAppBotTurnOutcome.Failed;
             reason = WhatsAppBotReasons.Failure;
-            await escalation.EscalateAsync(tenantId, conversation, lead, reason,
+            await EnsureLeadAsync(tenantId, conversation, ctx, turn, ct);
+            await escalation.EscalateAsync(tenantId, conversation, turn.Lead, reason,
                 run.Failure == "BOT_TIMEOUT"
                     ? "Le bot n’a pas répondu à temps ; le client attend un conseiller."
                     : "Le bot n’a pas pu répondre ; le client attend un conseiller.",
@@ -170,7 +198,8 @@ internal sealed class WhatsAppBotEngine(
         {
             outcome = WhatsAppBotTurnOutcome.Escalated;
             reason = handover.Reason;
-            await escalation.EscalateAsync(tenantId, conversation, lead, handover.Reason, handover.Summary, now, profile, tellCustomer: true, ct);
+            await EnsureLeadAsync(tenantId, conversation, ctx, turn, ct);
+            await escalation.EscalateAsync(tenantId, conversation, turn.Lead, handover.Reason, handover.Summary, now, profile, tellCustomer: true, ct);
         }
         else
         {
@@ -183,18 +212,29 @@ internal sealed class WhatsAppBotEngine(
                 // « je ne sais pas », rather than after the customer has read it.
                 outcome = WhatsAppBotTurnOutcome.RuleEscalated;
                 reason = WhatsAppBotReasons.NoUsefulAnswer;
-                await escalation.EscalateAsync(tenantId, conversation, lead, reason,
+                await EnsureLeadAsync(tenantId, conversation, ctx, turn, ct);
+                await escalation.EscalateAsync(tenantId, conversation, turn.Lead, reason,
                     $"Le bot n’a pas su répondre {unanswered} fois de suite.", now, profile, tellCustomer: true, ct);
             }
             else
             {
                 outcome = WhatsAppBotTurnOutcome.Replied;
                 replyId = (await escalation.QueueAutomaticAsync(tenantId, conversation, WhatsAppAuthor.Bot, reply.Text, now, ct)).Id;
+
+                // The minimum just became complete: the reply thanked the customer (the prompt
+                // told the model to), the lead is created if it was waiting, and a person takes over.
+                if (CompletedThisTurn(profile, conversation, turn.Lead, run) && conversation.MarkLeadReady(now))
+                {
+                    reason = WhatsAppBotReasons.LeadReady;
+                    await EnsureLeadAsync(tenantId, conversation, ctx, turn, ct);
+                    await escalation.EscalateAsync(tenantId, conversation, turn.Lead, reason,
+                        LeadReadySummary(profile, conversation, turn.Lead, ctx), now, profile, tellCustomer: true, ct);
+                }
             }
         }
 
-        await CommitAsync(tenantId, conversation, lead, WhatsAppBotTurn.Record(
-            tenantId, conversation.Id, trigger.Id, lead?.ProductLineId, profile.Version, model.Name,
+        await FinishAsync(tenantId, conversation, turn, WhatsAppBotTurn.Record(
+            tenantId, conversation.Id, trigger.Id, turn.Lead?.ProductLineId, profile.Version, model.Name,
             input: run.Input,
             output: run.Reply?.Text ?? run.Escalation?.Summary,
             toolCalls: run.Calls.Count == 0 ? null : JsonSerializer.Serialize(run.Calls, Json),
@@ -204,14 +244,82 @@ internal sealed class WhatsAppBotEngine(
             run.InputTokens, run.OutputTokens,
             errorCode: run.Failure,
             replyMessageId: replyId,
-            now), ct);
+            now), collected: run.Collected.Count > 0 || run.Pending.Count > 0, ct);
+    }
+
+    // ── The lead of a prospect ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The lead this turn works on — created from what the conversation holds when the bot was
+    /// talking to a prospect. Idempotent within a turn.
+    /// </summary>
+    private async Task EnsureLeadAsync(
+        Guid tenantId, WhatsAppConversation conversation, BotFieldContext ctx, TurnState turn, CancellationToken ct)
+    {
+        if (turn.Lead is not null || conversation is not { CollectingProspect: true, LeadId: null }) return;
+
+        var (lead, consentRecorded) = await prospects.CreateFromConversationAsync(tenantId, conversation, ctx, null, ct);
+        turn.Lead = lead;
+        turn.LeadCreated = true;
+        turn.ConsentRecorded = consentRecorded;
+    }
+
+    /// <summary>
+    /// Puts what the model collected for a prospect on the conversation — or straight on the lead,
+    /// when an agent filed the conversation on one while the model was thinking.
+    /// </summary>
+    private async Task KeepPendingAsync(
+        WhatsAppConversation conversation, BotRun run, BotFieldContext ctx, TurnState turn, CancellationToken ct)
+    {
+        if (run.Pending.Count == 0) return;
+
+        if (conversation is { CollectingProspect: true, LeadId: null })
+        {
+            foreach (var (code, value) in run.Pending) conversation.RecordPendingField(code, value);
+            return;
+        }
+
+        if (conversation.LeadId is not { } leadId) return;
+
+        turn.Lead ??= await db.Leads.AsTracking().FirstOrDefaultAsync(l => l.Id == leadId, ct);
+        if (turn.Lead is null) return;
+
+        foreach (var (code, value) in run.Pending)
+        {
+            if (fieldValues.Write(turn.Lead, code, value, ctx) is null) conversation.RecordBotCollected(code);
+        }
+    }
+
+    /// <summary>
+    /// The profile's minimum is complete now, and THIS turn's collection is what completed it — a
+    /// lead captured from a web form with its names already filled must not be handed over on the
+    /// first « bonjour ».
+    /// </summary>
+    private static bool CompletedThisTurn(WhatsAppBotProfile profile, WhatsAppConversation conversation, Lead? lead, BotRun run)
+    {
+        if (profile.FieldsRequiredForLead.Count == 0) return false;
+
+        var pending = conversation.PendingLeadFields();
+        var contributed = run.Collected.Concat(run.Pending.Keys).Any(profile.FieldsRequiredForLead.Contains);
+
+        return contributed && profile.FieldsRequiredForLead.All(code => WhatsAppBotFieldValues.IsFilled(lead, pending, code));
+    }
+
+    /// <summary>What the agent who takes over reads: the minimum, collected, field by field.</summary>
+    private static string LeadReadySummary(WhatsAppBotProfile profile, WhatsAppConversation conversation, Lead? lead, BotFieldContext ctx)
+    {
+        var pending = conversation.PendingLeadFields();
+        var parts = profile.FieldsRequiredForLead
+            .Select(code => $"{ctx.LabelOf(code)} : {WhatsAppBotFieldValues.Display(lead, pending, code, ctx) ?? "—"}");
+
+        return "Le bot a recueilli les informations indispensables. " + string.Join(" ; ", parts) + ".";
     }
 
     // ── The model ────────────────────────────────────────────────────────────────────────────
 
     private async Task<BotRun> AskAsync(
-        Guid tenantId, WhatsAppConversation conversation, Lead? lead, WhatsAppMessage trigger,
-        WhatsAppBotProfile profile, CancellationToken ct)
+        WhatsAppConversation conversation, Lead? lead, WhatsAppMessage trigger,
+        WhatsAppBotProfile profile, BotFieldContext ctx, CancellationToken ct)
     {
         var settings = options.Value;
         var run = new BotRun();
@@ -233,21 +341,44 @@ internal sealed class WhatsAppBotEngine(
                 .Take(3)
                 .ToListAsync(timeout.Token);
 
-            var catalogue = await CatalogueAsync(tenantId, timeout.Token);
-            var product = ProductOf(profile, lead, catalogue);
+            var pending = conversation.PendingLeadFields();
+            var product = ProductOf(profile, lead, pending, ctx.Catalogue);
+            var offered = ctx.Catalogue.Where(p => p.IsActive).Select(p => p.Name).Distinct().ToList();
 
-            var system = WhatsAppBotPrompt.Build(
-                profile,
-                product?.Name,
-                profile.FieldsToCollect.ToDictionary(f => f, f => IsFilled(lead, f)),
-                alreadySent.Where(b => !string.IsNullOrWhiteSpace(b)).Select(b => WhatsAppBotRedactor.Redact(b))!.ToList()!,
-                clock.GetUtcNow());
+            // The products the customer may name: only while the product is unknown, and only when
+            // this profile collects it. Known, the field is not offered at all.
+            var productChoices = product is null && profile.FieldsToCollect.Contains(WhatsAppBotFields.Product)
+                ? offered
+                : [];
 
-            var tools = WhatsAppBotTools.For(profile);
+            // What the bot can actually record: a product with choices to make, a custom field the
+            // form still has. Anything else would be a question whose answer goes nowhere.
+            var collectable = profile.FieldsToCollect
+                .Where(code => code switch
+                {
+                    WhatsAppBotFields.Product => productChoices.Count > 0 || WhatsAppBotFieldValues.IsFilled(lead, pending, code),
+                    _ when WhatsAppBotFields.IsCustom(code) => ctx.CustomField(code) is not null,
+                    _ => true,
+                })
+                .ToList();
+
+            var system = new BotSystemPrompt(
+                WhatsAppBotPrompt.Stable(profile, product?.Name, product is null ? offered : []),
+                WhatsAppBotPrompt.Turn(
+                    profile,
+                    collectable.Select(code => new BotFieldStatus(
+                        code,
+                        ctx.LabelOf(code),
+                        WhatsAppBotFieldValues.IsFilled(lead, pending, code),
+                        profile.FieldsRequiredForLead.Contains(code))).ToList(),
+                    alreadySent.Where(b => !string.IsNullOrWhiteSpace(b)).Select(b => WhatsAppBotRedactor.Redact(b))!.ToList()!,
+                    clock.GetUtcNow()));
+
+            var tools = WhatsAppBotTools.For(collectable, productChoices, ctx);
 
             for (var call = 0; call < MaxModelCalls; call++)
             {
-                var response = await model.CompleteAsync(new BotModelRequest(system, messages.ToList(), tools), timeout.Token);
+                var response = await model.CompleteAsync(new BotModelRequest(system, messages.ToList(), tools, profile.Faq), timeout.Token);
 
                 run.InputTokens = (run.InputTokens ?? 0) + (response.InputTokens ?? 0);
                 run.OutputTokens = (run.OutputTokens ?? 0) + (response.OutputTokens ?? 0);
@@ -256,8 +387,18 @@ internal sealed class WhatsAppBotEngine(
 
                 if (uses.Count == 0)
                 {
-                    run.Failure = "BOT_NO_TOOL_CALL";
-                    return run;
+                    // Free text is never sent: the model is told once to put its answer in `respond`.
+                    // The tool cannot be forced (current models refuse a forced tool_choice).
+                    if (call + 1 >= MaxModelCalls || response.Content.Count == 0)
+                    {
+                        run.Failure = "BOT_NO_TOOL_CALL";
+                        return run;
+                    }
+
+                    messages.Add(new BotMessage("assistant", response.Content));
+                    messages.Add(new BotMessage("user",
+                        [new BotTextBlock("Termine ce tour en appelant l’outil respond : ton texte n’a pas été envoyé au client.")]));
+                    continue;
                 }
 
                 messages.Add(new BotMessage("assistant", response.Content));
@@ -266,10 +407,9 @@ internal sealed class WhatsAppBotEngine(
                 foreach (var use in uses)
                 {
                     run.Calls.Add(new BotToolCall(use.Name, use.Input.GetRawText()));
-                    results.Add(Execute(use, run, profile, lead, product, catalogue));
+                    results.Add(Execute(use, run, collectable, lead, pending, ctx));
                 }
 
-                // A handover wins over a reply sent in the same breath.
                 if (run.Escalation is not null || run.Reply is not null) return run;
 
                 messages.Add(new BotMessage("user", results));
@@ -299,128 +439,116 @@ internal sealed class WhatsAppBotEngine(
     }
 
     private BotBlock Execute(
-        BotToolUseBlock use, BotRun run, WhatsAppBotProfile profile, Lead? lead,
-        ProductSummary? product, IReadOnlyList<ProductSummary> catalogue)
+        BotToolUseBlock use, BotRun run, IReadOnlyList<string> collectable, Lead? lead,
+        IReadOnlyDictionary<string, string> pending, BotFieldContext ctx)
     {
         BotToolResultBlock Ok(string content) => new(use.Id, content, IsError: false);
         BotToolResultBlock Error(string content) => new(use.Id, content, IsError: true);
 
-        switch (use.Name)
+        if (use.Name != WhatsAppBotTools.Respond) return Error("Outil inconnu : appelle respond.");
+
+        // The decision is checked BEFORE anything is written: a malformed call is sent back whole,
+        // and its corrected version carries the fields again.
+        var action = String(use.Input, "action")?.Trim().ToLowerInvariant();
+        BotReply? reply = null;
+        BotHandover? handover = null;
+
+        switch (action)
         {
-            case WhatsAppBotTools.GetProductInfo:
-            {
-                var info = new JsonObject
-                {
-                    ["product"] = product is null ? null : new JsonObject { ["name"] = product.Name, ["category"] = product.Category },
-                    ["faq"] = new JsonArray(profile.Faq.Select(f => (JsonNode?)new JsonObject
-                    {
-                        ["question"] = f.Question,
-                        ["answer"] = f.Answer,
-                    }).ToArray()),
-                };
-
-                // The general profile talks to somebody whose product is not known yet: it may
-                // name what the institution offers, never more than the names.
-                if (product is null)
-                {
-                    info["catalogue"] = new JsonArray(catalogue
-                        .Where(p => p.IsActive)
-                        .Select(p => (JsonNode?)new JsonObject { ["name"] = p.Name, ["category"] = p.Category })
-                        .ToArray());
-                }
-
-                return Ok(info.ToJsonString());
-            }
-
-            case WhatsAppBotTools.UpdateLeadField:
-            {
-                var field = String(use.Input, "field")?.Trim().ToUpperInvariant();
-                var value = String(use.Input, "value")?.Trim();
-
-                if (field is null || !profile.FieldsToCollect.Contains(field))
-                    return Error("Ce champ ne fait pas partie des informations à recueillir.");
-                if (string.IsNullOrWhiteSpace(value) || value.Length > 200)
-                    return Error("Valeur vide ou trop longue.");
-                if (lead is null)
-                    return Error("Aucune fiche n’est rattachée à cette conversation.");
-
-                var error = ApplyField(lead, field, value);
-                if (error is not null) return Error(error);
-
-                run.Collected.Add(field);
-                return Ok("Enregistré.");
-            }
-
-            case WhatsAppBotTools.EscalateToHuman:
-            {
-                var reason = String(use.Input, "reason")?.Trim().ToLowerInvariant();
-                var summary = String(use.Input, "summary")?.Trim();
-
-                if (reason is null || !WhatsAppBotReasons.ModelReasons.TryGetValue(reason, out var code))
-                    return Error($"Raison obligatoire, parmi : {string.Join(", ", WhatsAppBotReasons.ModelReasons.Keys)}.");
-                if (string.IsNullOrWhiteSpace(summary))
-                    return Error("Le résumé est obligatoire.");
-
-                run.Escalation = new BotHandover(code, summary.Length <= 2000 ? summary : summary[..2000]);
-                return Ok("Transmis.");
-            }
-
-            case WhatsAppBotTools.SendReply:
+            case WhatsAppBotTools.Reply:
             {
                 var text = String(use.Input, "text")?.Trim();
-
                 if (string.IsNullOrWhiteSpace(text))
-                    return Error("Le texte de la réponse est vide.");
+                    return Error("Avec reply, le texte de la réponse est obligatoire.");
 
-                var answered = use.Input.ValueKind == JsonValueKind.Object
-                    && use.Input.TryGetProperty("answered_question", out var a)
-                    && a.ValueKind == JsonValueKind.True;
+                var answered = use.Input.TryGetProperty("answered_question", out var a) && a.ValueKind == JsonValueKind.True;
+                reply = new BotReply(text.Length <= 4000 ? text : text[..4000], answered);
+                break;
+            }
 
-                run.Reply = new BotReply(text.Length <= 4000 ? text : text[..4000], answered);
-                return Ok("Envoyé.");
+            case WhatsAppBotTools.Handover:
+            {
+                var reason = String(use.Input, "handover_reason")?.Trim().ToLowerInvariant();
+                var summary = String(use.Input, "handover_summary")?.Trim();
+
+                if (reason is null || !WhatsAppBotReasons.ModelReasons.TryGetValue(reason, out var code))
+                    return Error($"Avec handover, handover_reason est obligatoire, parmi : {string.Join(", ", WhatsAppBotReasons.ModelReasons.Keys)}.");
+                if (string.IsNullOrWhiteSpace(summary))
+                    return Error("Avec handover, handover_summary est obligatoire.");
+
+                handover = new BotHandover(code, summary.Length <= 2000 ? summary : summary[..2000]);
+                break;
             }
 
             default:
-                return Error("Outil inconnu.");
+                return Error("action est obligatoire : reply ou handover.");
         }
+
+        // The fields, each on its own. A refused one is dropped without failing the turn — see the
+        // class comment — and is still « missing » in the next turn's prompt.
+        if (use.Input.TryGetProperty("collected", out var collected) && collected.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var entry in collected.EnumerateObject())
+            {
+                var field = WhatsAppBotFields.Normalize(entry.Name);
+                var raw = entry.Value.ValueKind == JsonValueKind.String ? entry.Value.GetString() : null;
+
+                if (!collectable.Contains(field) || string.IsNullOrWhiteSpace(raw) || raw.Length > 200)
+                {
+                    run.Refused.Add(field);
+                    continue;
+                }
+
+                // What this very call already kept counts: a product named twice is one product.
+                var known = run.Pending.Count == 0
+                    ? pending
+                    : pending.Concat(run.Pending).GroupBy(p => p.Key).ToDictionary(g => g.Key, g => g.Last().Value);
+
+                var (value, refusal) = fieldValues.Normalize(field, raw, lead, known, ctx);
+
+                if (refusal is null && lead is not null) refusal = fieldValues.Write(lead, field, value!, ctx);
+
+                if (refusal is not null)
+                {
+                    logger.LogInformation("WhatsApp bot: field {Field} not recorded ({Refusal}).", field, refusal);
+                    run.Refused.Add(field);
+                    continue;
+                }
+
+                if (lead is not null)
+                {
+                    if (!run.Collected.Contains(field)) run.Collected.Add(field);
+                }
+                else
+                {
+                    run.Pending[field] = value!;
+                }
+            }
+        }
+
+        run.Reply = reply;
+        run.Escalation = handover;
+        return Ok(reply is not null ? "Envoyé." : "Transmis.");
     }
 
-    /// <summary>Writes one collected field on the lead. Returns the refusal in words the model can act on.</summary>
-    private string? ApplyField(Lead lead, string field, string value)
+    /// <summary>
+    /// What the bot collected moves the score — a name, a city and a neighbourhood are points of
+    /// the calculator — and nothing else would recompute it: a WhatsApp lead used to keep the 0 it
+    /// was captured with until an agent logged an activity. After the commit, and outside the
+    /// turn's fate: a scoring failure is logged, never a reason to unsend a reply.
+    /// </summary>
+    private async Task RescoreAsync(Lead lead, CancellationToken ct)
     {
-        Sankore.Shared.Kernel.Result result;
+        if (lead.Status is LeadStatus.Converted or LeadStatus.Archived or LeadStatus.Lost or LeadStatus.Disqualified) return;
 
-        switch (field)
+        try
         {
-            case WhatsAppBotFields.FirstName:
-                result = lead.Update(null, firstName: value, lastName: null, null, null, null, null, null, null, null, null, null);
-                break;
-
-            case WhatsAppBotFields.LastName:
-                result = lead.Update(null, firstName: null, lastName: value, null, null, null, null, null, null, null, null, null);
-                break;
-
-            case WhatsAppBotFields.Email:
-                if (!System.Net.Mail.MailAddress.TryCreate(value, out var address) || !address.Host.Contains('.'))
-                    return "Adresse e-mail invalide.";
-                result = lead.SetEmail(address.Address, emailIndexer.Compute(address.Address));
-                break;
-
-            case WhatsAppBotFields.City:
-                result = lead.EnrichPrincipalIdentity(null, null, null, null, null, null, null, city: value, null, clock.GetUtcNow());
-                break;
-
-            case WhatsAppBotFields.DesiredAmount:
-                var amount = ParseAmount(value);
-                if (amount is null) return "Montant illisible : donne un nombre, par exemple 500000.";
-                result = lead.Update(null, null, null, null, null, null, desiredAmount: amount, null, null, null, null, null);
-                break;
-
-            default:
-                return "Champ non pris en charge.";
+            await sender.Send(new RecalculateLeadScoreCommand(lead.Id, "WHATSAPP_BOT_COLLECTED"), ct);
         }
-
-        return result.IsSuccess ? null : "La fiche ne peut plus être modifiée.";
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "WhatsApp bot: the score of lead {LeadId} could not be recomputed.", lead.Id);
+        }
     }
 
     /// <summary>« 500 000 FCFA », « 1,5 million », « 750k », « 2 000 000 » — XOF unless another currency is named.</summary>
@@ -451,16 +579,6 @@ internal sealed class WhatsAppBotEngine(
 
         return new Money(decimal.Round(amount, 2), currency);
     }
-
-    private static bool IsFilled(Lead? lead, string field) => lead is not null && field switch
-    {
-        WhatsAppBotFields.FirstName => !string.IsNullOrWhiteSpace(lead.FirstName),
-        WhatsAppBotFields.LastName => !string.IsNullOrWhiteSpace(lead.LastName),
-        WhatsAppBotFields.Email => !string.IsNullOrWhiteSpace(lead.Email),
-        WhatsAppBotFields.City => !string.IsNullOrWhiteSpace(lead.PrincipalCity),
-        WhatsAppBotFields.DesiredAmount => lead.DesiredAmount is { Amount: > 0 },
-        _ => false,
-    };
 
     /// <summary>
     /// The latest messages up to the one being answered, minimised (WA-BE-11) and shaped the way a
@@ -511,23 +629,14 @@ internal sealed class WhatsAppBotEngine(
         return (messages, transcript);
     }
 
-    private async Task<IReadOnlyList<ProductSummary>> CatalogueAsync(Guid tenantId, CancellationToken ct)
+    /// <summary>The product the turn talks about: the profile's, else the lead's, else the one a prospect named.</summary>
+    private static ProductSummary? ProductOf(
+        WhatsAppBotProfile profile, Lead? lead, IReadOnlyDictionary<string, string> pending, IReadOnlyList<ProductSummary> catalogue)
     {
-        try
-        {
-            return await admin.ListProductsAsync(tenantId, null, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // The FAQ still answers; only the product's name is missing.
-            logger.LogWarning("WhatsApp bot: the product catalogue could not be read ({Reason}).", ex.GetType().Name);
-            return [];
-        }
-    }
+        var line = profile.IsGeneral
+            ? lead?.ProductLineId ?? WhatsAppBotFieldValues.PendingProduct(pending)
+            : profile.ProductLineId;
 
-    private static ProductSummary? ProductOf(WhatsAppBotProfile profile, Lead? lead, IReadOnlyList<ProductSummary> catalogue)
-    {
-        var line = profile.IsGeneral ? lead?.ProductLineId : profile.ProductLineId;
         return line is { } id && id != Guid.Empty ? catalogue.FirstOrDefault(p => p.Id == id) : null;
     }
 
@@ -538,8 +647,13 @@ internal sealed class WhatsAppBotEngine(
                                        && (m.OccurredAt > trigger.OccurredAt
                                            || (m.OccurredAt == trigger.OccurredAt && m.CreatedAt > trigger.CreatedAt)), ct);
 
-    private async Task CommitAsync(
-        Guid tenantId, WhatsAppConversation conversation, Lead? lead, WhatsAppBotTurn turn, CancellationToken ct)
+    /// <summary>
+    /// Commits the turn — the conversation, the messages, the lead and anything the turn created —
+    /// then, only once it is committed, what must not happen for a turn that rolled back: the push,
+    /// the audit of a consent recorded for a new lead, the rescoring.
+    /// </summary>
+    private async Task FinishAsync(
+        Guid tenantId, WhatsAppConversation conversation, TurnState state, WhatsAppBotTurn turn, bool collected, CancellationToken ct)
     {
         db.WhatsAppBotTurns.Add(turn);
 
@@ -550,16 +664,25 @@ internal sealed class WhatsAppBotEngine(
         catch (DbUpdateConcurrencyException)
         {
             // A webhook moved the conversation between our read and our write — a new message,
-            // whose own turn will answer. Nothing of this one is kept, not even the turn row, so a
-            // redelivery of this event may run it again against the new state.
+            // whose own turn will answer. Nothing of this one is kept, not even the turn row (nor a
+            // lead it was creating), so a redelivery of this event may run it again against the new state.
             logger.LogInformation("WhatsApp bot turn of conversation {ConversationId} superseded by a concurrent change.", conversation.Id);
             return;
         }
+
+        var lead = state.Lead;
 
         await WhatsAppRealtime.PushAsync(
             realtime, logger, tenantId,
             [lead?.CurrentAssignedId, lead?.OwnerId, conversation.TargetAgentId, conversation.OwnerUserId],
             WhatsAppRealtime.ConversationUpdated, conversation.LeadId, conversation.Id, turn.ReplyMessageId ?? turn.InboundMessageId, ct);
+
+        if (lead is null) return;
+
+        if (state.ConsentRecorded)
+            await audit.SystemAsync(tenantId, WhatsAppAudit.ConsentFromInboundMessage, conversation.Id, lead.Id, ct);
+
+        if (collected || state.LeadCreated) await RescoreAsync(lead, ct);
     }
 
     private static string? String(JsonElement input, string name) =>
@@ -577,6 +700,19 @@ internal sealed class WhatsAppBotEngine(
         public int? OutputTokens { get; set; }
         public List<BotToolCall> Calls { get; } = [];
         public List<string> Collected { get; } = [];
+
+        /// <summary>Code → normalised value, collected while no lead exists.</summary>
+        public Dictionary<string, string> Pending { get; } = [];
+
+        public List<string> Refused { get; } = [];
+    }
+
+    /// <summary>The lead a turn works on, which may be created during the turn.</summary>
+    private sealed class TurnState(Lead? lead)
+    {
+        public Lead? Lead { get; set; } = lead;
+        public bool LeadCreated { get; set; }
+        public bool ConsentRecorded { get; set; }
     }
 
     private sealed record BotReply(string Text, bool Answered);

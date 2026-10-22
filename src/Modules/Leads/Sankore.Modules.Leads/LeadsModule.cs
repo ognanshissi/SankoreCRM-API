@@ -288,6 +288,8 @@ public static class LeadsModule
 
         services.AddScoped<Features.WhatsApp.Bot.WhatsAppBotProfiles>();
         services.AddScoped<Features.WhatsApp.Bot.WhatsAppBotEngine>();
+        services.AddScoped<Features.WhatsApp.Bot.WhatsAppBotFieldValues>();
+        services.AddScoped<Features.WhatsApp.WhatsAppProspects>();
         services.AddOutboxForModule<LeadsDbContext>();
         services.AddLocalization(opts => opts.ResourcesPath = "Resources");
 

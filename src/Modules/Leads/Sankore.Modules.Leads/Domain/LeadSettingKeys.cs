@@ -89,6 +89,20 @@ public static class LeadSettingKeys
     public const string WhatsAppCreateLeadForUnknownNumber = "whatsapp-create-lead-for-unknown-number";
 
     /// <summary>
+    /// When <see cref="WhatsAppCreateLeadForUnknownNumber"/> is on and the bot can answer, the lead
+    /// is created once the bot has collected the minimum the general profile requires — or at the
+    /// handover to a person, whichever comes first — rather than at the first message.
+    ///
+    /// <para>
+    /// <b>Default true</b>: a « bonjour » with no follow-up, a wrong number or spam used to become a
+    /// lead, dispatched to an agent with a « Premier contact » task. A conversation that never gives
+    /// the minimum stays unattached and follows the retention of leadless conversations. Without a
+    /// bot nothing changes: there would be nobody to collect, so the lead is created at once.
+    /// </para>
+    /// </summary>
+    public const string WhatsAppCreateLeadAfterCollection = "whatsapp-create-lead-after-collection";
+
+    /// <summary>
     /// Minutes an agent has to take over a WhatsApp conversation once the customer is waiting for
     /// a person (WA-BE-14). Past it, the supervisor is told and the lead is redispatched to another
     /// agent (WA-BE-15). 0 disables the SLA.
@@ -168,6 +182,10 @@ public static class LeadSettingKeys
         new(WhatsAppCreateLeadForUnknownNumber, "true", TypeBool,
             "Create a lead when an unknown number writes to the institution's WhatsApp number. "
             + "Off, the conversation stays unattached until an agent files it."),
+        new(WhatsAppCreateLeadAfterCollection, "true", TypeBool,
+            "When the WhatsApp bot answers an unknown number, create the lead only once the bot has "
+            + "collected the minimum its general profile requires, or when it hands over to an agent. "
+            + "Off, the lead is created at the first message."),
         new(WhatsAppTakeoverSlaMinutes, "30", TypeInt,
             "Minutes an agent has to take over a WhatsApp conversation once the customer waits for a "
             + "person. Past it, the supervisor is told and the lead is redispatched. 0 disables it."),

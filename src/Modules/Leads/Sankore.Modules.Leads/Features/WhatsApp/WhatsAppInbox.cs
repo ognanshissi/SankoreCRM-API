@@ -33,6 +33,10 @@ public enum WhatsAppInboxTab
 /// <param name="Name">The lead's or client's name, else the WhatsApp profile name.</param>
 /// <param name="Preview">The last message, cut to one line — what the agent triages on.</param>
 /// <param name="Route">Where the conversation opens: the lead's WhatsApp tab.</param>
+/// <param name="CollectingProspect">
+/// An unknown number the bot is talking to before any lead exists — its lead is created once the
+/// bot has the minimum, or at the handover.
+/// </param>
 public sealed record WhatsAppInboxItemDto(
     Guid ConversationId,
     Guid? LeadId,
@@ -52,7 +56,8 @@ public sealed record WhatsAppInboxItemDto(
     DateTimeOffset? TakeoverDeadline,
     bool TakeoverBreached,
     bool AmbiguousMatch,
-    string? Route);
+    string? Route,
+    bool CollectingProspect = false);
 
 /// <param name="Counts">Per tab, within the caller's perimeter and filters — the tabs' badges.</param>
 /// <param name="NextCursor">Pass it back for the next page; null at the end.</param>
@@ -180,6 +185,7 @@ internal sealed class GetWhatsAppInboxHandler(
                 x.Conversation.TakeoverDeadline,
                 Breached = x.Conversation.TakeoverBreachedAt != null,
                 x.Conversation.AmbiguousMatch,
+                x.Conversation.CollectingProspect,
                 LeadName = x.Lead != null ? x.Lead.FullName : null,
                 Product = x.Lead != null ? x.Lead.InterestedProduct : null,
                 Last = db.WhatsAppMessages
@@ -228,7 +234,8 @@ internal sealed class GetWhatsAppInboxHandler(
             r.TakeoverDeadline,
             r.Breached,
             r.AmbiguousMatch,
-            r.LeadId is { } lead ? $"/leads/{lead}/suivi/whatsapp" : null)).ToList();
+            r.LeadId is { } lead ? $"/leads/{lead}/suivi/whatsapp" : null,
+            CollectingProspect: r.CollectingProspect && r.LeadId == null)).ToList();
 
         var countsByTab = new Dictionary<string, int>
         {

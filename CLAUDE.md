@@ -2529,9 +2529,21 @@ reply to an agent's TEMPLATE goes to a person even with a bot (the agent is wait
 
 **A turn** (`WhatsAppBotEngine`): deterministic rules first (`WhatsAppBotRules.BeforeModel` — non-text
 message, explicit human request, sensitive keyword, lead `Qualified`, the unanswered counter), then
-the model with four tools and `tool_choice: any` — every answer is `send_reply(text,
-answered_question)` or `escalate_to_human(reason, summary)` from a closed reason list, so nothing
-the model writes outside a tool reaches a customer. 15 s for the whole turn; a timeout, an error or
+the model with ONE tool, `respond`, and `tool_choice: auto` — current models (Claude Sonnet 5.5, Opus 5.5,
+Fable 5.1) answer a forced `any`/`tool` with a 400, which failed EVERY turn until 2026-10-22; the prompt
+requires `respond` and a turn ending in plain text is sent back once (the text never reaches the
+customer). `Leads:WhatsAppBot:Effort` (default `low`) and `:Thinking` (default `between_tools`, i.e. off)
+keep a turn inside its 15 s; unread blocks (thinking) are replayed verbatim (`BotRawBlock`). Every answer is `action: reply` (text,
+`answered_question`) or `action: handover` (a reason from a closed list, a summary), with what the
+customer just gave in `collected`, so nothing the model writes outside the tool reaches a customer.
+**One model call per message, two at most** (`MaxModelCalls`): the FAQ, the product and the
+catalogue are in the prompt rather than behind a lookup tool, and the fields ride on the decision —
+it used to be four tools and up to four calls. Only a malformed DECISION earns the second call; a
+refused FIELD is dropped, the reply still goes, and the field stays « manquant » for the next turn.
+The system prompt is two blocks (`BotSystemPrompt`): the stable one (rules, product, FAQ,
+catalogue, instructions) carries Anthropic's `cache_control` breakpoint, the per-message one
+(missing fields, hours, just sent) comes after it so it never invalidates the cache. A turn's
+`InputTokens` counts cached reads too. 15 s for the whole turn; a timeout, an error or
 no decision hands over with the waiting message (`BOT_FAILURE`). The answer is DROPPED when a person
 took over or the customer wrote again meanwhile (that message's own turn answers both); a turn row
 per inbound message makes redelivery a no-op. The window rule cannot fire on a message (it reopens
@@ -2540,12 +2552,45 @@ the window) and lives in `WhatsAppTakeoverJob`, without a waiting message.
 **Minimisation** (`WhatsAppBotRedactor`): e-mails, identifiers mixing letters and digits, and digit
 runs of 8+ are masked before anything leaves — except a run followed by a currency, because the
 amount is what the bot talks about. The lead is described by WHICH fields are filled, never their
-values. `update_lead_field` writes only the profile's closed list (`WhatsAppBotFields`); the
-conversation keeps the CODES it wrote, values are read off the lead for the handover block.
+values. `collected` writes only the profile's closed list (`WhatsAppBotFields`: names, gender,
+e-mail, city, neighbourhood, product, amount); the conversation keeps the CODES it wrote, values are
+read off the lead for the handover block. `PRODUCT` is an enum of the ACTIVE catalogue, offered only
+while the lead's product is unknown; matched exactly (name or code, accents ignored), never
+overwritten, and two lines sharing a name record nothing. Once set, the next message runs under that
+product's own profile when it has one. Anything collected triggers `RecalculateLeadScoreCommand`
+after the commit — a WhatsApp lead otherwise kept the 0 it was captured with.
 
 **Escalation is one service** (`WhatsAppEscalation`) for the four paths — customer message, rule,
 model, window sweep — and never saves. Out of the agents' hours the profile's own message replaces
 the tenant's waiting message. Labels for every reason code: `WhatsAppBotReasons.Label`.
+
+### WhatsApp: the bot collects an unknown number's lead before it exists
+
+`whatsapp-create-lead-after-collection` (default **true**): an unknown number the bot can answer
+opens a conversation with `CollectingProspect = true` and **no lead**. What the bot collects waits,
+normalised, in `PendingLeadFieldsJson` (encrypted, M13's field key) and `WhatsAppProspects` creates
+the lead — source WhatsApp, the pending values written by the SAME `WhatsAppBotFieldValues.Write`
+a direct write uses, the `WhatsAppContact` consent with the FIRST inbound message as proof, contact
+established, `LeadCapturedEvent` (so auto-dispatch happens THEN, not in parallel with the bot) —
+when the profile's `FieldsRequiredForLead` are all collected, or at **any** handover first (rule,
+model, failure, unanswered threshold, bot switched off — the person who takes over needs a
+record). A number that matches an open lead meanwhile is attached instead, filling only its empty
+fields. Without a bot answering the number, or with the setting off, the lead is created at the
+first message as before. A STOP or silence creates nothing; the conversation follows leadless
+retention, and `Anonymize` blanks the pending values.
+
+**`BOT_LEAD_READY`**: the reply turn whose collection COMPLETED the minimum sends the model's reply
+(the stable prompt tells it to thank and stop asking once the « indispensable » fields are known),
+then escalates with the waiting message — once per conversation (`BotLeadReadyAt`). « Completed by
+this turn » matters: a web-form lead whose names are already filled is not handed over on its
+first « bonjour ». Empty `FieldsRequiredForLead` = created only at a handover.
+
+**Custom fields** of the lead form are collectable as `custom.<key>` (key kept as written — custom
+keys are case-sensitive; `WhatsAppBotFields.Normalize`). Offered only when live, not sensitive and
+not a reference (`BotFieldContext.IsCollectable`); checked at the profile save against the form;
+written best effort through `CustomFieldValues.ApplyBestEffort`. A single-choice field is an enum
+of its option labels in the tool schema. An unreadable form drops the custom fields for the turn,
+never the turn.
 
 ### WhatsApp lot 4: compliance and operations (WA-BE-19 → 22)
 

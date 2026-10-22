@@ -326,6 +326,8 @@ public sealed class WhatsAppTakeoverTests : IDisposable
         await new RecordMessagingEventsHandler(
                 db, _phoneIndexer, _blindIndexer, _customers, _settings, _realtime, _publisher,
                 Escalation(db), BotProfiles(db),
+            WhatsAppTestServices.Prospects(db, _phoneIndexer, _publisher, WhatsAppTestServices.FieldValues(_admin)),
+            WhatsAppTestServices.FieldValues(_admin),
                 new WhatsAppAudit(Substitute.For<IAuditWriter>(), TimeProvider.System, NullLogger<WhatsAppAudit>.Instance),
                 new FixedClock(_now), NullLogger<RecordMessagingEventsHandler>.Instance)
             .Handle(new RecordMessagingEventsCommand(_tenantId, _connectionId, null, new MessagingEventBatch([message], [])), CancellationToken.None);
