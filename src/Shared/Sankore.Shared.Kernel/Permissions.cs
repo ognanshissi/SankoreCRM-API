@@ -445,6 +445,21 @@ public static class Permissions
     public static readonly PermissionItem CanDeactivateTenantModule =
         new("tenant:modules:deactivate", "Deactivate a Module, Effective Immediately", ApplicationModules.Administration, "modules:deactivate");
 
+    // ── Support (Administration module) ─────────────────────────────────────
+    //
+    // Tickets a tenant user addresses to the platform team. Reading and opening are granted to
+    // every business role (RoleSeeder.EveryBusinessRole): each user sees their OWN tickets. The
+    // wide read — every ticket of the tenant — is the administrator's, like lead:read:all.
+
+    public static readonly PermissionItem CanReadSupportTickets =
+        new("support:read", "Read My Support Tickets to the Platform Team", ApplicationModules.Administration, "support:read");
+
+    public static readonly PermissionItem CanCreateSupportTicket =
+        new("support:create", "Open a Support Ticket, Answer, Close or Reopen It", ApplicationModules.Administration, "support:create");
+
+    public static readonly PermissionItem CanReadAllSupportTickets =
+        new("support:read:all", "Read Every Support Ticket of the Institution, Not Only Mine", ApplicationModules.Administration, "support:read:all");
+
     // ── Notifications module ───────────────────────────────────────────────
 
     public static readonly PermissionItem CanReadEmailTemplates =
@@ -974,6 +989,9 @@ public static class Permissions
         CanReadTenantModules,
         CanRequestTenantModule,
         CanDeactivateTenantModule,
+        CanReadSupportTickets,
+        CanCreateSupportTicket,
+        CanReadAllSupportTickets,
         CanManageEmailQuota,
         CanReadCompanyInfo,
         CanUpdateCompanyInfo,

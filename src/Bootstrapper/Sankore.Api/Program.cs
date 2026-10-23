@@ -1112,6 +1112,12 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(),
             Sankore.Modules.Administration.Features.PaidModules.NotifyTenantModuleDecisionsJob.CronExpression);
 
+        // Support tickets: the platform answers in the registry, this host tells the requester.
+        AddOrUpdate<Sankore.Modules.Administration.Features.Support.NotifySupportActivityJob>(
+            Sankore.Modules.Administration.Features.Support.NotifySupportActivityJob.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Administration.Features.Support.NotifySupportActivityJob.CronExpression);
+
         AddOrUpdate<Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator>(
             Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator.RecurringJobId,
             job => job.ExecuteAsync(),

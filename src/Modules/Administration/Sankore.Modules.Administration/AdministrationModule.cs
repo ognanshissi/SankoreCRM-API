@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies;
 using Sankore.Modules.Administration.Features.PaidModules;
+using Sankore.Modules.Administration.Features.Support;
 using Sankore.Modules.Administration.Features.PermissionsCatalog;
 using Sankore.Modules.Administration.Features.CompanyInfo;
 using Sankore.Modules.Administration.Features.Authentication.AccountActivation;
@@ -118,6 +119,12 @@ public static class AdministrationModule
             config.GetSection(Infrastructure.PaidModules.TenantModuleNotificationOptions.SectionName));
         services.AddScoped<Infrastructure.PaidModules.TenantModuleNotifier>();
         services.AddScoped<Features.PaidModules.NotifyTenantModuleDecisionsJob>();
+        // Support tickets: the registry holds them, this host relays and mails.
+        services.AddScoped<Infrastructure.Support.ISupportRegistry, Infrastructure.Support.HttpSupportRegistry>();
+        services.Configure<Infrastructure.Support.SupportNotificationOptions>(
+            config.GetSection(Infrastructure.Support.SupportNotificationOptions.SectionName));
+        services.AddScoped<Infrastructure.Support.SupportNotifier>();
+        services.AddScoped<Features.Support.NotifySupportActivityJob>();
         services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerNotifier>();
         services.AddScoped<Features.Users.AgentSettings.AgentAbsenceNotifier>();
         services.AddScoped<Sankore.Shared.Infrastructure.Auth.ISessionValidator, Infrastructure.Sessions.SessionValidator>();
@@ -223,6 +230,7 @@ public static class AdministrationModule
         app.MapSmsSettingsEndpoints();
         app.MapComplianceSettingsEndpoints();
         app.MapTenantModulesEndpoints();
+        app.MapSupportEndpoints();
 
         // Professional cards (CIMA 503, 510, 732). Alongside the compliance settings rather than
         // inside the users area: a licence is a compliance record about a person, not a profile

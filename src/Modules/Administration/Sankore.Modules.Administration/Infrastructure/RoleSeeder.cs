@@ -105,6 +105,9 @@ internal static class RoleSeeder
         Permissions.CanReadProduct,
         Permissions.CanViewWorkflowInstances,
         Permissions.CanCompleteWorkflowTask,
+        // Their own tickets to the platform team; support:read:all stays the administrator's.
+        Permissions.CanReadSupportTickets,
+        Permissions.CanCreateSupportTicket,
     ];
 
     /// <summary>Working one's own leads, from capture to conversion.</summary>

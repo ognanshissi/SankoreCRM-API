@@ -1830,6 +1830,40 @@ KYC and its caps, PEP, FATCA, AML) included, by product-owner decision: never ga
   has a catalogue. `ProductCategoryModuleTests` walks the enum: a value appended without a module
   fails it.
 
+### Support tickets: a tenant user writes to the platform team
+
+Product owner, 2026-10-23. A tenant user opens a ticket (subject, category, priority, message); the
+platform answers from the admin app. **The tickets live in the registry** (Sankore.Admin,
+`SupportTickets` + `SupportMessages`), not in a tenant schema, because the platform reads every
+tenant's in one queue — the same choice as the module subscriptions.
+
+- **Two route groups in the registry.** `/api/v1/tenants/{tenantId}/support/tickets` (+ `/activity`)
+  is what Sankore.Api calls with the service key; `/api/v1/support/tickets` (+ `/assignees`) is the
+  platform's, every route `RequirePlatformAdmin()`. The tenant routes take `requesterUserId` /
+  `RequesterOnly` from the API and confine everything to the route's tenant; a ticket outside reads
+  as `SUPPORT_TICKET_NOT_FOUND`.
+- **The thread** holds replies, internal notes and status changes (`SupportMessageKind`). An
+  internal note is filtered by the registry on every tenant route and again by the API mapping.
+  Statuses New → InProgress → WaitingOnTenant → Resolved → Closed: a platform reply moves to
+  `nextStatus` (WaitingOnTenant by default) and assigns the replier if nobody holds it; a tenant
+  reply on WaitingOnTenant/Resolved puts it back InProgress; the tenant may close, and reopen a
+  Resolved or Closed ticket. `SupportAutoCloseService` (registry, hourly) closes a ticket left
+  Resolved 7 days. The number is an identity column (`SUP-000123`).
+- **API side** (`Features/Support`, route `support/tickets`): `support:read` + `support:create`
+  for every business role (their OWN tickets), `support:read:all` for the administrator
+  (`RecordVisibility.SeesAll`). The caller's name, e-mail and roles come from the token and the user
+  table; the browser from the request header. Registry codes are relayed; an unreachable registry
+  is `503 TENANT_REGISTRY_UNAVAILABLE` (`TenantRegistryHttp`, shared with the paid modules).
+- **E-mails** go through M08 from the API: `Support:Notifications:PlatformRecipient` (ONE address,
+  owner's choice; empty = nobody, logged) on an opening and a tenant reply, with a link built from
+  `Support:Notifications:AdminAppUrl`; `NotifySupportActivityJob` (every 5 min) reads each tenant's
+  platform replies and status changes of the last two days and tells the requester (e-mail + bell,
+  key = the registry's message id; a reply and its status change are ONE notification).
+- **No attachments yet** (lot 5, deferred: a screenshot of the CRM nearly always shows customer
+  data). Front: lib `crm/support` (`/support`, top-bar life-buoy link carrying the current screen
+  as `from`); admin app `/support` and a Support section on the tenant page. The thread is bubbles,
+  not `tas-table` (owner's exception).
+
 ### Assigned-only reads: an agent consults the leads, clients and KYC files assigned to them
 
 Product owner, 2026-10-23. Three permissions widen a READ and grant no verb: `lead:read:all`,

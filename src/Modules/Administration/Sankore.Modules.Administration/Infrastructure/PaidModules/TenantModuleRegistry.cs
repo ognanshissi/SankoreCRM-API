@@ -71,12 +71,7 @@ internal sealed class HttpTenantModuleRegistry(
 {
     public const string Unavailable = "TENANT_REGISTRY_UNAVAILABLE";
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter() },
-    };
-
-    private sealed record ErrorBody(string? Error, string? Detail);
+    private static JsonSerializerOptions Json => TenantRegistryHttp.Json;
 
     private sealed record CreatedBody(Guid Id);
 
@@ -102,7 +97,31 @@ internal sealed class HttpTenantModuleRegistry(
                 new { userId, email }, Json, ct),
             _ => Task.FromResult(true), ct);
 
-    private async Task<RegistryResult<T>> SendAsync<T>(
+    private Task<RegistryResult<T>> SendAsync<T>(
+        Func<HttpClient, Task<HttpResponseMessage>> send,
+        Func<HttpResponseMessage, Task<T>> read,
+        CancellationToken ct) =>
+        TenantRegistryHttp.SendAsync(httpClientFactory, logger, "a module call", send, read, ct);
+}
+
+/// <summary>
+/// One call to the registry with the service key, and how its answer is read — shared by every
+/// area that relays to it (paid modules, support), so they agree on what is the tenant's mistake
+/// and what is our outage.
+/// </summary>
+internal static class TenantRegistryHttp
+{
+    public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
+
+    private sealed record ErrorBody(string? Error, string? Detail);
+
+    public static async Task<RegistryResult<T>> SendAsync<T>(
+        IHttpClientFactory httpClientFactory,
+        ILogger logger,
+        string what,
         Func<HttpClient, Task<HttpResponseMessage>> send,
         Func<HttpResponseMessage, Task<T>> read,
         CancellationToken ct)
@@ -125,14 +144,14 @@ internal sealed class HttpTenantModuleRegistry(
                     return new RegistryResult<T>(default, code, body.Detail);
             }
 
-            logger.LogError("Tenant registry answered {Status} to a module call", (int)response.StatusCode);
-            return new RegistryResult<T>(default, Unavailable);
+            logger.LogError("Tenant registry answered {Status} to {What}", (int)response.StatusCode, what);
+            return new RegistryResult<T>(default, HttpTenantModuleRegistry.Unavailable);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
             if (ct.IsCancellationRequested) throw;
-            logger.LogError(ex, "Tenant registry unreachable for a module call");
-            return new RegistryResult<T>(default, Unavailable);
+            logger.LogError(ex, "Tenant registry unreachable for {What}", what);
+            return new RegistryResult<T>(default, HttpTenantModuleRegistry.Unavailable);
         }
     }
 

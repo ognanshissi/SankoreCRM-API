@@ -12,6 +12,8 @@ public sealed class AdminDbContext(DbContextOptions<AdminDbContext> options): Db
     public DbSet<PlatformAdminRefreshToken> PlatformAdminRefreshTokens => Set<PlatformAdminRefreshToken>();
     public DbSet<ModuleDefinition> ModuleDefinitions => Set<ModuleDefinition>();
     public DbSet<TenantModuleSubscription> TenantModuleSubscriptions => Set<TenantModuleSubscription>();
+    public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
+    public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
 
     /// <summary>
     /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.

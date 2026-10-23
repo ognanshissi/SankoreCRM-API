@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Sankore.Admin.Domain;
 using Sankore.Admin.Features.Auth;
 using Sankore.Admin.Features.Modules;
+using Sankore.Admin.Features.Support;
 using Sankore.Admin.Features.TenantDomains;
 using Sankore.Admin.Features.Tenants;
 using Sankore.Admin.Infrastructure;
@@ -30,6 +31,12 @@ builder.Services.Configure<DefaultTenantOptions>(
     builder.Configuration.GetSection(DefaultTenantOptions.Section));
 builder.Services.Configure<PlatformAdminSeedOptions>(
     builder.Configuration.GetSection(PlatformAdminSeedOptions.Section));
+
+// Hourly closing of the support tickets left Resolved for a week. Not in --emit-openapi mode:
+// the emitter starts the host, and the service would reach for a database that is not there.
+builder.Services.AddSingleton(TimeProvider.System);
+if (emitOpenApiTo is null)
+    builder.Services.AddHostedService<SupportAutoCloseService>();
 
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
@@ -130,6 +137,7 @@ app.MapAuthEndpoints();
 app.MapTenantEndpoints();
 app.MapTenantDomainEndpoints();
 app.MapModuleEndpoints();
+app.MapSupportEndpoints();
 
 if (emitOpenApiTo is not null)
 {

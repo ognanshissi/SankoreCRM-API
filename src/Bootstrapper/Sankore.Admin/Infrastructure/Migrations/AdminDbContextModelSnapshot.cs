@@ -143,6 +143,153 @@ namespace Sankore.Admin.Infrastructure.Migrations
                     b.ToTable("PlatformAdminRefreshTokens");
                 });
 
+            modelBuilder.Entity("Sankore.Admin.Domain.SupportMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("AuthorName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Body")
+                        .HasMaxLength(10000)
+                        .HasColumnType("character varying(10000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .HasDatabaseName("ix_support_messages_tenant_created");
+
+                    b.HasIndex("TicketId", "CreatedAt")
+                        .HasDatabaseName("ix_support_messages_ticket_created");
+
+                    b.ToTable("SupportMessages", (string)null);
+                });
+
+            modelBuilder.Entity("Sankore.Admin.Domain.SupportTicket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("AssignedAdminId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastActivityAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Number")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Number"));
+
+                    b.Property<string>("PageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RequesterEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("RequesterName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("RequesterRole")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("RequesterUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedAdminId")
+                        .HasDatabaseName("ix_support_tickets_assigned_admin");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ux_support_tickets_number");
+
+                    b.HasIndex("Status", "LastActivityAt")
+                        .HasDatabaseName("ix_support_tickets_status_activity");
+
+                    b.HasIndex("TenantId", "LastActivityAt")
+                        .HasDatabaseName("ix_support_tickets_tenant_activity");
+
+                    b.ToTable("SupportTickets", (string)null);
+                });
+
             modelBuilder.Entity("Sankore.Admin.Domain.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -351,6 +498,15 @@ namespace Sankore.Admin.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Sankore.Admin.Domain.SupportMessage", b =>
+                {
+                    b.HasOne("Sankore.Admin.Domain.SupportTicket", null)
+                        .WithMany("Messages")
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Sankore.Admin.Domain.Tenant", b =>
                 {
                     b.OwnsOne("Sankore.Admin.Domain.SubscriptionStateInfo", "SubscriptionStateInfo", b1 =>
@@ -376,6 +532,11 @@ namespace Sankore.Admin.Infrastructure.Migrations
                         });
 
                     b.Navigation("SubscriptionStateInfo");
+                });
+
+            modelBuilder.Entity("Sankore.Admin.Domain.SupportTicket", b =>
+                {
+                    b.Navigation("Messages");
                 });
 #pragma warning restore 612, 618
         }
