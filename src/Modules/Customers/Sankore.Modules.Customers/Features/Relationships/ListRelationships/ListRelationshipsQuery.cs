@@ -1,4 +1,5 @@
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Modules.Customers.Features.Relationships.Shared;
 using Sankore.Shared.Kernel;
 
@@ -11,4 +12,4 @@ namespace Sankore.Modules.Customers.Features.Relationships.ListRelationships;
 public sealed record ListRelationshipsQuery(
     Guid ClientId,
     bool IncludeClosed
-) : IRequest<Result<IReadOnlyList<RelationshipDto>>>;
+) : IClientReadRequest, IRequest<Result<IReadOnlyList<RelationshipDto>>>;

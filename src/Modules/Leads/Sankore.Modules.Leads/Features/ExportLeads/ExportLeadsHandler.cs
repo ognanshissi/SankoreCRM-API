@@ -5,9 +5,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
-internal sealed class ExportLeadsHandler(LeadsDbContext db)
+internal sealed class ExportLeadsHandler(LeadsDbContext db, LeadVisibility? visibility = null)
     : IRequestHandler<ExportLeadsQuery, Result<byte[]>>
 {
     private static readonly string[] Headers =
@@ -24,7 +25,7 @@ internal sealed class ExportLeadsHandler(LeadsDbContext db)
 
     public async Task<Result<byte[]>> Handle(ExportLeadsQuery query, CancellationToken ct)
     {
-        var q = db.Leads.AsNoTracking();
+        var q = visibility?.Apply(db.Leads.AsNoTracking()) ?? db.Leads.AsNoTracking();
 
         if (query.Status.HasValue)
             q = q.Where(l => l.Status == query.Status.Value);

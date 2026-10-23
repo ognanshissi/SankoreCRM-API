@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Features.Files.ListKycFiles;
 
 using MediatR;
+using Sankore.Modules.Kyc.Features.Files;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Domain;
@@ -13,7 +14,8 @@ internal sealed class ListKycFilesHandler(
     KycDbContext db,
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
-    ICustomersModule customers)
+    ICustomersModule customers,
+    KycVisibility? visibility = null)
     : IRequestHandler<ListKycFilesQuery, Result<KycFileListPage>>
 {
     private const int MaxPageSize = 100;
@@ -29,7 +31,8 @@ internal sealed class ListKycFilesHandler(
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize <= 0 ? DefaultPageSize : request.PageSize, 1, MaxPageSize);
 
-        var query = await ApplyPerimeterAsync(db.KycFiles.AsQueryable(), request.AgencyId, ct);
+        var query = await ApplyPerimeterAsync(
+            visibility?.Apply(db.KycFiles) ?? db.KycFiles.AsQueryable(), request.AgencyId, ct);
 
         // « Mes dossiers » : ceux dont l'appelant est l'agent responsable. Appliqué APRÈS le
         // périmètre, donc il ne peut que restreindre — jamais rouvrir un dossier hors périmètre.

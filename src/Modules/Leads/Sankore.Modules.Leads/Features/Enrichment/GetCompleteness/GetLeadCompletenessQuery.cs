@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.Enrichment.GetCompleteness;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -15,4 +16,4 @@ using Sankore.Shared.Kernel;
 /// </para>
 /// </summary>
 internal sealed record GetLeadCompletenessQuery(Guid LeadId)
-    : IRequest<Result<LeadCompletenessDto>>;
+    : ILeadReadRequest, IRequest<Result<LeadCompletenessDto>>;

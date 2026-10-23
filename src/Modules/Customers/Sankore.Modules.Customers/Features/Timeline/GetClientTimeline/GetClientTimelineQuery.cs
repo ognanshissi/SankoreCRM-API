@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Timeline.GetClientTimeline;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -18,7 +19,7 @@ public sealed record GetClientTimelineQuery(
     string? SourceModule = null,
     string? EntryType = null,
     int Page = 1,
-    int PageSize = 20) : IRequest<Result<PagedResult<ClientTimelineEntryDto>>>;
+    int PageSize = 20) : IClientReadRequest, IRequest<Result<PagedResult<ClientTimelineEntryDto>>>;
 
 /// <summary>
 /// One timeline row as exposed over HTTP. Contains no sensitive value by construction — see

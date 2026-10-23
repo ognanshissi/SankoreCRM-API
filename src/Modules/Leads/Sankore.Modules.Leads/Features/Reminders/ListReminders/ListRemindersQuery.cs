@@ -1,13 +1,14 @@
 namespace Sankore.Modules.Leads.Features.Reminders.ListReminders;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
 
 internal sealed record ListRemindersQuery(
     Guid LeadId,
     ReminderStatus? Status = null
-) : IRequest<Result<IReadOnlyList<ReminderDto>>>;
+) : ILeadReadRequest, IRequest<Result<IReadOnlyList<ReminderDto>>>;
 
 public sealed record ReminderDto(
     Guid Id,

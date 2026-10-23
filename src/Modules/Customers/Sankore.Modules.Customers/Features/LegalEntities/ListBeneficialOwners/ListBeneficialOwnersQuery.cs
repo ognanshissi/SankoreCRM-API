@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.LegalEntities.ListBeneficialOwners;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -10,7 +11,7 @@ using Sankore.Shared.Kernel;
 /// </summary>
 public sealed record ListBeneficialOwnersQuery(
     Guid ClientId,
-    bool IncludeClosed = false) : IRequest<Result<IReadOnlyList<BeneficialOwnerDto>>>;
+    bool IncludeClosed = false) : IClientReadRequest, IRequest<Result<IReadOnlyList<BeneficialOwnerDto>>>;
 
 /// <param name="ExternalDocumentNumberMasked">
 /// Masked rendering of the encrypted document number (e.g. <c>"CI•••••••42"</c>).

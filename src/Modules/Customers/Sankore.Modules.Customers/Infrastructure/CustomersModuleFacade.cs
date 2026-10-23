@@ -33,7 +33,8 @@ internal sealed class CustomersModuleFacade(
     Notifications.ClientSmsNotifier clientSms,
     Sankore.Shared.Infrastructure.Crypto.IFieldEncryptor? encryptor = null,
     Sankore.Shared.Kernel.Authorization.IAgencyScopeProvider? agencyScope = null,
-    Microsoft.Extensions.Logging.ILogger<CustomersModuleFacade>? logger = null)
+    Microsoft.Extensions.Logging.ILogger<CustomersModuleFacade>? logger = null,
+    Features.Clients.Shared.ClientVisibility? visibility = null)
     : ICustomersModule
 {
     /// <summary>
@@ -96,14 +97,23 @@ internal sealed class CustomersModuleFacade(
 
         // The agency only — nothing else of the client is read, because nothing else is needed and
         // a projection that grew would be a projection a caller starts depending on.
-        var agencyId = await db.Clients
+        var client = await db.Clients
             .IgnoreQueryFilters()
             .Where(c => c.TenantId == tenantId && c.Id == clientId)
-            .Select(c => (Guid?)c.AgencyId)
+            .Select(c => new { c.AgencyId, c.AdvisorUserId, c.CreatedBy })
             .FirstOrDefaultAsync(ct);
 
-        return agencyId is { } agency
-            && await agencyScope.CanAccessAgencyAsync(tenantId, actorUserId, agency, ct);
+        if (client is null)
+            return false;
+
+        // Assigned-only reads. The rule needs the actor's permissions, which only the ambient user
+        // carries: it applies when the actor IS the signed-in caller — every caller of this
+        // contract today passes exactly that.
+        if (visibility?.RestrictedTo is { } restricted && restricted == actorUserId
+            && !Features.Clients.Shared.ClientVisibility.IsAdvisedBy(client.AdvisorUserId, client.CreatedBy, actorUserId))
+            return false;
+
+        return await agencyScope.CanAccessAgencyAsync(tenantId, actorUserId, client.AgencyId, ct);
     }
 
     /// <inheritdoc />

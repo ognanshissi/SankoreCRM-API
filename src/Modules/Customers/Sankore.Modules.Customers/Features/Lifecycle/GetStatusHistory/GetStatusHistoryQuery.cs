@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Lifecycle.GetStatusHistory;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -11,7 +12,7 @@ using Sankore.Shared.Kernel;
 /// exposes clear-text data and must be audited).
 /// </summary>
 public sealed record GetStatusHistoryQuery(Guid ClientId, int Page = 1, int PageSize = 20)
-    : IRequest<Result<PagedResult<ClientStatusHistoryDto>>>;
+    : IClientReadRequest, IRequest<Result<PagedResult<ClientStatusHistoryDto>>>;
 
 /// <summary>
 /// One transition. Enum values travel as names; <c>OldStatus</c> is null for the

@@ -2,6 +2,7 @@ namespace Sankore.Modules.Customers.Features.Duplicates.ListDuplicateCandidates;
 
 using System.Text.Json;
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Features.Duplicates.DetectDuplicates;
 using Sankore.Modules.Customers.Infrastructure;
@@ -21,7 +22,8 @@ using Sankore.Shared.Kernel.Authorization;
 internal sealed class ListDuplicateCandidatesHandler(
     CustomersDbContext db,
     ICurrentUser currentUser,
-    IAgencyScopeProvider agencyScope)
+    IAgencyScopeProvider agencyScope,
+    ClientVisibility? visibility = null)
     : IRequestHandler<ListDuplicateCandidatesQuery, Result<PagedResult<DuplicateCandidateDto>>>
 {
     public async Task<Result<PagedResult<DuplicateCandidateDto>>> Handle(
@@ -33,7 +35,10 @@ internal sealed class ListDuplicateCandidatesHandler(
 
         var accessible = await agencyScope.GetAccessibleAgencyIdsAsync(tenantId, currentUser.Id, ct);
 
-        var clients = db.Clients.IgnoreQueryFilters().Where(c => c.TenantId == tenantId);
+        // Both sides of a pair go through the same set, so an agent sees a pair only when both
+        // clients are theirs — the same reasoning as the perimeter below.
+        var tenantClients = db.Clients.IgnoreQueryFilters().Where(c => c.TenantId == tenantId);
+        var clients = visibility?.Apply(tenantClients) ?? tenantClients;
 
         var rows = from d in db.DuplicateCandidates.IgnoreQueryFilters().Where(d => d.TenantId == tenantId)
                    join a in clients on d.ClientAId equals a.Id

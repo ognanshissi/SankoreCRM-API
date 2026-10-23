@@ -24,7 +24,9 @@ public sealed class KycModuleFacade(
     IKycSettings settings,
     IDistributedCache cache,
     ILogger<KycModuleFacade> logger,
-    IAgencyScopeProvider? agencyScope = null) : IKycModule
+    IAgencyScopeProvider? agencyScope = null,
+    Features.Files.KycVisibility? visibility = null,
+    Sankore.Shared.Infrastructure.Auth.ICurrentUser? currentUser = null) : IKycModule
 {
     public Task<KycFileSummary?> GetKycFileSummaryAsync(Guid tenantId, Guid kycFileId, CancellationToken ct) =>
         db.KycFiles
@@ -38,10 +40,18 @@ public sealed class KycModuleFacade(
         var file = await db.KycFiles
             .IgnoreQueryFilters()
             .Where(f => f.TenantId == tenantId && f.Id == kycFileId)
-            .Select(f => new { f.AgencyId })
+            .Select(f => new { f.AgencyId, f.ResponsibleAgentId, f.CreatedBy, f.LastSubmittedBy })
             .FirstOrDefaultAsync(ct);
 
         if (file is null) return false;
+
+        // Assigned-only reads, when the actor IS the signed-in caller — the only one whose
+        // permissions are known here, and the only actor any caller passes today.
+        if (visibility is { SeesAll: false } && currentUser?.Id == actorUserId
+            && !(file.ResponsibleAgentId == actorUserId
+                 || (file.ResponsibleAgentId == null
+                     && (file.CreatedBy == actorUserId || file.LastSubmittedBy == actorUserId))))
+            return false;
 
         // Same rule as KycFileAccess, for an actor named by the caller instead of the HTTP user.
         // No scope provider registered = no way to check = refused.

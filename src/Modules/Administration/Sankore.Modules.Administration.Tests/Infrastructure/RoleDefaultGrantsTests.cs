@@ -94,4 +94,35 @@ public sealed class RoleDefaultGrantsTests
 
     private static IEnumerable<string> Granted(string roleCode)
         => RoleSeeder.DefaultGrants.Where(g => g.RoleCode == roleCode).Select(g => g.PermissionCode);
+
+    private static readonly PermissionItem[] ReadAll =
+    [
+        Permissions.CanReadAllLeads,
+        Permissions.CanReadAllCustomers,
+        Permissions.CanReadAllKycFiles,
+    ];
+
+    [Theory]
+    [InlineData("Agent")]
+    [InlineData("CommercialAgent")]
+    public void The_two_agent_roles_read_only_what_is_assigned_to_them(string role)
+    {
+        // Product owner, 2026-10-23. A grant here would reach every existing tenant on the next
+        // boot and widen every agent's view back to the whole perimeter.
+        var granted = RoleSeeder.DefaultGrants.Where(g => g.RoleCode == role).Select(g => g.PermissionCode);
+
+        granted.Should().NotIntersectWith(ReadAll.Select(p => p.Code));
+    }
+
+    [Theory]
+    [InlineData("SalesManager")]
+    [InlineData("BranchManager")]
+    [InlineData("Cashier")]
+    [InlineData("RegulationManager")]
+    public void The_other_business_roles_keep_the_whole_perimeter(string role)
+    {
+        var granted = RoleSeeder.DefaultGrants.Where(g => g.RoleCode == role).Select(g => g.PermissionCode);
+
+        granted.Should().Contain(ReadAll.Select(p => p.Code));
+    }
 }

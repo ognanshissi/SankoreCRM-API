@@ -15,7 +15,8 @@ internal sealed class GetKycFileHandler(
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
     IKycSettings settings,
-    IWorkflowModule workflow)
+    IWorkflowModule workflow,
+    KycVisibility? visibility = null)
     : IRequestHandler<GetKycFileQuery, Result<KycFileDto>>
 {
     public async Task<Result<KycFileDto>> Handle(GetKycFileQuery request, CancellationToken ct)
@@ -23,7 +24,7 @@ internal sealed class GetKycFileHandler(
         // The global query filter scopes this to the caller's tenant; a file of another tenant is
         // simply absent, and the caller is told NOT_FOUND rather than FORBIDDEN. Same rule as M01:
         // the existence of a record must not leak across tenants.
-        var query = db.KycFiles.AsQueryable();
+        var query = visibility?.Apply(db.KycFiles) ?? db.KycFiles.AsQueryable();
 
         query = request.KycFileId is { } id
             ? query.Where(f => f.Id == id)

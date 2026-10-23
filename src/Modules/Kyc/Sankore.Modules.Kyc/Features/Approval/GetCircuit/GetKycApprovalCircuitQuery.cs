@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Features.Approval.GetCircuit;
 
 using MediatR;
+using Sankore.Modules.Kyc.Features.Files;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -8,7 +9,7 @@ using Sankore.Shared.Kernel;
 /// A query — no <c>ICommand</c>, so neither the transaction nor the audit behaviour runs.
 /// </summary>
 internal sealed record GetKycApprovalCircuitQuery(Guid KycFileId)
-    : IRequest<Result<KycApprovalCircuitDto>>;
+    : IKycFileReadRequest, IRequest<Result<KycApprovalCircuitDto>>;
 
 /// <param name="IsStarted">
 /// False while the file has not reached validation yet. The levels are then the circuit it WOULD

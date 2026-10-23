@@ -1830,6 +1830,43 @@ KYC and its caps, PEP, FATCA, AML) included, by product-owner decision: never ga
   has a catalogue. `ProductCategoryModuleTests` walks the enum: a value appended without a module
   fails it.
 
+### Assigned-only reads: an agent consults the leads, clients and KYC files assigned to them
+
+Product owner, 2026-10-23. Three permissions widen a READ and grant no verb: `lead:read:all`,
+`customers:read:all`, `kyc:read:all`. Without one (Agent and CommercialAgent by default; a custom
+role too until it is granted them) the caller sees only what is assigned to them. With it, they see
+what they saw before: the whole tenant for leads, the agency perimeter for clients and KYC files.
+`RecordVisibility.SeesAll` (Shared.Infrastructure/Auth) is the one test: not authenticated, System or
+Administrator role (a token older than the permission), or the permission on `ICurrentUser.Permissions`
+(read off the JWT `permission` claims).
+
+| Entity | « Assigned » | Rule | Single read marker → error |
+|---|---|---|---|
+| Lead | current assignee or owner; the collector while nobody holds it | `LeadVisibility` | `ILeadReadRequest` → `LEAD_NOT_FOUND` |
+| Client | advisor; the creator while it has no advisor | `ClientVisibility` | `IClientReadRequest` → `CLIENT_NOT_FOUND` |
+| KYC file | responsible agent; the creator or submitter while it has none | `KycVisibility` | `IKycFileReadRequest` → `KYC_FILE_NOT_FOUND` |
+
+- **A read of one record by id declares the marker** on its query; each module's pipeline behavior
+  refuses it before the handler, with the module's not-found code, never a 403. The agency perimeter
+  stays the handler's own check — the marker only narrows it.
+- **A list applies `Visibility.Apply(query)` as a SQL predicate, before it counts** (leads list,
+  export, pipeline, stats, SLA breaches, duplicate lookup, opportunities; client search, quick
+  counts, export, duplicate pairs, merges, holding detail; KYC list, file by customer, caps, document
+  read, `KycFileAccess`). The handlers take the service as an OPTIONAL parameter, so a handler test
+  that passes none keeps the whole tenant.
+- **Cross-module checks** (`ICustomersModule.CanActorAccessClientAsync`,
+  `IKycModule.CanActorAccessKycFileAsync`) apply the rule when the actor IS the signed-in caller —
+  the only one whose permissions are known there.
+- **The client export** runs as SYSTEM: the request stores `SearchClientsQuery.AdvisedBy` (server-set,
+  overwritten whatever the body says) and the job filters on it.
+- **Interactive capture** fills `AgentCollectedLeadId` with the caller when the form named nobody,
+  so an agent keeps the lead they just typed until somebody holds it.
+- **KYC four eyes**: an agent no longer sees a colleague's file, so the AGENT rung is signed by the
+  branch manager — `KycApproverLevels` gives BranchManager that rank for the « awaits me » badge.
+  Nothing forbids the same person signing two rungs, so a Standard file can now carry one checker.
+- **Writes are not gated by the markers** — only reads. Lead writes keep `LeadAccessGuard` where they
+  had it; a write by id on a record the caller cannot list is not refused by this rule.
+
 ### Tenant parameters: three module-owned stores, one typed table
 
 M12 exposes **no generic settings store** — its only precedent for a tenant parameter is

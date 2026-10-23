@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Household.GetHousehold;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Modules.Customers.Features.Household.Shared;
 using Sankore.Shared.Kernel;
 
@@ -20,4 +21,4 @@ using Sankore.Shared.Kernel;
 public sealed record GetHouseholdQuery(
     Guid ClientId,
     bool IncludePepDetail,
-    bool IncludeRemoved) : IRequest<Result<ClientHouseholdDto>>;
+    bool IncludeRemoved) : IClientReadRequest, IRequest<Result<ClientHouseholdDto>>;

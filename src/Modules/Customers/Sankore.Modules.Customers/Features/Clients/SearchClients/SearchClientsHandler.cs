@@ -39,7 +39,8 @@ internal sealed class SearchClientsHandler(
     IBlindIndexer indexer,
     IAdministrationModule? administration = null,
     IKycModule? kyc = null,
-    ILogger<SearchClientsHandler>? logger = null
+    ILogger<SearchClientsHandler>? logger = null,
+    ClientVisibility? visibility = null
 ) : IRequestHandler<SearchClientsQuery, Result<PagedResult<ClientSearchItemDto>>>
 {
     private const int MaxPageSize = 200;
@@ -51,7 +52,7 @@ internal sealed class SearchClientsHandler(
         var actor = currentUser.Id;
 
         var query = await ClientSearchFilter.ApplyAsync(
-            db, db.Clients.AsQueryable(), request.Criteria, tenantId, actor, agencyScope, indexer, ct);
+            db, visibility?.Apply(db.Clients) ?? db.Clients, request.Criteria, tenantId, actor, agencyScope, indexer, ct);
         query = ClientSearchFilter.Quick(query, request.Quick);
 
         // Custom-field filters (dynamic forms, lot 6), served by the GIN index on custom_fields.

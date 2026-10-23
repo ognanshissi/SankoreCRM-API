@@ -1,11 +1,12 @@
 namespace Sankore.Modules.Leads.Features.NextAction.GetNextAction;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
 
 internal sealed record GetNextActionQuery(Guid LeadId)
-    : IRequest<Result<NextActionDto>>;
+    : ILeadReadRequest, IRequest<Result<NextActionDto>>;
 
 public sealed record NextActionDto(
     Guid LeadId,

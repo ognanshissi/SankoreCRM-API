@@ -1,10 +1,11 @@
 namespace Sankore.Modules.Kyc.Features.RemoteInvitations.ListInvitations;
 
 using MediatR;
+using Sankore.Modules.Kyc.Features.Files;
 using Sankore.Shared.Kernel;
 
 internal sealed record ListKycRemoteInvitationsQuery(Guid KycFileId)
-    : IRequest<Result<KycRemoteInvitationListDto>>;
+    : IKycFileReadRequest, IRequest<Result<KycRemoteInvitationListDto>>;
 
 /// <summary>
 /// What the agent's "KYC à distance" panel needs (KRM-F-07): the links issued for a file, and —

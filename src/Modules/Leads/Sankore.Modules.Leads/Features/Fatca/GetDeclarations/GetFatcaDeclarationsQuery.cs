@@ -1,11 +1,12 @@
 namespace Sankore.Modules.Leads.Features.Fatca.GetDeclarations;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
 /// <summary>The FATCA position of every person of a lead (BNF-B-11).</summary>
 internal sealed record GetFatcaDeclarationsQuery(Guid LeadId)
-    : IRequest<Result<LeadFatcaDto>>;
+    : ILeadReadRequest, IRequest<Result<LeadFatcaDto>>;
 
 /// <summary>
 /// One declaration.

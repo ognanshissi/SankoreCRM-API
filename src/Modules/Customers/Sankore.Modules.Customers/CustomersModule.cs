@@ -51,6 +51,10 @@ public static class CustomersModule
         // assembly scan skips internals by default — without this they never run.
         services.AddValidatorsFromAssembly(typeof(CustomersModule).Assembly, includeInternalTypes: true);
 
+        // Assigned-only reads: an Agent or a CommercialAgent sees the clients they advise.
+        services.AddScoped<Features.Clients.Shared.ClientVisibility>();
+        services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Clients.Shared.ClientVisibilityBehavior<,>));
+
         services.AddOutboxForModule<CustomersDbContext>();
         services.AddLocalization(o => o.ResourcesPath = "Resources");
 

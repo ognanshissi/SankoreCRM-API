@@ -1,6 +1,9 @@
 namespace Sankore.Modules.Kyc.Tests.Features.Files;
 
 using FluentAssertions;
+using Sankore.Modules.Kyc.Features.Approval.GetCircuit;
+using Sankore.Modules.Kyc.Features.Files;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Domain;
@@ -274,16 +277,26 @@ public sealed class ListKycFilesHandlerTests : IDisposable
     [Fact]
     public async Task Only_the_NEXT_rung_counts_not_any_pending_one()
     {
-        // Agent still pending below the branch manager: the circuit is waiting on the agent, and
-        // DecideKycApprovalHandler would refuse a branch manager signing ahead of them.
+        // Agent still pending below compliance: the circuit is waiting on the agent rung, and
+        // DecideKycApprovalHandler would refuse a compliance officer signing ahead of it.
         var file = Seed(status: KycFileStatus.Validating, pendingAt: KycApprovalLevel.Agent);
         _db.KycApprovalSteps.Add(
-            KycApprovalStep.Pending(_tenantId, file.Id, KycApprovalLevel.BranchManager, _clock));
+            KycApprovalStep.Pending(_tenantId, file.Id, KycApprovalLevel.ComplianceOfficer, _clock));
 
-        var page = await ReadAsync(Handler(roles: Roles.BranchManager.Code));
+        var page = await ReadAsync(Handler(roles: Roles.RegulationManager.Code));
 
         page.AwaitingMeCount.Should().Be(0,
-            "a manager must not be told a file awaits them while the agent has not signed");
+            "compliance must not be told a file awaits them while the agent rung is unsigned");
+    }
+
+    [Fact]
+    public async Task A_branch_manager_is_awaited_on_the_agent_rung_too()
+    {
+        // Assigned-only reads (product owner, 2026-10-23): an agent no longer sees a colleague's
+        // file, so the branch manager signs the agent rung — and is told so.
+        Seed(status: KycFileStatus.Validating, pendingAt: KycApprovalLevel.Agent);
+
+        (await ReadAsync(Handler(roles: Roles.BranchManager.Code))).AwaitingMeCount.Should().Be(1);
     }
 
     [Fact]
@@ -482,5 +495,82 @@ public sealed class ListKycFilesHandlerTests : IDisposable
         public override DateTimeOffset GetUtcNow() => _now;
 
         public void Advance(TimeSpan by) => _now = _now.Add(by);
+    }
+
+    // ── Assigned-only reads (product owner, 2026-10-23) ─────────────────────────────────────
+
+    private ICurrentUser SignedIn(string role, params string[] permissions)
+    {
+        var user = CurrentUser(role);
+        user.IsAuthenticated.Returns(true);
+        user.Permissions.Returns(permissions);
+        return user;
+    }
+
+    private ListKycFilesHandler RestrictedHandler(ICurrentUser user)
+        => new(_db, user, Scope(), Customers(), new KycVisibility(user));
+
+    [Fact]
+    public async Task An_agent_sees_only_the_files_they_are_responsible_for()
+    {
+        var mine = Seed(responsibleAgent: _userId);
+        Seed(responsibleAgent: Guid.NewGuid());
+        Seed();   // nobody responsible, created by somebody else
+
+        var page = await ReadAsync(RestrictedHandler(SignedIn(Roles.Agent.Code)));
+
+        page.Rows.Select(r => r.KycFileId).Should().Equal(mine.Id);
+        page.TotalCount.Should().Be(1, "the count is taken after the restriction, not before");
+    }
+
+    [Fact]
+    public async Task A_file_nobody_is_responsible_for_is_its_creators()
+    {
+        var created = KycFile.Open(_tenantId, Guid.NewGuid(), KycChannel.Agency, _userId, _clock, agencyId: MyAgency);
+        _db.KycFiles.Add(created);
+        var handedOver = KycFile.Open(
+            _tenantId, Guid.NewGuid(), KycChannel.Agency, _userId, _clock, agencyId: MyAgency,
+            responsibleAgentId: Guid.NewGuid());
+        _db.KycFiles.Add(handedOver);
+
+        var page = await ReadAsync(RestrictedHandler(SignedIn(Roles.CommercialAgent.Code)));
+
+        page.Rows.Select(r => r.KycFileId).Should().Equal(
+            [created.Id], "once somebody is responsible, the creator no longer sees the file");
+    }
+
+    [Fact]
+    public async Task Kyc_read_all_keeps_the_whole_perimeter()
+    {
+        Seed(responsibleAgent: _userId);
+        Seed(responsibleAgent: Guid.NewGuid());
+
+        var user = SignedIn(Roles.Agent.Code, Permissions.CanReadAllKycFiles.Code);
+
+        (await ReadAsync(RestrictedHandler(user))).TotalCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_read_by_id_of_another_agents_file_is_not_found()
+    {
+        var theirs = Seed(responsibleAgent: Guid.NewGuid());
+        var mine = Seed(responsibleAgent: _userId);
+        await _db.SaveChangesAsync();
+
+        var user = SignedIn(Roles.Agent.Code);
+        var services = new ServiceCollection()
+            .AddSingleton(user)
+            .AddSingleton(_db)
+            .AddSingleton(new KycVisibility(user))
+            .BuildServiceProvider();
+        var behavior = new KycVisibilityBehavior<GetKycApprovalCircuitQuery, Result<string>>(services);
+
+        var refused = await behavior.Handle(
+            new GetKycApprovalCircuitQuery(theirs.Id), () => Task.FromResult(Result.Ok("reached")), default);
+        var allowed = await behavior.Handle(
+            new GetKycApprovalCircuitQuery(mine.Id), () => Task.FromResult(Result.Ok("reached")), default);
+
+        refused.Error.Should().Be(KycErrors.FileNotFound, "never a 403: that would confirm the file exists");
+        allowed.Value.Should().Be("reached");
     }
 }

@@ -4,9 +4,11 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
-internal sealed class FindDuplicatesHandler(LeadsDbContext db, ILeadEmailIndexer emailIndexer)
+internal sealed class FindDuplicatesHandler(
+    LeadsDbContext db, ILeadEmailIndexer emailIndexer, LeadVisibility? visibility = null)
     : IRequestHandler<FindDuplicatesQuery, Result<IReadOnlyList<DuplicateMatchResult>>>
 {
     public async Task<Result<IReadOnlyList<DuplicateMatchResult>>> Handle(
@@ -34,7 +36,9 @@ internal sealed class FindDuplicatesHandler(LeadsDbContext db, ILeadEmailIndexer
         // DB pre-filter: candidates that match at least one strong signal.
         // Phone suffix match via EndsWith (translates to SQL LIKE '%<digits>').
         // Name / DOB / location are additive signals scored in-memory only.
-        var candidates = await db.Leads
+        // A match names the person and their phone: an agent is shown only the leads they could
+        // open anyway. Capture still flags a duplicate server-side, whoever holds the original.
+        var candidates = await (visibility?.Apply(db.Leads) ?? db.Leads)
             .Where(l =>
                 l.Status != LeadStatus.Lost &&
                 l.Status != LeadStatus.Archived &&

@@ -1,4 +1,5 @@
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -27,13 +28,14 @@ internal sealed class GetClientQuickCountsHandler(
     CustomersDbContext db,
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
-    IBlindIndexer indexer)
+    IBlindIndexer indexer,
+    ClientVisibility? visibility = null)
     : IRequestHandler<GetClientQuickCountsQuery, Result<ClientQuickCountsDto>>
 {
     public async Task<Result<ClientQuickCountsDto>> Handle(GetClientQuickCountsQuery request, CancellationToken ct)
     {
         var query = await ClientSearchFilter.ApplyAsync(
-            db, db.Clients.AsQueryable(), request.Criteria, currentUser.TenantId, currentUser.Id, agencyScope, indexer, ct);
+            db, visibility?.Apply(db.Clients) ?? db.Clients, request.Criteria, currentUser.TenantId, currentUser.Id, agencyScope, indexer, ct);
 
         async Task<int> Count(ClientQuickFilter quick) => await ClientSearchFilter.Quick(query, quick).CountAsync(ct);
 

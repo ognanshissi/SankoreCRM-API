@@ -36,7 +36,8 @@ using Sankore.Shared.Kernel.Authorization;
 internal sealed class KycFileAccess(
     KycDbContext db,
     ICurrentUser currentUser,
-    IAgencyScopeProvider agencyScope)
+    IAgencyScopeProvider agencyScope,
+    KycVisibility? visibility = null)
 {
     /// <summary>
     /// True when the caller may act on <paramref name="kycFileId"/>: it exists in their tenant and
@@ -57,7 +58,8 @@ internal sealed class KycFileAccess(
     {
         // The tenant comes from the context's global query filter, which is correct here: every
         // caller of this service is inside an HTTP request.
-        var agencyId = await db.KycFiles
+        // Assigned-only first: an agent acts on the files they are responsible for.
+        var agencyId = await (visibility?.Apply(db.KycFiles) ?? db.KycFiles)
             .Where(f => f.Id == kycFileId)
             .Select(f => new { f.AgencyId })
             .FirstOrDefaultAsync(ct);

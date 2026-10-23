@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.WhatsApp;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.PublicApi;
@@ -156,7 +157,7 @@ internal sealed class WhatsAppLeadAccess(LeadsDbContext db, LeadAccessGuard guar
 
 internal sealed record GetWhatsAppPanelQuery(
     Guid LeadId, bool HasWhatsAppPermission, bool MayForce, bool MayReply = false, bool MaySupervise = false)
-    : IRequest<Result<WhatsAppPanelDto>>;
+    : ILeadReadRequest, IRequest<Result<WhatsAppPanelDto>>;
 
 internal sealed class GetWhatsAppPanelHandler(
     LeadsDbContext db,
@@ -288,7 +289,7 @@ internal sealed class GetWhatsAppPanelHandler(
 
 internal sealed record ListWhatsAppMessagesQuery(
     Guid LeadId, bool HasWhatsAppPermission, DateTimeOffset? Before, int Limit)
-    : IRequest<Result<WhatsAppMessagePageDto>>;
+    : ILeadReadRequest, IRequest<Result<WhatsAppMessagePageDto>>;
 
 /// <summary>
 /// The thread, newest first, by a cursor on the message's instant (WA-FE-05 « chargement au
@@ -422,7 +423,7 @@ internal sealed class MarkWhatsAppReadHandler(LeadsDbContext db, WhatsAppLeadAcc
 // ── Media ────────────────────────────────────────────────────────────────────────────────────
 
 internal sealed record GetWhatsAppMediaQuery(Guid LeadId, Guid MessageId, bool HasWhatsAppPermission)
-    : IRequest<Result<MessagingMediaContent>>;
+    : ILeadReadRequest, IRequest<Result<MessagingMediaContent>>;
 
 /// <summary>
 /// A media of the lead's thread (WA-FE-05): our envelope-encrypted copy when one was kept

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Features.Files;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.Infrastructure.Storage;
 using Sankore.Shared.Infrastructure.Auth;
@@ -57,6 +58,7 @@ internal static class ReadKycDocumentEndpoint
         KycDbContext db,
         IKycDocumentStore store,
         ICurrentUser currentUser,
+        KycVisibility visibility,
         TimeProvider clock,
         IHttpContextAccessor httpContextAccessor,
         ILoggerFactory loggerFactory,
@@ -64,7 +66,7 @@ internal static class ReadKycDocumentEndpoint
     {
         // The query filter scopes this to the caller's tenant: a file of another tenant is absent,
         // so the answer is 404 and never 403 — the existence of a customer must not leak.
-        var exists = await db.KycFiles.AnyAsync(f => f.Id == kycFileId, ct);
+        var exists = await visibility.Apply(db.KycFiles).AnyAsync(f => f.Id == kycFileId, ct);
         if (!exists)
             return Results.NotFound(new { error = KycErrors.FileNotFound });
 

@@ -2,6 +2,7 @@ namespace Sankore.Modules.Customers.Features.Compliance.Export;
 
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Modules.Customers.Features.Clients.SearchClients;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Shared.Infrastructure.Crypto;
@@ -45,6 +46,9 @@ internal static class ClientExportQueryBuilder
         var query = db.Clients
             .IgnoreQueryFilters()
             .Where(c => c.TenantId == tenantId);
+
+        if (filters.AdvisedBy is { } advisor)
+            query = query.Where(ClientVisibility.AdvisedBy(advisor));
 
         if (!string.IsNullOrWhiteSpace(filters.ClientNumber))
         {

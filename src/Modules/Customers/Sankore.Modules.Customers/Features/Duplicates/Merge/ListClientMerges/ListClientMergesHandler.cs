@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Duplicates.Merge.ListClientMerges;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Features.Duplicates.Merge.GetClientMerge;
 using Sankore.Modules.Customers.Infrastructure;
@@ -15,7 +16,8 @@ using Sankore.Shared.Kernel.Authorization;
 internal sealed class ListClientMergesHandler(
     CustomersDbContext db,
     ICurrentUser currentUser,
-    IAgencyScopeProvider agencyScope)
+    IAgencyScopeProvider agencyScope,
+    ClientVisibility? visibility = null)
     : IRequestHandler<ListClientMergesQuery, Result<PagedResult<ClientMergeRequestDto>>>
 {
     public async Task<Result<PagedResult<ClientMergeRequestDto>>> Handle(
@@ -27,7 +29,10 @@ internal sealed class ListClientMergesHandler(
 
         var accessible = await agencyScope.GetAccessibleAgencyIdsAsync(tenantId, currentUser.Id, ct);
 
-        var clients = db.Clients.IgnoreQueryFilters().Where(c => c.TenantId == tenantId);
+        // Both sides of a pair go through the same set, so an agent sees a pair only when both
+        // clients are theirs — the same reasoning as the perimeter below.
+        var tenantClients = db.Clients.IgnoreQueryFilters().Where(c => c.TenantId == tenantId);
+        var clients = visibility?.Apply(tenantClients) ?? tenantClients;
 
         var rows = from r in db.ClientMergeRequests.IgnoreQueryFilters().Where(r => r.TenantId == tenantId)
                    join survivor in clients on r.SurvivorClientId equals survivor.Id

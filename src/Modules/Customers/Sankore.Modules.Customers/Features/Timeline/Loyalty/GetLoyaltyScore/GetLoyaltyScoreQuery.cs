@@ -1,12 +1,13 @@
 namespace Sankore.Modules.Customers.Features.Timeline.Loyalty.GetLoyaltyScore;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Shared.Kernel;
 
 /// <summary>Current loyalty score of a client plus its recent history (US-M01-BE-28).</summary>
 /// <param name="HistoryLimit">How many past computations to return, newest first. Clamped to 50.</param>
 public sealed record GetLoyaltyScoreQuery(Guid ClientId, int HistoryLimit = 12)
-    : IRequest<Result<ClientLoyaltyScoreDto>>;
+    : IClientReadRequest, IRequest<Result<ClientLoyaltyScoreDto>>;
 
 /// <param name="Score">Latest score, 0..100. Null when the client has never been scored.</param>
 /// <param name="IsProvisional">

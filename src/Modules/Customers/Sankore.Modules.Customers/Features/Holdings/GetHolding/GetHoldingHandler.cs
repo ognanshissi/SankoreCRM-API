@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Holdings.GetHolding;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Features.Holdings.Shared;
@@ -13,7 +14,8 @@ internal sealed class GetHoldingHandler(
     CustomersDbContext db,
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
-    SubjectLabelResolver labels)
+    SubjectLabelResolver labels,
+    ClientVisibility? visibility = null)
     : IRequestHandler<GetHoldingQuery, Result<HoldingDto>>
 {
     public async Task<Result<HoldingDto>> Handle(GetHoldingQuery query, CancellationToken ct)
@@ -25,7 +27,7 @@ internal sealed class GetHoldingHandler(
         if (holding is null)
             return Result.Fail<HoldingDto>(CustomerErrors.HoldingNotFound);
 
-        var agencyId = await db.Clients
+        var agencyId = await (visibility?.Apply(db.Clients) ?? db.Clients)
             .Where(c => c.Id == holding.ClientId)
             .Select(c => (Guid?)c.AgencyId)
             .FirstOrDefaultAsync(ct);

@@ -1,4 +1,5 @@
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Modules.Customers.Features.ContactPoints.Shared;
 using Sankore.Shared.Kernel;
 
@@ -12,4 +13,4 @@ namespace Sankore.Modules.Customers.Features.ContactPoints.ListContactPoints;
 public sealed record ListContactPointsQuery(
     Guid ClientId,
     bool IncludeClosed
-) : IRequest<Result<IReadOnlyList<ContactPointDto>>>;
+) : IClientReadRequest, IRequest<Result<IReadOnlyList<ContactPointDto>>>;

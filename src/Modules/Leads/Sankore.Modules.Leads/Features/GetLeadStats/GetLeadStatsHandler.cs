@@ -4,15 +4,16 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetLeadStatsHandler(LeadsDbContext db)
+internal sealed class GetLeadStatsHandler(LeadsDbContext db, LeadVisibility? visibility = null)
     : IRequestHandler<GetLeadStatsQuery, Result<LeadStatsDto>>
 {
     public async Task<Result<LeadStatsDto>> Handle(
         GetLeadStatsQuery query, CancellationToken ct)
     {
-        var baseQuery = db.Leads.AsQueryable();
+        var baseQuery = visibility?.Apply(db.Leads) ?? db.Leads.AsQueryable();
 
         if (query.From.HasValue)
             baseQuery = baseQuery.Where(l => l.CapturedAt >= query.From.Value);

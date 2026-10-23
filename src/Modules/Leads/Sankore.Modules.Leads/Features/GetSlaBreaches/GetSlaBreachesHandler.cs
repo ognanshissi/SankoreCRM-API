@@ -4,9 +4,11 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetSlaBreachesHandler(LeadsDbContext db, TimeProvider clock)
+internal sealed class GetSlaBreachesHandler(
+    LeadsDbContext db, TimeProvider clock, LeadVisibility? visibility = null)
     : IRequestHandler<GetSlaBreachesQuery, Result<IReadOnlyList<SlaBreachDto>>>
 {
     public async Task<Result<IReadOnlyList<SlaBreachDto>>> Handle(
@@ -18,7 +20,7 @@ internal sealed class GetSlaBreachesHandler(LeadsDbContext db, TimeProvider cloc
         // and SLA deadline has passed.
         var breachesQuery =
             from assignment in db.LeadAssignments
-            join lead in db.Leads on assignment.LeadId equals lead.Id
+            join lead in visibility?.Apply(db.Leads) ?? db.Leads on assignment.LeadId equals lead.Id
             where assignment.SupersededAt == null          // a replaced assignment owes nothing
                && assignment.FirstContactAt == null
                && assignment.SlaDeadline < now

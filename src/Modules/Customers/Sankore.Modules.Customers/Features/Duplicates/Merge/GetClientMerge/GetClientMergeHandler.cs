@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Duplicates.Merge.GetClientMerge;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
@@ -11,7 +12,8 @@ using Sankore.Shared.Kernel.Authorization;
 internal sealed class GetClientMergeHandler(
     CustomersDbContext db,
     ICurrentUser currentUser,
-    IAgencyScopeProvider agencyScope)
+    IAgencyScopeProvider agencyScope,
+    ClientVisibility? visibility = null)
     : IRequestHandler<GetClientMergeQuery, Result<ClientMergeRequestDto>>
 {
     public async Task<Result<ClientMergeRequestDto>> Handle(GetClientMergeQuery query, CancellationToken ct)
@@ -35,7 +37,8 @@ internal sealed class GetClientMergeHandler(
         // request exists between two clients of a branch they cannot see.
         foreach (var client in clients)
         {
-            if (!await agencyScope.CanAccessAgencyAsync(tenantId, currentUser.Id, client.AgencyId, ct))
+            if (!await agencyScope.CanAccessAgencyAsync(tenantId, currentUser.Id, client.AgencyId, ct)
+                || visibility?.CanSee(client) == false)
                 return Result.Fail<ClientMergeRequestDto>(CustomerErrors.MergeRequestNotFound);
         }
 

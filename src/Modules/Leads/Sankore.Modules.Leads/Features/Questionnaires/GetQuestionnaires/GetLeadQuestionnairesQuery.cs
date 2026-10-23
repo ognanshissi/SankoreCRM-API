@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.Questionnaires.GetQuestionnaires;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -11,7 +12,7 @@ using Sankore.Shared.Kernel;
 /// claims — see <c>HealthAnswerAccess</c>.
 /// </param>
 internal sealed record GetLeadQuestionnairesQuery(Guid LeadId, bool IncludeHealthAnswers)
-    : IRequest<Result<LeadQuestionnairesDto>>;
+    : ILeadReadRequest, IRequest<Result<LeadQuestionnairesDto>>;
 
 /// <param name="Answers">
 /// Null when the caller may not read them — which is every health response unless they hold

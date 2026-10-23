@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.FindDuplicates;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
@@ -29,6 +30,7 @@ public static class CaptureLeadEndpoint
     private static async Task<IResult> Handle(
         CaptureLeadRequest req,
         ISender sender,
+        ICurrentUser currentUser,
         HttpContext http,
         CancellationToken ct)
     {
@@ -87,7 +89,10 @@ public static class CaptureLeadEndpoint
             ExternalReference:    req.ExternalReference,
             OwnerId:              req.OwnerId,
             AgencyId:             req.AgencyId,
-            AgentCollectedLeadId: req.AgentCollectedLeadId,
+            // The person typing the lead is who collected it, unless the form named somebody: an
+            // agent who captures a lead nobody holds yet must still see it (assigned-only reads).
+            AgentCollectedLeadId: req.AgentCollectedLeadId
+                                  ?? (currentUser.Id == Guid.Empty ? null : currentUser.Id),
             CompanyName:          req.CompanyName,
             CompanyEmail:         req.CompanyEmail,
             CompanyPhone:         req.CompanyPhone,

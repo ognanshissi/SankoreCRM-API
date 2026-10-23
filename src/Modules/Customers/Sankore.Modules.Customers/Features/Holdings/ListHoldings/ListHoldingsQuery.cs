@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Holdings.ListHoldings;
 
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Modules.Customers.Features.Holdings.Shared;
 using Sankore.Shared.Kernel;
 
@@ -18,4 +19,4 @@ public sealed record ListHoldingsQuery(
     string? Category,
     string? Status,
     int Page,
-    int PageSize) : IRequest<Result<PagedResult<HoldingDto>>>;
+    int PageSize) : IClientReadRequest, IRequest<Result<PagedResult<HoldingDto>>>;

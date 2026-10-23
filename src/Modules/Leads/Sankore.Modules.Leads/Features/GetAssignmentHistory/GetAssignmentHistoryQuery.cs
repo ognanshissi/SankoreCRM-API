@@ -1,11 +1,12 @@
 namespace Sankore.Modules.Leads.Features.GetAssignmentHistory;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
 
 internal sealed record GetAssignmentHistoryQuery(Guid LeadId)
-    : IRequest<Result<IReadOnlyList<AssignmentDto>>>;
+    : ILeadReadRequest, IRequest<Result<IReadOnlyList<AssignmentDto>>>;
 
 public sealed record AssignmentDto(
     Guid Id,

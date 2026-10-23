@@ -115,6 +115,10 @@ public static class KycModule
         // its handler unvalidated.
         services.AddValidatorsFromAssembly(typeof(KycModule).Assembly, includeInternalTypes: true);
 
+        // Assigned-only reads: an Agent or a CommercialAgent sees the files they are responsible for.
+        services.AddScoped<Features.Files.KycVisibility>();
+        services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Files.KycVisibilityBehavior<,>));
+
         services.AddOutboxForModule<KycDbContext>();
 
         // Field protection, keyed to this module — see KycFieldProtection for why the shared

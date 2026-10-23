@@ -43,6 +43,7 @@ public sealed class CustomerPermissionsTests
         "customers:pep_read",           // BNF-B-13
         "customers:holding_manage",     // BNF-B-14
         "customers:designation_manage", // BNF-B-15
+        "customers:read:all",           // assigned-only reads (product owner, 2026-10-23)
     ];
 
     private static readonly string[] ExpectedCodes = [.. OriginalCodes, .. EvolutionCodes];

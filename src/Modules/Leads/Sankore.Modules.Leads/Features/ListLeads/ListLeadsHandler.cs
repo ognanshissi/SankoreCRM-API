@@ -6,19 +6,22 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.GetLead;
 using Sankore.Modules.Leads.Features.NextAction;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
 internal sealed class ListLeadsHandler(
     LeadsDbContext db,
     Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
     ITenantContext? tenant = null,
-    ILeadSettings? settings = null)
+    ILeadSettings? settings = null,
+    LeadVisibility? visibility = null)
     : IRequestHandler<ListLeadsQuery, Result<PagedResult<LeadDto>>>
 {
     public async Task<Result<PagedResult<LeadDto>>> Handle(
         ListLeadsQuery query, CancellationToken ct)
     {
-        var q = db.Leads.AsNoTracking();
+        // Assigned-only for an agent; a test or a caller with lead:read:all keeps the whole tenant.
+        var q = visibility?.Apply(db.Leads.AsNoTracking()) ?? db.Leads.AsNoTracking();
 
         if (query.Status.HasValue)
             q = q.Where(l => l.Status == query.Status.Value);

@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.DispatchLead.PreviewDispatch;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
 
@@ -14,7 +15,7 @@ using Sankore.Shared.Kernel;
 /// this is the read.
 /// </summary>
 public sealed record PreviewDispatchQuery(Guid LeadId)
-    : IRequest<Result<DispatchPreviewResult>>;
+    : ILeadReadRequest, IRequest<Result<DispatchPreviewResult>>;
 
 /// <param name="Strategy">The strategy the applicable rule carries — what a real dispatch would use.</param>
 /// <param name="RuleId">The rule that would apply, or null when the built-in defaults would.</param>

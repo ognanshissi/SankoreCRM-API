@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.Household.GetHousehold;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -12,4 +13,4 @@ using Sankore.Shared.Kernel;
 /// buried where nobody reviewing authorization would look for it.
 /// </param>
 internal sealed record GetHouseholdQuery(Guid LeadId, bool IncludePepDetail)
-    : IRequest<Result<LeadHouseholdDto>>;
+    : ILeadReadRequest, IRequest<Result<LeadHouseholdDto>>;

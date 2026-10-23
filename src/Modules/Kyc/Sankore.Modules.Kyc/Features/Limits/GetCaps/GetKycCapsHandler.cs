@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Features.Limits.GetCaps;
 
 using MediatR;
+using Sankore.Modules.Kyc.Features.Files;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
@@ -32,14 +33,15 @@ internal sealed class GetKycCapsHandler(
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
     IKycModule kyc,
-    IKycSettings settings)
+    IKycSettings settings,
+    KycVisibility? visibility = null)
     : IRequestHandler<GetKycCapsQuery, Result<KycCapsDto>>
 {
     public async Task<Result<KycCapsDto>> Handle(GetKycCapsQuery request, CancellationToken ct)
     {
         // The global query filter scopes this to the caller's tenant. Closed files are excluded the
         // same way the by-customer file read excludes them: they are evidence, not a live position.
-        var query = db.KycFiles
+        var query = (visibility?.Apply(db.KycFiles) ?? db.KycFiles)
             .Where(f => f.CustomerId == request.CustomerId
                      && f.Status != KycFileStatus.Rejected
                      && f.Status != KycFileStatus.Suspended);

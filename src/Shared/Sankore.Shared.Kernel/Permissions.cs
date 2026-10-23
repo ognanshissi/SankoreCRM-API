@@ -214,6 +214,15 @@ public static class Permissions
     public static readonly PermissionItem CanReadLead =
         new("lead:read", "View Lead Details", ApplicationModules.Leads, "read");
 
+    // The three « read:all » permissions widen a READ, they grant no verb. Without one, the
+    // caller sees only the records assigned to them — a lead they hold or own, a client they
+    // advise, a KYC file they are responsible for, and failing a holder the one they created
+    // (product owner, 2026-10-23). With it, they see what they saw before: the whole tenant for
+    // leads, their agency perimeter for clients and KYC files. Agent and CommercialAgent are the
+    // roles that do NOT receive them by default — see RecordVisibility.
+    public static readonly PermissionItem CanReadAllLeads =
+        new("lead:read:all", "View every lead, not only those assigned to me", ApplicationModules.Leads, "read:all");
+
     public static readonly PermissionItem CanUpdateLead =
         new("lead:update", "Update Lead Information", ApplicationModules.Leads, "update");
 
@@ -458,6 +467,10 @@ public static class Permissions
     public static readonly PermissionItem CanReadCustomer =
         new("customers:read", "Read Customer Record", ApplicationModules.Customers, "read");
 
+    public static readonly PermissionItem CanReadAllCustomers =
+        new("customers:read:all", "Read every customer of my perimeter, not only those I advise",
+            ApplicationModules.Customers, "read:all");
+
     public static readonly PermissionItem CanCreateCustomer =
         new("customers:create", "Create Customer Record", ApplicationModules.Customers, "create");
 
@@ -527,6 +540,10 @@ public static class Permissions
 
     public static readonly PermissionItem CanReadKycFile =
         new("kyc:read", "Read KYC File", ApplicationModules.Kyc, "read");
+
+    public static readonly PermissionItem CanReadAllKycFiles =
+        new("kyc:read:all", "Read every KYC file of my perimeter, not only those I am responsible for",
+            ApplicationModules.Kyc, "read:all");
 
     public static readonly PermissionItem CanManageKycFile =
         new("kyc:manage", "Collect and correct KYC data", ApplicationModules.Kyc, "manage");
@@ -883,6 +900,7 @@ public static class Permissions
     public static readonly PermissionItem[] All =
     [
         CanReadKycFile,
+        CanReadAllKycFiles,
         CanManageKycFile,
         CanRunKycVerification,
         CanApproveKycFile,
@@ -961,6 +979,7 @@ public static class Permissions
         CanUpdateCompanyInfo,
         CanCaptureLead,
         CanReadLead,
+        CanReadAllLeads,
         CanUpdateLead,
         CanAssignLead,
         CanQualifyLead,
@@ -1006,6 +1025,7 @@ public static class Permissions
         CanReadNurturingSequences,
         CanManageLeadSourceCredentials,
         CanReadCustomer,
+        CanReadAllCustomers,
         CanCreateCustomer,
         CanUpdateCustomer,
         CanUpdateCustomerSensitive,

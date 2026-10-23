@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.CustomerLink.GetCustomerMatches;
 
 using MediatR;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -8,7 +9,7 @@ using Sankore.Shared.Kernel;
 /// suggestion looks at. A query: no transaction, no audit row.
 /// </summary>
 internal sealed record GetCustomerMatchesQuery(Guid LeadId)
-    : IRequest<Result<IReadOnlyList<CustomerMatchDto>>>;
+    : ILeadReadRequest, IRequest<Result<IReadOnlyList<CustomerMatchDto>>>;
 
 /// <param name="MatchedOn">"phone" | "email" | "identityDocument" — several when several matched.</param>
 /// <param name="IsExactSingleMatch">

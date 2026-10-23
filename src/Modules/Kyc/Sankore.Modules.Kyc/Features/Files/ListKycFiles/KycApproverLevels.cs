@@ -49,8 +49,14 @@ internal static class KycApproverLevels
             if (Is(role, Roles.Agent) || Is(role, Roles.CommercialAgent))
                 ranks.Add((int)KycApprovalLevel.Agent);
 
+            // The branch manager also signs the AGENT rung: an agent sees only their own files
+            // (assigned-only reads, product owner 2026-10-23), so no colleague agent is shown the
+            // file another agent submitted.
             if (Is(role, Roles.BranchManager))
+            {
+                ranks.Add((int)KycApprovalLevel.Agent);
                 ranks.Add((int)KycApprovalLevel.BranchManager);
+            }
 
             // The compliance rung. RegulationManager is the role that carries it in this tenant's
             // vocabulary; no separate "ComplianceOfficer" role exists, and inventing one here would

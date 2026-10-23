@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Kyc.Tests.Features.Documents;
 
+using Sankore.Modules.Kyc.Features.Files;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -77,7 +78,7 @@ public sealed class ReadKycDocumentTests : IDisposable
         return await ReadKycDocumentEndpoint.Handle(
             kycFileId, storageRef, reason,
             _factory.CreateContext(), store ?? StoreWith("image-bytes"),
-            User(), TimeProvider.System, accessor, NullLoggerFactory.Instance,
+            User(), new KycVisibility(User()), TimeProvider.System, accessor, NullLoggerFactory.Instance,
             CancellationToken.None);
     }
 

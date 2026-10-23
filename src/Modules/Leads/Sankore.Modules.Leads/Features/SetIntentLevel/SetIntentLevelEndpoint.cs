@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
 public static class SetIntentLevelEndpoint
@@ -35,10 +36,10 @@ public static class SetIntentLevelEndpoint
     private static async Task<IResult> GetHandle(
         Guid leadId,
         LeadsDbContext db,
+        LeadVisibility visibility,
         CancellationToken ct)
     {
-        var lead = await db.Leads
-            .AsNoTracking()
+        var lead = await visibility.Apply(db.Leads.AsNoTracking())
             .Where(l => l.Id == leadId)
             .Select(l => new { l.Id, l.IntentLevel, l.Score, l.UpdatedAt })
             .FirstOrDefaultAsync(ct);

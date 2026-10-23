@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Features.Documents.ListDocuments;
 
 using MediatR;
+using Sankore.Modules.Kyc.Features.Files;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -8,7 +9,7 @@ using Sankore.Shared.Kernel;
 /// had — until the registry existed there was nothing to enumerate.
 /// </summary>
 internal sealed record ListKycDocumentsQuery(Guid KycFileId)
-    : IRequest<Result<KycDocumentListDto>>;
+    : IKycFileReadRequest, IRequest<Result<KycDocumentListDto>>;
 
 /// <param name="AllCurrentDocumentsAccepted">
 /// True when every CURRENT document — the newest of each kind — has been accepted, and there is at

@@ -1,7 +1,5 @@
 namespace Sankore.Shared.Infrastructure.Behaviors;
 
-using System.Collections.Concurrent;
-using System.Reflection;
 using MediatR;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
@@ -36,12 +34,6 @@ public sealed class AgencyAuthorizationBehavior<TRequest, TResponse>(
 {
     private const string OutOfScope = "AGENCY_OUT_OF_SCOPE";
 
-    /// <summary>
-    /// Cached <c>Result&lt;T&gt;.Fail(string)</c> per closed response type —
-    /// reflection is only paid once per TResponse, not once per request.
-    /// </summary>
-    private static readonly ConcurrentDictionary<Type, MethodInfo> FailFactories = new();
-
     public async Task<TResponse> Handle(
         TRequest request,
         RequestHandlerDelegate<TResponse> next,
@@ -64,26 +56,5 @@ public sealed class AgencyAuthorizationBehavior<TRequest, TResponse>(
     }
 
     private static TResponse BuildFailure()
-    {
-        var responseType = typeof(TResponse);
-
-        if (responseType == typeof(Result))
-            return (TResponse)(object)Result.Fail(OutOfScope);
-
-        if (responseType.IsGenericType
-            && responseType.GetGenericTypeDefinition() == typeof(Result<>))
-        {
-            var factory = FailFactories.GetOrAdd(responseType, static t =>
-                t.GetMethod(nameof(Result<object>.Fail), BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly,
-                    [typeof(string)])
-                ?? throw new InvalidOperationException(
-                    $"Result<T>.Fail(string) not found on {t.Name}."));
-
-            return (TResponse)factory.Invoke(null, [OutOfScope])!;
-        }
-
-        // A handler whose response is not a Result cannot carry the error code,
-        // so surface it as a domain error the exception handler will translate.
-        throw new DomainException(OutOfScope, "Client.Agency.OutOfScope");
-    }
+        => ResultFailures.Of<TResponse>(OutOfScope, "Client.Agency.OutOfScope");
 }

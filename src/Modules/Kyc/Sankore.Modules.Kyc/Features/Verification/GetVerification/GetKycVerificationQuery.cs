@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Features.Verification.GetVerification;
 
 using MediatR;
+using Sankore.Modules.Kyc.Features.Files;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -15,7 +16,7 @@ using Sankore.Shared.Kernel;
 /// </para>
 /// </summary>
 internal sealed record GetKycVerificationQuery(Guid KycFileId)
-    : IRequest<Result<KycVerificationDto>>;
+    : IKycFileReadRequest, IRequest<Result<KycVerificationDto>>;
 
 /// <param name="Breakdown">
 /// The per-criterion contributions **as the biometry service named them**, not projected onto a

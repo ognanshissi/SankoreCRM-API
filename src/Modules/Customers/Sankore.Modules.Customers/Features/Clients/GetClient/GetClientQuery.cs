@@ -11,4 +11,4 @@ using Sankore.Shared.Kernel;
 /// Opening a client record is not an event worth auditing; REVEALING one of its protected
 /// fields is, and that is a separate, audited command.
 /// </summary>
-public sealed record GetClientQuery(Guid ClientId) : IRequest<Result<ClientDetailDto>>;
+public sealed record GetClientQuery(Guid ClientId) : IClientReadRequest, IRequest<Result<ClientDetailDto>>;

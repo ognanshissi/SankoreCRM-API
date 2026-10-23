@@ -3,6 +3,7 @@ namespace Sankore.Modules.Customers.Features.Compliance.Export.RequestClientExpo
 using System.Text.Json;
 using Hangfire;
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
@@ -14,7 +15,8 @@ internal sealed class RequestClientExportHandler(
     ICustomerSettings settings,
     ICurrentUser currentUser,
     IBackgroundJobClient backgroundJobs,
-    ILogger<RequestClientExportHandler> logger
+    ILogger<RequestClientExportHandler> logger,
+    ClientVisibility? visibility = null
 ) : IRequestHandler<RequestClientExportCommand, Result<RequestClientExportResult>>
 {
     private static readonly JsonSerializerOptions FilterJsonOptions = new(JsonSerializerDefaults.Web);
@@ -35,7 +37,12 @@ internal sealed class RequestClientExportHandler(
         // The filters are stored, not re-passed through the Hangfire payload: a job argument is
         // persisted in clear in the job store, and a phone or document filter is personal data.
         // The job receives the export id and reads the filters back from the row.
-        var filtersJson = JsonSerializer.Serialize(command.Filters, FilterJsonOptions);
+        // AdvisedBy is never the caller's to choose: it is the restriction or nothing.
+        var filters = command.Filters with
+        {
+            AdvisedBy = visibility is null || visibility.SeesAll ? null : currentUser.Id,
+        };
+        var filtersJson = JsonSerializer.Serialize(filters, FilterJsonOptions);
 
         // Queue() mints the download token and sets ExpiresAt = now + ttl; the token is the only
         // thing protecting the file, so the domain owns its generation.

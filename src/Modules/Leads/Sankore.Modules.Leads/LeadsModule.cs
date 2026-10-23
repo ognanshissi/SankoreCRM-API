@@ -121,6 +121,10 @@ public static class LeadsModule
         // assembly scan skips those by default — without this they never run.
         services.AddValidatorsFromAssembly(typeof(LeadsModule).Assembly, includeInternalTypes: true);
 
+        // Assigned-only reads: an Agent or a CommercialAgent sees the leads they hold.
+        services.AddScoped<Features.Visibility.LeadVisibility>();
+        services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Visibility.LeadVisibilityBehavior<,>));
+
         // DispatchLead slice-internal services
         services.AddScoped<CompatibilityScorer>();
         // AgentCapacityService: Redis-cached open CRM task count per agent (US-M13-082).

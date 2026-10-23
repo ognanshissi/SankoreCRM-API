@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Features.Documents.GetIdentityDocument;
 
 using MediatR;
+using Sankore.Modules.Kyc.Features.Files;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -8,7 +9,7 @@ using Sankore.Shared.Kernel;
 /// machine-readable zone — so an agent can correct a misread value.
 /// </summary>
 internal sealed record GetKycIdentityDocumentQuery(Guid KycFileId)
-    : IRequest<Result<KycIdentityDocumentDto>>;
+    : IKycFileReadRequest, IRequest<Result<KycIdentityDocumentDto>>;
 
 /// <param name="MaskedNumber">
 /// The document number, masked: first two and last two characters kept

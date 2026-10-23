@@ -172,6 +172,18 @@ internal static class RoleSeeder
         Permissions.CanInviteKycRemote,
     ];
 
+    /// <summary>
+    /// The whole perimeter rather than one's own records — every business role but the two agents
+    /// (product owner, 2026-10-23: an Agent or a CommercialAgent consults only the leads, clients
+    /// and KYC files assigned to them). A tenant restores the wide view by granting these.
+    /// </summary>
+    private static readonly PermissionItem[] ReadEverythingInPerimeter =
+    [
+        Permissions.CanReadAllLeads,
+        Permissions.CanReadAllCustomers,
+        Permissions.CanReadAllKycFiles,
+    ];
+
     private static readonly PermissionItem[] TelephonyAgent =
     [
         Permissions.CanMakeTelephonyCall,
@@ -251,6 +263,7 @@ internal static class RoleSeeder
     private static readonly PermissionItem[] SalesManagerPermissions =
     [
         .. EveryBusinessRole,
+        .. ReadEverythingInPerimeter,
         Permissions.CanReadTerritory,
         .. LeadWork,
         .. LeadSupervision,
@@ -282,6 +295,7 @@ internal static class RoleSeeder
     private static readonly PermissionItem[] BranchManagerPermissions =
     [
         .. EveryBusinessRole,
+        .. ReadEverythingInPerimeter,
         Permissions.CanReadTerritory,
         .. LeadWork,
         .. LeadSupervision,
@@ -315,6 +329,7 @@ internal static class RoleSeeder
     private static readonly PermissionItem[] CashierPermissions =
     [
         .. EveryBusinessRole,
+        .. ReadEverythingInPerimeter,
         Permissions.CanCaptureLead,
         Permissions.CanReadLead,
         Permissions.CanReadCustomer,
@@ -332,6 +347,7 @@ internal static class RoleSeeder
     private static readonly PermissionItem[] RegulationManagerPermissions =
     [
         .. EveryBusinessRole,
+        .. ReadEverythingInPerimeter,
         Permissions.CanReadTerritory,
         Permissions.CanReadAudit,
         Permissions.CanManageDistributionCredentials,

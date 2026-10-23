@@ -4,9 +4,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetPipelineHandler(LeadsDbContext db)
+internal sealed class GetPipelineHandler(LeadsDbContext db, LeadVisibility? visibility = null)
     : IRequestHandler<GetPipelineQuery, Result<PipelineView>>
 {
     // Stages shown on the board (exclude terminal stages).
@@ -27,7 +28,7 @@ internal sealed class GetPipelineHandler(LeadsDbContext db)
     public async Task<Result<PipelineView>> Handle(
         GetPipelineQuery query, CancellationToken ct)
     {
-        var q = db.Leads.AsNoTracking()
+        var q = (visibility?.Apply(db.Leads.AsNoTracking()) ?? db.Leads.AsNoTracking())
             .Where(l => l.Status != LeadStatus.Lost
                      && l.Status != LeadStatus.Disqualified
                      && l.Status != LeadStatus.Archived);

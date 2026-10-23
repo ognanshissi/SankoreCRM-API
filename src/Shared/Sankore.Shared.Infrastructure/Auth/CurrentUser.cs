@@ -22,6 +22,12 @@ public interface ICurrentUser
     /// les identités de tâches de fond et les doubles de test n'usurpent jamais personne.
     /// </summary>
     Guid? ImpersonatorId => null;
+
+    /// <summary>
+    /// Permission codes from the JWT <c>permission</c> claims. Empty by default: a background
+    /// identity carries the System role instead, and a test double that needs one says so.
+    /// </summary>
+    IReadOnlyList<string> Permissions => [];
 }
 
 /// <summary>
@@ -51,6 +57,11 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICur
         .ToList() ?? [];
 
     public Guid? ImpersonatorId => ImpersonationClaims.ReadImpersonatorId(Principal);
+
+    public IReadOnlyList<string> Permissions => Principal?
+        .FindAll("permission")
+        .Select(c => c.Value)
+        .ToList() ?? [];
 }
 
 /// <summary>

@@ -34,7 +34,12 @@ public sealed record SearchClientsQuery(
     RiskLevel? RiskLevel = null,
     bool? HasPepExposure = null,
     /// <summary>Custom-field filters, <c>key:value</c> (dynamic forms, lot 6). A sensitive field cannot be filtered on.</summary>
-    IReadOnlyList<string>? CustomFilters = null
+    IReadOnlyList<string>? CustomFilters = null,
+    /// <summary>
+    /// SERVER-SET for an export: the requester who sees only the clients they advise. The job runs
+    /// as SYSTEM and no longer knows who asked, so the restriction travels with the filters.
+    /// </summary>
+    Guid? AdvisedBy = null
 ) : IRequest<Result<PagedResult<ClientSearchItemDto>>>
 {
     public ClientSearchCriteria Criteria => new(
