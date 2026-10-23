@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// ASS-04 and ASS-05: subscribing a customer, and reading what became of the attempt.
@@ -14,7 +15,9 @@ internal static class SubscribePolicyEndpoints
 {
     internal static IEndpointRouteBuilder MapSubscribePolicy(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("integration/insurance/subscriptions").WithTags("Integration");
+        var group = app.MapGroup("integration/insurance/subscriptions")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.Insurance);
 
         group.MapPost(string.Empty, Subscribe)
             .WithName("SubscribeInsurancePolicy")

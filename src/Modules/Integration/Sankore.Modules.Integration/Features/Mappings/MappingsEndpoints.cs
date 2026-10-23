@@ -10,6 +10,8 @@ using Sankore.Modules.Integration.Features.Mappings.ListMappings;
 using Sankore.Modules.Integration.Features.Mappings.ListUnmappedCodes;
 using Sankore.Modules.Integration.Features.Mappings.UpsertMapping;
 using Sankore.Modules.Integration.Features.Mappings.ValidateMappingImport;
+using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Aggregator of the mappings area (INT-04). Adding a slice touches its own folder plus exactly
@@ -29,7 +31,9 @@ public static class MappingsEndpoints
 
         var group = app
             .MapGroup("integration/connections/{connectionId:guid}/mappings")
-            .WithTags("Integration");
+            .WithTags("Integration")
+            // Shared by core banking and insurer connections; telephony has no mappings.
+            .RequireTenantModule(TenantModules.BankingMicrofinance, TenantModules.Insurance);
 
         // The literal sub-routes ("{domain}/import", "{domain}/unmapped", "{domain}/export.csv")
         // and the parameter route ("{domain}/{crmCode}") never collide: the parameter route is

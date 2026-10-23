@@ -32,6 +32,10 @@
     </ItemGroup>
 
     <ItemGroup>
+      <InternalsVisibleTo Include="Sankore.Admin.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
       <ProjectReference Include="..\..\..\SankoreCRM.ServiceDefaults\SankoreCRM.ServiceDefaults.csproj" />
       <ProjectReference Include="..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
     </ItemGroup>

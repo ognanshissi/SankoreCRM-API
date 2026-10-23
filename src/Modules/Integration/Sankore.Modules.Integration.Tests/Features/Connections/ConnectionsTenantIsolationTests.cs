@@ -114,7 +114,7 @@ public sealed class ConnectionsTenantIsolationTests : IDisposable
 
         var activate = await new ActivateConnectionHandler(
                 db, ConnectionsTestHarness.User(TenantA), ConnectionsTestHarness.Clock(),
-                ConnectionsTestHarness.Log<ActivateConnectionHandler>())
+                ConnectionsTestHarness.Log<ActivateConnectionHandler>(), FixedTenantModules.All)
             .Handle(new ActivateConnectionCommand(foreign.Id), CancellationToken.None);
 
         activate.Error.Should().Be(IntegrationErrors.ConnectionNotFound);
@@ -181,7 +181,7 @@ public sealed class ConnectionsTenantIsolationTests : IDisposable
         await using var db = _factory.CreateContext();
         var result = await new ActivateConnectionHandler(
                 db, ConnectionsTestHarness.User(TenantA), ConnectionsTestHarness.Clock(),
-                ConnectionsTestHarness.Log<ActivateConnectionHandler>())
+                ConnectionsTestHarness.Log<ActivateConnectionHandler>(), FixedTenantModules.All)
             .Handle(new ActivateConnectionCommand(mine.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

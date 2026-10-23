@@ -59,6 +59,18 @@ public sealed class KycValidatedOnboardingConsumer(
         using var scope = scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
 
+        // A NEW customer reaches the core banking system only while the tenant runs « Banking -
+        // Microfinance ». Checked before the inbox claims the message. A skipped onboarding is not
+        // replayed when the module comes back: the decision belongs to the moment of validation.
+        if (!await sp.GetRequiredService<ITenantModules>()
+                .IsEnabledAsync(evt.TenantId, TenantModules.BankingMicrofinance, ct))
+        {
+            logger.LogInformation(
+                "Banking - Microfinance is off for tenant {TenantId}: customer {CustomerId} is not created in a core banking system",
+                evt.TenantId, evt.CustomerEntityId);
+            return;
+        }
+
         // First thing that runs, and it commits its own row: a redelivery loses on the inbox
         // primary key and returns, so the customer is queued for creation once. The idempotency
         // key on the command is the second line of defence (INT-05) and would make a duplicate

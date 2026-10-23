@@ -5,12 +5,15 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, TimeProvider clock)
+internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, TimeProvider clock, ITenantModules modules)
     : IRequestHandler<CreateQualificationTemplateCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
         CreateQualificationTemplateCommand cmd, CancellationToken ct)
     {
+        if (cmd.ProductCategory is { } category && !await modules.AllowsCategoryAsync(category, ct))
+            return Result.Fail<Guid>(TenantModuleErrors.CategoryDisabled);
+
         var template = QualificationTemplate.Create(
             tenantId:    cmd.TenantId,
             name:        cmd.Name,

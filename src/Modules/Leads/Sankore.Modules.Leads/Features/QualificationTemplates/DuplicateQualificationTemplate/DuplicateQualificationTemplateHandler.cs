@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class DuplicateQualificationTemplateHandler(LeadsDbContext db, TimeProvider clock)
+internal sealed class DuplicateQualificationTemplateHandler(LeadsDbContext db, TimeProvider clock, ITenantModules modules)
     : IRequestHandler<DuplicateQualificationTemplateCommand, Result<Guid>>
 {
     /// <summary>Matches the Name column in <c>QualificationTemplateConfiguration</c>.</summary>
@@ -25,6 +25,9 @@ internal sealed class DuplicateQualificationTemplateHandler(LeadsDbContext db, T
 
         if (source is null)
             return Result.Fail<Guid>("TEMPLATE_NOT_FOUND");
+
+        if (source.ProductCategory is { } category && !await modules.AllowsCategoryAsync(category, ct))
+            return Result.Fail<Guid>(TenantModuleErrors.CategoryDisabled);
 
         var name = string.IsNullOrWhiteSpace(cmd.Name)
             ? DeriveCopyName(source.Name)

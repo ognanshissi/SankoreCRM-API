@@ -11,7 +11,8 @@ using Sankore.Shared.Kernel;
 internal sealed class GetCurrentUserHandler(
     AdministrationDbContext db,
     UserManager<AppUser> userManager,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    ITenantModules tenantModules)
     : IRequestHandler<GetCurrentUserQuery, Result<CurrentUserDto>>
 {
     public async Task<Result<CurrentUserDto>> Handle(
@@ -68,6 +69,8 @@ internal sealed class GetCurrentUserHandler(
             Permissions:     allPermissions,
             DefaultLanguage: profile?.DefaultLanguage ?? "fr",
             ImpersonatorId:  currentUser.ImpersonatorId,
-            ImpersonatorName: impersonatorName));
+            ImpersonatorName: impersonatorName,
+            ActiveModules:   await tenantModules.ActiveAsync(user.TenantId, ct),
+            ReadOnlyModules: await tenantModules.ReadOnlyAsync(user.TenantId, ct)));
     }
 }

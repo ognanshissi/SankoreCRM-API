@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// The <i>mécanisme de traitement des réclamations</i> of the règlement
@@ -32,7 +33,9 @@ internal static class ComplaintEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        var group = app.MapGroup("integration/insurance/complaints").WithTags("Integration");
+        var group = app.MapGroup("integration/insurance/complaints")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.Insurance);
 
         group.MapPost(string.Empty, Record)
             .WithName("RecordInsuranceComplaint")

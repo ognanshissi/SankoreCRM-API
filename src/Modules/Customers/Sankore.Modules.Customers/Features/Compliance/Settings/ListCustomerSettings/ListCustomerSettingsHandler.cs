@@ -7,7 +7,7 @@ using Sankore.Modules.Customers.Features.Compliance.Shared;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class ListCustomerSettingsHandler(CustomersDbContext db)
+internal sealed class ListCustomerSettingsHandler(CustomersDbContext db, ITenantModules modules)
     : IRequestHandler<ListCustomerSettingsQuery, Result<IReadOnlyList<CustomerSettingDto>>>
 {
     public async Task<Result<IReadOnlyList<CustomerSettingDto>>> Handle(
@@ -21,7 +21,11 @@ internal sealed class ListCustomerSettingsHandler(CustomersDbContext db)
         // Driven by the declared catalogue, not by the table: a key the seeder has not written
         // yet still shows up with its factory value (IsDefault = true), and a stale row for a
         // key that no longer exists in the catalogue is simply not exposed.
+        // Listed while the module is in force or deactivated (read-only); hidden if never subscribed.
+        var banking = await modules.IsReadableAsync(TenantModules.BankingMicrofinance, ct);
+
         var items = CustomerSettingKeys.Defaults
+            .Where(declared => banking || !CustomerSettingKeys.BankingMicrofinanceKeys.Contains(declared.Key))
             .Select(declared => stored.TryGetValue(declared.Key, out var row)
                 ? CustomerSettingDto.FromStored(row, declared)
                 : CustomerSettingDto.FromDefault(declared))

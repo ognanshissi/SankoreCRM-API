@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.Reconciliation.ListGaps;
 using Sankore.Modules.Integration.Features.Reconciliation.ResolveGap;
+using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Area aggregator: one <c>MapGroup</c>, one call per slice. Adding a feature touches its own
@@ -37,7 +39,10 @@ internal static class ReconciliationEndpoints
 {
     internal static IEndpointRouteBuilder MapReconciliationEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("integration/reconciliation").WithTags("Integration");
+        // One ledger for the core-banking and the insurance comparisons: either module opens it.
+        var group = app.MapGroup("integration/reconciliation")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.BankingMicrofinance, TenantModules.Insurance);
 
         group.MapListReconciliationGaps();
         group.MapResolveReconciliationGap();

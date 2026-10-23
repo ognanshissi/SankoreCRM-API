@@ -7,7 +7,7 @@ using Sankore.Modules.Leads.Features.QualificationTemplates.CreateQualificationT
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db)
+internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db, ITenantModules modules)
     : IRequestHandler<UpdateQualificationTemplateCommand, Result>
 {
     public async Task<Result> Handle(
@@ -22,6 +22,12 @@ internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db)
 
         if (template.Status == TemplateStatus.Archived)
             return Result.Fail("TEMPLATE_ALREADY_ARCHIVED");
+
+        // Moving a template INTO a closed module's category is a creation in disguise; editing one
+        // that already sits there is not — existing configuration stays usable.
+        if (cmd.ProductCategory is { } category && category != template.ProductCategory
+            && !await modules.AllowsCategoryAsync(category, ct))
+            return Result.Fail(TenantModuleErrors.CategoryDisabled);
 
         var detailsResult = template.UpdateDetails(cmd.Name, cmd.Description, cmd.ProductCategory, cmd.ProductCode);
         if (detailsResult.IsFailure)

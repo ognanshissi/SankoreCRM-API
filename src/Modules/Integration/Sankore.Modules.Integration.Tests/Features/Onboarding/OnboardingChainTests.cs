@@ -7,6 +7,7 @@ using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Features.Onboarding;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Modules.Kyc.PublicApi;
+using Sankore.Shared.Kernel;
 using Xunit;
 
 /// <summary>
@@ -59,6 +60,20 @@ public sealed class OnboardingChainTests
         // why rethrowing would have the broker redeliver for ever.
         context.Inbox.WasClaimedBy(MessageId, KycValidatedOnboardingConsumer.ConsumerKey)
             .Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Without_Banking_Microfinance_a_validated_customer_is_not_sent_to_the_core_banking_system()
+    {
+        using var context = OnboardingTestContext.WithActiveConnection();
+        context.Modules = new FixedTenantModules(TenantModules.Insurance);
+
+        await context.ConsumeKycValidatedAsync(MessageId);
+
+        (await context.CommandsAsync()).Should().BeEmpty(
+            "the connection is still active, but a new customer is an entry the module closes");
+        context.Inbox.WasClaimedBy(MessageId, KycValidatedOnboardingConsumer.ConsumerKey)
+            .Should().BeFalse("nothing was handled");
     }
 
     [Fact]

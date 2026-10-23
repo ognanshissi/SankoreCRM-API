@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies;
+using Sankore.Modules.Administration.Features.PaidModules;
 using Sankore.Modules.Administration.Features.PermissionsCatalog;
 using Sankore.Modules.Administration.Features.CompanyInfo;
 using Sankore.Modules.Administration.Features.Authentication.AccountActivation;
@@ -91,6 +92,11 @@ public static class AdministrationModule
             sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
+
+        // Paid modules: the registry (Sankore.Admin) holds them; this writes on the tenant's
+        // behalf through the named client AddTenantStore registers.
+        services.AddScoped<Infrastructure.PaidModules.ITenantModuleRegistry,
+            Infrastructure.PaidModules.HttpTenantModuleRegistry>();
         // Agency perimeter (Kernel contract) — Administration owns the agency tree.
         services.AddScoped<IAgencyScopeProvider, AgencyScopeProvider>();
 
@@ -108,6 +114,10 @@ public static class AdministrationModule
                            Features.Agencies.CreateAgency.PostgresAgencyCodeGenerator>();
         services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerRoleCoordinator>();
         services.AddScoped<Infrastructure.ModuleEmailSender>();
+        services.Configure<Infrastructure.PaidModules.TenantModuleNotificationOptions>(
+            config.GetSection(Infrastructure.PaidModules.TenantModuleNotificationOptions.SectionName));
+        services.AddScoped<Infrastructure.PaidModules.TenantModuleNotifier>();
+        services.AddScoped<Features.PaidModules.NotifyTenantModuleDecisionsJob>();
         services.AddScoped<Features.Agencies.AssignAgencyManager.AgencyManagerNotifier>();
         services.AddScoped<Features.Users.AgentSettings.AgentAbsenceNotifier>();
         services.AddScoped<Sankore.Shared.Infrastructure.Auth.ISessionValidator, Infrastructure.Sessions.SessionValidator>();
@@ -212,6 +222,7 @@ public static class AdministrationModule
         app.MapNotificationSettingsEndpoints();
         app.MapSmsSettingsEndpoints();
         app.MapComplianceSettingsEndpoints();
+        app.MapTenantModulesEndpoints();
 
         // Professional cards (CIMA 503, 510, 732). Alongside the compliance settings rather than
         // inside the users area: a licence is a compliance record about a person, not a profile

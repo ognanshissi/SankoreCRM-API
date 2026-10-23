@@ -9,6 +9,7 @@ using Sankore.Modules.Administration.Infrastructure.Configurations;
 using Sankore.Modules.Administration.PublicApi.Forms;
 using Sankore.Modules.Administration.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
+using Sankore.Shared.Kernel;
 using Xunit;
 
 public sealed class EntityFormHandlersTests : IDisposable
@@ -26,10 +27,11 @@ public sealed class EntityFormHandlersTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private async Task<EntityFormDto> GetAsync(FormEntity entity)
+    private async Task<EntityFormDto> GetAsync(FormEntity entity, ITenantModules? modules = null)
     {
         await using var db = _db.CreateContext();
-        return (await new GetEntityFormHandler(db).Handle(new GetEntityFormQuery(entity), default)).Value;
+        return (await new GetEntityFormHandler(db, new FixedTenantContext(_tenantId), modules ?? FixedTenantModules.All)
+            .Handle(new GetEntityFormQuery(entity), default)).Value;
     }
 
     private async Task<Sankore.Shared.Kernel.Result<EntityFormDto>> SaveAsync(

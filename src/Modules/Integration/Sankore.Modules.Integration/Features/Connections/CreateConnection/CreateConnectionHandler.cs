@@ -12,7 +12,8 @@ internal sealed class CreateConnectionHandler(
     IntegrationDbContext db,
     ICurrentUser currentUser,
     TimeProvider clock,
-    ILogger<CreateConnectionHandler> logger)
+    ILogger<CreateConnectionHandler> logger,
+    ITenantModules modules)
     : IRequestHandler<CreateConnectionCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateConnectionCommand cmd, CancellationToken ct)
@@ -24,6 +25,9 @@ internal sealed class CreateConnectionHandler(
         // with a DomainException — a 500 where the caller deserves an error code.
         if (cmd.Settings is null || cmd.Settings.ExpectedKind != cmd.Kind)
             return Result.Fail<Guid>(IntegrationErrors.SettingsInvalid);
+
+        if (!await ConnectionFamilyModules.IsOpenAsync(modules, cmd.Family, ct))
+            return Result.Fail<Guid>(TenantModuleErrors.Disabled);
 
         var connection = IntegrationConnection.Create(
             tenantId: currentUser.TenantId,

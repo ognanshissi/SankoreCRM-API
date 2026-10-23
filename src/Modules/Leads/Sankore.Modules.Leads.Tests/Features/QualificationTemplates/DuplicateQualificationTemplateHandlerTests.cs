@@ -29,7 +29,7 @@ public sealed class DuplicateQualificationTemplateHandlerTests : IDisposable
         var sourceId = await SeedTemplate(status: sourceStatus);
 
         await using var db = _factory.CreateContext();
-        var result = await new DuplicateQualificationTemplateHandler(db, _clock).Handle(
+        var result = await new DuplicateQualificationTemplateHandler(db, _clock, FixedTenantModules.All).Handle(
             new DuplicateQualificationTemplateCommand(sourceId, Name: null), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -59,7 +59,7 @@ public sealed class DuplicateQualificationTemplateHandlerTests : IDisposable
         var source = await LoadTemplate(sourceId);
 
         await using var db = _factory.CreateContext();
-        var result = await new DuplicateQualificationTemplateHandler(db, _clock).Handle(
+        var result = await new DuplicateQualificationTemplateHandler(db, _clock, FixedTenantModules.All).Handle(
             new DuplicateQualificationTemplateCommand(sourceId, Name: null), CancellationToken.None);
 
         var copy = await LoadTemplate(result.Value);
@@ -92,7 +92,7 @@ public sealed class DuplicateQualificationTemplateHandlerTests : IDisposable
         var sourceId = await SeedTemplate(status: TemplateStatus.Draft);
 
         await using var db = _factory.CreateContext();
-        var result = await new DuplicateQualificationTemplateHandler(db, _clock).Handle(
+        var result = await new DuplicateQualificationTemplateHandler(db, _clock, FixedTenantModules.All).Handle(
             new DuplicateQualificationTemplateCommand(sourceId, Name: null), CancellationToken.None);
 
         var copy = await LoadTemplate(result.Value);
@@ -113,7 +113,7 @@ public sealed class DuplicateQualificationTemplateHandlerTests : IDisposable
               .GetRules().Single().TriggerQuestionId.Should().Be(sourceTriggerId);
 
         await using var db = _factory.CreateContext();
-        var result = await new DuplicateQualificationTemplateHandler(db, _clock).Handle(
+        var result = await new DuplicateQualificationTemplateHandler(db, _clock, FixedTenantModules.All).Handle(
             new DuplicateQualificationTemplateCommand(sourceId, Name: null), CancellationToken.None);
 
         var copy = await LoadTemplate(result.Value);
@@ -134,7 +134,7 @@ public sealed class DuplicateQualificationTemplateHandlerTests : IDisposable
         var sourceId = await SeedTemplate(status: TemplateStatus.Archived);
 
         await using var db = _factory.CreateContext();
-        var result = await new DuplicateQualificationTemplateHandler(db, _clock).Handle(
+        var result = await new DuplicateQualificationTemplateHandler(db, _clock, FixedTenantModules.All).Handle(
             new DuplicateQualificationTemplateCommand(sourceId, "  2027 revision  "), CancellationToken.None);
 
         (await LoadTemplate(result.Value)).Name.Should().Be("2027 revision");
@@ -146,7 +146,7 @@ public sealed class DuplicateQualificationTemplateHandlerTests : IDisposable
         var sourceId = await SeedTemplate(status: TemplateStatus.Draft, name: new string('x', 200));
 
         await using var db = _factory.CreateContext();
-        var result = await new DuplicateQualificationTemplateHandler(db, _clock).Handle(
+        var result = await new DuplicateQualificationTemplateHandler(db, _clock, FixedTenantModules.All).Handle(
             new DuplicateQualificationTemplateCommand(sourceId, Name: null), CancellationToken.None);
 
         var copy = await LoadTemplate(result.Value);
@@ -158,7 +158,7 @@ public sealed class DuplicateQualificationTemplateHandlerTests : IDisposable
     {
         await using var db = _factory.CreateContext();
 
-        var result = await new DuplicateQualificationTemplateHandler(db, _clock).Handle(
+        var result = await new DuplicateQualificationTemplateHandler(db, _clock, FixedTenantModules.All).Handle(
             new DuplicateQualificationTemplateCommand(Guid.NewGuid(), Name: null), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();

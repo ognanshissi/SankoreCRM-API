@@ -45,6 +45,9 @@ public sealed class HoldingSubscriptionConsumerTests : IDisposable
     private readonly CommandsTestHarness.FixedClock _clock = new(CommandsTestHarness.Now);
     private readonly ServiceProvider _provider;
 
+    /// <summary>The tenant's paid modules; every module unless a test switches them off.</summary>
+    private ITenantModules _modules = FixedTenantModules.All;
+
     public HoldingSubscriptionConsumerTests()
     {
         _provider = BuildProvider();
@@ -128,6 +131,16 @@ public sealed class HoldingSubscriptionConsumerTests : IDisposable
     }
 
     // ── the point of the feature ────────────────────────────────────────────
+
+    [Fact]
+    public async Task Without_the_Assurance_module_a_new_subscription_is_not_sent_to_the_insurer()
+    {
+        _modules = new FixedTenantModules(TenantModules.BankingMicrofinance);
+
+        await ConsumeAsync();
+
+        (await CommandsAsync()).Should().BeEmpty("the holding stays PendingSync, nothing leaves for the insurer");
+    }
 
     [Fact]
     public async Task A_signed_holding_becomes_one_queued_command()
@@ -372,6 +385,7 @@ public sealed class HoldingSubscriptionConsumerTests : IDisposable
             .Build());
 
         services.AddSingleton<IIntegrationInboxGuard>(_inbox);
+        services.AddTransient(_ => _modules);
         services.AddScoped<IntegrationAdapterResolver>();
         services.AddScoped<Sankore.Modules.Integration.Features.References.GetReference.ReferenceLookup>();
         services.AddScoped<CommandPayloadProtector>();

@@ -133,6 +133,12 @@ dotnet ef database update \
 
 dotnet ef database update --project src/Modules/Leads/Sankore.Modules.Leads \
   --startup-project src/Bootstrapper/Sankore.Api --context LeadsDbContext
+
+# The tenant registry (Sankore.Admin) is its own startup project; it migrates itself at boot.
+dotnet ef migrations add <Name> \
+  --project src/Bootstrapper/Sankore.Admin \
+  --startup-project src/Bootstrapper/Sankore.Admin \
+  --context AdminDbContext --output-dir Infrastructure/Migrations
 ```
 
 ### Docker (without Aspire)
@@ -218,7 +224,7 @@ Its extra **Job control** page adds pause/resume, which Hangfire OSS has no equi
 
 `AdministrationDbContext` extends `IdentityDbContext<AppUser, AppRole, Guid>`. Default schema: `administration`. Migrations history table is in the `identity` schema.
 
-`AdministrationModule.InitializeAsync(sp)` runs migrations + `RoleSeeder` + `PermissionSeeder` at startup. `RoleSeeder` seeds `Roles.All` and grants all permissions to the `System` role.
+`AdministrationModule.InitializeAsync(sp)` runs migrations + `RoleSeeder` + `PermissionSeeder` at startup. `RoleSeeder` seeds `Roles.All`, grants every permission to `System` and `Administrator`, and gives the six other roles the matrix in `RoleSeeder.DefaultGrants` (composed per role from `Permissions.*`, additive, never revokes; `RoleDefaultGrantsTests` pins what stays administrator-only).
 
 **AppUser factories:**
 - `AppUser.Create(tenantId, agencyId, fullName, email)` — standard user, `AgencyId` required
@@ -1742,6 +1748,88 @@ symptom is a five-minute delay that looks like flakiness. **Invalidate AFTER `Sa
 doing it first opens a window for a concurrent read to repopulate from the pre-write row, which is
 the one ordering that makes a cache permanently wrong instead of briefly stale.
 
+### Paid tenant modules: « Banking - Microfinance » and « Assurance »
+
+A tenant subscribes to paid modules (`TenantModules` in the Kernel: `BankingMicrofinance`,
+`Insurance`). Everything else is the **socle**, always on — telephony and compliance (KYC, simplified
+KYC and its caps, PEP, FATCA, AML) included, by product-owner decision: never gate them. Code asks
+« is this module active? », never « what kind of institution is this? ». Design and decisions:
+`../Sankore_Parametrage_Modules.pdf` and `../Sankore_Modules_Specification_Implementation.pdf`.
+
+- **The registry holds the truth.** `ModuleDefinitions` (label, price, `IsAvailable`) and
+  `TenantModuleSubscriptions` in Sankore.Admin: one row per period, never deleted or reused,
+  statuses Requested → Active / Rejected / Cancelled, Active → Deactivated. The filtered unique index
+  `ux_tenant_module_open` allows one open row (Requested or Active) per tenant and module. The
+  migration seeded both definitions at price 0 and **not available**, and gave every tenant that
+  existed then both modules (`Source = Migration`) — in SQL, not in a seeder, so a tenant created
+  later on the socle alone never receives them by accident.
+- **Who does what.** The tenant administrator asks (`tenant:modules:request`, the price accepted is
+  copied onto the row), the platform authorises or refuses with a reason, the tenant may cancel a
+  pending request, and deactivation is the tenant's, immediate, without approval
+  (`tenant:modules:deactivate`). Those three permissions go to Administrator/System only.
+- **Platform decisions need an operator token.** The registry lets either the service key or an
+  operator JWT through host-wide; approve, reject, direct activation and pricing carry
+  `RequirePlatformAdmin()`, otherwise Sankore.Api could authorise its own tenant's request.
+- **Reading.** `TenantResponse.ActiveModules` → `TenantInfo.ActiveModules` (cached 30 s) →
+  `ITenantModules`. A null list (a record cached before the field existed, a silent registry) reads
+  as **every module**: a module is a commercial boundary, and in doubt a tenant keeps what it has. An
+  empty list is the socle alone. The front-end gets the list on `GET users/auth-context`
+  (`CurrentUserDto.ActiveModules`), not on the public tenant context.
+- **Writing from the API.** `Features/PaidModules` (route `tenant-modules`) relays to the registry
+  through the named client `TenantStoreServiceCollectionExtensions.HttpClientName`, always for the
+  caller's tenant and in the caller's name, then drops the cached `TenantInfo`
+  (`ITenantCacheInvalidator`) so a deactivation applies on the next request. Registry codes are
+  relayed as they are; an unreachable registry is `503 TENANT_REGISTRY_UNAVAILABLE`.
+- **Gating a route:** `MapGroup(...).RequireTenantModule(TenantModules.X)` (several codes = any of
+  them) answers `403 TENANT_MODULE_DISABLED`. It is distinct from permissions on purpose: client
+  groups are read with `customers:read`, which no module may withdraw.
+- **Front-end.** CRM: `TenantModulesService` (null list = every module, like the server) and
+  `hasModuleGuard(...)` in `crm/common`, the « Modules et abonnement » page at `/settings/modules`
+  (cards, not `tas-table`, by owner decision). Admin app: `/modules/demandes` (the queue),
+  `/modules/catalogue` (prices, availability) and a Modules section on the tenant page. The
+  registry documents its enums as strings (`EnumSchemaFilter`, twin of the API's) — without it the
+  admin client turned every status into `NUMBER_0…4`.
+- **What « Banking - Microfinance » closes (lot 2)** — entries only, never what already exists:
+  `client-groups` and `integration/balance` (route filter), the seven group-size settings (hidden
+  from the list, `TENANT_MODULE_DISABLED` on read/write), `products/{id}/link-cbs`, product and
+  qualification-template creation in its categories (`AllowsCategoryAsync`, 403
+  `PRODUCT_CATEGORY_MODULE_DISABLED`; a template may keep the category it already has), the
+  category options of `GET forms/Product`, creating or activating a CoreBanking connection
+  (`ConnectionFamilyModules` — Banking only, an Insurance-only tenant has no core banking), and
+  the two onboarding consumers (a newly validated customer is not sent to the CBS; not replayed
+  later). Mappings, commands, references, reconciliation and the relay-agent operator routes open
+  with EITHER module; telephony and messaging connections are never gated. Background jobs keep
+  running for what exists (product owner, 2026-10-23). Tests use `FixedTenantModules`.
+- **What « Assurance » closes (lot 3):** the six `integration/insurance/*` route groups (products,
+  subscriptions, claims and their pieces, statements, complaints), creating or activating an
+  Insurance connection, insurance categories (lot 2's category rule), and
+  `HoldingSubscriptionConsumer` — a new holding is not sent to an insurer and stays PendingSync.
+  Not gated, by design: CollectPremiumsJob, ComplaintDeadlineJob, the evidence purges, CIMA
+  professional cards and `InsuranceDistributionGuard`, health questionnaires, product holdings and
+  beneficiary designations (they follow the product, and existing insurance products stay usable).
+- **A deactivated module stays READABLE** (product owner, 2026-10-23). The registry sends
+  `ReadOnlyModules` (deactivated and not active again) → `TenantInfo.ReadOnlyModules` →
+  `ITenantModules.IsReadableAsync`. `RequireTenantModule` lets GET/HEAD through for a readable
+  module and every other verb only for an active one, so a route that writes on a GET, or reads by
+  POST, must not rely on it alone. A module never subscribed reads nothing. The front gets
+  `CurrentUserDto.ReadOnlyModules`: consultation screens use `canReadModuleGuard` and
+  `TenantModulesService.readable`, show `<module-read-only-notice>` and hide their actions through
+  `readOnly(...)`; creation flows (insurance subscription) keep `hasModuleGuard`.
+- **Lot 4 — profiles and e-mails.** `TenantProfiles` (registry): ImfOrBank, CaisseWithInsurance,
+  InsuranceDistributor, CrmOnly — a preset of direct activations at `POST /api/v1/tenants`
+  (`Profile` OR `ActiveModules`, never both; `GET /api/v1/tenant-profiles`; a taken FQDN is now
+  409 `TENANT_FQDN_TAKEN`). E-mails go through M08 from Sankore.Api (the registry has no mail engine
+  and no route back): `TenantModuleNotifier` mails `TenantModules:Notifications:PlatformRecipients`
+  on a request (`tenant-module.requested`) and a deactivation (`tenant-module.deactivated`) — empty
+  list = nobody, logged; `NotifyTenantModuleDecisionsJob` (every 5 min, global) reads each tenant's
+  decisions of the last two days from the registry and tells the requester
+  (`tenant-module.approved` / `.rejected`, plus the bell). No sent-state is stored: the outbox key
+  `tenant-module.decided:{subscriptionId}` makes every later run a no-op.
+- **Categories.** `ProductCategories.ModuleOf` maps every category to its module;
+  `ProductCategory.Standard` (« Produit standard ») is the socle's, so a tenant without modules still
+  has a catalogue. `ProductCategoryModuleTests` walks the enum: a value appended without a module
+  fails it.
+
 ### Tenant parameters: three module-owned stores, one typed table
 
 M12 exposes **no generic settings store** — its only precedent for a tenant parameter is
@@ -2746,7 +2834,7 @@ the associated colleagues (`crm_task_participants`), the holder's line manager a
 (`IAdministrationModule.GetUserSupervisorsAsync`, new — falls back on the creator for an unheld
 task), a BranchManager whose team contains the holder, and the bypass roles. Anyone else: 404.
 The Administration lookups fail closed and run under `TransactionScope.Suppress`.
-`lead:task:read` / `lead:task:manage` are now default grants of the four business roles.
+`lead:task:read` / `lead:task:manage` are default grants of every non-privileged role.
 
 Criteria (`crm_task_criteria`, who ticked and when, frozen once the task is closed), comments
 (`crm_task_comments`, author-only edit, logical delete, cursor `before`), tags (`crm_task_tags`,

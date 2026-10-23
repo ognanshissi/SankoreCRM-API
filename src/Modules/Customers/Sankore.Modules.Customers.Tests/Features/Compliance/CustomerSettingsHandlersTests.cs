@@ -35,7 +35,7 @@ public sealed class CustomerSettingsHandlersTests : IDisposable
     public async Task Listing_returns_every_declared_key_even_before_the_tenant_has_been_seeded()
     {
         await using var db = _factory.CreateContext();
-        var handler = new ListCustomerSettingsHandler(db);
+        var handler = new ListCustomerSettingsHandler(db, FixedTenantModules.All);
 
         var result = await handler.Handle(new ListCustomerSettingsQuery(), CancellationToken.None);
 
@@ -53,7 +53,7 @@ public sealed class CustomerSettingsHandlersTests : IDisposable
         await using var db = _factory.CreateContext();
         await StoreAsync(db, CustomerSettingKeys.MinimumAge, "21");
 
-        var result = await new ListCustomerSettingsHandler(db)
+        var result = await new ListCustomerSettingsHandler(db, FixedTenantModules.All)
             .Handle(new ListCustomerSettingsQuery(), CancellationToken.None);
 
         var minimumAge = result.Value.Single(s => s.Key == CustomerSettingKeys.MinimumAge);
@@ -73,7 +73,7 @@ public sealed class CustomerSettingsHandlersTests : IDisposable
         await using var db = _factory.CreateContext();
         await StoreAsync(db, CustomerSettingKeys.MinimumAge, "21", valueType: "string");
 
-        var result = await new ListCustomerSettingsHandler(db)
+        var result = await new ListCustomerSettingsHandler(db, FixedTenantModules.All)
             .Handle(new ListCustomerSettingsQuery(), CancellationToken.None);
 
         result.Value.Single(s => s.Key == CustomerSettingKeys.MinimumAge)
@@ -85,7 +85,7 @@ public sealed class CustomerSettingsHandlersTests : IDisposable
     {
         await using var db = _factory.CreateContext();
 
-        var result = await new GetCustomerSettingHandler(db)
+        var result = await new GetCustomerSettingHandler(db, FixedTenantModules.All)
             .Handle(new GetCustomerSettingQuery("minimum-agee"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -97,7 +97,7 @@ public sealed class CustomerSettingsHandlersTests : IDisposable
     {
         await using var db = _factory.CreateContext();
 
-        var result = await new GetCustomerSettingHandler(db)
+        var result = await new GetCustomerSettingHandler(db, FixedTenantModules.All)
             .Handle(new GetCustomerSettingQuery("RETENTION-YEARS"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -263,11 +263,66 @@ public sealed class CustomerSettingsHandlersTests : IDisposable
         }
     }
 
+    // ── Paid module « Banking - Microfinance » ─────────────────────────────
+
+    [Fact]
+    public async Task Without_Banking_Microfinance_the_group_size_settings_are_not_listed()
+    {
+        await using var db = _factory.CreateContext();
+
+        var socle = (await new ListCustomerSettingsHandler(db, FixedTenantModules.None)
+            .Handle(new ListCustomerSettingsQuery(), CancellationToken.None)).Value;
+        var banking = (await new ListCustomerSettingsHandler(db, new FixedTenantModules(TenantModules.BankingMicrofinance))
+            .Handle(new ListCustomerSettingsQuery(), CancellationToken.None)).Value;
+
+        socle.Select(s => s.Key).Should().NotIntersectWith(CustomerSettingKeys.BankingMicrofinanceKeys);
+        socle.Select(s => s.Key).Should().Contain(CustomerSettingKeys.MinimumAge, "the socle's settings stay");
+        banking.Select(s => s.Key).Should().Contain(CustomerSettingKeys.BankingMicrofinanceKeys);
+    }
+
+    [Fact]
+    public async Task Without_Banking_Microfinance_a_group_size_setting_is_refused_on_read_and_write()
+    {
+        await using var db = _factory.CreateContext();
+        var settings = Substitute.For<ICustomerSettings>();
+
+        (await new GetCustomerSettingHandler(db, FixedTenantModules.None)
+                .Handle(new GetCustomerSettingQuery(CustomerSettingKeys.GroupMaxSizeTontine), CancellationToken.None))
+            .Error.Should().Be(TenantModuleErrors.Disabled);
+
+        (await NewUpdateHandler(db, settings, FixedTenantModules.None)
+                .Handle(new UpdateCustomerSettingCommand(CustomerSettingKeys.GroupMaxSizeTontine, "40"), CancellationToken.None))
+            .Error.Should().Be(TenantModuleErrors.Disabled);
+        await settings.DidNotReceiveWithAnyArgs().SetAsync(default, default!, default!, default, default);
+
+        (await new GetCustomerSettingHandler(db, FixedTenantModules.None)
+                .Handle(new GetCustomerSettingQuery(CustomerSettingKeys.MinimumAge), CancellationToken.None))
+            .IsSuccess.Should().BeTrue("a socle setting is never gated");
+    }
+
+    [Fact]
+    public async Task Once_Banking_Microfinance_is_deactivated_the_group_size_settings_are_readable_not_writable()
+    {
+        await using var db = _factory.CreateContext();
+        var deactivated = new FixedTenantModules { ReadOnly = [TenantModules.BankingMicrofinance] };
+        var settings = Substitute.For<ICustomerSettings>();
+
+        (await new ListCustomerSettingsHandler(db, deactivated)
+                .Handle(new ListCustomerSettingsQuery(), CancellationToken.None)).Value
+            .Select(s => s.Key).Should().Contain(CustomerSettingKeys.BankingMicrofinanceKeys);
+        (await new GetCustomerSettingHandler(db, deactivated)
+                .Handle(new GetCustomerSettingQuery(CustomerSettingKeys.GroupMaxSizeVsla), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+        (await NewUpdateHandler(db, settings, deactivated)
+                .Handle(new UpdateCustomerSettingCommand(CustomerSettingKeys.GroupMaxSizeVsla, "25"), CancellationToken.None))
+            .Error.Should().Be(TenantModuleErrors.Disabled);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private UpdateCustomerSettingHandler NewUpdateHandler(
-        CustomersDbContext db, ICustomerSettings settings) =>
-        new(db, settings, _currentUser, _clock);
+        CustomersDbContext db, ICustomerSettings settings, ITenantModules? modules = null) =>
+        new(db, settings, _currentUser, _clock, modules ?? FixedTenantModules.All);
 
     private async Task StoreAsync(
         CustomersDbContext db, string key, string value, string? valueType = null)

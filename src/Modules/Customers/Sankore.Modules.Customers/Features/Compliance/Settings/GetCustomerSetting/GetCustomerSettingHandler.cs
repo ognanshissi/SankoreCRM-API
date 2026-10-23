@@ -7,7 +7,7 @@ using Sankore.Modules.Customers.Features.Compliance.Shared;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetCustomerSettingHandler(CustomersDbContext db)
+internal sealed class GetCustomerSettingHandler(CustomersDbContext db, ITenantModules modules)
     : IRequestHandler<GetCustomerSettingQuery, Result<CustomerSettingDto>>
 {
     public async Task<Result<CustomerSettingDto>> Handle(
@@ -16,6 +16,10 @@ internal sealed class GetCustomerSettingHandler(CustomersDbContext db)
         var declared = CustomerSettingValueValidation.FindDefault(query.Key);
         if (declared is null)
             return Result.Fail<CustomerSettingDto>(CustomerErrors.SettingUnknown);
+
+        if (CustomerSettingKeys.BankingMicrofinanceKeys.Contains(declared.Key)
+            && !await modules.IsReadableAsync(TenantModules.BankingMicrofinance, ct))
+            return Result.Fail<CustomerSettingDto>(TenantModuleErrors.Disabled);
 
         var stored = await db.CustomerSettings
             .FirstOrDefaultAsync(s => s.Key == declared.Key, ct);

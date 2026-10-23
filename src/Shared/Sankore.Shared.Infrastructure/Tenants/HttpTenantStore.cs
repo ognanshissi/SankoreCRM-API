@@ -19,7 +19,7 @@ internal sealed class HttpTenantStore(
         PropertyNameCaseInsensitive = true
     };
 
-    private const string ClientName = "TenantStore";
+    private const string ClientName = TenantStoreServiceCollectionExtensions.HttpClientName;
 
     public Task<TenantInfo?> GetAsync(Guid tenantId, CancellationToken ct = default)
         => FetchAsync(

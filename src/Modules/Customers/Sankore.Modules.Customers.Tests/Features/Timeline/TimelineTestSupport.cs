@@ -123,6 +123,14 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
     /// WA-BE-07's inbound recording. Nothing in the timeline receives WhatsApp messages; it records
     /// nothing, which is the safe answer for a stub.
     /// </summary>
+    public Task<AppointmentCalendarEntry?> GetAppointmentForCalendarAsync(
+        Guid tenantId, Guid appointmentId, CancellationToken ct)
+        => Task.FromResult<AppointmentCalendarEntry?>(null);
+
+    public Task<IReadOnlyList<AppointmentCalendarEntry>> ListAppointmentsForUserAsync(
+        Guid tenantId, Guid userId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<AppointmentCalendarEntry>>([]);
+
     public Task<MessagingEventsOutcome> RecordMessagingEventsAsync(
         Guid tenantId, Guid connectionId, Guid? connectionAgencyId, MessagingEventBatch batch,
         CancellationToken ct)

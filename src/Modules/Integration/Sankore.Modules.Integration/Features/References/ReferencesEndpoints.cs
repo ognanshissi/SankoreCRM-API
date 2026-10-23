@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.References.GetReference;
+using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Area aggregator for the identifier correspondence (INT-07). One <c>MapGroup</c>, one call per
@@ -19,7 +21,9 @@ internal static class ReferencesEndpoints
 {
     internal static IEndpointRouteBuilder MapIntegrationReferencesEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("integration/references").WithTags("Integration");
+        var group = app.MapGroup("integration/references")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.BankingMicrofinance, TenantModules.Insurance);
 
         group.MapGetIntegrationReference();
 

@@ -1,5 +1,5 @@
-using Sankore.Admin.Domain;
 using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Admin.Infrastructure;
 
@@ -43,12 +43,24 @@ public sealed class DefaultTenantOptions
     public string? Id { get; set; }
 
     /// <summary>
-    /// NOT persisted — <c>Tenant.ApplicationModulesList</c> is a public field, and EF maps
-    /// properties, so it is absent from the model snapshot. Kept because the seeder has always
-    /// filled it and a future mapping would want these values.
+    /// Paid modules the seeded tenant receives, as comma-separated <see cref="TenantModules"/>
+    /// codes (<c>DefaultTenant__ActiveModules</c>); empty grants none. Granted once, when the
+    /// seeder creates the tenant, as direct activations — never re-applied to an existing tenant,
+    /// so a module its administrator switched off stays off across redeploys. Both by default:
+    /// the seeded tenant is the one every feature is developed and demonstrated on.
+    ///
+    /// <para>
+    /// A string and not a list: the configuration binder APPENDS to a list that already holds
+    /// defaults, so an environment naming one module would still have yielded both.
+    /// </para>
     /// </summary>
-    public List<string> Modules { get; set; } =
-        [ApplicationModules.Lead, ApplicationModules.Customer, ApplicationModules.Loan];
+    public string ActiveModules { get; set; } = string.Join(',', TenantModules.All);
+
+    /// <summary>The configured codes, trimmed and de-duplicated; unknown codes are kept for reporting.</summary>
+    public IReadOnlyList<string> ActiveModuleCodes =>
+        ActiveModules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
     internal const string DefaultName = "Sankore";
 

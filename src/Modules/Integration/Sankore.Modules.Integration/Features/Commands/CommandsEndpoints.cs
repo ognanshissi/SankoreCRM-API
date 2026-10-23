@@ -7,6 +7,8 @@ using Sankore.Modules.Integration.Features.Commands.CancelCommand;
 using Sankore.Modules.Integration.Features.Commands.GetCommand;
 using Sankore.Modules.Integration.Features.Commands.ListCommands;
 using Sankore.Modules.Integration.Features.Commands.ReplayCommand;
+using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Area aggregator: one <c>MapGroup</c>, one call per slice. Adding a feature touches its own
@@ -22,7 +24,10 @@ internal static class CommandsEndpoints
 {
     internal static IEndpointRouteBuilder MapIntegrationCommandsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("integration/commands").WithTags("Integration");
+        // Commands go to a core banking system or an insurer: open with either paid module.
+        var group = app.MapGroup("integration/commands")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.BankingMicrofinance, TenantModules.Insurance);
 
         group.MapListIntegrationCommands();
         group.MapGetIntegrationCommand();

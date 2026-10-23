@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.RelayAgents.ListRelayAgents;
 using Sankore.Modules.Integration.Features.RelayAgents.RegisterRelayAgent;
 using Sankore.Modules.Integration.Features.RelayAgents.RevokeRelayAgent;
+using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Area aggregator for the routes a HUMAN calls (INT-27). One MapGroup, one call per slice.
@@ -32,7 +34,11 @@ internal static class RelayAgentsEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        var group = app.MapGroup("integration/relay-agents").WithTags("Integration");
+        // The operator routes only: the agent's own enrolment and heartbeat stay open, a relay
+        // already deployed must keep reaching us whatever the tenant subscribes to.
+        var group = app.MapGroup("integration/relay-agents")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.BankingMicrofinance, TenantModules.Insurance);
 
         // Criterion 3's read half: last contact, version, state. No thumbprint, no token.
         group.MapListRelayAgents();

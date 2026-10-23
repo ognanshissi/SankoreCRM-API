@@ -96,6 +96,17 @@ public static class CustomerSettingKeys
     ];
 
     /// <summary>
+    /// The group-size settings: they govern client groups, which belong to the « Banking -
+    /// Microfinance » paid module. Without it they are hidden and refused; once DEACTIVATED they
+    /// are listed and readable but refused on write. The stored values are kept either way.
+    /// </summary>
+    public static readonly IReadOnlySet<string> BankingMicrofinanceKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        GroupMinSizeSolidarity, GroupMaxSizeSolidarity, GroupMinSizeTontine, GroupMaxSizeTontine,
+        GroupMinSizeVsla, GroupMaxSizeVsla, SolidaritySingleGroupRule,
+    };
+
+    /// <summary>
     /// The same defaults keyed by setting key. <see cref="Defaults"/> stays the ordered
     /// list because the admin screen renders it in that order; this is the lookup the
     /// settings service and the seeder need. Both views share one declaration, so a new

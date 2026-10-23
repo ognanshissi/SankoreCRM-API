@@ -9,11 +9,17 @@ namespace Sankore.Modules.Administration.Features.Products.CreateProduct;
 internal sealed class CreateProductHandler(
     AdministrationDbContext db,
     ITenantContext tenant,
-    ProductCatalogCache catalogCache
+    ProductCatalogCache catalogCache,
+    ITenantModules modules
 ) : IRequestHandler<CreateProductCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateProductCommand request, CancellationToken ct)
     {
+        // A paid module closes the creation of products in its categories, not the use of those
+        // already in the catalogue.
+        if (!await modules.AllowsCategoryAsync(request.Category, ct))
+            return Result.Fail<Guid>(TenantModuleErrors.CategoryDisabled);
+
         var codeNormalized = request.Code.ToUpperInvariant();
         var exists = await db.ProductSpecialities
             .AnyAsync(p => p.Code == codeNormalized, ct);

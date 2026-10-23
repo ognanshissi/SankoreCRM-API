@@ -10,6 +10,8 @@ public sealed class AdminDbContext(DbContextOptions<AdminDbContext> options): Db
     public DbSet<TenantDomain> TenantDomains => Set<TenantDomain>();
     public DbSet<PlatformAdmin> PlatformAdmins => Set<PlatformAdmin>();
     public DbSet<PlatformAdminRefreshToken> PlatformAdminRefreshTokens => Set<PlatformAdminRefreshToken>();
+    public DbSet<ModuleDefinition> ModuleDefinitions => Set<ModuleDefinition>();
+    public DbSet<TenantModuleSubscription> TenantModuleSubscriptions => Set<TenantModuleSubscription>();
 
     /// <summary>
     /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.

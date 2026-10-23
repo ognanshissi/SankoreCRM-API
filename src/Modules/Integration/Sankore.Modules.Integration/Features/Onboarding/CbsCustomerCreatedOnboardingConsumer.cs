@@ -56,6 +56,18 @@ public sealed class CbsCustomerCreatedOnboardingConsumer(
         using var scope = scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
 
+        // A NEW customer reaches the core banking system only while the tenant runs « Banking -
+        // Microfinance ». Checked before the inbox claims the message. A skipped onboarding is not
+        // replayed when the module comes back: the decision belongs to the moment of validation.
+        if (!await sp.GetRequiredService<ITenantModules>()
+                .IsEnabledAsync(evt.TenantId, TenantModules.BankingMicrofinance, ct))
+        {
+            logger.LogInformation(
+                "Banking - Microfinance is off for tenant {TenantId}: no KYC tier is pushed and no account is opened for customer {CustomerId}",
+                evt.TenantId, evt.CrmCustomerId);
+            return;
+        }
+
         var inbox = sp.GetRequiredService<IIntegrationInboxGuard>();
 
         if (!await inbox.TryBeginAsync(

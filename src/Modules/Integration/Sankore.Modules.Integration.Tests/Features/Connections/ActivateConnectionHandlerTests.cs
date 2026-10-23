@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Integration.Features.Connections.ActivateConnection;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Modules.Integration.Tests.TestSupport;
+using Sankore.Shared.Kernel;
 using Xunit;
 
 public sealed class ActivateConnectionHandlerTests : IDisposable
@@ -15,9 +16,10 @@ public sealed class ActivateConnectionHandlerTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    private ActivateConnectionHandler Build(Sankore.Modules.Integration.Infrastructure.IntegrationDbContext db)
+    private ActivateConnectionHandler Build(Sankore.Modules.Integration.Infrastructure.IntegrationDbContext db,
+        ITenantModules? modules = null)
         => new(db, ConnectionsTestHarness.User(Tenant), ConnectionsTestHarness.Clock(),
-            ConnectionsTestHarness.Log<ActivateConnectionHandler>());
+            ConnectionsTestHarness.Log<ActivateConnectionHandler>(), modules ?? FixedTenantModules.All);
 
     [Fact]
     public async Task Activation_without_a_passed_health_check_is_refused()
@@ -70,6 +72,21 @@ public sealed class ActivateConnectionHandlerTests : IDisposable
 
         await using var read = _factory.CreateContext();
         (await read.Connections.SingleAsync(c => c.Id == connection.Id)).IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_core_banking_connection_cannot_be_switched_on_once_the_module_is_off()
+    {
+        await using var seed = _factory.CreateContext();
+        var connection = ConnectionsTestHarness.Seed(seed, Tenant, healthy: true);
+
+        await using var db = _factory.CreateContext();
+        var result = await Build(db, FixedTenantModules.None).Handle(
+            new ActivateConnectionCommand(connection.Id), CancellationToken.None);
+
+        result.Error.Should().Be(TenantModuleErrors.Disabled);
+        await using var read = _factory.CreateContext();
+        (await read.Connections.SingleAsync(c => c.Id == connection.Id)).IsActive.Should().BeFalse();
     }
 
     [Fact]

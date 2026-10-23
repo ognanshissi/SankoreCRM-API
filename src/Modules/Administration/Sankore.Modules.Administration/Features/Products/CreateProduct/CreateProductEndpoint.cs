@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Products.CreateProduct;
@@ -18,6 +19,7 @@ internal static class CreateProductEndpoint
             .RequireAuthorization(Permissions.CanCreateProduct.Code)
             .Produces<Guid>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden)
             .WithOpenApi()
             .WithTenantHeader();
 
@@ -33,8 +35,11 @@ internal static class CreateProductEndpoint
             req.Name, req.Code, req.Category,
             req.Description, req.ParametersJson, req.EffectiveFrom, req.CustomFields), ct);
 
-        return result.IsSuccess
-            ? Results.Created($"/api/v1/products/{result.Value}", result.Value)
+        if (result.IsSuccess)
+            return Results.Created($"/api/v1/products/{result.Value}", result.Value);
+
+        return result.Error == TenantModuleErrors.CategoryDisabled
+            ? TenantModuleResults.CategoryDisabled(req.Category)
             : Results.Problem(result.Error, statusCode: StatusCodes.Status400BadRequest);
     }
 }

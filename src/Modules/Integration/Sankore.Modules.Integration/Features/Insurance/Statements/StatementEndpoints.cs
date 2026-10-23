@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.Insurance.Statements.FinaliseStatement;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// ASS-10: reading a month's bordereau, exporting it, and closing it.
@@ -24,7 +25,9 @@ internal static class StatementEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        var group = app.MapGroup("integration/insurance/statements").WithTags("Integration");
+        var group = app.MapGroup("integration/insurance/statements")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.Insurance);
 
         group.MapGet(string.Empty, List)
             .WithName("ListInsurerStatements")

@@ -66,6 +66,7 @@ public sealed class CustomersModuleCompositionTests
         // Singleton in production (CachedTenantStore), so keep the lifetime honest here:
         // a job resolved from the root container must be able to depend on it.
         services.AddSingleton(_ => Substitute.For<ITenantStore>());
+        services.AddSingleton<ITenantModules>(FixedTenantModules.All);
         services.AddSingleton(_ => Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>());
         services.AddSingleton(_ => Substitute.For<Hangfire.IBackgroundJobClient>());
         services.AddSingleton(_ => Substitute.For<IBus>());

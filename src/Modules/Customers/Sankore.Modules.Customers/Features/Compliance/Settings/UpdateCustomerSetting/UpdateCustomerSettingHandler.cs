@@ -17,7 +17,8 @@ internal sealed class UpdateCustomerSettingHandler(
     CustomersDbContext db,
     ICustomerSettings settings,
     ICurrentUser currentUser,
-    TimeProvider clock
+    TimeProvider clock,
+    ITenantModules modules
 ) : IRequestHandler<UpdateCustomerSettingCommand, Result<CustomerSettingDto>>
 {
     public async Task<Result<CustomerSettingDto>> Handle(
@@ -26,6 +27,10 @@ internal sealed class UpdateCustomerSettingHandler(
         var declared = CustomerSettingValueValidation.FindDefault(command.Key);
         if (declared is null)
             return Result.Fail<CustomerSettingDto>(CustomerErrors.SettingUnknown);
+
+        if (CustomerSettingKeys.BankingMicrofinanceKeys.Contains(declared.Key)
+            && !await modules.IsEnabledAsync(TenantModules.BankingMicrofinance, ct))
+            return Result.Fail<CustomerSettingDto>(TenantModuleErrors.Disabled);
 
         // Defensive re-check: the validator already refused these, but a job or another module
         // can dispatch the command directly, outside the HTTP pipeline.

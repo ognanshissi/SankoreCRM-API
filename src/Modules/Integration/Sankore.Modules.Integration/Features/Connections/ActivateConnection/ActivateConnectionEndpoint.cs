@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
 internal static class ActivateConnectionEndpoint
@@ -49,6 +50,8 @@ internal static class ActivateConnectionEndpoint
 
         return result.Error switch
         {
+            // The module follows from the family, which only the handler read.
+            TenantModuleErrors.Disabled => TenantModuleResults.Disabled([]),
             IntegrationErrors.ConnectionNotFound => Results.NotFound(new { error = result.Error }),
             IntegrationErrors.CoreBankingConnectionAlreadyActive
                 or IntegrationErrors.TelephonyConnectionAlreadyActive

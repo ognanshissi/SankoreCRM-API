@@ -16,7 +16,17 @@ public record TenantResponse(
     DateTimeOffset? TrialExpiresAt,
     DateTimeOffset? BlockedAt,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    /// <summary>
+    /// Codes of the paid modules in force (<c>TenantModules</c>). Sankore.Api reads it into
+    /// <c>TenantInfo.ActiveModules</c> by name, so the name is part of the contract.
+    /// </summary>
+    IReadOnlyList<string> ActiveModules,
+    /// <summary>
+    /// Modules the tenant deactivated and has not switched on again: their screens stay open for
+    /// CONSULTATION (product owner, 2026-10-23). Read into <c>TenantInfo.ReadOnlyModules</c> by name.
+    /// </summary>
+    IReadOnlyList<string> ReadOnlyModules);
 
 internal sealed class GetTenantHandler(AdminDbContext db) : IRequestHandler<GetTenantQuery, TenantResponse?>
 {
@@ -25,10 +35,7 @@ internal sealed class GetTenantHandler(AdminDbContext db) : IRequestHandler<GetT
         return await db.Tenants
             .AsNoTracking()
             .Where(t => t.Id == request.Id)
-            .Select(t => new TenantResponse(
-                t.Id, t.Name, t.RootUserEmail, t.Fqdn,
-                t.IsActive, t.IsMaintenance, t.TrialExpiresAt, t.BlockedAt,
-                t.CreatedAt, t.UpdatedAt))
+            .SelectResponse(db)
             .FirstOrDefaultAsync(ct);
     }
 }

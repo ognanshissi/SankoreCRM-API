@@ -1106,6 +1106,12 @@ if (emitOpenApiTo is null) {
         // would silently round every configured interval up to itself.
         // Connected agendas (lot 2): every user's ticked agendas at most 15 minutes behind, until the
         // providers' push notifications are wired.
+        // Paid modules (lot 4): the registry decides, this host tells the requester.
+        AddOrUpdate<Sankore.Modules.Administration.Features.PaidModules.NotifyTenantModuleDecisionsJob>(
+            Sankore.Modules.Administration.Features.PaidModules.NotifyTenantModuleDecisionsJob.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Administration.Features.PaidModules.NotifyTenantModuleDecisionsJob.CronExpression);
+
         AddOrUpdate<Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator>(
             Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator.RecurringJobId,
             job => job.ExecuteAsync(),

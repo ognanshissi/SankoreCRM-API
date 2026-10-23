@@ -46,10 +46,7 @@ internal sealed class GetTenantByFqdnHandler(AdminDbContext db)
         return await db.Tenants
             .AsNoTracking()
             .Where(t => t.Id == tenantId)
-            .Select(t => new TenantResponse(
-                t.Id, t.Name, t.RootUserEmail, t.Fqdn,
-                t.IsActive, t.IsMaintenance, t.TrialExpiresAt, t.BlockedAt,
-                t.CreatedAt, t.UpdatedAt))
+            .SelectResponse(db)
             .FirstOrDefaultAsync(ct);
     }
 }

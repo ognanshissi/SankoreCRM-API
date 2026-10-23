@@ -27,7 +27,7 @@ namespace Sankore.Shared.Infrastructure.Tenants;
 internal sealed class CachedTenantStore(
     ITenantStore inner,
     IDistributedCache cache,
-    IOptions<TenantStoreOptions> options) : ITenantStore
+    IOptions<TenantStoreOptions> options) : ITenantStore, ITenantCacheInvalidator
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -86,4 +86,11 @@ internal sealed class CachedTenantStore(
 
     public Task<IReadOnlyList<TenantInfo>> GetAllActiveAsync(CancellationToken ct = default)
         => inner.GetAllActiveAsync(ct);
+
+    /// <summary>
+    /// Only the id entry: it is the one holding a status. The FQDN entry maps an origin to an
+    /// id, which a module change does not move.
+    /// </summary>
+    public Task InvalidateAsync(Guid tenantId, CancellationToken ct = default)
+        => cache.RemoveAsync(IdKey(tenantId), ct);
 }

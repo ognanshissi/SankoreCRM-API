@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Sankore.Admin.Domain;
 using Sankore.Admin.Features.Auth;
+using Sankore.Admin.Features.Modules;
 using Sankore.Admin.Features.TenantDomains;
 using Sankore.Admin.Features.Tenants;
 using Sankore.Admin.Infrastructure;
@@ -128,6 +129,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 app.MapAuthEndpoints();
 app.MapTenantEndpoints();
 app.MapTenantDomainEndpoints();
+app.MapModuleEndpoints();
 
 if (emitOpenApiTo is not null)
 {

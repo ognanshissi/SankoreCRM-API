@@ -20,4 +20,13 @@ public sealed record CurrentUserDto(
     string DefaultLanguage,
     /// <summary>L'administrateur qui agit sous cette identité, ou null hors usurpation.</summary>
     Guid? ImpersonatorId = null,
-    string? ImpersonatorName = null);
+    string? ImpersonatorName = null,
+    /// <summary>
+    /// Codes of the tenant's paid modules in force (<c>BankingMicrofinance</c>, <c>Insurance</c>).
+    /// The front-end shows a module's screens only when its code is here. Carried with the user
+    /// and not on the public tenant context, which anyone knowing the domain can read: which
+    /// modules an institution pays for is not public.
+    /// </summary>
+    IReadOnlyList<string>? ActiveModules = null,
+    /// <summary>Modules deactivated by the tenant: their screens stay open for consultation only.</summary>
+    IReadOnlyList<string>? ReadOnlyModules = null);

@@ -9,7 +9,7 @@ using Sankore.Modules.Notifications.Domain;
 /// Runs at startup inside <see cref="NotificationsModule.InitializeAsync"/>.
 /// Idempotent — only inserts templates that do not yet exist.
 /// </summary>
-internal static class NotificationsSeeder
+internal static partial class NotificationsSeeder
 {
     public static async Task SeedAsync(NotificationsDbContext db, ILogger logger, CancellationToken ct = default)
     {
@@ -42,6 +42,7 @@ internal static class NotificationsSeeder
         await SeedAppointmentCancelledAsync(db, logger, ct);
         await SeedAppointmentRescheduledAsync(db, logger, ct);
         await SeedWhatsAppTemplatesAsync(db, logger, ct);
+        await SeedTenantModuleTemplatesAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 

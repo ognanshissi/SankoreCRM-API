@@ -8,6 +8,7 @@ using Sankore.Modules.Integration.Features.Insurance.Claims.DeclareClaim;
 using Sankore.Modules.Integration.Features.Insurance.Claims.RecordIndemnity;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// ASS-09: declaring a loss, following the dossier, and recording the indemnity.
@@ -30,7 +31,9 @@ internal static class ClaimEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        var group = app.MapGroup("integration/insurance/claims").WithTags("Integration");
+        var group = app.MapGroup("integration/insurance/claims")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.Insurance);
 
         group.MapPost(string.Empty, Declare)
             .WithName("DeclareInsuranceClaim")

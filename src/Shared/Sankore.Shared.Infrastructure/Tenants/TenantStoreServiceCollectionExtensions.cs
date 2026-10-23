@@ -8,6 +8,12 @@ namespace Sankore.Shared.Infrastructure.Tenants;
 public static class TenantStoreServiceCollectionExtensions
 {
     /// <summary>
+    /// The named client that reaches the registry (Sankore.Admin): base address and service key
+    /// already set. Reused by whoever writes to the registry on a tenant's behalf.
+    /// </summary>
+    public const string HttpClientName = "TenantStore";
+
+    /// <summary>
     /// Registers the external tenant store, its in-memory cache decorator,
     /// and the named HttpClient. Call once from Program.cs.
     ///
@@ -19,7 +25,7 @@ public static class TenantStoreServiceCollectionExtensions
     {
         services.Configure<TenantStoreOptions>(config.GetSection(TenantStoreOptions.Section));
 
-        services.AddHttpClient("TenantStore", (sp, client) =>
+        services.AddHttpClient(HttpClientName, (sp, client) =>
         {
             var opts = config.GetSection(TenantStoreOptions.Section).Get<TenantStoreOptions>()!;
             client.BaseAddress = new Uri(opts.BaseUrl.TrimEnd('/') + "/");
@@ -35,7 +41,13 @@ public static class TenantStoreServiceCollectionExtensions
                 sp.GetRequiredService<HttpTenantStore>(),
                 sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>(),
                 sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<TenantStoreOptions>>()));
+        // Resolved through ITenantStore, not CachedTenantStore, so a host or a test that swaps the
+        // store keeps a working (no-op) invalidator instead of an invalid cast.
+        services.AddSingleton<ITenantCacheInvalidator>(sp =>
+            sp.GetRequiredService<ITenantStore>() as ITenantCacheInvalidator ?? NoTenantCache.Instance);
 
+        // Paid modules, read off the cached TenantInfo. Scoped: it follows the request's tenant.
+        services.AddScoped<ITenantModules, TenantModulesService>();
 
         return services;
     }

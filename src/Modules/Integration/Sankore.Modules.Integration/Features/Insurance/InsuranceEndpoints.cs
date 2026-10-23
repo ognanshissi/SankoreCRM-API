@@ -16,6 +16,8 @@ using Sankore.Modules.Integration.Features.Insurance.QuoteInsuranceProduct;
 using Sankore.Modules.Integration.Features.Insurance.Statements;
 using Sankore.Modules.Integration.Features.Insurance.SubscribePolicy;
 using Sankore.Modules.Integration.Features.Insurance.UpdateInsuranceProduct;
+using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Area aggregator of the insurance family (ASS-03 for now; ASS-04 → ASS-10 add their slices and
@@ -34,6 +36,13 @@ using Sankore.Modules.Integration.Features.Insurance.UpdateInsuranceProduct;
 /// Tagged <c>Integration</c>, like every other area of the module: the front-end generator groups
 /// its client by tag, and a second tag would split one module's client in two.
 /// </para>
+///
+/// <para>
+/// Every insurance group (products here, subscriptions, claims and their pieces, statements,
+/// complaints in their own aggregators) answers 403 TENANT_MODULE_DISABLED without the
+/// « Assurance » paid module. The background jobs are not gated: premiums, complaint deadlines and
+/// evidence purges of contracts already running go on (product owner, 2026-10-23).
+/// </para>
 /// </summary>
 internal static class InsuranceEndpoints
 {
@@ -43,7 +52,8 @@ internal static class InsuranceEndpoints
 
         var products = app
             .MapGroup("integration/insurance/products")
-            .WithTags("Integration");
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.Insurance);
 
         products.MapListInsuranceProducts();
         products.MapGetInsuranceProduct();

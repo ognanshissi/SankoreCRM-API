@@ -79,6 +79,9 @@ internal sealed class OnboardingTestContext : IDisposable
 
     internal IKycModule Kyc { get; }
 
+    /// <summary>The tenant's paid modules; every module unless a test switches them off.</summary>
+    internal ITenantModules Modules { get; set; } = FixedTenantModules.All;
+
     private readonly string _databaseName = $"onboarding-{Guid.NewGuid()}";
     private readonly ServiceProvider _provider;
     private readonly CommandsTestHarness.FixedClock _clock = new(Now);
@@ -336,6 +339,8 @@ internal sealed class OnboardingTestContext : IDisposable
         services.AddScoped<CbsCustomerPayloadSource>();
         services.AddSingleton(Customers);
         services.AddSingleton(Kyc);
+        // Transient over a property, so a test can switch the modules after the provider is built.
+        services.AddTransient(_ => Modules);
         services.AddScoped<IIntegrationModule, IntegrationModuleFacade>();
 
         // Singleton and not scoped, unlike production: the chain spans several scopes and the

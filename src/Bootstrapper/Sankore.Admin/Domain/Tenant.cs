@@ -8,8 +8,6 @@ public class Tenant
     public string Fqdn { get; private set; } = null!;
     public bool IsActive { get; private set; }
 
-    public List<string> ApplicationModulesList = []; // use ApplicationL
-    
     public DateTimeOffset? TrialExpiresAt { get; private set; }
     public bool IsMaintenance { get; private set; }
     public DateTimeOffset? BlockedAt { get; private set; }

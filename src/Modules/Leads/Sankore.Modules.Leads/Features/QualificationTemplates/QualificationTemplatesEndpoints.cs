@@ -18,6 +18,7 @@ using Sankore.Modules.Leads.Features.QualificationTemplates.PublishQualification
 using Sankore.Modules.Leads.Features.QualificationTemplates.UnarchiveQualificationTemplate;
 using Sankore.Modules.Leads.Features.QualificationTemplates.UpdateQualificationTemplate;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
 public static class QualificationTemplatesEndpoints
@@ -134,6 +135,8 @@ public static class QualificationTemplatesEndpoints
             Questions:   req.Questions,
             Sections:    req.Sections), ct);
 
+        if (result.Error == TenantModuleErrors.CategoryDisabled)
+            return TenantModuleResults.CategoryDisabled(req.ProductCategory);
         if (!result.IsSuccess)
             return Results.Problem(title: "Create template failed", detail: result.Error, statusCode: 422);
 
@@ -193,7 +196,9 @@ public static class QualificationTemplatesEndpoints
             ? Results.NoContent()
             : result.Error is "TEMPLATE_NOT_FOUND"
                 ? Results.NotFound(new { error = result.Error })
-                : Results.Problem(title: "Update template failed", detail: result.Error, statusCode: 422);
+                : result.Error == TenantModuleErrors.CategoryDisabled
+                    ? TenantModuleResults.CategoryDisabled(req.ProductCategory)
+                    : Results.Problem(title: "Update template failed", detail: result.Error, statusCode: 422);
     }
 
     private static async Task<IResult> PublishTemplate(
@@ -222,7 +227,9 @@ public static class QualificationTemplatesEndpoints
 
         return result.Error is "TEMPLATE_NOT_FOUND"
             ? Results.NotFound(new { error = result.Error })
-            : Results.Problem(title: "Duplicate template failed", detail: result.Error, statusCode: 422);
+            : result.Error == TenantModuleErrors.CategoryDisabled
+                ? TenantModuleResults.CategoryDisabled()
+                : Results.Problem(title: "Duplicate template failed", detail: result.Error, statusCode: 422);
     }
 
     private static async Task<IResult> UnarchiveTemplate(

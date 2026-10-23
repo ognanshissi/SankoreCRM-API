@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Products.LinkProductToCbs;
@@ -14,8 +15,9 @@ internal static class LinkProductToCbsEndpoint
         app.MapPost("{id:guid}/link-cbs", Handle)
             .WithName("LinkProductToCbs")
             .WithSummary("Link a CRM product to a CBS product")
-            .WithDescription("Associates the CRM product with an external Core Banking System product identifier. Audited separately from general product updates.")
+            .WithDescription("Associates the CRM product with an external Core Banking System product identifier. Audited separately from general product updates. Requires the Banking - Microfinance module.")
             .RequireAuthorization(Permissions.CanUpdateProduct.Code)
+            .RequireTenantModule(TenantModules.BankingMicrofinance)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity)

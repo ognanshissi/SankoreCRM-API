@@ -21,10 +21,7 @@ internal sealed class ListTenantsHandler(AdminDbContext db) : IRequestHandler<Li
         return await query
             .AsNoTracking()
             .OrderBy(t => t.Name)
-            .Select(t => new TenantResponse(
-                t.Id, t.Name, t.RootUserEmail, t.Fqdn,
-                t.IsActive, t.IsMaintenance, t.TrialExpiresAt, t.BlockedAt,
-                t.CreatedAt, t.UpdatedAt))
+            .SelectResponse(db)
             .ToListAsync(ct);
     }
 }

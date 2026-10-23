@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Shared.Infrastructure.Extensions;
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
 internal static class CreateConnectionEndpoint
@@ -56,6 +57,9 @@ internal static class CreateConnectionEndpoint
                 Name: req.Name,
                 Settings: req.Settings),
             ct);
+
+        if (result.Error == TenantModuleErrors.Disabled)
+            return TenantModuleResults.Disabled([ConnectionFamilyModules.RequiredModule(req.Family)!]);
 
         return result.IsSuccess
             ? Results.Created(

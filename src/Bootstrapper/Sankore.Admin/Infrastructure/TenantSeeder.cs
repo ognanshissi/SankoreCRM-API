@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Sankore.Admin.Domain;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Admin.Infrastructure;
 
@@ -84,11 +85,9 @@ internal static class TenantSeeder
         if (pinnedId is { } pinned)
             SetId(tenant, pinned);
 
-        // Not persisted — see DefaultTenantOptions.Modules.
-        tenant.ApplicationModulesList.AddRange(options.Modules);
-
         db.Tenants.Add(tenant);
         db.TenantDomains.Add(TenantDomain.Create(tenant.Id, fqdn, isPrimary: true));
+        AddModules(db, tenant.Id, options, logger);
 
         await db.SaveChangesAsync(ct);
 
@@ -148,6 +147,30 @@ internal static class TenantSeeder
 
         logger.LogInformation(
             "TenantSeeder: tenant {TenantId} already provisioned for {Fqdn}", tenant.Id, fqdn);
+    }
+
+    /// <summary>
+    /// Only on creation: an existing tenant's modules belong to its administrator and to the
+    /// platform, and a redeploy must never switch back on a module someone switched off.
+    /// </summary>
+    private static void AddModules(AdminDbContext db, Guid tenantId, DefaultTenantOptions options, ILogger logger)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var code in options.ActiveModuleCodes)
+        {
+            if (!TenantModules.IsKnown(code))
+            {
+                logger.LogWarning(
+                    "TenantSeeder: {Section}__ActiveModules names {Module}, which is not a module "
+                    + "({Known}). It was ignored.",
+                    DefaultTenantOptions.Section, code, string.Join(", ", TenantModules.All));
+                continue;
+            }
+
+            db.TenantModuleSubscriptions.Add(TenantModuleSubscription.ActivateDirect(
+                tenantId, code, adminId: null, ModuleSubscriptionSource.Direct, now));
+        }
     }
 
     // Sets the private Id property via reflection — used only here to pin the seed tenant ID.

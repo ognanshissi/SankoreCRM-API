@@ -6,6 +6,7 @@ using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Features.Connections.CreateConnection;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Modules.Integration.Tests.TestSupport;
+using Sankore.Shared.Kernel;
 using Xunit;
 
 public sealed class CreateConnectionHandlerTests : IDisposable
@@ -16,9 +17,10 @@ public sealed class CreateConnectionHandlerTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    private CreateConnectionHandler Build(Sankore.Modules.Integration.Infrastructure.IntegrationDbContext db)
+    private CreateConnectionHandler Build(Sankore.Modules.Integration.Infrastructure.IntegrationDbContext db,
+        ITenantModules? modules = null)
         => new(db, ConnectionsTestHarness.User(Tenant), ConnectionsTestHarness.Clock(),
-            ConnectionsTestHarness.Log<CreateConnectionHandler>());
+            ConnectionsTestHarness.Log<CreateConnectionHandler>(), modules ?? FixedTenantModules.All);
 
     [Fact]
     public async Task A_connection_is_created_for_the_callers_tenant()
@@ -39,6 +41,37 @@ public sealed class CreateConnectionHandlerTests : IDisposable
         stored.TenantId.Should().Be(Tenant);
         stored.Name.Should().Be("CBS principal");
         stored.Settings.Should().BeOfType<TemenosSettings>();
+    }
+
+    [Fact]
+    public async Task A_tenant_with_Insurance_alone_cannot_create_a_core_banking_connection()
+    {
+        // Product owner, 2026-10-23: no core banking connection without Banking - Microfinance,
+        // not even to debit insurance premiums.
+        await using var db = _factory.CreateContext();
+
+        var result = await Build(db, new FixedTenantModules(TenantModules.Insurance)).Handle(
+            new CreateConnectionCommand(
+                IntegrationFamily.CoreBanking, IntegrationKind.Temenos, IntegrationMode.Api,
+                "CBS principal", ConnectionsTestHarness.Temenos()),
+            CancellationToken.None);
+
+        result.Error.Should().Be(TenantModuleErrors.Disabled);
+        (await db.Connections.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_tenant_on_the_socle_alone_still_connects_its_telephony()
+    {
+        await using var db = _factory.CreateContext();
+
+        var result = await Build(db, FixedTenantModules.None).Handle(
+            new CreateConnectionCommand(
+                IntegrationFamily.Telephony, IntegrationKind.Ringover, IntegrationMode.Api,
+                "Standard", new RingoverSettings { ApiHost = "public-api.ringover.com" }),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue("telephony is socle, never a module");
     }
 
     [Fact]

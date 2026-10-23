@@ -31,6 +31,16 @@ public enum ProductCategory
 
     /// <summary>A sight/transaction account (BNF-B-06). Appended, so no stored value moves.</summary>
     CurrentAccount,
+
+    /// <summary>
+    /// « Produit standard » — the socle's category, belonging to no paid module, so a tenant
+    /// running on the socle alone still has a catalogue. It is not the <c>Other</c> the remark
+    /// above refuses: every question a category answers has an explicit answer here — no
+    /// household and no designation (<c>BeneficiaryPolicy.None</c>), the tenant's default KYC
+    /// tier, no integration system, the generic qualification template, never the CIMA card
+    /// guard. Appended, so no stored value moves.
+    /// </summary>
+    Standard,
 }
 /// <summary>
 /// Which product categories are INSURANCE, in one place.
@@ -80,4 +90,41 @@ public static class ProductCategories
 
     /// <summary>The typed overload.</summary>
     public static bool IsInsurance(ProductCategory category) => Insurance.Contains(category);
+
+    /// <summary>
+    /// The categories of the « Banking - Microfinance » module: banking products and the
+    /// microfinance ones (tontine, group credit, agriculture), by the product owner's decision.
+    /// </summary>
+    public static readonly IReadOnlyList<ProductCategory> BankingMicrofinance =
+    [
+        ProductCategory.Loan,
+        ProductCategory.Savings,
+        ProductCategory.CurrentAccount,
+        ProductCategory.Tontine,
+        ProductCategory.GroupCredit,
+        ProductCategory.Agriculture,
+    ];
+
+    /// <summary>
+    /// The paid module a category belongs to (<see cref="TenantModules"/>), or null for
+    /// <see cref="ProductCategory.Standard"/>, which is socle. Throws for a category attached to
+    /// no module: a value appended to the enum must be placed in a module or declared socle, and
+    /// <c>ProductCategoryModuleTests</c> walks every value so the omission fails a test, not a
+    /// request.
+    /// </summary>
+    public static string? ModuleOf(ProductCategory category) => category switch
+    {
+        ProductCategory.Standard => null,
+        _ when Insurance.Contains(category) => TenantModules.Insurance,
+        _ when BankingMicrofinance.Contains(category) => TenantModules.BankingMicrofinance,
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category,
+            "This category belongs to no module and is not the socle's Standard."),
+    };
+
+    /// <summary>
+    /// Whether a tenant running <paramref name="activeModules"/> may create something in
+    /// <paramref name="category"/>. Standard always; any other only with its module.
+    /// </summary>
+    public static bool IsOpenWith(ProductCategory category, IReadOnlyCollection<string> activeModules)
+        => ModuleOf(category) is not { } module || activeModules.Contains(module);
 }

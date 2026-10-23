@@ -2,6 +2,8 @@ namespace Sankore.Modules.Customers.Features.Compliance.Shared;
 
 using Microsoft.AspNetCore.Http;
 using Sankore.Modules.Customers.Domain;
+using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Single mapping from this zone's error codes to HTTP status codes.
@@ -21,6 +23,10 @@ internal static class ComplianceHttp
 
         CustomerErrors.SettingUnknown
             => Results.NotFound(new { error }),
+
+        // Only the group-size settings refuse this way.
+        TenantModuleErrors.Disabled
+            => TenantModuleResults.Disabled([TenantModules.BankingMicrofinance]),
 
         CustomerErrors.RetentionNotReached
             or CustomerErrors.KycRetentionNotCleared

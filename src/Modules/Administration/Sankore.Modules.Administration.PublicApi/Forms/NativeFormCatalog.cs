@@ -133,6 +133,7 @@ public static class NativeFormCatalog
         ProductCategory.GroupCredit => "Crédit de groupe",
         ProductCategory.Agriculture => "Agriculture",
         ProductCategory.CurrentAccount => "Compte courant",
+        ProductCategory.Standard => "Produit standard",
         _ => category.ToString(),
     };
 

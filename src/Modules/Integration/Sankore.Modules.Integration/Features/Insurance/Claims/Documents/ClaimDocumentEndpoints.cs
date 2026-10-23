@@ -12,6 +12,7 @@ using Sankore.Modules.Integration.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// The <i>pièces de sinistre</i> of one dossier: deposit, list, read back.
@@ -35,7 +36,9 @@ internal static class ClaimDocumentEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        var group = app.MapGroup("integration/insurance/claims").WithTags("Integration");
+        var group = app.MapGroup("integration/insurance/claims")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.Insurance);
 
         group.MapPost("{claimId:guid}/documents", Upload)
             .WithName("UploadClaimDocument")

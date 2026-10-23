@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Integration.Features.Balance.GetLiveBalance;
+using Sankore.Shared.Infrastructure.Tenants;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Area aggregator for the real-time balance (INT-15). One <c>MapGroup</c>, one call per slice.
@@ -21,7 +23,10 @@ internal static class BalanceEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        var group = app.MapGroup("integration/balance").WithTags("Integration");
+        // The live balance is read from the core banking system: Banking - Microfinance only.
+        var group = app.MapGroup("integration/balance")
+            .WithTags("Integration")
+            .RequireTenantModule(TenantModules.BankingMicrofinance);
 
         group.MapGetLiveBalance();
 

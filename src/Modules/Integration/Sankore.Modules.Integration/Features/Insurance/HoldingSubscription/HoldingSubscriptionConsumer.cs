@@ -56,6 +56,18 @@ public sealed class HoldingSubscriptionConsumer(
         using var scope = scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
 
+        // A NEW subscription leaves for an insurer only while the tenant runs « Assurance ». The
+        // holding stays PendingSync, as on any refusal before the queue, and is not replayed when
+        // the module comes back. Contracts already at the insurer are not touched.
+        if (!await sp.GetRequiredService<ITenantModules>()
+                .IsEnabledAsync(evt.TenantId, TenantModules.Insurance, ct))
+        {
+            logger.LogInformation(
+                "Assurance is off for tenant {TenantId}: holding {HoldingId} is not sent to an insurer",
+                evt.TenantId, evt.HoldingId);
+            return;
+        }
+
         var inbox = sp.GetRequiredService<IIntegrationInboxGuard>();
 
         if (!await inbox.TryBeginAsync(

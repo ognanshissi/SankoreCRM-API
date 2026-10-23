@@ -16,6 +16,7 @@ internal static class SwaggerSetup
         services.AddSwaggerGen(options =>
         {
             options.CustomSchemaIds(SchemaId);
+            options.SchemaFilter<EnumSchemaFilter>();
 
             options.SwaggerDoc("v1", new()
             {

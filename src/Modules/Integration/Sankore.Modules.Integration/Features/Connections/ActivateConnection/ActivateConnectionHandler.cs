@@ -12,7 +12,8 @@ internal sealed class ActivateConnectionHandler(
     IntegrationDbContext db,
     ICurrentUser currentUser,
     TimeProvider clock,
-    ILogger<ActivateConnectionHandler> logger)
+    ILogger<ActivateConnectionHandler> logger,
+    ITenantModules modules)
     : IRequestHandler<ActivateConnectionCommand, Result>
 {
     /// <summary>
@@ -53,6 +54,10 @@ internal sealed class ActivateConnectionHandler(
         // like the "one active core banking connection" rule firing.
         if (connection.IsActive)
             return Result.Ok();
+
+        // A connection created while the module was on cannot be switched on after it went off.
+        if (!await ConnectionFamilyModules.IsOpenAsync(modules, connection.Family, ct))
+            return Result.Fail(TenantModuleErrors.Disabled);
 
         // ONE active core banking connection per tenant, SEVERAL insurance ones: a customer
         // cannot be created in two core banking systems, while an IMF legitimately distributes
