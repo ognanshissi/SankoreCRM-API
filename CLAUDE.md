@@ -1447,11 +1447,21 @@ with the purpose — but rotating that key invalidates BOTH indexes and both nee
 whole request reads its identity, household, PEP and FATCA from, so a public ingest able to set it
 would point a lead at an arbitrary client. `Lead.Kind` is **derived from it, never stored**.
 
-`Lead.ProductLineId` is the same shape — opaque, server-set, no FK — and does **not** replace
-`InterestedProduct`, which stays as captured. That field already links a lead to a product but by
-**free-text label** (`"Crédit commerçant"`, defaulted to `"Unknown"` by the pull job and the system
-capture endpoint), and a label cannot carry a beneficiary policy. The pair is the same one as
-`Lead.Source` / `Lead.LeadSourceConfigId`: what the prospect said, and what an agent resolved it to.
+**The lead stores NO product line** (product owner, 2026-10-24 — the column was dropped by
+`MoveProductLineToProjects`). `Lead.InterestedProduct` is what the prospect asked for (a code or a
+free label, `"Unknown"` from the pull job and the system capture endpoint) and pre-fills a project's
+product. The sale's line is the PROJECT's: `Opportunity.ProductLineId`, recorded by the create and
+update handlers when the product is set (`ProductLineLookup`, best-effort), read by the step gate,
+the questionnaire plan, the won close and the client-file opening — each falls back to resolving
+`Opportunity.Product` when the column is null (projects older than it). What needs a line BEFORE any
+project — the licensed agents of a dispatch, a WhatsApp bot profile or template, the household
+ceilings, the « by product » report — resolves `InterestedProduct` on demand
+(`ProductLineLookup.ForLeadAsync`; `HouseholdPolicyResolver` does it inside its fail-closed try).
+`POST leads/{id}/convert` takes an optional `projectId`: the client file is opened for THAT project's
+line (KYC tier, required fields, `KycRequested.ProductLineId`), else the lead's single open project,
+else the asked product. Enrichment no longer sets a line, and `PRODUCT_LINE_NOT_RESOLVED` /
+`require-product-line-to-convert` are gone: an unidentified product is refused by the project's step
+gate (fail-closed on KYC), not by the lead.
 
 **`CustomerMatchPolicy` is the single definition of when a lead attaches automatically**: a UNIQUE
 match, on an identifier that identifies a PERSON (identity document, e-mail). A **phone alone never
@@ -1695,7 +1705,8 @@ whose product somebody else removed.
 ### Product lines carry a beneficiary policy (BNF-B-06)
 
 `ProductSpeciality` **is** the product line — there is no separate `ProductLine` entity, and
-`Lead.ProductLineId` is its `Id`. Two members were added:
+`Opportunity.ProductLineId` (a project's) and `ProductHolding.ProductLineId` (a contract's) are its
+`Id`. Two members were added:
 
 | Stored as | What | Why |
 |---|---|---|
@@ -2077,12 +2088,11 @@ counts against the percentage.
 address on a member that inherits one (its own update command refuses postal fields), and
 `FIX_ON_CUSTOMER` for anything on an attached lead's client record.
 
-**`PRODUCT_LINE_NOT_RESOLVED` is reported always and blocks only behind a tenant switch**
-(`LeadSettingKeys.RequireProductLineToConvert`, default **false**). A deliberate departure from
-BNF-B-04 §3.3's default: `Lead.ProductLineId` is new, label resolution is exact-match only, and the
-pull job writes the literal `"Unknown"`, so shipping the refusal on would make every lead already
-in the database unconvertible on deploy. Turning it on is an operational step that follows
-catalogue configuration.
+**The policy a completeness report applies is a parameter**: `ComputeAsync(lead, productLineId)`.
+`GET leads/{id}/completeness?projectId=` and the client-file opening pick that line with the SAME
+rule, `ProductLineLookup.ForClientFileAsync` (the named project, else the lead's single open one,
+else the asked product), so the gauge the wizard shows and the refusal it may get cannot disagree;
+the wizard passes the project it was opened from. No line means nothing beyond what every lead owes.
 
 ### Required-field codes are a closed list in the Kernel
 

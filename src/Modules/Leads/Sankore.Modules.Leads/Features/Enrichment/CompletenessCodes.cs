@@ -13,14 +13,6 @@ public static class CompletenessCodes
 {
     // ── The lead as a whole ──────────────────────────────────────────────
 
-    /// <summary>
-    /// No catalogue line is resolved, so nothing can be required of this lead at all — the policy
-    /// that says what to collect is reached through the product line (§3.3). Reported FIRST and
-    /// blocks the conversion: without it the most permissive path (a lead whose product nobody
-    /// identified) would also be the easiest to convert.
-    /// </summary>
-    public const string ProductLineNotResolved = "PRODUCT_LINE_NOT_RESOLVED";
-
     /// <summary>A questionnaire a person still owes (BNF-B-08).</summary>
     public const string MissingQuestionnaire = "MISSING_QUESTIONNAIRE";
 

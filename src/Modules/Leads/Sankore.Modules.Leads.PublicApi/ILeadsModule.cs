@@ -228,8 +228,9 @@ public interface ILeadsModule
 /// One request a customer has in progress (BNF-B-22). Non-sensitive by construction.
 /// </summary>
 /// <param name="ProductLineId">
-/// The resolved M12 product line, or null when nobody has resolved it yet. The client record uses
-/// it to warn that a request duplicates a product line the customer already holds.
+/// The M12 product line of the request's open PROJECT (the lead stores none), or null while no
+/// project names a catalogue product. The client record uses it to warn that a request duplicates a
+/// product line the customer already holds.
 /// </param>
 /// <param name="InterestedProduct">The product as CAPTURED — a free-text label, not a catalogue code.</param>
 public sealed record CustomerOpenLead(

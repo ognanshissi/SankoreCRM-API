@@ -9,7 +9,8 @@ using Sankore.Shared.Kernel;
 internal sealed class GetLeadCompletenessHandler(
     LeadsDbContext db,
     LeadAccessGuard accessGuard,
-    LeadCompletenessCalculator calculator)
+    LeadCompletenessCalculator calculator,
+    Administration.PublicApi.IAdministrationModule administration)
     : IRequestHandler<GetLeadCompletenessQuery, Result<LeadCompletenessDto>>
 {
     public async Task<Result<LeadCompletenessDto>> Handle(
@@ -32,6 +33,10 @@ internal sealed class GetLeadCompletenessHandler(
         if (access.IsFailure)
             return Result.Fail<LeadCompletenessDto>(access.Error!);
 
-        return Result.Ok(await calculator.ComputeAsync(lead, ct));
+        // The line the client-file opening will check, so the gauge and the refusal agree.
+        var productLineId = await ProductLines.ProductLineLookup.ForClientFileAsync(
+            db, administration, lead, query.ProjectId, ct);
+
+        return Result.Ok(await calculator.ComputeAsync(lead, productLineId, ct));
     }
 }

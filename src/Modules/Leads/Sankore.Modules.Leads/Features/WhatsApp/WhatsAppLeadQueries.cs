@@ -488,9 +488,11 @@ internal sealed class ComposeWhatsAppHandler(
                          && t.IsAvailable
                          && t.Status == WhatsAppTemplateStatus.Approved)
                 .OrderBy(t => t.Name)
-                .ToListAsync(ct))
-            .Where(t => t.AppliesTo(lead.ProductLineId))
-            .ToList();
+                .ToListAsync(ct));
+
+        // The product the lead ASKED for — the lead stores no line (product owner, 2026-10-24).
+        var leadLine = await ProductLines.ProductLineLookup.ForLeadAsync(admin, lead, ct);
+        templates = templates.Where(t => t.AppliesTo(leadLine)).ToList();
 
         var agentName = (await admin.GetUserNamesAsync(currentUser.TenantId, [currentUser.Id], ct))
             .GetValueOrDefault(currentUser.Id);

@@ -1020,10 +1020,6 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("principal_usage_name");
 
-                    b.Property<Guid?>("ProductLineId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("product_line_id");
-
                     b.Property<string>("ProspectType")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -2310,6 +2306,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("product");
+
+                    b.Property<Guid?>("ProductLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_line_id");
 
                     b.Property<DateTimeOffset?>("SeparateNeedConfirmedAt")
                         .HasColumnType("timestamp with time zone")

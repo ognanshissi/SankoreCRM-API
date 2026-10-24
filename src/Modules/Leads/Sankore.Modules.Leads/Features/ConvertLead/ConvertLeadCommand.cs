@@ -27,7 +27,13 @@ internal sealed record ConvertLeadCommand(
     /// Minimum confidence score (0-100) to trigger the duplicate gate at conversion.
     /// Defaults to 70 (Probable) — only high-confidence matches block conversion.
     /// </summary>
-    double MinConfidenceThreshold = 70.0
+    double MinConfidenceThreshold = 70.0,
+    /// <summary>
+    /// The project the client file is opened for: ITS product decides the KYC and the fields
+    /// required (product owner, 2026-10-24 — the lead stores no product line). Null: the lead's
+    /// single open project, else what the lead asked for.
+    /// </summary>
+    Guid? ProjectId = null
 ) : IRequest<Result<ConvertLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

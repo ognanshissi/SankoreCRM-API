@@ -201,7 +201,6 @@ public sealed class ProjectStepGateTests : IDisposable
         await using (var db = _factory.CreateContext())
         {
             var lead = LeadTestBuilder.Create().WithTenant(_tenantId).WithAgency(Guid.NewGuid()).WithProduct("CARTE").Build();
-            lead.SetProductLine(_standardLine);
             db.Leads.Add(lead);
             db.Opportunities.Add(Opportunity.CreateFromLead(_tenantId, lead.Id, "Projet carte", "CARTE", null, _clock));
             await db.SaveChangesAsync();

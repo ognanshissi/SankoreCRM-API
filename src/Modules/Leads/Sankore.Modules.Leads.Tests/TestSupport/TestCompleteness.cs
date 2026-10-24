@@ -23,8 +23,8 @@ internal static class TestCompleteness
 {
     /// <summary>
     /// A calculator whose dependencies answer "nothing is configured": no product policy, FATCA
-    /// off, no client, the product-line refusal off. A lead with no resolved product line is then
-    /// complete, which is what every pre-Lot-6 case in the suite assumes.
+    /// off, no client. A lead whose asked product resolves to no line is then complete, which is
+    /// what every pre-Lot-6 case in the suite assumes.
     /// </summary>
     /// <remarks>
     /// A caller supplying its OWN <see cref="IAdministrationModule"/> must stub
@@ -36,8 +36,7 @@ internal static class TestCompleteness
         LeadsDbContext db,
         IAdministrationModule? administration = null,
         ICustomersModule? customers = null,
-        IKycModule? kyc = null,
-        bool requireProductLine = false)
+        IKycModule? kyc = null)
     {
         var admin = administration ?? Substitute.For<IAdministrationModule>();
 
@@ -55,8 +54,7 @@ internal static class TestCompleteness
             admin,
             customers ?? Substitute.For<ICustomersModule>(),
             kyc ?? Substitute.For<IKycModule>(),
-            new FatcaSubjectPlanner(admin, NullLogger<FatcaSubjectPlanner>.Instance),
-            FixedSettings(requireProductLine));
+            new FatcaSubjectPlanner(admin, NullLogger<FatcaSubjectPlanner>.Instance));
     }
 
     /// <summary>Compliance settings with FATCA off — the platform default.</summary>
@@ -71,22 +69,4 @@ internal static class TestCompleteness
     /// like to this calculator.
     /// </summary>
     internal static ComplianceSettingsDto PepOff { get; } = FatcaOff with { PepEnabled = false };
-
-    /// <summary>
-    /// A settings double rather than the real <c>LeadSettingsService</c>: that one caches in a
-    /// process-wide static for 60 seconds, so two tests disagreeing about this switch would see
-    /// each other's answer whatever order they ran in.
-    /// </summary>
-    private static ILeadSettings FixedSettings(bool requireProductLine)
-    {
-        var settings = Substitute.For<ILeadSettings>();
-
-        settings.GetBoolAsync(
-                Arg.Any<Guid>(),
-                LeadSettingKeys.RequireProductLineToConvert,
-                Arg.Any<CancellationToken>())
-            .Returns(requireProductLine);
-
-        return settings;
-    }
 }

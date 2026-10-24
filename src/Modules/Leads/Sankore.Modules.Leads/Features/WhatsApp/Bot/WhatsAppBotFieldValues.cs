@@ -115,7 +115,7 @@ internal sealed class WhatsAppBotFieldValues(
             case WhatsAppBotFields.Product:
             {
                 // Never overwrites: a product an agent resolved, or the bot an earlier turn, stays.
-                if (lead?.ProductLineId is not null || pending.ContainsKey(WhatsAppBotFields.Product))
+                if (LineOf(lead, ctx.Catalogue) is not null || pending.ContainsKey(WhatsAppBotFields.Product))
                     return (null, "Le produit est déjà connu.");
 
                 var wanted = WhatsAppBotText.Normalize(value);
@@ -185,13 +185,13 @@ internal sealed class WhatsAppBotFieldValues(
 
             case WhatsAppBotFields.Product:
             {
-                if (lead.ProductLineId is not null) return "Le produit est déjà connu.";
+                if (LineOf(lead, ctx.Catalogue) is not null) return "Le produit est déjà connu.";
                 if (!Guid.TryParse(value, out var line)) return "Produit illisible.";
 
-                result = lead.SetProductLine(line);
-
-                if (result.IsSuccess && ctx.Catalogue.FirstOrDefault(p => p.Id == line) is { } product)
-                    result = lead.Update(null, null, null, null, null, interestedProduct: product.Name, null, null, null, null, null, null);
+                // The lead keeps what was ASKED — the catalogue name — and no line of its own: its
+                // project will carry one (product owner, 2026-10-24).
+                if (ctx.Catalogue.FirstOrDefault(p => p.Id == line) is not { } product) return "Produit illisible.";
+                result = lead.Update(null, null, null, null, null, interestedProduct: product.Name, null, null, null, null, null, null);
                 break;
             }
 
@@ -213,8 +213,33 @@ internal sealed class WhatsAppBotFieldValues(
         return result.IsSuccess ? null : "La fiche ne peut plus être modifiée.";
     }
 
+    /// <summary>
+    /// The active catalogue line the lead's asked product names — code or name, accents and case
+    /// ignored, a single match only — or null. What « the product is known » means now that the lead
+    /// stores no line.
+    /// </summary>
+    public static Guid? LineOf(Lead? lead, IReadOnlyList<ProductSummary> catalogue)
+    {
+        if (lead is null || string.IsNullOrWhiteSpace(lead.InterestedProduct) || lead.InterestedProduct == "Unknown")
+            return null;
+
+        var wanted = WhatsAppBotText.Normalize(lead.InterestedProduct);
+        var matches = catalogue
+            .Where(p => p.IsActive
+                     && (WhatsAppBotText.Normalize(p.Code) == wanted || WhatsAppBotText.Normalize(p.Name) == wanted))
+            .Select(p => p.Id)
+            .Distinct()
+            .ToList();
+
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
     /// <summary>Whether the field already holds a value — on the lead, or waiting on the conversation.</summary>
-    public static bool IsFilled(Lead? lead, IReadOnlyDictionary<string, string> pending, string code)
+    /// <param name="ctx">
+    /// The catalogue, to tell a known product from a free label. Without it, any asked product
+    /// other than « Unknown » counts.
+    /// </param>
+    public static bool IsFilled(Lead? lead, IReadOnlyDictionary<string, string> pending, string code, BotFieldContext? ctx = null)
     {
         if (pending.ContainsKey(code)) return true;
         if (lead is null) return false;
@@ -227,7 +252,9 @@ internal sealed class WhatsAppBotFieldValues(
             WhatsAppBotFields.Email => !string.IsNullOrWhiteSpace(lead.Email),
             WhatsAppBotFields.City => !string.IsNullOrWhiteSpace(lead.PrincipalCity),
             WhatsAppBotFields.Neighbourhood => !string.IsNullOrWhiteSpace(lead.PrincipalNeighbourhood),
-            WhatsAppBotFields.Product => lead.ProductLineId is not null,
+            WhatsAppBotFields.Product => ctx is not null
+                ? LineOf(lead, ctx.Catalogue) is not null
+                : !string.IsNullOrWhiteSpace(lead.InterestedProduct) && lead.InterestedProduct != "Unknown",
             WhatsAppBotFields.DesiredAmount => lead.DesiredAmount is { Amount: > 0 },
             _ when WhatsAppBotFields.IsCustom(code) =>
                 CustomFieldValues.Read(lead.CustomFieldsJson)?.ContainsKey(WhatsAppBotFields.CustomKey(code)) == true,
@@ -271,7 +298,7 @@ internal sealed class WhatsAppBotFieldValues(
             WhatsAppBotFields.Email => lead.Email,
             WhatsAppBotFields.City => lead.PrincipalCity,
             WhatsAppBotFields.Neighbourhood => lead.PrincipalNeighbourhood,
-            WhatsAppBotFields.Product => lead.ProductLineId is null ? null : lead.InterestedProduct,
+            WhatsAppBotFields.Product => ctx is not null && LineOf(lead, ctx.Catalogue) is null ? null : lead.InterestedProduct,
             WhatsAppBotFields.DesiredAmount => lead.DesiredAmount is { } m
                 ? $"{m.Amount.ToString("N0", CultureInfo.GetCultureInfo("fr-FR"))} {m.Currency}"
                 : null,

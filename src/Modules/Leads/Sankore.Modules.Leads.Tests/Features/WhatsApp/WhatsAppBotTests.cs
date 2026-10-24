@@ -231,15 +231,16 @@ public sealed class WhatsAppBotTests : IDisposable
         await SaveProfileAsync(line, enabled: false);
 
         await using var db = _db.CreateContext();
-        var lead = Lead.Capture(_tenantId, "Awa", "+221771234567", LeadSource.Web, "Crédit", "fr",
+        // The lead stores no product line: the product it ASKED for resolves to the line.
+        _admin.ResolveProductLineAsync(_tenantId, "Crédit", Arg.Any<CancellationToken>()).Returns(line);
+        var asked = Lead.Capture(_tenantId, "Awa", "+221771234567", LeadSource.Web, "Crédit", "fr",
             new Sankore.Shared.Kernel.ValueObject.GeoPoint(0, 0), null, TimeProvider.System);
-        lead.SetProductLine(line);
+        var unknown = Lead.Capture(_tenantId, "Awa", "+221771234567", LeadSource.Web, "Unknown", "fr",
+            new Sankore.Shared.Kernel.ValueObject.GeoPoint(0, 0), null, TimeProvider.System);
 
-        var profiles = new WhatsAppBotProfiles(db, _settings, new FakeWhatsAppBotModel());
-        (await profiles.ResolveActiveAsync(_tenantId, lead, CancellationToken.None)).Should().BeNull();
-
-        lead.SetProductLine(null);
-        (await profiles.ResolveActiveAsync(_tenantId, lead, CancellationToken.None))!.IsGeneral.Should().BeTrue();
+        var profiles = new WhatsAppBotProfiles(db, _settings, new FakeWhatsAppBotModel(), _admin);
+        (await profiles.ResolveActiveAsync(_tenantId, asked, CancellationToken.None)).Should().BeNull();
+        (await profiles.ResolveActiveAsync(_tenantId, unknown, CancellationToken.None))!.IsGeneral.Should().BeTrue();
     }
 
     // ── Routing (WA-BE-11) ─────────────────────────────────────────────────────
@@ -486,6 +487,9 @@ public sealed class WhatsAppBotTests : IDisposable
         var savings = new ProductSummary("EPG", "Épargne", "Savings", true, Guid.NewGuid());
         var retired = new ProductSummary("OLD", "Ancien produit", "Loan", false, Guid.NewGuid());
         _admin.ListProductsAsync(_tenantId, null, Arg.Any<CancellationToken>()).Returns([credit, savings, retired]);
+        // M12's exact rule, on the name the bot records: what makes the next message use the
+        // product's own profile now that the lead stores no line.
+        _admin.ResolveProductLineAsync(_tenantId, "Crédit commerçant", Arg.Any<CancellationToken>()).Returns(credit.Id);
 
         await SeedLeadAsync(withProduct: false);
         await SaveProfileAsync(Guid.Empty, enabled: true, fields: ["PRODUCT"]);
@@ -503,8 +507,7 @@ public sealed class WhatsAppBotTests : IDisposable
         await using (var read = _db.CreateContext())
         {
             var lead = await read.Leads.SingleAsync();
-            lead.ProductLineId.Should().Be(credit.Id);
-            lead.InterestedProduct.Should().Be("Crédit commerçant");
+            lead.InterestedProduct.Should().Be("Crédit commerçant", "the lead keeps what was asked, and no line");
         }
 
         // The next message is answered under the product's own profile, and the product is no
@@ -532,7 +535,7 @@ public sealed class WhatsAppBotTests : IDisposable
         await RunTurnAsync(model, conversationId, messageId);
 
         await using var read = _db.CreateContext();
-        (await read.Leads.SingleAsync()).ProductLineId.Should().BeNull();
+        (await read.Leads.SingleAsync()).InterestedProduct.Should().NotBe("Crédit immobilier");
         (await read.WhatsAppMessages.AnyAsync(m => m.Body == "D’accord.")).Should().BeTrue();
     }
 
@@ -737,7 +740,6 @@ public sealed class WhatsAppBotTests : IDisposable
         var lead = await read.Leads.SingleAsync();
         lead.FullName.Should().Be("Awa Ndiaye");
         lead.Source.Should().Be(LeadSource.WhatsApp);
-        lead.ProductLineId.Should().Be(Credit.Id);
         lead.InterestedProduct.Should().Be("Crédit commerçant");
 
         var consent = await read.LeadConsents.SingleAsync(c => c.LeadId == lead.Id);
@@ -959,7 +961,7 @@ public sealed class WhatsAppBotTests : IDisposable
             await new RecordMessagingEventsHandler(
                     db, _phoneIndexer, _blindIndexer, _customers, _settings, _realtime, _publisher,
                     new WhatsAppEscalation(db, _customers, _settings, _publisher, NullLogger<WhatsAppEscalation>.Instance),
-                    new WhatsAppBotProfiles(db, _settings, model),
+                    new WhatsAppBotProfiles(db, _settings, model, _admin),
                     WhatsAppTestServices.Prospects(db, _phoneIndexer, _publisher, FieldValues(), _integration),
                     FieldValues(),
                     new WhatsAppAudit(Substitute.For<IAuditWriter>(), TimeProvider.System, NullLogger<WhatsAppAudit>.Instance),
@@ -978,7 +980,7 @@ public sealed class WhatsAppBotTests : IDisposable
 
         var engine = new WhatsAppBotEngine(
             db,
-            new WhatsAppBotProfiles(db, _settings, model),
+            new WhatsAppBotProfiles(db, _settings, model, _admin),
             model,
             new WhatsAppEscalation(db, _customers, _settings, _publisher, NullLogger<WhatsAppEscalation>.Instance),
             FieldValues(),

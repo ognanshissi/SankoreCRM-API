@@ -149,14 +149,6 @@ public sealed class CaptureLeadHandler(
             matchedCustomerId = await TryMatchCustomerAsync(cmd, ct);
         }
 
-        // ── Which product line is this about? (BNF-B-01) ─────────────────────
-        //
-        // Best-effort resolution of the captured LABEL onto a catalogue line. A label that matches
-        // nothing — and "Unknown", which is what the pull job and the system endpoint write when a
-        // source names no product — resolves to null, and an agent picks the line at enrichment.
-        // Never fuzzy: the resolved line decides which fields gate the conversion.
-        var productLineId = cmd.ProductLineId ?? await TryResolveProductLineAsync(cmd, ct);
-
         // ── Create the lead ───────────────────────────────────────────────────
         var lead = Lead.Capture(
             tenantId:             cmd.TenantId,
@@ -175,7 +167,6 @@ public sealed class CaptureLeadHandler(
             lastName:             cmd.LastName,
             email:                cmd.Email,
             emailBlindIndex:      emailIndex,
-            productLineId:        productLineId,
             customerId:           matchedCustomerId,
             customerLinkIsAutomatic: cmd.CustomerId is null,
             customerLinkReason:   cmd.CustomerId is null
@@ -346,36 +337,6 @@ public sealed class CaptureLeadHandler(
             ["ownerId"]            = cmd.OwnerId?.ToString(),
         };
 
-    private async Task<Guid?> TryResolveProductLineAsync(CaptureLeadCommand cmd, CancellationToken ct)
-    {
-        try
-        {
-            using var suppressed = new System.Transactions.TransactionScope(
-                System.Transactions.TransactionScopeOption.Suppress,
-                System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
-
-            var resolved = await administration.ResolveProductLineAsync(
-                cmd.TenantId, cmd.InterestedProduct, ct);
-
-            suppressed.Complete();
-
-            if (resolved is null)
-            {
-                logger.LogInformation(
-                    "Captured product label {Label} matched no active product line; "
-                    + "the lead carries none until an agent resolves it.",
-                    cmd.InterestedProduct);
-            }
-
-            return resolved;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex, "Product line resolution failed at capture; the lead is created without one.");
-            return null;
-        }
-    }
 
     private async Task<Guid?> TryMatchCustomerAsync(CaptureLeadCommand cmd, CancellationToken ct)
     {

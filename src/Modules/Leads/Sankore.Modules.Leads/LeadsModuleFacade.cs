@@ -102,7 +102,14 @@ public sealed class LeadsModuleFacade(
                 l.Id,
                 l.Status.ToString(),
                 l.PipelineStage.ToString(),
-                l.ProductLineId,
+                // The lead stores no product line: its open PROJECT carries the one being sold.
+                db.Opportunities
+                    .IgnoreQueryFilters()
+                    .Where(o => o.TenantId == tenantId && o.LeadId == l.Id
+                             && o.Stage != OpportunityStage.ClosedWon && o.Stage != OpportunityStage.ClosedLost)
+                    .OrderByDescending(o => o.CreatedAt)
+                    .Select(o => o.ProductLineId)
+                    .FirstOrDefault(),
                 l.InterestedProduct,
                 l.CurrentAssignedId,
                 l.CapturedAt,

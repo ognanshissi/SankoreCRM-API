@@ -5,7 +5,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
 
 /// <summary>
-/// What the lead's product line permits of its household (BNF-B-03, BNF-B-06).
+/// What the product the lead asked for permits of its household (BNF-B-03, BNF-B-06).
 /// </summary>
 /// <param name="MaxChildren">Null = no ceiling.</param>
 /// <param name="ChildMaxAge">Null = no limit.</param>
@@ -29,9 +29,13 @@ internal sealed class HouseholdPolicyResolver(IAdministrationModule administrati
     /// <remarks>
     /// <b>An UNRESOLVED product line is allowed, not refused.</b> An agent collects the household
     /// while the prospect is in front of them and qualifies the request afterwards; refusing until
-    /// somebody picks a product line would invert that order for no benefit. The gap is reported
-    /// by the completeness check instead, as <c>PRODUCT_LINE_NOT_RESOLVED</c> (BNF-B-04), and the
-    /// conversion refuses on it.
+    /// somebody picks a product line would invert that order for no benefit.
+    ///
+    /// <para>
+    /// The line is the one <see cref="Lead.InterestedProduct"/> names, resolved now — the lead stores
+    /// none (product owner, 2026-10-24) — because the household is recorded at the lead's stage,
+    /// before any project.
+    /// </para>
     ///
     /// <para>
     /// <b>An M12 outage FAILS the write</b>, unlike the best-effort lookups on the capture path.
@@ -43,7 +47,7 @@ internal sealed class HouseholdPolicyResolver(IAdministrationModule administrati
     /// </remarks>
     internal async Task<Result<HouseholdLimits>> ResolveAsync(Lead lead, CancellationToken ct)
     {
-        if (lead.ProductLineId is not { } lineId)
+        if (string.IsNullOrWhiteSpace(lead.InterestedProduct))
             return Result.Ok(HouseholdLimits.Unlimited);
 
         BeneficiaryPolicyDto? policy;
@@ -53,7 +57,16 @@ internal sealed class HouseholdPolicyResolver(IAdministrationModule administrati
                 System.Transactions.TransactionScopeOption.Suppress,
                 System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
 
-            policy = await administration.GetBeneficiaryPolicyAsync(lead.TenantId, lineId, ct);
+            // Resolved inside the try: an outage of the resolution fails the write too, like one of
+            // the policy read — the ceilings must not be skipped because M12 did not answer.
+            var lineId = await administration.ResolveProductLineAsync(lead.TenantId, lead.InterestedProduct, ct);
+            if (lineId is null)
+            {
+                suppressed.Complete();
+                return Result.Ok(HouseholdLimits.Unlimited);
+            }
+
+            policy = await administration.GetBeneficiaryPolicyAsync(lead.TenantId, lineId.Value, ct);
             suppressed.Complete();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

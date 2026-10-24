@@ -23,30 +23,6 @@ public static class LeadSettingKeys
     public const string HealthResponseRetentionDays = "health-response-retention-days";
 
     /// <summary>
-    /// Whether a lead with no resolved product line is REFUSED conversion (BNF-B-04 §3.3), as
-    /// opposed to merely being told about it.
-    ///
-    /// <para>
-    /// <b>Default false, and that is a deliberate departure from the specification's default.</b>
-    /// BNF-B-04 asks for the refusal outright. But <c>Lead.ProductLineId</c> is new, resolution
-    /// from <c>InterestedProduct</c> is best-effort and exact-match only, and the pull job and the
-    /// system capture endpoint write the literal label <c>"Unknown"</c> when a source names no
-    /// product — which resolves to nothing by design. Shipping the refusal on by default would
-    /// therefore make every lead already in the database, and every lead from an unlabelled
-    /// source, unconvertible on the day of the deploy. That is not a compliance improvement, it is
-    /// an outage.
-    /// </para>
-    ///
-    /// <para>
-    /// The gap is REPORTED either way — it is the first item of the completeness report with or
-    /// without this switch — so nobody is surprised by it later. Turning it on is the operational
-    /// step that completes BNF-B-04, and it belongs AFTER a tenant has configured its catalogue
-    /// and its label mappings.
-    /// </para>
-    /// </summary>
-    public const string RequireProductLineToConvert = "require-product-line-to-convert";
-
-    /// <summary>
     /// Months a CLOSED lead's personal data is kept before it is destroyed (BNF-B-19). The clock
     /// starts when the lead reached a terminal status — converted, lost, disqualified or archived —
     /// and a live lead is never anonymised however old it is.
@@ -167,9 +143,6 @@ public static class LeadSettingKeys
     [
         new(HealthResponseRetentionDays, "90", TypeInt,
             "Days a health questionnaire response is kept after transmission to the insurance back-office."),
-        new(RequireProductLineToConvert, "false", TypeBool,
-            "Refuse to convert a lead whose product line has not been resolved. Enable once the "
-            + "product catalogue and the label mappings are configured."),
         new(LeadRetentionMonths, "24", TypeInt,
             "Months a closed lead's personal data is kept before it is anonymised. The clock "
             + "starts at closure; a live lead is never anonymised."),

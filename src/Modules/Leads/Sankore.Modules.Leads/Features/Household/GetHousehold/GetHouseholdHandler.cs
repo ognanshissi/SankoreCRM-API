@@ -47,7 +47,7 @@ internal sealed class GetHouseholdHandler(
         // discover it on a refused write. A lead with no resolved product line is editable with no
         // limits — see HouseholdPolicyResolver.
         BeneficiaryPolicyDto? policy = null;
-        if (lead.ProductLineId is { } lineId)
+        if (await ProductLines.ProductLineLookup.ForLeadAsync(administration, lead, ct) is { } lineId)
         {
             try
             {

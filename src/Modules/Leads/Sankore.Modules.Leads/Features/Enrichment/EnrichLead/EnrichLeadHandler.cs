@@ -17,7 +17,6 @@ using Sankore.Shared.Kernel;
 internal sealed class EnrichLeadHandler(
     HouseholdWriteContext context,
     LeadsDbContext db,
-    IAdministrationModule administration,
     LeadCompletenessCalculator calculator,
     ICurrentUser currentUser,
     ISender sender,
@@ -26,7 +25,6 @@ internal sealed class EnrichLeadHandler(
     : IRequestHandler<EnrichLeadCommand, Result<LeadCompletenessDto>>
 {
     internal const string ActivityNotFound = "LEAD_ACTIVITY_NOT_FOUND";
-    internal const string ProductLineNotFound = "PRODUCT_LINE_NOT_FOUND";
 
     public async Task<Result<LeadCompletenessDto>> Handle(
         EnrichLeadCommand cmd, CancellationToken ct)
@@ -48,29 +46,6 @@ internal sealed class EnrichLeadHandler(
 
             if (!belongs)
                 return Result.Fail<LeadCompletenessDto>(ActivityNotFound);
-        }
-
-        var lineChanged = false;
-
-        if (cmd.ClearProductLine)
-        {
-            var cleared = lead.SetProductLine(null);
-            if (cleared.IsFailure)
-                return Result.Fail<LeadCompletenessDto>(cleared.Error!);
-
-            lineChanged = true;
-        }
-        else if (cmd.ProductLineId is { } lineId && lineId != lead.ProductLineId)
-        {
-            var exists = await LineExistsAsync(lead.TenantId, lineId, ct);
-            if (exists.IsFailure)
-                return Result.Fail<LeadCompletenessDto>(exists.Error!);
-
-            var set = lead.SetProductLine(lineId);
-            if (set.IsFailure)
-                return Result.Fail<LeadCompletenessDto>(set.Error!);
-
-            lineChanged = true;
         }
 
         var enriched = lead.EnrichPrincipalIdentity(
@@ -112,8 +87,6 @@ internal sealed class EnrichLeadHandler(
             new LeadEnrichedIntegrationEvent(
                 TenantId:         lead.TenantId,
                 LeadId:           lead.Id,
-                ProductLineId:    lead.ProductLineId,
-                ProductLineChanged: lineChanged,
                 ChangedFields:    ChangedFieldNames(cmd),
                 SourceActivityId: cmd.SourceActivityId),
             ct);
@@ -138,39 +111,6 @@ internal sealed class EnrichLeadHandler(
         // Recomputed AFTER the commit, so the percentage counts the ToComplete rows the line
         // change just produced.
         return Result.Ok(await calculator.ComputeAsync(lead, ct));
-    }
-
-    /// <summary>
-    /// Whether the line exists in this tenant's catalogue.
-    /// </summary>
-    /// <remarks>
-    /// A null policy means the line does not exist — <c>GetBeneficiaryPolicyAsync</c> distinguishes
-    /// that from a line that exists and collects nothing, which is the whole reason it is nullable.
-    ///
-    /// <para>
-    /// An M12 outage REFUSES the write rather than storing the id unvalidated. Same posture as
-    /// <c>HouseholdPolicyResolver</c> and for a stronger reason: this field decides which policy
-    /// governs the lead, and an unvalidated one is precisely what keeping it off the capture
-    /// contracts exists to prevent.
-    /// </para>
-    /// </remarks>
-    private async Task<Result> LineExistsAsync(Guid tenantId, Guid lineId, CancellationToken ct)
-    {
-        try
-        {
-            using var suppressed = new System.Transactions.TransactionScope(
-                System.Transactions.TransactionScopeOption.Suppress,
-                System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
-
-            var policy = await administration.GetBeneficiaryPolicyAsync(tenantId, lineId, ct);
-            suppressed.Complete();
-
-            return policy is null ? Result.Fail(ProductLineNotFound) : Result.Ok();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return Result.Fail(HouseholdPolicyResolver.PolicyUnavailable);
-        }
     }
 
     /// <summary>Whether the request touched a field <c>LeadScoreCalculator</c> reads.</summary>

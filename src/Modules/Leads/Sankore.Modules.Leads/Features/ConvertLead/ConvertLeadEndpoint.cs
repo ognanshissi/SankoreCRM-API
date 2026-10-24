@@ -34,7 +34,8 @@ public static class ConvertLeadEndpoint
                 LeadId:                 leadId,
                 CustomerId:             req.CustomerId,
                 Force:                  req.Force,
-                MinConfidenceThreshold: req.MinConfidenceThreshold ?? 70.0), ct);
+                MinConfidenceThreshold: req.MinConfidenceThreshold ?? 70.0,
+                ProjectId:              req.ProjectId), ct);
 
         if (!result.IsSuccess)
         {
@@ -82,4 +83,10 @@ public sealed record ConvertLeadRequest(
     /// Minimum confidence score (0-100) for a candidate to trigger the gate.
     /// Defaults to 70 (Probable). Lower this to catch more candidates.
     /// </summary>
-    double? MinConfidenceThreshold = null);
+    double? MinConfidenceThreshold = null,
+    /// <summary>
+    /// The project the client file is opened for — its product decides the KYC and the required
+    /// fields. Omit it from the lead's own screen: its single open project is used, else what the
+    /// lead asked for.
+    /// </summary>
+    Guid? ProjectId = null);

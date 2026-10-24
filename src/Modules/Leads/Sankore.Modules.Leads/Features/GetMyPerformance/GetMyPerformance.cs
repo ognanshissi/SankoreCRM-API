@@ -63,7 +63,7 @@ internal sealed class GetMyPerformanceHandler(
             .Where(p => p.x.AgentId == me || (agencyId != null && p.l.AgencyId == agencyId))
             .Select(p => new AssignmentRow(
                 p.x.AgentId, p.x.LeadId, p.x.CreatedAt, p.x.FirstContactAt, p.x.SlaDeadline,
-                p.l.AgencyId, p.l.Status, p.l.ConvertedAt, p.l.CurrentAssignedId, p.l.ProductLineId, p.l.InterestedProduct))
+                p.l.AgencyId, p.l.Status, p.l.ConvertedAt, p.l.CurrentAssignedId, p.l.InterestedProduct))
             .ToListAsync(ct);
 
         var mine = rows.Where(r => r.AgentId == me).ToList();
@@ -175,15 +175,20 @@ internal sealed class GetMyPerformanceHandler(
     {
         if (mine.Count == 0) return [];
 
-        // Le catalogue nomme une ligne résolue ; sinon le libellé capturé, et « Unknown » — la
-        // valeur par défaut des captures sans produit — n'est pas un produit.
-        var catalog = mine.Any(r => r.ProductLineId != null)
-            ? (await admin.ListProductsAsync(tenantId, null, ct)).Where(p => p.Id != Guid.Empty).ToDictionary(p => p.Id, p => p.Name)
-            : [];
+        // Le catalogue nomme le produit demandé quand il le reconnaît (par son code ou son nom) ;
+        // sinon le libellé capturé, et « Unknown » — la valeur par défaut des captures sans
+        // produit — n'est pas un produit. Le lead ne stocke plus de ligne produit.
+        var products = await admin.ListProductsAsync(tenantId, null, ct) ?? [];
+        var catalog = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in products.Where(p => p.Id != Guid.Empty))
+        {
+            catalog.TryAdd(p.Code.Trim(), p.Name);
+            catalog.TryAdd(p.Name.Trim(), p.Name);
+        }
 
         string Label(AssignmentRow r) =>
-            r.ProductLineId is { } id && catalog.TryGetValue(id, out var name) ? name
-            : string.IsNullOrWhiteSpace(r.InterestedProduct) || r.InterestedProduct == "Unknown" ? "Produit non précisé"
+            string.IsNullOrWhiteSpace(r.InterestedProduct) || r.InterestedProduct == "Unknown" ? "Produit non précisé"
+            : catalog.TryGetValue(r.InterestedProduct.Trim(), out var name) ? name
             : r.InterestedProduct.Trim();
 
         return mine
@@ -212,7 +217,7 @@ internal sealed class GetMyPerformanceHandler(
 internal sealed record AssignmentRow(
     Guid AgentId, Guid LeadId, DateTimeOffset AssignedAt, DateTimeOffset? FirstContactAt, DateTimeOffset SlaDeadline,
     Guid? LeadAgencyId, LeadStatus Status, DateTimeOffset? ConvertedAt, Guid? CurrentAssignedId,
-    Guid? ProductLineId, string? InterestedProduct);
+    string? InterestedProduct);
 
 internal sealed record TaskRow(Guid? AgentId, Guid? LeadId, DateTimeOffset DueAt, DateTimeOffset? CompletedAt);
 

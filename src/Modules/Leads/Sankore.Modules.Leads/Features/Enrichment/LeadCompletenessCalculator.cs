@@ -41,8 +41,7 @@ internal sealed class LeadCompletenessCalculator(
     IAdministrationModule administration,
     ICustomersModule customers,
     IKycModule kyc,
-    FatcaSubjectPlanner fatcaPlanner,
-    ILeadSettings settings)
+    FatcaSubjectPlanner fatcaPlanner)
 {
     /// <summary>What the conversion reports when the file is not complete.</summary>
     internal const string Incomplete = "LEAD_NOT_COMPLETE";
@@ -59,6 +58,19 @@ internal sealed class LeadCompletenessCalculator(
     internal async Task<LeadCompletenessDto> ComputeAsync(Lead lead, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(lead);
+        return await ComputeAsync(
+            lead, await ProductLines.ProductLineLookup.ForLeadAsync(administration, lead, ct), ct);
+    }
+
+    /// <summary>
+    /// The report against a given product line's policy — the PROJECT's when a client file is opened
+    /// for one (product owner, 2026-10-24: the lead stores no line; the sale's line is the
+    /// project's). Null checks only what every lead owes.
+    /// </summary>
+    internal async Task<LeadCompletenessDto> ComputeAsync(
+        Lead lead, Guid? productLineId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(lead);
 
         var gaps = new List<CompletenessGap>();
         var applicable = 0;
@@ -71,27 +83,12 @@ internal sealed class LeadCompletenessCalculator(
             else gaps.Add(gap());
         }
 
-        // ── 1. The product line, first (§3.3) ────────────────────────────────
+        // ── 1. The product line's policy ────────────────────────────────────
         //
-        // Reported FIRST because nothing else can be required without it: the policy that says
-        // what to collect is reached THROUGH the line. Without it the most permissive path — a
-        // lead whose product nobody identified — would also be the easiest to convert.
-        //
-        // Whether it BLOCKS is the tenant's switch, and it ships off. The reasoning is on
-        // LeadSettingKeys.RequireProductLineToConvert: every lead already in the database has no
-        // product line, so a refusal on by default would make none of them convertible. Reported
-        // either way, so the gap is visible before anybody turns the switch on.
-        var productLineBlocks = await RequireProductLineAsync(lead.TenantId, ct);
-
-        Check(lead.ProductLineId is not null,
-              () => new CompletenessGap(
-                  Code:         CompletenessCodes.ProductLineNotResolved,
-                  SubjectLabel: null,
-                  Detail:       null,
-                  ActionHint:   null,
-                  Blocking:     productLineBlocks));
-
-        var policy = await TryReadPolicyAsync(lead, ct);
+        // What to collect is reached THROUGH the line. No line — a need « à préciser » — means
+        // nothing beyond what every lead owes; the project's step gate is what refuses to go on
+        // without an identified product (fail-closed on the KYC question).
+        var policy = await TryReadPolicyAsync(lead.TenantId, productLineId, ct);
         if (policy.Unavailable)
         {
             Check(false, () => new CompletenessGap(
@@ -197,24 +194,11 @@ internal sealed class LeadCompletenessCalculator(
     }
 
     /// <summary>
-    /// Whether an unresolved product line refuses the conversion for this tenant.
-    /// </summary>
-    /// <remarks>
-    /// An unreadable setting falls back to <c>false</c> — NOT the usual fail-closed posture, and
-    /// deliberately so. Failing closed here would refuse every conversion in the tenant because a
-    /// settings row could not be read, which is a worse outcome than letting through a lead whose
-    /// product line nobody resolved. The restrictive default belongs where a compliance rule is at
-    /// stake (the PEP window, the FATCA toggle); this switch is a rollout control.
-    /// </remarks>
-    /// <summary>
     /// Whether PEP vigilance is on for the tenant.
     ///
     /// <para>
-    /// <b>An outage answers TRUE</b>, which is the opposite of
-    /// <see cref="RequireProductLineAsync"/> below and deliberately so. There, failing closed
-    /// means not blocking a conversion on a setting nobody could read; here, failing closed means
-    /// keeping an LBC/FT obligation we could not confirm had been waived. Both directions are "do
-    /// not let an outage relax a rule", and for this flag that is TRUE.
+    /// <b>An outage answers TRUE</b>: failing closed means keeping an LBC/FT obligation we could
+    /// not confirm had been waived — an outage must not relax a rule.
     /// </para>
     /// </summary>
     private async Task<bool> PepEnabledAsync(Guid tenantId, CancellationToken ct)
@@ -237,19 +221,6 @@ internal sealed class LeadCompletenessCalculator(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return true;
-        }
-    }
-
-    private async Task<bool> RequireProductLineAsync(Guid tenantId, CancellationToken ct)
-    {
-        try
-        {
-            return await settings.GetBoolAsync(
-                tenantId, LeadSettingKeys.RequireProductLineToConvert, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return false;
         }
     }
 
@@ -460,9 +431,9 @@ internal sealed class LeadCompletenessCalculator(
     /// <c>ProductCatalogCache</c>, so asking twice in one request costs nothing.
     /// </remarks>
     private async Task<(BeneficiaryPolicyDto? Value, bool Unavailable)> TryReadPolicyAsync(
-        Lead lead, CancellationToken ct)
+        Guid tenantId, Guid? productLineId, CancellationToken ct)
     {
-        if (lead.ProductLineId is not { } lineId)
+        if (productLineId is not { } lineId)
             return (null, false);
 
         try
@@ -471,7 +442,7 @@ internal sealed class LeadCompletenessCalculator(
                 System.Transactions.TransactionScopeOption.Suppress,
                 System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
 
-            var policy = await administration.GetBeneficiaryPolicyAsync(lead.TenantId, lineId, ct);
+            var policy = await administration.GetBeneficiaryPolicyAsync(tenantId, lineId, ct);
             suppressed.Complete();
 
             // A DANGLING line id — the product was retired, or the id was never valid. Treated as

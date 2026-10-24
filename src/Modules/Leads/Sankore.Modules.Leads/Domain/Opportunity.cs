@@ -24,6 +24,14 @@ public sealed class Opportunity : AggregateRoot
     public string Title { get; private set; } = default!;
     public string? Description { get; private set; }
     public string Product { get; private set; } = default!;
+
+    /// <summary>
+    /// The catalogue line <see cref="Product"/> names, resolved when the product is set
+    /// (<c>ProductLineLookup</c>); null for a need « à préciser » or a label the catalogue does not
+    /// know. THE product line of the sale: KYC tier, required fields, questionnaires and the
+    /// contract all read it. An opaque reference, no foreign key — M12's schema.
+    /// </summary>
+    public Guid? ProductLineId { get; private set; }
     public Money? EstimatedAmount { get; private set; }
     public OpportunityStage Stage { get; private set; }
 
@@ -133,6 +141,14 @@ public sealed class Opportunity : AggregateRoot
         opp.RaiseDomainEvent(new Events.OpportunityCreatedDomainEvent(opp.Id, leadId, customerEntityId));
         return opp;
     }
+
+    /// <summary>
+    /// Records the catalogue line the product resolved to. Set by the handler that set the
+    /// product, never by a caller: an id arriving from outside would choose the policy — the KYC
+    /// tier — governing the sale.
+    /// </summary>
+    public void SetProductLine(Guid? productLineId)
+        => ProductLineId = productLineId == Guid.Empty ? null : productLineId;
 
     /// <summary>
     /// Moves the request to another stage.

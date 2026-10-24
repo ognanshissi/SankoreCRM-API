@@ -206,7 +206,8 @@ internal sealed class DispatchLeadHandler(
         var licensed = await distributionGuard.FilterEligibleAsync(
             cmd.TenantId,
             [.. eligible_candidates.Select(a => a.Id)],
-            lead.ProductLineId,
+            // The product the lead asked for: a dispatch happens before any project exists.
+            await ProductLines.ProductLineLookup.ForLeadAsync(usersModule, lead, ct),
             ct);
 
         if (licensed.Count != eligible_candidates.Count)

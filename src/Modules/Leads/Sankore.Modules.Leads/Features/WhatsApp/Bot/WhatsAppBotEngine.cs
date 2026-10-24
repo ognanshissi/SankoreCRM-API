@@ -140,7 +140,7 @@ internal sealed class WhatsAppBotEngine(
                 "Le bot n’est plus actif pour ce prospect.", now, profile: null, tellCustomer: true, ct);
 
             await FinishAsync(tenantId, conversation, turn, WhatsAppBotTurn.Record(
-                tenantId, conversation.Id, trigger.Id, turn.Lead?.ProductLineId, profileVersion: 0, RulesModel,
+                tenantId, conversation.Id, trigger.Id, WhatsAppBotFieldValues.LineOf(turn.Lead, ctx.Catalogue), profileVersion: 0, RulesModel,
                 input: null, output: null, toolCalls: null, WhatsAppBotTurnOutcome.RuleEscalated, WhatsAppBotReasons.Disabled,
                 answered: null, latencyMs: 0, null, null, errorCode: null, replyMessageId: null, now), collected: false, ct);
             return;
@@ -155,7 +155,7 @@ internal sealed class WhatsAppBotEngine(
             await escalation.EscalateAsync(tenantId, conversation, turn.Lead, verdict.Reason, verdict.Summary, now, profile, tellCustomer: true, ct);
 
             await FinishAsync(tenantId, conversation, turn, WhatsAppBotTurn.Record(
-                tenantId, conversation.Id, trigger.Id, turn.Lead?.ProductLineId, profile.Version, RulesModel,
+                tenantId, conversation.Id, trigger.Id, WhatsAppBotFieldValues.LineOf(turn.Lead, ctx.Catalogue), profile.Version, RulesModel,
                 input: null, output: null, toolCalls: null, WhatsAppBotTurnOutcome.RuleEscalated, verdict.Reason,
                 answered: null, latencyMs: 0, null, null, errorCode: null, replyMessageId: null, now), collected: false, ct);
             return;
@@ -223,7 +223,7 @@ internal sealed class WhatsAppBotEngine(
 
                 // The minimum just became complete: the reply thanked the customer (the prompt
                 // told the model to), the lead is created if it was waiting, and a person takes over.
-                if (CompletedThisTurn(profile, conversation, turn.Lead, run) && conversation.MarkLeadReady(now))
+                if (CompletedThisTurn(profile, conversation, turn.Lead, run, ctx) && conversation.MarkLeadReady(now))
                 {
                     reason = WhatsAppBotReasons.LeadReady;
                     await EnsureLeadAsync(tenantId, conversation, ctx, turn, ct);
@@ -234,7 +234,7 @@ internal sealed class WhatsAppBotEngine(
         }
 
         await FinishAsync(tenantId, conversation, turn, WhatsAppBotTurn.Record(
-            tenantId, conversation.Id, trigger.Id, turn.Lead?.ProductLineId, profile.Version, model.Name,
+            tenantId, conversation.Id, trigger.Id, WhatsAppBotFieldValues.LineOf(turn.Lead, ctx.Catalogue), profile.Version, model.Name,
             input: run.Input,
             output: run.Reply?.Text ?? run.Escalation?.Summary,
             toolCalls: run.Calls.Count == 0 ? null : JsonSerializer.Serialize(run.Calls, Json),
@@ -295,14 +295,14 @@ internal sealed class WhatsAppBotEngine(
     /// lead captured from a web form with its names already filled must not be handed over on the
     /// first « bonjour ».
     /// </summary>
-    private static bool CompletedThisTurn(WhatsAppBotProfile profile, WhatsAppConversation conversation, Lead? lead, BotRun run)
+    private static bool CompletedThisTurn(WhatsAppBotProfile profile, WhatsAppConversation conversation, Lead? lead, BotRun run, BotFieldContext ctx)
     {
         if (profile.FieldsRequiredForLead.Count == 0) return false;
 
         var pending = conversation.PendingLeadFields();
         var contributed = run.Collected.Concat(run.Pending.Keys).Any(profile.FieldsRequiredForLead.Contains);
 
-        return contributed && profile.FieldsRequiredForLead.All(code => WhatsAppBotFieldValues.IsFilled(lead, pending, code));
+        return contributed && profile.FieldsRequiredForLead.All(code => WhatsAppBotFieldValues.IsFilled(lead, pending, code, ctx));
     }
 
     /// <summary>What the agent who takes over reads: the minimum, collected, field by field.</summary>
@@ -356,7 +356,7 @@ internal sealed class WhatsAppBotEngine(
             var collectable = profile.FieldsToCollect
                 .Where(code => code switch
                 {
-                    WhatsAppBotFields.Product => productChoices.Count > 0 || WhatsAppBotFieldValues.IsFilled(lead, pending, code),
+                    WhatsAppBotFields.Product => productChoices.Count > 0 || WhatsAppBotFieldValues.IsFilled(lead, pending, code, ctx),
                     _ when WhatsAppBotFields.IsCustom(code) => ctx.CustomField(code) is not null,
                     _ => true,
                 })
@@ -369,7 +369,7 @@ internal sealed class WhatsAppBotEngine(
                     collectable.Select(code => new BotFieldStatus(
                         code,
                         ctx.LabelOf(code),
-                        WhatsAppBotFieldValues.IsFilled(lead, pending, code),
+                        WhatsAppBotFieldValues.IsFilled(lead, pending, code, ctx),
                         profile.FieldsRequiredForLead.Contains(code))).ToList(),
                     alreadySent.Where(b => !string.IsNullOrWhiteSpace(b)).Select(b => WhatsAppBotRedactor.Redact(b))!.ToList()!,
                     clock.GetUtcNow()));
@@ -634,7 +634,7 @@ internal sealed class WhatsAppBotEngine(
         WhatsAppBotProfile profile, Lead? lead, IReadOnlyDictionary<string, string> pending, IReadOnlyList<ProductSummary> catalogue)
     {
         var line = profile.IsGeneral
-            ? lead?.ProductLineId ?? WhatsAppBotFieldValues.PendingProduct(pending)
+            ? WhatsAppBotFieldValues.LineOf(lead, catalogue) ?? WhatsAppBotFieldValues.PendingProduct(pending)
             : profile.ProductLineId;
 
         return line is { } id && id != Guid.Empty ? catalogue.FirstOrDefault(p => p.Id == id) : null;

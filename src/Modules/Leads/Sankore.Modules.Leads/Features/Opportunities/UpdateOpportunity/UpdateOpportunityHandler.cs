@@ -7,7 +7,10 @@ using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
 
-internal sealed class UpdateOpportunityHandler(LeadsDbContext db, TimeProvider clock)
+internal sealed class UpdateOpportunityHandler(
+    LeadsDbContext db,
+    TimeProvider clock,
+    Administration.PublicApi.IAdministrationModule? administration = null)
     : IRequestHandler<UpdateOpportunityCommand, Result>
 {
     public async Task<Result> Handle(UpdateOpportunityCommand cmd, CancellationToken ct)
@@ -29,6 +32,8 @@ internal sealed class UpdateOpportunityHandler(LeadsDbContext db, TimeProvider c
             ? new Money(value, cmd.EstimatedCurrency)
             : null;
 
+        var previousProduct = opportunity.Product;
+
         opportunity.Update(
             title:             cmd.Title,
             description:       cmd.Description,
@@ -40,6 +45,12 @@ internal sealed class UpdateOpportunityHandler(LeadsDbContext db, TimeProvider c
             nextStep:          cmd.NextStep,
             nextStepDueOn:     cmd.NextStepDueOn,
             confirmSeparateNeed: cmd.ConfirmSeparateNeed);
+
+        // The line follows the product: kept from the old label it would name another product —
+        // and decide the KYC of a sale it is not about.
+        if (administration is not null && opportunity.Product != previousProduct)
+            opportunity.SetProductLine(
+                await ProductLines.ProductLineLookup.ResolveAsync(administration, opportunity.TenantId, opportunity.Product, ct));
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

@@ -82,7 +82,7 @@ internal sealed class ProjectLeadConversion(
                 ConversionType: lead.CustomerLinkReason == ConvertLeadHandler.ClientFileOpenedReason
                     ? LeadConversionType.NewCustomer
                     : LeadConversionType.ExistingCustomerNewProduct,
-                ProductLineId:  lead.ProductLineId),
+                ProductLineId:  project.ProductLineId),
             ct);
     }
 }

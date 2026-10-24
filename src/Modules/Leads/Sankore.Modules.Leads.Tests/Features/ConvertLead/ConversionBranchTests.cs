@@ -51,14 +51,14 @@ public sealed class ConversionBranchTests : IDisposable
     // ── fixtures ────────────────────────────────────────────────────────────
 
     private async Task<Lead> SeedAsync(
-        bool attached = false, bool exposed = false, Guid? lineId = null)
+        bool attached = false, bool exposed = false)
     {
         var lead = Lead.Capture(
             tenantId: _tenant, fullName: "Aya Kouassi", phoneNumber: "+2250700000001",
             source: LeadSource.Agency, interestedProduct: "Assurance santé",
             preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0),
             preferredAgencyId: _agency, clock: TimeProvider.System,
-            firstName: "Aya", lastName: "Kouassi", ownerId: _agent, productLineId: lineId);
+            firstName: "Aya", lastName: "Kouassi", ownerId: _agent);
 
         if (attached)
             lead.AttachToCustomer(_customer, isAutomatic: false, reason: "Confirmed by the agent");
@@ -246,7 +246,7 @@ public sealed class ConversionBranchTests : IDisposable
     {
         // The contract is opened when the PROJECT is won, on the project's own product.
         M01Creates(Guid.NewGuid());
-        var lead = await SeedAsync(lineId: _line);
+        var lead = await SeedAsync();
 
         var result = await ConvertAsync(new ConvertLeadCommand(lead.Id));
 

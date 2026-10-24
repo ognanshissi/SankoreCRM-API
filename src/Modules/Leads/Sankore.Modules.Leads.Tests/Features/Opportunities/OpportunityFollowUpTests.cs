@@ -2,6 +2,8 @@ namespace Sankore.Modules.Leads.Tests.Features.Opportunities;
 
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Opportunities.CreateOpportunity;
 using Sankore.Modules.Leads.Features.Opportunities.UpdateOpportunity;
@@ -65,6 +67,44 @@ public sealed class OpportunityFollowUpTests : IDisposable
         await UpdateAsync(new UpdateOpportunityCommand(id, Product: "Crédit habitat"));
 
         (await LoadAsync(id)).Product.Should().Be("Crédit habitat");
+    }
+
+    [Fact]
+    public async Task The_project_records_the_catalogue_line_its_product_names_and_follows_it()
+    {
+        // The sale's line is the project's (product owner, 2026-10-24): recorded with the product,
+        // and moved with it — kept from the old label it would decide the KYC of another product.
+        var habitat = Guid.NewGuid();
+        var equipment = Guid.NewGuid();
+        var admin = Substitute.For<IAdministrationModule>();
+        admin.ResolveProductLineAsync(_tenantId, "Crédit équipement", Arg.Any<CancellationToken>()).Returns(equipment);
+        admin.ResolveProductLineAsync(_tenantId, "Crédit habitat", Arg.Any<CancellationToken>()).Returns(habitat);
+
+        Guid id;
+        await using (var db = _factory.CreateContext())
+        {
+            var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+            db.Leads.Add(lead);
+            await db.SaveChangesAsync(CancellationToken.None);
+
+            var created = await new CreateOpportunityHandler(db, new FixedTime(Now), admin).Handle(
+                new CreateOpportunityCommand(_tenantId, lead.Id, "Chantier", Product: "Crédit équipement"),
+                CancellationToken.None);
+            created.IsSuccess.Should().BeTrue(created.Error);
+            id = created.Value;
+        }
+        (await LoadAsync(id)).ProductLineId.Should().Be(equipment);
+
+        await using (var db = _factory.CreateContext())
+            (await new UpdateOpportunityHandler(db, new FixedTime(Now), admin)
+                .Handle(new UpdateOpportunityCommand(id, Product: "Crédit habitat"), CancellationToken.None))
+                .IsSuccess.Should().BeTrue();
+        (await LoadAsync(id)).ProductLineId.Should().Be(habitat);
+
+        await using (var db = _factory.CreateContext())
+            await new UpdateOpportunityHandler(db, new FixedTime(Now), admin)
+                .Handle(new UpdateOpportunityCommand(id, Product: "Libellé libre"), CancellationToken.None);
+        (await LoadAsync(id)).ProductLineId.Should().BeNull("a label the catalogue does not know names no line");
     }
 
     [Fact]

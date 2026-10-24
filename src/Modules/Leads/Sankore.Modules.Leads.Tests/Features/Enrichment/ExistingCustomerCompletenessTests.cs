@@ -55,12 +55,13 @@ public sealed class ExistingCustomerCompletenessTests : IDisposable
 
     private async Task<LeadCompletenessDto> ComputeAsync(bool attach = true)
     {
+        _admin.ResolveProductLineAsync(_tenant, "Assurance santé", Arg.Any<CancellationToken>()).Returns(_line);
         var lead = Lead.Capture(
             tenantId: _tenant, fullName: "Aya Kouassi", phoneNumber: "+2250700000001",
             source: LeadSource.Agency, interestedProduct: "Assurance santé",
             preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0),
             preferredAgencyId: Guid.NewGuid(), clock: TimeProvider.System,
-            ownerId: Guid.NewGuid(), productLineId: _line);
+            ownerId: Guid.NewGuid());
 
         if (attach)
             lead.AttachToCustomer(_customer, isAutomatic: false, reason: "Confirmed by the agent");

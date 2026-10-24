@@ -117,7 +117,9 @@ internal sealed class SendWhatsAppTemplateHandler(
 
         if (template is null) return Fail(WhatsAppErrors.TemplateNotFound);
         if (!template.IsSendable) return Fail(WhatsAppErrors.TemplateNotApproved);
-        if (!template.AppliesTo(lead.ProductLineId)) return Fail(WhatsAppErrors.TemplateNotForProduct);
+        // The product the lead ASKED for — the lead stores no line (product owner, 2026-10-24).
+        if (!template.AppliesTo(await ProductLines.ProductLineLookup.ForLeadAsync(admin, lead, ct)))
+            return Fail(WhatsAppErrors.TemplateNotForProduct);
 
         var values = (cmd.Variables ?? []).Select(v => v?.Trim() ?? string.Empty).ToList();
 

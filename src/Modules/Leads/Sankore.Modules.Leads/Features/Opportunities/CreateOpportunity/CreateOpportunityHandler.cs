@@ -7,7 +7,10 @@ using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 using Money = Sankore.Shared.Kernel.ValueObject.Money;
 
-internal sealed class CreateOpportunityHandler(LeadsDbContext db, TimeProvider clock)
+internal sealed class CreateOpportunityHandler(
+    LeadsDbContext db,
+    TimeProvider clock,
+    Administration.PublicApi.IAdministrationModule? administration = null)
     : IRequestHandler<CreateOpportunityCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
@@ -31,6 +34,12 @@ internal sealed class CreateOpportunityHandler(LeadsDbContext db, TimeProvider c
             description:       cmd.Description,
             estimatedAmount:   amount,
             expectedCloseDate: cmd.ExpectedCloseDate);
+
+        // The product's catalogue line, recorded with it: the sale's line is the project's (product
+        // owner, 2026-10-24). Best-effort — a label the catalogue does not know stays « à préciser »
+        // as far as the policy is concerned, and readers resolve again when null.
+        if (administration is not null)
+            opp.SetProductLine(await ProductLines.ProductLineLookup.ResolveAsync(administration, opp.TenantId, opp.Product, ct));
 
         db.Opportunities.Add(opp);
         await db.SaveChangesAsync(ct);

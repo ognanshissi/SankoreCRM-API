@@ -15,5 +15,10 @@ using Sankore.Shared.Kernel;
 /// missing QUESTIONNAIRE rather than as a missing field.
 /// </para>
 /// </summary>
-internal sealed record GetLeadCompletenessQuery(Guid LeadId)
+/// <param name="ProjectId">
+/// The project a client file would be opened for: the report then applies ITS product's policy —
+/// the same line the opening will check. Null: the lead's single open project, else what it asked
+/// for (<c>ProductLineLookup.ForClientFileAsync</c>).
+/// </param>
+internal sealed record GetLeadCompletenessQuery(Guid LeadId, Guid? ProjectId = null)
     : ILeadReadRequest, IRequest<Result<LeadCompletenessDto>>;

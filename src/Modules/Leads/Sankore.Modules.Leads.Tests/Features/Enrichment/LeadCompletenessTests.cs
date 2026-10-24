@@ -49,18 +49,26 @@ public sealed class LeadCompletenessTests : IDisposable
                      RequiredKycTier: null,
                      IntegrationSystem: null));
 
+    /// <summary>
+    /// The lead stores no product line: <paramref name="lineId"/> is what its asked product
+    /// resolves to in the catalogue.
+    /// </summary>
     private Lead Capture(Guid? lineId = null, bool withNames = true)
-        => Lead.Capture(
+    {
+        _admin.ResolveProductLineAsync(_tenant, "Assurance santé", Arg.Any<CancellationToken>())
+              .Returns(lineId);
+
+        return Lead.Capture(
             tenantId: _tenant, fullName: "Aya Kouassi", phoneNumber: "+2250700000001",
             source: LeadSource.Agency, interestedProduct: "Assurance santé",
             preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0),
             preferredAgencyId: Guid.NewGuid(), clock: TimeProvider.System,
             firstName: withNames ? "Aya" : null,
             lastName: withNames ? "Kouassi" : null,
-            ownerId: Guid.NewGuid(), productLineId: lineId);
+            ownerId: Guid.NewGuid());
+    }
 
-    private async Task<LeadCompletenessDto> ComputeAsync(
-        Lead lead, bool requireProductLine = false)
+    private async Task<LeadCompletenessDto> ComputeAsync(Lead lead, Guid? projectLine = null, bool forProject = false)
     {
         await using var db = _factory.CreateContext();
         db.Leads.Add(lead);
@@ -70,42 +78,34 @@ public sealed class LeadCompletenessTests : IDisposable
             .Include(l => l.HouseholdMembers)
             .FirstAsync(l => l.Id == lead.Id, CancellationToken.None);
 
-        return await TestCompleteness
-            .Calculator(db, _admin, requireProductLine: requireProductLine)
-            .ComputeAsync(tracked, CancellationToken.None);
+        var calculator = TestCompleteness.Calculator(db, _admin);
+        return forProject
+            ? await calculator.ComputeAsync(tracked, projectLine, CancellationToken.None)
+            : await calculator.ComputeAsync(tracked, CancellationToken.None);
     }
 
-    // ── the product line comes first (§3.3) ─────────────────────────────────
+    // ── the product line: the project's, else what the lead asked for ───────
 
     [Fact]
-    public async Task An_unresolved_product_line_is_the_first_thing_reported()
+    public async Task A_lead_whose_asked_product_names_no_line_owes_only_what_every_lead_owes()
     {
-        var report = await ComputeAsync(Capture(lineId: null));
-
-        report.Gaps.Should().NotBeEmpty();
-        report.Gaps[0].Code.Should().Be(CompletenessCodes.ProductLineNotResolved,
-            "nothing else can be required without it — the policy is reached THROUGH the line");
-    }
-
-    [Fact]
-    public async Task An_unresolved_product_line_does_not_block_until_the_tenant_says_so()
-    {
-        // Deliberate departure from the specification's default: every lead already in the
-        // database has no product line, so a refusal on by default would convert none of them.
+        // The lead stores no product line (product owner, 2026-10-24); an unknown product is a
+        // need « à préciser », which the project's step gate — not this report — refuses to sell.
         var report = await ComputeAsync(Capture(lineId: null));
 
         report.CanConvert.Should().BeTrue();
-        report.Gaps[0].Blocking.Should().BeFalse();
+        report.Gaps.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task With_the_switch_on_an_unresolved_product_line_refuses_the_conversion()
+    public async Task The_project_line_decides_the_required_fields_whatever_the_lead_asked_for()
     {
-        var report = await ComputeAsync(Capture(lineId: null), requireProductLine: true);
+        PolicyRequires(PersonFieldCode.BirthDate);
 
-        report.CanConvert.Should().BeFalse();
-        report.Gaps[0].Should().Match<CompletenessGap>(g =>
-            g.Code == CompletenessCodes.ProductLineNotResolved && g.Blocking);
+        var report = await ComputeAsync(Capture(lineId: null), projectLine: _line, forProject: true);
+
+        report.CanConvert.Should().BeFalse("the project's product requires a birth date");
+        report.Gaps.Should().Contain(g => g.Code == CompletenessCodes.MissingRequiredField);
     }
 
     // ── required fields, per person ─────────────────────────────────────────
@@ -274,7 +274,7 @@ public sealed class LeadCompletenessTests : IDisposable
 
         var report = await ComputeAsync(Capture(_line));
 
-        report.Applicable.Should().Be(1, "only the product-line check applies");
+        report.Applicable.Should().Be(0, "nothing applies — the product line is not a check of the lead any more");
         report.Percentage.Should().Be(100);
         report.CanConvert.Should().BeTrue();
     }
@@ -286,11 +286,10 @@ public sealed class LeadCompletenessTests : IDisposable
 
         var report = await ComputeAsync(Capture(_line));
 
-        // Four checks apply: the product line (resolved), the first name (present), the birth date
-        // and the city (both missing).
-        report.Applicable.Should().Be(4);
-        report.Satisfied.Should().Be(2);
-        report.Percentage.Should().Be(50);
+        // Three checks apply: the first name (present), the birth date and the city (both missing).
+        report.Applicable.Should().Be(3);
+        report.Satisfied.Should().Be(1);
+        report.Percentage.Should().Be(33);
     }
 
     // ── FATCA (BNF-B-11) ────────────────────────────────────────────────────
@@ -304,7 +303,7 @@ public sealed class LeadCompletenessTests : IDisposable
 
         report.Gaps.Should().NotContain(g =>
             g.Code == CompletenessCodes.FatcaDeclarationMissing);
-        report.Applicable.Should().Be(1,
+        report.Applicable.Should().Be(0,
             "BNF-B-11: with FATCA off nothing is required, exposed or COUNTED");
     }
 

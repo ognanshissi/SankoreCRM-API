@@ -355,7 +355,7 @@ public sealed class ProjectQuestionnaireTests : IDisposable
             source: LeadSource.Agency, interestedProduct: Product,
             preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0), preferredAgencyId: Guid.NewGuid(),
             clock: TimeProvider.System, firstName: "Aya", lastName: "Kouassi",
-            ownerId: _user.Id, productLineId: _productLine);
+            ownerId: _user.Id);
         lead.AddHouseholdMember(
             HouseholdMemberType.Child, null, PersonIdentity.Create("Kouassi", "Kofi"), null, true, Now);
 

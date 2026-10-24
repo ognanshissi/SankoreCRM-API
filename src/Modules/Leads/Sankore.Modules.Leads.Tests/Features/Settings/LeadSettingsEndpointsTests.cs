@@ -216,7 +216,7 @@ public sealed class LeadSettingsEndpointsTests : IDisposable
         await using var db = _factory.CreateContext();
 
         var result = await Updater(db, settings).Handle(
-            new UpdateLeadSettingCommand(LeadSettingKeys.RequireProductLineToConvert, "true"),
+            new UpdateLeadSettingCommand(LeadSettingKeys.WhatsAppBotEnabled, "true"),
             CancellationToken.None);
 
         result.Value!.Value.Should().Be("true");

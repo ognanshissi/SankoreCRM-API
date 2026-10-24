@@ -51,10 +51,6 @@ public sealed class DispatchLicenceGuardTests : IDisposable
             preferredAgencyId: null,
             clock: TimeProvider.System);
 
-        // A resolved product line is what makes the guard ask anything at all. The guard's double
-        // is what decides whether this line is an insurance one.
-        lead.SetProductLine(Guid.NewGuid()).IsSuccess.Should().BeTrue();
-
         db.Leads.Add(lead);
         await db.SaveChangesAsync();
         return lead;
@@ -86,6 +82,10 @@ public sealed class DispatchLicenceGuardTests : IDisposable
         var module = Substitute.For<IAdministrationModule>();
         module.GetAvailableAgentsAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(agents.ToList());
+        // The lead stores no product line: its asked product resolves to one, which is what makes
+        // the guard ask anything at all. The guard's double decides whether it is an insurance one.
+        module.ResolveProductLineAsync(Arg.Any<Guid>(), "Assurance santé", Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
         return module;
     }
 

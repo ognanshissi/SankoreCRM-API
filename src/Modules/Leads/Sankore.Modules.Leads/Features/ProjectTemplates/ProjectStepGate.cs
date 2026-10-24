@@ -89,7 +89,7 @@ internal sealed class ProjectStepGate(
         if (!reachesFile && !reachesApproval)
             return Result.Ok();
 
-        var (kycRequired, tier, lineId) = await RequirementOfAsync(project.Product, ct);
+        var (kycRequired, tier, lineId) = await RequirementOfAsync(project, ct);
         var lead = project.LeadId is { } leadId
             ? await db.Leads.AsNoTracking().FirstOrDefaultAsync(l => l.Id == leadId, ct)
             : null;
@@ -199,9 +199,9 @@ internal sealed class ProjectStepGate(
     }
 
     /// <summary>(KYC required?, tier to compare or null, product line) for a project's product.</summary>
-    private async Task<(bool Required, string? Tier, Guid? LineId)> RequirementOfAsync(string? product, CancellationToken ct)
+    private async Task<(bool Required, string? Tier, Guid? LineId)> RequirementOfAsync(Opportunity project, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(product))
+        if (project.ProductLineId is null && string.IsNullOrWhiteSpace(project.Product))
             return (true, null, null);
 
         try
@@ -209,7 +209,9 @@ internal sealed class ProjectStepGate(
             using var suppressed = new TransactionScope(
                 TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
 
-            var lineId = await administration.ResolveProductLineAsync(tenant.CurrentTenantId, product, ct);
+            // The line recorded with the product; resolved again for a project older than it.
+            var lineId = project.ProductLineId
+                ?? await administration.ResolveProductLineAsync(tenant.CurrentTenantId, project.Product, ct);
             var policy = lineId is { } id
                 ? await administration.GetBeneficiaryPolicyAsync(tenant.CurrentTenantId, id, ct)
                 : null;

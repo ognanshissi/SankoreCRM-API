@@ -40,11 +40,5 @@ internal sealed class EnrichLeadValidator : AbstractValidator<EnrichLeadCommand>
         RuleFor(x => x.BirthDate)
             .Must(d => d is null || d <= DateOnly.FromDateTime(DateTime.UtcNow))
             .WithMessage("BirthDate cannot be in the future.");
-
-        // Naming a line AND asking to clear it are two different intentions in one request, and
-        // guessing which wins is how a lead silently loses its product line.
-        RuleFor(x => x)
-            .Must(x => !(x.ClearProductLine && x.ProductLineId is not null))
-            .WithMessage("Pass either productLineId or clearProductLine, not both.");
     }
 }

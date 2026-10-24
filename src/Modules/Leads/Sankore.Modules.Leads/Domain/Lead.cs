@@ -342,36 +342,17 @@ public sealed class Lead : AggregateRoot
     // ── Product & qualification ──────────────────────────────────────────────
 
     /// <summary>
-    /// The product line this request is about: the id of an M12 <c>ProductSpeciality</c>
-    /// (BNF-B-01). Null until somebody resolves it, and null says exactly that.
+    /// What the prospect asked for — a catalogue code or a free label, « Unknown » when a source
+    /// named nothing. It pre-fills a project's product and, before any project exists, is resolved
+    /// to a catalogue line on demand (<c>ProductLineLookup</c>) for what needs one: the licensed
+    /// agents of a dispatch, a WhatsApp profile, the household ceilings.
     ///
     /// <para>
-    /// It does NOT replace <see cref="InterestedProduct"/>, which stays as captured. That field
-    /// already links a lead to a product, but by FREE-TEXT LABEL — a required 100-character string
-    /// validated by a single <c>NotEmpty()</c>, holding values like "Crédit commerçant" and
-    /// defaulted to "Unknown" by the pull job and the system capture endpoint. A label cannot carry
-    /// the beneficiary policy, the household toggle, the required-fields list or the KYC tier,
-    /// because those are all reads on a catalogue row. So: what the prospect said, and what an
-    /// agent resolved it to. The same pair as <see cref="Source"/> and
-    /// <see cref="LeadSourceConfigId"/>, for the same reason.
-    /// </para>
-    ///
-    /// <para>
-    /// An OPAQUE reference with no foreign key — another schema — so a retired product line leaves
-    /// a resolvable-looking id and every reader must degrade rather than assume.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Server-set only</b>, and absent from <c>CaptureLeadRequest</c> /
-    /// <c>SystemCaptureLeadRequest</c> on purpose. Nothing validates an id arriving from a public
-    /// ingest, so a caller able to set it would choose the policy governing its own lead — which
-    /// fields gate its conversion, the KYC tier required, and whether multiple holdings are
-    /// allowed. Exactly the reasoning that keeps <see cref="LeadSourceConfigId"/> off those
-    /// contracts.
+    /// <b>No product line is stored on the lead</b> (product owner, 2026-10-24): the product that
+    /// decides — KYC, required fields, questionnaires, the contract — is the PROJECT's
+    /// (<see cref="Opportunity.ProductLineId"/>). A second, stored copy here could only disagree.
     /// </para>
     /// </summary>
-    public Guid? ProductLineId { get; private set; }
-
     public string InterestedProduct { get; private set; } = default!;
     public Money? DesiredAmount { get; private set; }
     public string PreferredLanguage { get; private set; } = default!;
@@ -563,7 +544,6 @@ public sealed class Lead : AggregateRoot
         Guid? leadSourceConfigId = null,
         string? emailBlindIndex = null,
         Guid? customerId = null,
-        Guid? productLineId = null,
         bool customerLinkIsAutomatic = false,
         string? customerLinkReason = null)
     {
@@ -635,7 +615,6 @@ public sealed class Lead : AggregateRoot
             AcquisitionCost       = acquisitionCost,
             IsTest                = isTest,
             LeadSourceConfigId    = leadSourceConfigId,
-            ProductLineId         = productLineId,
             CustomerId            = customerId,
             CustomerLinkIsAutomatic = customerId.HasValue && customerLinkIsAutomatic,
             CustomerLinkReason    = customerId.HasValue ? Blank(customerLinkReason) : null,
@@ -1483,8 +1462,8 @@ public sealed class Lead : AggregateRoot
     ///
     /// <para>
     /// It does NOT touch the phone, the e-mail, the national id or the product line. Those have
-    /// their own writers — <see cref="SetEmail"/>, <see cref="SetProductLine"/> — because each
-    /// carries a side effect (a blind index, a policy change) that a bulk identity setter would
+    /// their own writers — <see cref="SetEmail"/> — because each
+    /// carries a side effect (a blind index) that a bulk identity setter would
     /// silently skip.
     /// </para>
     /// </summary>
@@ -1681,24 +1660,6 @@ public sealed class Lead : AggregateRoot
         UpdatedAt      = now;
 
         RaiseDomainEvent(new LeadPepExposureChangedDomainEvent(Id, exposed));
-        return Result.Ok();
-    }
-
-    // ── Product line (BNF-B-01) ──────────────────────────────────────────────
-
-    /// <summary>
-    /// Resolves, or clears, the M12 product line this request is about. Server-set — see
-    /// <see cref="ProductLineId"/> for why no capture contract carries it.
-    /// </summary>
-    public Result SetProductLine(Guid? productLineId)
-    {
-        if (Status is LeadStatus.Converted or LeadStatus.Archived)
-            return Result.Fail("Cannot update a closed lead.");
-
-        // Guid.Empty is what a malformed JSON guid deserialises to in this API
-        // (see GuidConverter in Program.cs), so it must not be stored as a real reference.
-        ProductLineId = productLineId == Guid.Empty ? null : productLineId;
-        UpdatedAt     = DateTimeOffset.UtcNow;
         return Result.Ok();
     }
 

@@ -78,12 +78,6 @@ public sealed record CaptureLeadCommand(
     /// </summary>
     Guid? CustomerId = null,
     /// <summary>
-    /// The M12 product line, when the caller resolved it. Server-set only — see
-    /// <c>Lead.ProductLineId</c> for why a caller able to choose it would be choosing the
-    /// beneficiary policy that gates its own conversion.
-    /// </summary>
-    Guid? ProductLineId = null,
-    /// <summary>
     /// The prospect's household, when the capture collected one (BNF-B-18). Created in the SAME
     /// transaction as the lead: a household recorded by a second request is one that can fail on
     /// its own, leaving a lead whose family somebody has to remember to re-enter.

@@ -86,7 +86,7 @@ public sealed class EnrichLeadHandlerTests : IDisposable
             NullLogger<HouseholdWriteContext>.Instance);
 
         return new EnrichLeadHandler(
-            context, db, _admin, TestCompleteness.Calculator(db, _admin), user, _sender,
+            context, db, TestCompleteness.Calculator(db, _admin), user, _sender,
             Options.Create(new LeadModuleSettings()), _publisher);
     }
 
@@ -238,55 +238,13 @@ public sealed class EnrichLeadHandlerTests : IDisposable
     {
         var lead = await SeedAsync(withNames: true);
 
-        var result = await SendAsync(new EnrichLeadCommand(lead.Id, ProductLineId: _line));
+        var result = await SendAsync(new EnrichLeadCommand(lead.Id, City: "Abidjan"));
 
         result.Value.LeadId.Should().Be(lead.Id);
         result.Value.Gaps.Should().NotContain(g =>
-            g.Code == Sankore.Modules.Leads.Features.Enrichment
-                      .CompletenessCodes.ProductLineNotResolved,
-            "the line was just resolved, and the report has to reflect the write it accompanies");
-    }
-
-    // ── the product line is the one validated field ─────────────────────────
-
-    [Fact]
-    public async Task A_product_line_the_catalogue_does_not_have_is_refused()
-    {
-        // The only server-validated field here, because it decides which policy governs the lead.
-        var lead = await SeedAsync(withNames: true);
-        _admin.GetBeneficiaryPolicyAsync(_tenant, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-              .Returns((BeneficiaryPolicyDto?)null);
-
-        var result = await SendAsync(new EnrichLeadCommand(lead.Id, ProductLineId: Guid.NewGuid()));
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(EnrichLeadHandler.ProductLineNotFound);
-        (await ReloadAsync(lead.Id)).ProductLineId.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task An_unreachable_catalogue_refuses_rather_than_storing_an_unchecked_id()
-    {
-        var lead = await SeedAsync(withNames: true);
-        _admin.GetBeneficiaryPolicyAsync(_tenant, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-              .Returns<Task<BeneficiaryPolicyDto?>>(_ => throw new InvalidOperationException("M12 down"));
-
-        var result = await SendAsync(new EnrichLeadCommand(lead.Id, ProductLineId: _line));
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(HouseholdPolicyResolver.PolicyUnavailable);
-    }
-
-    [Fact]
-    public async Task Clearing_the_product_line_needs_no_catalogue_read()
-    {
-        var lead = await SeedAsync(withNames: true);
-        await SendAsync(new EnrichLeadCommand(lead.Id, ProductLineId: _line));
-
-        var result = await SendAsync(new EnrichLeadCommand(lead.Id, ClearProductLine: true));
-
-        result.IsSuccess.Should().BeTrue(result.Error);
-        (await ReloadAsync(lead.Id)).ProductLineId.Should().BeNull();
+            g.Code == Sankore.Modules.Leads.Features.Enrichment.CompletenessCodes.MissingRequiredField
+            && g.Detail == "CITY",
+            "the report has to reflect the write it accompanies");
     }
 
     // ── traceability ────────────────────────────────────────────────────────
@@ -364,7 +322,7 @@ public sealed class EnrichLeadHandlerTests : IDisposable
             _publisher, new FixedClock(Now), NullLogger<HouseholdWriteContext>.Instance);
 
         var handler = new EnrichLeadHandler(
-            context, db, _admin, TestCompleteness.Calculator(db, _admin), stranger, _sender,
+            context, db, TestCompleteness.Calculator(db, _admin), stranger, _sender,
             Options.Create(new LeadModuleSettings()), _publisher);
 
         var result = await handler.Handle(
@@ -386,7 +344,7 @@ public sealed class EnrichLeadHandlerTests : IDisposable
                   _line, "CPT-01", nameof(ProductCategory.CurrentAccount),
                   true, false, [], null, null, [], null, null));
 
-        await SendAsync(new EnrichLeadCommand(lead.Id, ProductLineId: _line));
+        _admin.ResolveProductLineAsync(_tenant, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_line);
         var result = await SendAsync(new EnrichLeadCommand(lead.Id, City: "Abidjan"));
 
         result.IsSuccess.Should().BeTrue(result.Error);

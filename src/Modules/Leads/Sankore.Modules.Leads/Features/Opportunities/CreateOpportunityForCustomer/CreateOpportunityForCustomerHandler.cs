@@ -11,7 +11,8 @@ using Money = Sankore.Shared.Kernel.ValueObject.Money;
 internal sealed class CreateOpportunityForCustomerHandler(
     LeadsDbContext db,
     TimeProvider clock,
-    IPhoneBlindIndexer phoneBlindIndexer)
+    IPhoneBlindIndexer phoneBlindIndexer,
+    Administration.PublicApi.IAdministrationModule? administration = null)
     : IRequestHandler<CreateOpportunityForCustomerCommand, Result<CreateOpportunityForCustomerResult>>
 {
     public async Task<Result<CreateOpportunityForCustomerResult>> Handle(
@@ -66,6 +67,9 @@ internal sealed class CreateOpportunityForCustomerHandler(
             description:       cmd.Description,
             estimatedAmount:   amount,
             expectedCloseDate: cmd.ExpectedCloseDate);
+
+        if (administration is not null)
+            opp.SetProductLine(await ProductLines.ProductLineLookup.ResolveAsync(administration, opp.TenantId, opp.Product, ct));
 
         db.Opportunities.Add(opp);
         await db.SaveChangesAsync(ct);

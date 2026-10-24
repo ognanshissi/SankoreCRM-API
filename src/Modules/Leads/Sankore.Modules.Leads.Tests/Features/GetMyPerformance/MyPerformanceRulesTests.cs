@@ -22,7 +22,7 @@ public sealed class MyPerformanceRulesTests
             Guid.NewGuid(),
             converted ? LeadStatus.Converted : LeadStatus.New,
             converted ? Now.AddDays(-1) : null,
-            holder ?? agent, null, "Compte épargne");
+            holder ?? agent, "Compte épargne");
     }
 
     [Theory]

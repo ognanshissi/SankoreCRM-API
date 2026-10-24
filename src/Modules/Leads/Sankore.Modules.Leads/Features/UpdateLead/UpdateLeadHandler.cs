@@ -32,7 +32,6 @@ internal sealed class UpdateLeadHandler(
         if (lead.IsStale(cmd.ExpectedUpdatedAt))
             return Result.Fail(LeadConcurrency.ConflictError);
 
-        var previousProduct = lead.InterestedProduct;
 
         GeoPoint? location = null;
         if (cmd.Latitude.HasValue && cmd.Longitude.HasValue)
@@ -83,42 +82,7 @@ internal sealed class UpdateLeadHandler(
                 return stored;
         }
 
-        // The line follows the label. Left alone, a lead whose product an agent corrected kept the
-        // line resolved from the OLD label — or none at all — and the conversion then sent the
-        // KYC file and the draft holding the wrong product, or no product.
-        if (!string.Equals(previousProduct?.Trim(), lead.InterestedProduct?.Trim(), StringComparison.OrdinalIgnoreCase))
-            await ResolveProductLineAsync(lead, ct);
-
         await db.SaveChangesAsync(ct);
         return Result.Ok();
-    }
-
-    /// <summary>
-    /// Same rule as at capture. A label that matches nothing CLEARS the line: keeping one that
-    /// names another product would be worse than none. A catalogue outage changes nothing — the
-    /// edit is saved and the conversion retries the lookup.
-    /// </summary>
-    private async Task ResolveProductLineAsync(Lead lead, CancellationToken ct)
-    {
-        Guid? resolved;
-        try
-        {
-            using var suppressed = new TransactionScope(
-                TransactionScopeOption.Suppress,
-                TransactionScopeAsyncFlowOption.Enabled);
-
-            resolved = await administration.ResolveProductLineAsync(
-                lead.TenantId, lead.InterestedProduct, ct);
-
-            suppressed.Complete();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _ = ex;
-            return;
-        }
-
-        if (resolved != lead.ProductLineId)
-            lead.SetProductLine(resolved);
     }
 }

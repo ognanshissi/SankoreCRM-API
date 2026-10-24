@@ -30,11 +30,6 @@ using Sankore.Shared.Kernel;
 /// calculator the conversion will use.
 /// </para>
 /// </summary>
-/// <param name="ProductLineId">
-/// An M12 product line. Server-VALIDATED against the catalogue, unlike every other field here: it
-/// decides which policy governs the lead, so an unchecked id would let a caller choose its own
-/// required fields and KYC tier. Pass <paramref name="ClearProductLine"/> to unset it.
-/// </param>
 /// <param name="SourceActivityId">
 /// The <c>LeadActivity</c> during which this was collected, when an agent is enriching from a call
 /// or a visit (BNF-B-02). Validated to belong to this lead. It
@@ -57,8 +52,6 @@ internal sealed record EnrichLeadCommand(
     string? PostalCode = null,
     string? City = null,
     string? CountryCode = null,
-    Guid? ProductLineId = null,
-    bool ClearProductLine = false,
     Guid? SourceActivityId = null,
     DateTimeOffset? ExpectedUpdatedAt = null,
     string? Neighbourhood = null,

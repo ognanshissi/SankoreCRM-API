@@ -175,33 +175,20 @@ public sealed class LeadIdentityTests
     // ── Product line ──────────────────────────────────────────────────────
 
     [Fact]
-    public void A_captured_lead_has_no_product_line_until_one_is_resolved()
+    public void A_lead_keeps_what_was_asked_and_no_product_line()
     {
-        var lead = Capture();
-
-        lead.ProductLineId.Should().BeNull();
-        lead.InterestedProduct.Should().Be("Crédit commerçant",
-            "the captured label is untouched — it is the other half of the pair");
+        // Product owner, 2026-10-24: the sale's line is the PROJECT's (Opportunity.ProductLineId).
+        Capture().InterestedProduct.Should().Be("Crédit commerçant");
+        typeof(Lead).GetProperty("ProductLineId").Should().BeNull("a second copy could only disagree with the project's");
     }
 
     [Fact]
-    public void SetProductLine_stores_a_resolved_line()
+    public void A_project_treats_an_empty_guid_as_no_product_line()
     {
-        var lead = Capture();
-        var line = Guid.NewGuid();
+        // Guid.Empty is what this API's GuidConverter produces from a malformed JSON guid.
+        var project = Opportunity.CreateFromLead(Guid.NewGuid(), Guid.NewGuid(), "Projet", "Crédit", null, TimeProvider.System);
 
-        lead.SetProductLine(line).IsSuccess.Should().BeTrue();
-        lead.ProductLineId.Should().Be(line);
-    }
-
-    [Fact]
-    public void SetProductLine_treats_an_empty_guid_as_absent()
-    {
-        // Guid.Empty is what this API's GuidConverter produces from a malformed JSON guid, so it
-        // must never be stored as though it referenced a product line.
-        var lead = Capture();
-
-        lead.SetProductLine(Guid.Empty);
-        lead.ProductLineId.Should().BeNull();
+        project.SetProductLine(Guid.Empty);
+        project.ProductLineId.Should().BeNull();
     }
 }

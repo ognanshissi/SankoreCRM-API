@@ -14,15 +14,8 @@ using Sankore.Shared.Kernel;
 /// endpoint — the same rule <c>ILeadsModule.GetLeadHistoryAsync</c> already follows.
 /// </para>
 /// </summary>
-/// <param name="ProductLineChanged">
-/// Whether this enrichment resolved or cleared the product line. Carried separately because it is
-/// the one change with downstream consequences: the required fields, the questionnaires owed and
-/// the KYC tier all follow from it.
-/// </param>
 public sealed record LeadEnrichedIntegrationEvent(
     Guid TenantId,
     Guid LeadId,
-    Guid? ProductLineId,
-    bool ProductLineChanged,
     IReadOnlyList<string> ChangedFields,
     Guid? SourceActivityId) : IntegrationEventBase;

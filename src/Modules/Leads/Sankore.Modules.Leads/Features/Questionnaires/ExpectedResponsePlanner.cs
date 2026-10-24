@@ -227,7 +227,7 @@ internal sealed class ExpectedResponsePlanner(
     /// <summary>The product line the project's product names, or null.</summary>
     private async Task<BeneficiaryPolicyDto?> LineOfAsync(Opportunity project, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(project.Product))
+        if (project.ProductLineId is null && string.IsNullOrWhiteSpace(project.Product))
             return null;
 
         try
@@ -238,7 +238,8 @@ internal sealed class ExpectedResponsePlanner(
                 System.Transactions.TransactionScopeOption.Suppress,
                 System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
 
-            var lineId = await administration.ResolveProductLineAsync(project.TenantId, project.Product, ct);
+            var lineId = project.ProductLineId
+                ?? await administration.ResolveProductLineAsync(project.TenantId, project.Product, ct);
             var line = lineId is { } id
                 ? await administration.GetBeneficiaryPolicyAsync(project.TenantId, id, ct)
                 : null;

@@ -19,11 +19,16 @@ public sealed class HouseholdPolicyResolverTests
 
     private HouseholdPolicyResolver Resolver() => new(_admin);
 
-    private static Lead LeadWith(Guid? productLineId) => Lead.Capture(
-        tenantId: Tenant, fullName: "Aya Kouassi", phoneNumber: "+2250700000001",
-        source: LeadSource.Agency, interestedProduct: "Assurance santé",
-        preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0), preferredAgencyId: null,
-        clock: TimeProvider.System, ownerId: Guid.NewGuid(), productLineId: productLineId);
+    /// <summary>The lead stores no product line: its asked product resolves to <paramref name="productLineId"/>.</summary>
+    private Lead LeadWith(Guid? productLineId)
+    {
+        _admin.ResolveProductLineAsync(Tenant, "Assurance santé", Arg.Any<CancellationToken>()).Returns(productLineId);
+        return Lead.Capture(
+            tenantId: Tenant, fullName: "Aya Kouassi", phoneNumber: "+2250700000001",
+            source: LeadSource.Agency, interestedProduct: "Assurance santé",
+            preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0), preferredAgencyId: null,
+            clock: TimeProvider.System, ownerId: Guid.NewGuid());
+    }
 
     private void PolicyFor(Guid lineId, int? maxChildren = null, int? childMaxAge = null) =>
         _admin.GetBeneficiaryPolicyAsync(Tenant, lineId, Arg.Any<CancellationToken>())

@@ -44,15 +44,15 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
     private ExpectedResponsePlanner Planner(Sankore.Modules.Leads.Infrastructure.LeadsDbContext db)
         => new(db, _admin, TimeProvider.System);
 
+    /// <summary>A null <paramref name="productLineId"/> is a lead whose need names no product yet.</summary>
     private Lead LeadWith(Guid? productLineId, int children = 0, bool spouse = false)
     {
         var lead = Lead.Capture(
             tenantId: _tenant, fullName: "Aya Kouassi", phoneNumber: "+2250700000001",
-            source: LeadSource.Agency, interestedProduct: "Assurance santé",
+            source: LeadSource.Agency, interestedProduct: productLineId is null ? "Unknown" : Product,
             preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0), preferredAgencyId: null,
             clock: TimeProvider.System,
-            firstName: "Aya", lastName: "Kouassi", ownerId: Guid.NewGuid(),
-            productLineId: productLineId);
+            firstName: "Aya", lastName: "Kouassi", ownerId: Guid.NewGuid());
 
         if (spouse)
             lead.AddHouseholdMember(
@@ -88,7 +88,7 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
         await using var db = _factory.CreateContext();
         db.Leads.Add(lead);
         db.Opportunities.Add(Opportunity.CreateFromLead(
-            _tenant, lead.Id, "Projet santé", lead.ProductLineId is null ? null : Product,
+            _tenant, lead.Id, "Projet santé", lead.InterestedProduct == "Unknown" ? null : Product,
             ownerId: null, TimeProvider.System));
         db.QualificationTemplates.AddRange(templates);
         await db.SaveChangesAsync(CancellationToken.None);

@@ -42,12 +42,14 @@ public sealed class RequiredConsentTests : IDisposable
 
     private async Task<Lead> SeedAsync()
     {
+        // The lead stores no product line: its asked product resolves to it.
+        _admin.ResolveProductLineAsync(_tenant, "Crédit équipement", Arg.Any<CancellationToken>()).Returns(_line);
         var lead = Lead.Capture(
             tenantId: _tenant, fullName: "Didier Gbagbo", phoneNumber: "+2250701020324",
             source: LeadSource.CallCenter, interestedProduct: "Crédit équipement",
             preferredLanguage: "fr", location: new GeoPoint(5.3, -4.0),
             preferredAgencyId: null, clock: TimeProvider.System,
-            firstName: "Didier", lastName: "Gbagbo", ownerId: _agent, productLineId: _line);
+            firstName: "Didier", lastName: "Gbagbo", ownerId: _agent);
         await using var db = _factory.CreateContext();
         db.Leads.Add(lead);
         await db.SaveChangesAsync(CancellationToken.None);

@@ -117,8 +117,8 @@ internal sealed class CloseOpportunityHandler(
                 TransactionScopeOption.Suppress,
                 TransactionScopeAsyncFlowOption.Enabled);
 
-            var lineId = await administration.ResolveProductLineAsync(
-                opportunity.TenantId, opportunity.Product, ct);
+            var lineId = opportunity.ProductLineId
+                ?? await administration.ResolveProductLineAsync(opportunity.TenantId, opportunity.Product, ct);
 
             if (lineId is null)
             {

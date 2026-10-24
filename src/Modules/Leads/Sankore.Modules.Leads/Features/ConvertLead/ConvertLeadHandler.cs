@@ -96,16 +96,14 @@ internal sealed class ConvertLeadHandler(
                 AlreadyConverted: true));
         }
 
-        // ── The product line, if capture could not resolve it ────────────
+        // ── Which product is the file opened for? ────────────────────────
         //
-        // Capture resolves the label once, and only on CaptureLeadHandler's path: a lead from a web
-        // form, a webhook or a hand-completed ingestion is built without the lookup, and a label
-        // fixed by an agent afterwards was never looked up again. The line then stayed null through
-        // the conversion, so KycRequested carried none — and the KYC file read "no product", fell
-        // back to the default remote policy and to manual validation, while the client's draft
-        // holding was not opened at all. Resolving here, before the completeness gate, closes all
-        // those paths at the one place the line is finally consumed.
-        await TryResolveMissingProductLineAsync(lead, ct);
+        // The PROJECT's (product owner, 2026-10-24): the lead stores no product line, and the line
+        // decides the fields required before the client is created, whether a KYC file opens and
+        // at which tier. The named project, else the lead's single open one, else — no project
+        // yet — what the lead asked for.
+        var productLineId = await ProductLines.ProductLineLookup.ForClientFileAsync(
+            db, administration, lead, cmd.ProjectId, ct);
 
         // ── The file must be complete (BNF-B-04, BNF-B-08, BNF-B-11) ─────
         //
@@ -122,7 +120,7 @@ internal sealed class ConvertLeadHandler(
         // NOT bypassed by Force. That flag exists to override the DUPLICATE gate, which is a
         // judgement about whether two records are the same person; a missing health declaration or
         // an unresolved product line is not a judgement call.
-        var report = await completeness.ComputeAsync(lead, ct);
+        var report = await completeness.ComputeAsync(lead, productLineId, ct);
         if (!report.CanConvert)
         {
             return Result.Ok(new ConvertLeadResult(
@@ -138,7 +136,7 @@ internal sealed class ConvertLeadHandler(
         // A Standard line whose policy says None sells without a file: the client is created
         // active and nothing asks M02 for anything. Anything else — an unresolved product, an
         // unreadable policy — keeps the file, because a gate that cannot tell must not waive it.
-        var kycRequired = await IsKycRequiredAsync(lead, ct);
+        var kycRequired = await IsKycRequiredAsync(lead.TenantId, productLineId, ct);
 
         // ── US-M13-171: Validate existing customer if provided ──────────
         if (cmd.CustomerId.HasValue)
@@ -308,7 +306,7 @@ internal sealed class ConvertLeadHandler(
                     // whether the new customer may send their documents remotely and how the file is
                     // validated. Null when the lead's product label resolved to nothing, which is
                     // ordinary — the file is then simply collected at the counter.
-                    ProductLineId:    lead.ProductLineId),
+                    ProductLineId:    productLineId),
                 ct);
 
         await db.SaveChangesAsync(ct);
@@ -336,36 +334,6 @@ internal sealed class ConvertLeadHandler(
     }
 
     /// <summary>
-    /// Same rule as at capture — exact on the code or the name, active lines only, "Unknown"
-    /// resolves to nothing — and the same posture: best-effort. A conversion is not refused
-    /// because the catalogue could not be read; the lead converts without a line, as it did before.
-    /// </summary>
-    private async Task TryResolveMissingProductLineAsync(Lead lead, CancellationToken ct)
-    {
-        if (lead.ProductLineId is not null || string.IsNullOrWhiteSpace(lead.InterestedProduct))
-            return;
-
-        try
-        {
-            using var suppressed = new TransactionScope(
-                TransactionScopeOption.Suppress,
-                TransactionScopeAsyncFlowOption.Enabled);
-
-            var resolved = await administration.ResolveProductLineAsync(
-                lead.TenantId, lead.InterestedProduct, ct);
-
-            suppressed.Complete();
-
-            if (resolved is { } lineId)
-                lead.SetProductLine(lineId);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _ = ex;
-        }
-    }
-
-    /// <summary>
     /// Creates the client through M01's contract, pre-filling what the lead already collected.
     ///
     /// Runs in a SUPPRESSED transaction scope on purpose. TransactionBehavior has an ambient
@@ -381,9 +349,9 @@ internal sealed class ConvertLeadHandler(
     /// False only for a resolved line whose policy says <c>None</c>. Best-effort like the line
     /// resolution above, and fail-closed: an outage reads as « KYC required ».
     /// </summary>
-    private async Task<bool> IsKycRequiredAsync(Lead lead, CancellationToken ct)
+    private async Task<bool> IsKycRequiredAsync(Guid tenantId, Guid? productLineId, CancellationToken ct)
     {
-        if (lead.ProductLineId is not { } lineId)
+        if (productLineId is not { } lineId)
             return true;
 
         try
@@ -392,7 +360,7 @@ internal sealed class ConvertLeadHandler(
                 TransactionScopeOption.Suppress,
                 TransactionScopeAsyncFlowOption.Enabled);
 
-            var policy = await administration.GetBeneficiaryPolicyAsync(lead.TenantId, lineId, ct);
+            var policy = await administration.GetBeneficiaryPolicyAsync(tenantId, lineId, ct);
 
             suppressed.Complete();
             return policy is null || KycRequirement.IsRequired(policy.RequiredKycTier);

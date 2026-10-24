@@ -27,7 +27,7 @@ internal static class EnrichmentEndpoints
         app.MapPost("{leadId:guid}/enrich", Enrich)
             .WithName("EnrichLead")
             .WithTags("Leads")
-            .WithSummary("Complete the principal's identity and resolve the product line")
+            .WithSummary("Complete the principal's identity")
             .RequireAuthorization(Permissions.CanUpdateLead.Code)
             .Produces<LeadCompletenessDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
@@ -40,10 +40,13 @@ internal static class EnrichmentEndpoints
         return app;
     }
 
+    /// <param name="projectId">
+    /// Optional: the project a client file would be opened for — its product's policy applies.
+    /// </param>
     private static async Task<IResult> GetCompleteness(
-        Guid leadId, ISender sender, CancellationToken ct)
+        Guid leadId, Guid? projectId, ISender sender, CancellationToken ct)
     {
-        var result = await sender.Send(new GetLeadCompletenessQuery(leadId), ct);
+        var result = await sender.Send(new GetLeadCompletenessQuery(leadId, projectId), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : Problem(result.Error);
     }
 
@@ -61,8 +64,6 @@ internal static class EnrichmentEndpoints
             PostalCode:        req.PostalCode,
             City:              req.City,
             CountryCode:       req.CountryCode,
-            ProductLineId:     req.ProductLineId,
-            ClearProductLine:  req.ClearProductLine,
             SourceActivityId:  req.SourceActivityId,
             ExpectedUpdatedAt: req.ExpectedUpdatedAt,
             Neighbourhood:     req.Neighbourhood,
@@ -78,7 +79,6 @@ internal static class EnrichmentEndpoints
     {
         "LEAD_NOT_FOUND"
         or EnrichLeadHandler.ActivityNotFound
-        or EnrichLeadHandler.ProductLineNotFound
             => Results.NotFound(new { error }),
         LeadAccessGuard.Forbidden
             => Results.Problem(title: "Not permitted", detail: error, statusCode: 403),
@@ -109,8 +109,6 @@ public sealed record EnrichLeadRequest(
     string? City = null,
     /// <summary>ISO 3166-1 alpha-2.</summary>
     string? CountryCode = null,
-    Guid? ProductLineId = null,
-    bool ClearProductLine = false,
     Guid? SourceActivityId = null,
     DateTimeOffset? ExpectedUpdatedAt = null,
     /// <summary>Quartier.</summary>

@@ -22,22 +22,35 @@ using Sankore.Modules.Leads.Infrastructure;
 /// is a conversation the tenant chose not to turn into a lead. Both go to a person.
 /// </para>
 /// </summary>
-internal sealed class WhatsAppBotProfiles(LeadsDbContext db, ILeadSettings settings, IWhatsAppBotModel model)
+internal sealed class WhatsAppBotProfiles(
+    LeadsDbContext db,
+    ILeadSettings settings,
+    IWhatsAppBotModel model,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null)
 {
-    public Task<WhatsAppBotProfile?> ResolveActiveAsync(Guid tenantId, Lead? lead, CancellationToken ct) =>
-        lead is null ? Task.FromResult<WhatsAppBotProfile?>(null) : ResolveAsync(tenantId, lead.ProductLineId, ct);
+    public async Task<WhatsAppBotProfile?> ResolveActiveAsync(Guid tenantId, Lead? lead, CancellationToken ct) =>
+        lead is null ? null : await ResolveAsync(tenantId, await LineOfAsync(lead, ct), ct);
+
+    /// <summary>
+    /// The line the lead ASKED for — the lead stores none (product owner, 2026-10-24), and the bot
+    /// talks before any project exists. Without the catalogue (a test double), the general profile.
+    /// </summary>
+    private Task<Guid?> LineOfAsync(Lead lead, CancellationToken ct) =>
+        administration is null
+            ? Task.FromResult<Guid?>(null)
+            : ProductLines.ProductLineLookup.ForLeadAsync(administration, lead, ct);
 
     /// <summary>
     /// The profile for a conversation: its lead's, or — for a prospect the bot talks to before any
     /// lead exists — the profile of the product the customer already named, else the general one.
     /// An unattached conversation that is NOT collecting a prospect still gets none.
     /// </summary>
-    public Task<WhatsAppBotProfile?> ResolveForConversationAsync(
+    public async Task<WhatsAppBotProfile?> ResolveForConversationAsync(
         Guid tenantId, WhatsAppConversation conversation, Lead? lead, CancellationToken ct) =>
-        lead is not null ? ResolveAsync(tenantId, lead.ProductLineId, ct)
+        lead is not null ? await ResolveAsync(tenantId, await LineOfAsync(lead, ct), ct)
         : conversation is { CollectingProspect: true, LeadId: null }
-            ? ResolveAsync(tenantId, WhatsAppBotFieldValues.PendingProduct(conversation.PendingLeadFields()), ct)
-            : Task.FromResult<WhatsAppBotProfile?>(null);
+            ? await ResolveAsync(tenantId, WhatsAppBotFieldValues.PendingProduct(conversation.PendingLeadFields()), ct)
+            : null;
 
     /// <summary>
     /// Whether the bot would answer a number nobody knows yet — what decides, at the first message,

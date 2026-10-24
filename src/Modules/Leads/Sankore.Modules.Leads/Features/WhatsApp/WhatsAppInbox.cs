@@ -274,7 +274,18 @@ internal sealed class GetWhatsAppInboxHandler(
         }
 
         if (query.ProductLineId is { } product)
-            rows = rows.Where(x => x.Lead != null && x.Lead.ProductLineId == product);
+        {
+            // The lead stores no product line (product owner, 2026-10-24): a conversation is about
+            // a product when its lead ASKED for it, by the line's code or its name.
+            var line = (await admin.ListProductsAsync(me.TenantId, null, ct)).FirstOrDefault(p => p.Id == product);
+            if (line is null)
+                return rows.Where(_ => false);
+
+            var code = line.Code.Trim().ToLower();
+            var name = line.Name.Trim().ToLower();
+            rows = rows.Where(x => x.Lead != null
+                                && (x.Lead.InterestedProduct.ToLower() == code || x.Lead.InterestedProduct.ToLower() == name));
+        }
 
         return rows;
     }
