@@ -28,14 +28,21 @@ internal sealed class ListMyStepsHandler(
                              && s.ApproverRoleCode != null
                              && roles.Contains(s.ApproverRoleCode))))
             .OrderBy(s => s.DueAt)
-            .Select(s => new MyStepDto(
-                s.Id,
-                s.InstanceId,
-                s.Name,
-                s.ApproverRoleCode,
-                s.AssignedToUserId,
-                s.DueAt,
-                s.CreatedAt))
+            .Join(db.WorkflowInstances, s => s.InstanceId, i => i.Id, (s, i) => new { s, i })
+            .Select(x => new MyStepDto(
+                x.s.Id,
+                x.s.InstanceId,
+                x.s.Name,
+                x.s.ApproverRoleCode,
+                x.s.AssignedToUserId,
+                x.s.DueAt,
+                x.s.CreatedAt,
+                x.i.EntityType,
+                x.i.EntityId,
+                db.WorkflowTemplates.Where(t => t.Id == x.i.TemplateId).Select(t => t.Name).FirstOrDefault(),
+                x.i.SubjectLabel,
+                x.i.SubjectDetail,
+                x.i.SubjectLink))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<MyStepDto>>(steps);

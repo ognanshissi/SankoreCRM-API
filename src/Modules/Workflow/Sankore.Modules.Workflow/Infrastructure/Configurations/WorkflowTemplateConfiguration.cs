@@ -15,12 +15,13 @@ internal sealed class WorkflowTemplateConfiguration : IEntityTypeConfiguration<W
         b.Property(t => t.Name).HasMaxLength(200).IsRequired();
         b.Property(t => t.Description).HasMaxLength(1000);
         b.Property(t => t.Version).HasDefaultValue(1).ValueGeneratedNever();
+        b.Property(t => t.Circuit).HasMaxLength(WorkflowTemplate.MaxCircuitLength).IsRequired().HasDefaultValue(string.Empty);
 
-        // Each (tenant, entityType, version) triplet must be unique.
-        b.HasIndex(t => new { t.TenantId, t.EntityType, t.Version }).IsUnique();
+        // Each (tenant, entityType, circuit, version) must be unique — a circuit is versioned on its own.
+        b.HasIndex(t => new { t.TenantId, t.EntityType, t.Circuit, t.Version }).IsUnique();
 
-        // At most one active template per (tenant, entityType) — filtered unique index.
-        b.HasIndex(t => new { t.TenantId, t.EntityType })
+        // At most one active template per (tenant, entityType, circuit) — filtered unique index.
+        b.HasIndex(t => new { t.TenantId, t.EntityType, t.Circuit })
          .IsUnique()
          .HasFilter("is_active = true");
 

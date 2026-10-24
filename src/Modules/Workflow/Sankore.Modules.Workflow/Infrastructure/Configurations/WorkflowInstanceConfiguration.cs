@@ -18,6 +18,9 @@ internal sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<W
         b.Property(i => i.CurrentStateId).IsRequired(false);
         b.Property(i => i.ParentInstanceId).IsRequired(false);
         b.Property(i => i.WaitingForChildId).IsRequired(false);
+        b.Property(i => i.SubjectLabel).HasMaxLength(WorkflowInstance.MaxSubjectLabelLength);
+        b.Property(i => i.SubjectDetail).HasMaxLength(WorkflowInstance.MaxSubjectDetailLength);
+        b.Property(i => i.SubjectLink).HasMaxLength(WorkflowInstance.MaxSubjectLinkLength);
 
         b.HasIndex(i => new { i.TenantId, i.EntityType, i.EntityId });
         // Fast lookup: find all child instances of a parent.

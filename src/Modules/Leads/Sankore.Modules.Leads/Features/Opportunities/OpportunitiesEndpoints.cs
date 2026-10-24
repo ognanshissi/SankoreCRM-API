@@ -90,6 +90,35 @@ public static class OpportunitiesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        // PUT opportunities/{id}/checklist/{itemId} — ticks or unticks a point of the current template
+        group.MapPut("{id:guid}/checklist/{itemId:guid}", SetChecklistItem)
+            .WithName("SetProjectChecklistItem")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // GET opportunities/{id}/validations — the circuits its steps started, and their decisions
+        group.MapGet("{id:guid}/validations", GetValidations)
+            .WithName("GetProjectValidations")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanReadOpportunities.Code)
+            .Produces<IReadOnlyList<StepConditions.ProjectValidationDto>>()
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        // POST opportunities/{id}/workflow/restart — after a refusal, runs the current step's circuit again
+        group.MapPost("{id:guid}/workflow/restart", RestartWorkflow)
+            .WithName("RestartProjectWorkflow")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         // POST opportunities/{id}/close
         group.MapPost("{id:guid}/close", Close)
             .WithName("CloseOpportunity")
@@ -244,6 +273,25 @@ public static class OpportunitiesEndpoints
         return Results.Ok(new ProjectTemplateSummaryDto(
             template.Name, template.TracksForecast, template.AmountKind, template.CriticalCloseDate));
     }
+
+    private static async Task<IResult> SetChecklistItem(
+        Guid id, Guid itemId, StepConditions.SetProjectChecklistItemRequest req, ISender sender, CancellationToken ct)
+        => StepConditionResult(await sender.Send(new StepConditions.SetProjectChecklistItemCommand(id, itemId, req.Done), ct));
+
+    private static async Task<IResult> GetValidations(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new StepConditions.GetProjectValidationsQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+    }
+
+    private static async Task<IResult> RestartWorkflow(Guid id, ISender sender, CancellationToken ct)
+        => StepConditionResult(await sender.Send(new StepConditions.RestartProjectWorkflowCommand(id), ct));
+
+    private static IResult StepConditionResult(Result result) => result.IsSuccess
+        ? Results.NoContent()
+        : result.Error == OpportunityErrors.NotFound
+            ? Results.NotFound(new { error = result.Error })
+            : Results.Problem(title: "Project step condition", detail: result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
 
     private static async Task<IResult> GetOpportunity(
         Guid id, ISender sender, CancellationToken ct)

@@ -24,6 +24,13 @@ public static class ProjectTemplatesEndpoints
             .Produces<IReadOnlyList<ProjectTemplateDto>>()
             .WithOpenApi();
 
+        // The project circuits a step can start: the active M12 templates of entity type « Opportunity ».
+        group.MapGet("workflow-circuits", ListWorkflowCircuits)
+            .WithName("ListProjectWorkflowCircuits")
+            .RequireAuthorization(Permissions.CanReadPipelineStages.Code)
+            .Produces<IReadOnlyList<Sankore.Modules.Workflow.PublicApi.WorkflowCircuitSummary>>()
+            .WithOpenApi();
+
         group.MapPost("", Create)
             .WithName("CreateProjectTemplate")
             .RequireAuthorization(Permissions.CanManagePipelineStages.Code)
@@ -52,6 +59,11 @@ public static class ProjectTemplatesEndpoints
 
     private static async Task<IResult> List(ISender sender, CancellationToken ct)
         => Results.Ok((await sender.Send(new ListProjectTemplatesQuery(), ct)).Value);
+
+    private static async Task<IResult> ListWorkflowCircuits(
+        Sankore.Modules.Workflow.PublicApi.IWorkflowModule workflow, ITenantContext tenant, CancellationToken ct)
+        => Results.Ok(await workflow.ListActiveCircuitsAsync(
+            tenant.CurrentTenantId, ProjectWorkflows.EntityType, ct));
 
     private static async Task<IResult> Create(
         CreateProjectTemplateRequest req, ISender sender, CancellationToken ct)
@@ -84,7 +96,7 @@ public static class ProjectTemplatesEndpoints
     private static IReadOnlyList<ProjectStepInput> Inputs(IReadOnlyList<ProjectStepRequest>? steps)
         => (steps ?? []).Select(s => new ProjectStepInput(
             s.Id, s.Label ?? string.Empty, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
-            s.RequiresQuestionnaires)).ToList();
+            s.RequiresQuestionnaires, s.RequiresAmount, s.RequiresCloseDate, s.Checklist, s.WorkflowCircuit)).ToList();
 
     private static IResult ToProblem(string error) => error switch
     {
@@ -132,4 +144,12 @@ public sealed record ProjectStepRequest(
     string? Suggestion,
     bool OpensClientFile = false,
     bool IsApproval = false,
-    bool RequiresQuestionnaires = false);
+    bool RequiresQuestionnaires = false,
+    /// <summary>Reaching the step needs the project's amount.</summary>
+    bool RequiresAmount = false,
+    /// <summary>Reaching the step needs the project's expected close date.</summary>
+    bool RequiresCloseDate = false,
+    /// <summary>Points ticked while on the step, all required to leave it. Up to 10.</summary>
+    IReadOnlyList<ProjectChecklistItemInput>? Checklist = null,
+    /// <summary>The workflow circuit started on reaching the step (see GET project-templates/workflow-circuits).</summary>
+    string? WorkflowCircuit = null);

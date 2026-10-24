@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Features.Opportunities;
 
+using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel.ValueObject;
 
@@ -49,7 +50,18 @@ public sealed record OpportunityDto(
     /// <param name="AmountKind">What its amount stands for: a loan, a premium, a deposit — or nothing particular.</param>
     ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
     /// <param name="CriticalCloseDate">Its close date is a deadline: required, and chased once passed.</param>
-    bool CriticalCloseDate = false);
+    bool CriticalCloseDate = false,
+    /// <param name="CheckedChecklistItemIds">The checklist points of its steps already ticked.</param>
+    IReadOnlyList<Guid>? CheckedChecklistItemIds = null,
+    /// <param name="WorkflowRuns">
+    /// The validation circuits started for its steps, latest last. <c>State</c> is read from M12 on
+    /// the single-project read only; a list leaves it null rather than call M12 once per row.
+    /// </param>
+    IReadOnlyList<ProjectWorkflowRunDto>? WorkflowRuns = null);
+
+/// <param name="State">NotStarted, InProgress, Approved, Refused or Unknown — null when not read.</param>
+public sealed record ProjectWorkflowRunDto(
+    Guid StepId, string Circuit, Guid InstanceId, DateTimeOffset StartedAt, ProjectTemplates.ProjectWorkflowState? State);
 
 /// <summary>
 /// The person behind a project, as the projects board shows and searches it: the lead's name and
@@ -67,6 +79,47 @@ public sealed record ProjectContactDto(
 
 internal static class OpportunityStepEnrichment
 {
+    /// <summary>
+    /// Adds the ticked checklist points and the circuit runs — one query for every row. With
+    /// <paramref name="workflows"/>, also reads the state of each step's LATEST run from M12.
+    /// </summary>
+    public static async Task<IReadOnlyList<OpportunityDto>> WithConditionsAsync(
+        this IReadOnlyList<OpportunityDto> items,
+        Infrastructure.LeadsDbContext db,
+        ProjectTemplates.ProjectWorkflows? workflows,
+        CancellationToken ct)
+    {
+        if (items.Count == 0)
+            return items;
+
+        var ids = items.Select(o => o.Id).ToList();
+        var projects = await db.Opportunities.AsNoTracking().Where(o => ids.Contains(o.Id)).ToListAsync(ct);
+        var byId = projects.ToDictionary(o => o.Id);
+
+        var result = new List<OpportunityDto>(items.Count);
+        foreach (var item in items)
+        {
+            if (!byId.TryGetValue(item.Id, out var project))
+            {
+                result.Add(item);
+                continue;
+            }
+
+            var runs = new List<ProjectWorkflowRunDto>();
+            foreach (var run in project.WorkflowRuns.OrderBy(r => r.StartedAt))
+            {
+                var latest = project.LatestWorkflowRun(run.StepId) == run;
+                var state = workflows is not null && latest
+                    ? await workflows.StateAsync(project, run.StepId, ct)
+                    : (ProjectTemplates.ProjectWorkflowState?)null;
+                runs.Add(new ProjectWorkflowRunDto(run.StepId, run.Circuit, run.InstanceId, run.StartedAt, state));
+            }
+
+            result.Add(item with { CheckedChecklistItemIds = project.CheckedChecklistItems, WorkflowRuns = runs });
+        }
+        return result;
+    }
+
     /// <summary>Adds each project's template and current step. One resolution per distinct product.</summary>
     public static async Task<IReadOnlyList<OpportunityDto>> WithStepsAsync(
         this IEnumerable<OpportunityDto> items,

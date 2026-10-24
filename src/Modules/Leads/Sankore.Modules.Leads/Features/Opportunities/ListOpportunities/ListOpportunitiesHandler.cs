@@ -44,6 +44,7 @@ internal sealed class ListOpportunitiesHandler(
             .ToListAsync(ct);
 
         IReadOnlyList<OpportunityDto> enriched = templates is null ? items : await items.WithStepsAsync(templates, ct);
+        enriched = await enriched.WithConditionsAsync(db, workflows: null, ct);
         return Result.Ok(await WithContactsAsync(enriched, ct));
     }
 

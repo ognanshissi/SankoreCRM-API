@@ -25,6 +25,21 @@ public interface IWorkflowModule
         Guid instanceId, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// The ACTIVE circuits of <paramref name="entityType"/> — for a project step to name the one it
+    /// starts (« Opportunity », the project, can have several: a credit committee, a group-insurance committee…).
+    /// </summary>
+    Task<IReadOnlyList<WorkflowCircuitSummary>> ListActiveCircuitsAsync(
+        Guid tenantId, string entityType, CancellationToken ct = default);
+
+    /// <summary>
+    /// The decisions taken on each of <paramref name="instanceIds"/>, step by step — for the module
+    /// that started them to show who validated, refused or still has to (the project page shows
+    /// the validations of each step's circuit). Unknown ids, or ids of another tenant, are skipped.
+    /// </summary>
+    Task<IReadOnlyList<WorkflowInstanceDecisions>> GetInstanceDecisionsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Mirrors a decision a CALLING module has already taken onto its workflow instance.
     ///
     /// <para>
@@ -79,12 +94,49 @@ public sealed record StepSlaStat(string StepName, int Total, int OnTime);
 /// it two homes and let them drift.
 /// </para>
 /// </param>
+/// <param name="Circuit">
+/// The circuit to start among the entity type's active ones; null takes the first (the historic,
+/// single-circuit behaviour of every entity type but projects).
+/// </param>
 public sealed record WorkflowStartRequest(
     string EntityType,
     Guid EntityId,
     Guid StartedByUserId,
     Guid TenantId,
-    IReadOnlyCollection<int>? RequiredStepOrders = null);
+    IReadOnlyCollection<int>? RequiredStepOrders = null,
+    string? Circuit = null,
+    WorkflowSubject? Subject = null);
+
+/// <summary>
+/// What the instance validates, in the starting module's words — what an approver sees in their
+/// queue instead of a bare « Validation ». A snapshot of the submission.
+/// </summary>
+/// <param name="Link">An app path that opens the subject (« /leads/projets/{id} »).</param>
+public sealed record WorkflowSubject(string Label, string? Detail = null, string? Link = null);
+
+/// <param name="Status">Pending, InProgress, Completed, Rejected, Cancelled, TimedOut…</param>
+public sealed record WorkflowInstanceDecisions(
+    Guid InstanceId,
+    string WorkflowName,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    IReadOnlyList<WorkflowStepDecision> Steps);
+
+/// <param name="Status">Pending, AwaitingApproval, Approved, Rejected, Skipped, TimedOut…</param>
+/// <param name="ActedByUserId">Who approved or refused; null while pending or when the engine decided.</param>
+public sealed record WorkflowStepDecision(
+    int Order,
+    string Name,
+    string? ApproverRoleCode,
+    string Status,
+    Guid? ActedByUserId,
+    string? Comment,
+    DateTimeOffset? DueAt,
+    DateTimeOffset? DecidedAt);
+
+/// <param name="Circuit">The stable key a project step stores; survives new versions.</param>
+public sealed record WorkflowCircuitSummary(string Circuit, string Name, int Version, int StepCount);
 
 /// <summary>What the calling module decided, in the engine's vocabulary.</summary>
 public enum WorkflowDecision

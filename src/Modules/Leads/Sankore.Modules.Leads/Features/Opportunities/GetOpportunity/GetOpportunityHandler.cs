@@ -9,7 +9,8 @@ using Sankore.Shared.Kernel;
 internal sealed class GetOpportunityHandler(
     LeadsDbContext db,
     LeadVisibility? visibility = null,
-    ProjectTemplates.ProjectTemplateResolver? templates = null)
+    ProjectTemplates.ProjectTemplateResolver? templates = null,
+    ProjectTemplates.ProjectWorkflows? workflows = null)
     : IRequestHandler<GetOpportunityQuery, Result<OpportunityDto>>
 {
     public async Task<Result<OpportunityDto>> Handle(
@@ -29,6 +30,7 @@ internal sealed class GetOpportunityHandler(
         if (opp is null)
             return Result.Fail<OpportunityDto>("OPPORTUNITY_NOT_FOUND");
 
-        return Result.Ok(templates is null ? opp : (await new[] { opp }.WithStepsAsync(templates, ct))[0]);
+        IReadOnlyList<OpportunityDto> one = templates is null ? [opp] : await new[] { opp }.WithStepsAsync(templates, ct);
+        return Result.Ok((await one.WithConditionsAsync(db, workflows, ct))[0]);
     }
 }

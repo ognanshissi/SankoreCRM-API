@@ -13,22 +13,26 @@ internal sealed class CreateTemplateHandler(
 {
     public async Task<Result<Guid>> Handle(CreateTemplateCommand request, CancellationToken ct)
     {
-        // Allow at most one version-1 template per (tenant, entityType).
-        // Subsequent versions must be created via CreateDraft.
+        // Allow at most one version-1 template per (tenant, entityType, circuit).
+        // Subsequent versions must be created via CreateDraft. A project template is a circuit of
+        // its own, keyed by its name; every other entity type has the single empty circuit.
+        var circuit = WorkflowTemplate.CircuitFor(request.EntityType, request.Name);
         var v1Exists = await db.WorkflowTemplates
-            .AnyAsync(t => t.EntityType == request.EntityType && t.Version == 1, ct);
+            .AnyAsync(t => t.EntityType == request.EntityType && t.Circuit == circuit && t.Version == 1, ct);
 
         if (v1Exists)
-            return Result.Fail<Guid>(
-                $"A workflow template for entity type '{request.EntityType}' already exists. " +
-                "Use CreateDraft to add a new version.");
+            return Result.Fail<Guid>(circuit.Length > 0
+                ? $"A project workflow named like '{request.Name}' already exists. Choose another name, or create a new version of it."
+                : $"A workflow template for entity type '{request.EntityType}' already exists. " +
+                  "Use CreateDraft to add a new version.");
 
         var template = WorkflowTemplate.Create(
             currentUser.TenantId,
             request.EntityType,
             request.Name,
             currentUser.Id,
-            request.Description);
+            request.Description,
+            circuit);
 
         db.WorkflowTemplates.Add(template);
         await db.SaveChangesAsync(ct);

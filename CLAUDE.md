@@ -1919,6 +1919,29 @@ catalogue, both under a suppressed `TransactionScope`.
     after the date means already chased) for the owner, else the lead's agent — and, for a project
     with NO date (created before the template made it critical), one High task « Date limite à
     fixer » (trigger `ProjectCloseDateMissing`), once.
+- **Step conditions and linked circuits (owner, 2026-10-24)**, on `ProjectTemplateStep`, checked
+  by `ProjectStepGate.ConditionsMetAsync` FIRST and only going FORWARD:
+  - `RequiresAmount` / `RequiresCloseDate`: to REACH the step (`PROJECT_AMOUNT_REQUIRED`,
+    `PROJECT_CLOSE_DATE_REQUIRED`).
+  - `Checklist` (≤ 10 points, jsonb, item ids stable across edits): ticked on the project
+    (`Opportunity.CheckedChecklistItems`, `PUT opportunities/{id}/checklist/{itemId}`), all
+    required to LEAVE the step (`PROJECT_CHECKLIST_INCOMPLETE`).
+  - `WorkflowCircuit`: an M12 circuit of entity type `Opportunity`, started by
+    `ProjectWorkflows` when the project REACHES the step (refused if it cannot start), approved
+    before LEAVING it; refused → `PROJECT_WORKFLOW_REJECTED` until `POST …/workflow/restart`;
+    unreadable → fail-closed. Runs are kept on `Opportunity.WorkflowRuns`.
+  - Every step between the current one and the target is LEFT: skipping a step still owes its
+    points and circuit, and winning owes all of them.
+  - ONE move path, `ProjectStepTransition` (gate → circuit → move → conversion), used by the step
+    endpoint AND the legacy `PUT /stage`, which now moves onto the FIRST step of the phase (it used
+    to skip every check). M12 circuits: `WorkflowTemplate.Circuit` (slug of the name for
+    `Opportunity`, empty otherwise); uniqueness (v1, draft, active) is per (entity type, circuit);
+    `IWorkflowModule.ListActiveCircuitsAsync`, `WorkflowStartRequest.Circuit`.
+  - **What an approver sees**: the starting module passes a `WorkflowSubject` (label, detail
+    line, app link) stored on `WorkflowInstance.Subject*` — a snapshot of the submission. Projects
+    send title + person · product · amount · step; « Ma file » (pending and done) shows it. The
+    project page lists every run and its decisions (`GET opportunities/{id}/validations`, from
+    `IWorkflowModule.GetInstanceDecisionsAsync` + user names), latest first.
   - `GET opportunities/template?product=` (`ProjectTemplateSummaryDto`, read permission) gives the
     creation forms the template BEFORE the project exists — amount label, required deadline; the
     front reads it through `projectCreationRules` (`@sankore/crm/common`). « Projets par phase »

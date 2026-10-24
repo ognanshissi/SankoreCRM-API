@@ -56,7 +56,10 @@ internal sealed class GetCompletedTasksHandler(WorkflowDbContext db)
                 s.ActedByUserId,
                 s.AssignedToUserId,
                 s.CreatedAt,
-                s.CompletedAt);
+                s.CompletedAt,
+                i.SubjectLabel,
+                i.SubjectDetail,
+                i.SubjectLink);
 
         var items = await query
             .Skip((page - 1) * pageSize)

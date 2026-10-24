@@ -10,7 +10,9 @@ public sealed record WorkflowTemplateDto(
     int Version,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    List<WorkflowStepDto> Steps);
+    List<WorkflowStepDto> Steps,
+    /// <summary>The circuit this template versions; empty for every entity type but projects.</summary>
+    string Circuit = "");
 
 public sealed record WorkflowStepDto(
     Guid Id,

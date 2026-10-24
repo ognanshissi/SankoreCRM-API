@@ -54,10 +54,39 @@ public sealed class WorkflowInstance : AggregateRoot
     /// </summary>
     public Guid? WaitingForChildId { get; private set; }
 
+    /// <summary>
+    /// What is being validated, as the STARTING module describes it — the engine only knows an
+    /// entity type and an id, which tells an approver nothing (« Validation » of what?). A snapshot
+    /// taken at submission: the amount the committee was asked about stays readable even if the
+    /// project changes afterwards.
+    /// </summary>
+    public string? SubjectLabel { get; private set; }
+
+    /// <summary>One line of context under <see cref="SubjectLabel"/> (client, product, amount…).</summary>
+    public string? SubjectDetail { get; private set; }
+
+    /// <summary>The app path that opens the subject (« /leads/projets/{id} »).</summary>
+    public string? SubjectLink { get; private set; }
+
+    public const int MaxSubjectLabelLength = 200;
+    public const int MaxSubjectDetailLength = 400;
+    public const int MaxSubjectLinkLength = 300;
+
     private readonly List<WorkflowInstanceStep> _steps = [];
     public IReadOnlyCollection<WorkflowInstanceStep> Steps => _steps.AsReadOnly();
 
     private WorkflowInstance() { }
+
+    /// <summary>Records what the instance validates — see <see cref="SubjectLabel"/>. Truncated, never refused.</summary>
+    public void DescribeSubject(string? label, string? detail, string? link)
+    {
+        SubjectLabel  = Clip(label, MaxSubjectLabelLength);
+        SubjectDetail = Clip(detail, MaxSubjectDetailLength);
+        SubjectLink   = Clip(link, MaxSubjectLinkLength);
+    }
+
+    private static string? Clip(string? text, int max)
+        => string.IsNullOrWhiteSpace(text) ? null : text.Trim().Length <= max ? text.Trim() : text.Trim()[..max];
 
     private static readonly IReadOnlyDictionary<string, object> _emptyContext =
         new Dictionary<string, object>();

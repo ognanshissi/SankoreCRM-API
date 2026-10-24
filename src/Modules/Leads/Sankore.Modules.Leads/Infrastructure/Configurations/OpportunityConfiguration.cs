@@ -28,6 +28,8 @@ internal sealed class OpportunityConfiguration : IEntityTypeConfiguration<Opport
         builder.HasIndex(o => new { o.TenantId, o.CustomerEntityId })
             .HasFilter("customer_entity_id IS NOT NULL");
         builder.HasIndex(o => new { o.TenantId, o.Stage });
+        JsonbList.Configure(builder.Property(o => o.CheckedChecklistItems));
+        JsonbList.Configure(builder.Property(o => o.WorkflowRuns));
         builder.Ignore(o => o.DomainEvents);
     }
 }

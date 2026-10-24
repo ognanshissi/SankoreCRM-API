@@ -68,6 +68,19 @@ public sealed class Opportunity : AggregateRoot
     /// </summary>
     public DateTimeOffset? SeparateNeedConfirmedAt { get; private set; }
 
+    /// <summary>
+    /// The checklist points of its template's steps the agent has ticked — by item id, so a
+    /// reworded label keeps its tick. Leaving a step needs all of that step's points here.
+    /// </summary>
+    public List<Guid> CheckedChecklistItems { get; private set; } = [];
+
+    /// <summary>
+    /// The validation circuits (M12) started when the project reached a step linked to one — the
+    /// latest run of a step decides whether it may be left. A run refused and run again is kept:
+    /// the history of who refused stays readable.
+    /// </summary>
+    public List<ProjectWorkflowRun> WorkflowRuns { get; private set; } = [];
+
     private Opportunity() { } // EF Core
 
     public static Opportunity CreateFromLead(
@@ -203,6 +216,35 @@ public sealed class Opportunity : AggregateRoot
     /// <see cref="AdvanceStage"/>: any open step to any open step, never from a closed project.
     /// </summary>
     /// <param name="probability">In percent, as a template step carries it.</param>
+    /// <summary>Ticks or unticks one checklist point. A closed project is history: refused.</summary>
+    public Result SetChecklistItem(Guid itemId, bool done, DateTimeOffset now)
+    {
+        if (Stage == OpportunityStage.ClosedWon || Stage == OpportunityStage.ClosedLost)
+            return Result.Fail("OPPORTUNITY_ALREADY_CLOSED");
+
+        var has = CheckedChecklistItems.Contains(itemId);
+        if (done == has)
+            return Result.Ok();
+
+        // A new list rather than an in-place change: the value comparer sees the column change.
+        CheckedChecklistItems = done
+            ? [.. CheckedChecklistItems, itemId]
+            : CheckedChecklistItems.Where(id => id != itemId).ToList();
+        UpdatedAt = now;
+        return Result.Ok();
+    }
+
+    /// <summary>Records the circuit just started for <paramref name="stepId"/>.</summary>
+    public void RecordWorkflowRun(Guid stepId, string circuit, Guid instanceId, DateTimeOffset now)
+    {
+        WorkflowRuns = [.. WorkflowRuns, new ProjectWorkflowRun(stepId, circuit, instanceId, now)];
+        UpdatedAt = now;
+    }
+
+    /// <summary>The latest circuit run of <paramref name="stepId"/>, or null.</summary>
+    public ProjectWorkflowRun? LatestWorkflowRun(Guid stepId)
+        => WorkflowRuns.Where(r => r.StepId == stepId).MaxBy(r => r.StartedAt);
+
     public Result MoveToStep(Guid stepId, OpportunityStage phase, int probability, DateTimeOffset now)
     {
         if (Stage == OpportunityStage.ClosedWon || Stage == OpportunityStage.ClosedLost)
@@ -302,3 +344,6 @@ public enum OpportunityStage
     ClosedWon,
     ClosedLost
 }
+
+/// <summary>One validation circuit started for a step of the project's template.</summary>
+public sealed record ProjectWorkflowRun(Guid StepId, string Circuit, Guid InstanceId, DateTimeOffset StartedAt);

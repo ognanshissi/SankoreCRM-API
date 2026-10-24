@@ -2249,6 +2249,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CheckedChecklistItems")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("checked_checklist_items")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("CloseReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -2338,6 +2345,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<string>("WorkflowRuns")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("workflow_runs")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.HasKey("Id")
                         .HasName("pk_opportunities");
@@ -4573,6 +4587,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                                 .HasColumnType("uuid")
                                 .HasColumnName("id");
 
+                            b1.Property<string>("Checklist")
+                                .IsRequired()
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("jsonb")
+                                .HasColumnName("checklist")
+                                .HasDefaultValueSql("'[]'::jsonb");
+
                             b1.Property<bool>("IsApproval")
                                 .HasColumnType("boolean")
                                 .HasColumnName("is_approval");
@@ -4601,6 +4622,14 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                                 .HasColumnType("integer")
                                 .HasColumnName("probability");
 
+                            b1.Property<bool>("RequiresAmount")
+                                .HasColumnType("boolean")
+                                .HasColumnName("requires_amount");
+
+                            b1.Property<bool>("RequiresCloseDate")
+                                .HasColumnType("boolean")
+                                .HasColumnName("requires_close_date");
+
                             b1.Property<bool>("RequiresQuestionnaires")
                                 .HasColumnType("boolean")
                                 .HasColumnName("requires_questionnaires");
@@ -4609,6 +4638,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                                 .HasMaxLength(200)
                                 .HasColumnType("character varying(200)")
                                 .HasColumnName("suggestion");
+
+                            b1.Property<string>("WorkflowCircuit")
+                                .HasMaxLength(60)
+                                .HasColumnType("character varying(60)")
+                                .HasColumnName("workflow_circuit");
 
                             b1.HasKey("TemplateId", "Id")
                                 .HasName("pk_project_template_steps");

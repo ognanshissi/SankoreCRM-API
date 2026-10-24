@@ -26,6 +26,8 @@ internal static class ListMyStepsEndpoint
     }
 }
 
+/// <param name="SubjectLabel">What is being validated, as the starting module described it; null for older instances.</param>
+/// <param name="SubjectLink">An app path that opens it.</param>
 internal sealed record MyStepDto(
     Guid StepId,
     Guid InstanceId,
@@ -33,4 +35,10 @@ internal sealed record MyStepDto(
     string? ApproverRoleCode,
     Guid? AssignedToUserId,
     DateTimeOffset? DueAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? EntityType = null,
+    Guid? EntityId = null,
+    string? WorkflowName = null,
+    string? SubjectLabel = null,
+    string? SubjectDetail = null,
+    string? SubjectLink = null);

@@ -173,6 +173,21 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("status");
 
+                    b.Property<string>("SubjectDetail")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("subject_detail");
+
+                    b.Property<string>("SubjectLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("subject_label");
+
+                    b.Property<string>("SubjectLink")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("subject_link");
+
                     b.Property<Guid>("TemplateId")
                         .HasColumnType("uuid")
                         .HasColumnName("template_id");
@@ -496,6 +511,14 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Circuit")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasDefaultValue("")
+                        .HasColumnName("circuit");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -541,14 +564,14 @@ namespace Sankore.Modules.Workflow.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_workflow_templates");
 
-                    b.HasIndex("TenantId", "EntityType")
+                    b.HasIndex("TenantId", "EntityType", "Circuit")
                         .IsUnique()
-                        .HasDatabaseName("ix_workflow_templates_tenant_id_entity_type")
+                        .HasDatabaseName("ix_workflow_templates_tenant_id_entity_type_circuit")
                         .HasFilter("is_active = true");
 
-                    b.HasIndex("TenantId", "EntityType", "Version")
+                    b.HasIndex("TenantId", "EntityType", "Circuit", "Version")
                         .IsUnique()
-                        .HasDatabaseName("ix_workflow_templates_tenant_id_entity_type_version");
+                        .HasDatabaseName("ix_workflow_templates_tenant_id_entity_type_circuit_version");
 
                     b.ToTable("workflow_templates", "workflow");
                 });

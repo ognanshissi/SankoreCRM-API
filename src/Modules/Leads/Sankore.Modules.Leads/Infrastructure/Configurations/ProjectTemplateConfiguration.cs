@@ -41,6 +41,8 @@ internal sealed class ProjectTemplateConfiguration : IEntityTypeConfiguration<Pr
             s.Property(x => x.Label).HasMaxLength(ProjectTemplate.MaxLabelLength).IsRequired();
             s.Property(x => x.Phase).HasConversion<string>().HasMaxLength(30);
             s.Property(x => x.Suggestion).HasMaxLength(ProjectTemplate.MaxSuggestionLength);
+            s.Property(x => x.WorkflowCircuit).HasMaxLength(ProjectTemplate.MaxCircuitLength);
+            JsonbList.Configure(s.Property(x => x.Checklist));
         });
         builder.Navigation(t => t.Steps).UsePropertyAccessMode(PropertyAccessMode.Field);
 

@@ -27,5 +27,6 @@ internal static class TemplateMapper
                     Kind: s.Kind.ToString(),
                     ConfigJson: s.ConfigJson,
                     IsBlocking: s.IsBlocking))
-                .ToList());
+                .ToList(),
+            Circuit: t.Circuit);
 }

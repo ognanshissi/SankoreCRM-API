@@ -24,6 +24,7 @@ internal sealed class CreateDraftHandler(WorkflowDbContext db, ICurrentUser curr
         var nextVersion = source.Version + 1;
         var draftExists = await db.WorkflowTemplates
             .AnyAsync(t => t.EntityType == source.EntityType
+                        && t.Circuit == source.Circuit
                         && t.Version == nextVersion
                         && !t.IsActive, ct);
 

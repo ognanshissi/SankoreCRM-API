@@ -71,4 +71,8 @@ public sealed record CompletedTaskDto(
     Guid? ActedByUserId,
     Guid? AssignedToUserId,
     DateTimeOffset StartedAt,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    /// <summary>What was validated, as the starting module described it; null for older instances.</summary>
+    string? SubjectLabel = null,
+    string? SubjectDetail = null,
+    string? SubjectLink = null);

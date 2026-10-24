@@ -52,7 +52,8 @@ internal sealed class ProjectStepGate(
     ITenantContext tenant,
     ICurrentUser currentUser,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
-    QuestionnaireCompletenessChecker? questionnaires = null)
+    QuestionnaireCompletenessChecker? questionnaires = null,
+    ProjectWorkflows? workflows = null)
 {
     /// <param name="targetIndex">
     /// The index of the step reached in <paramref name="template"/>; <c>Steps.Count</c> for a project
@@ -67,6 +68,13 @@ internal sealed class ProjectStepGate(
         CancellationToken ct)
     {
         var steps = template.Steps.ToList();
+
+        // The step conditions (product owner, 2026-10-24) first: they are the project's own data,
+        // cheap to read, and what the agent can settle on the spot.
+        var conditions = await ConditionsMetAsync(project, steps, currentIndex, targetIndex, ct);
+        if (conditions.IsFailure)
+            return conditions;
+
         var opens = steps.FindIndex(s => s.OpensClientFile);
         var approval = steps.FindIndex(s => s.IsApproval);
         var asks = steps.FindIndex(s => s.RequiresQuestionnaires);
@@ -130,6 +138,58 @@ internal sealed class ProjectStepGate(
                     HasPepExposure:   lead.HasPepExposure,
                     ProductLineId:    lineId),
                 ct);
+        }
+
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// <list type="bullet">
+    /// <item>Going FORWARD to a step — or past every step, winning — needs what the steps on the
+    /// way ask of the project itself: its amount, its expected close date.</item>
+    /// <item>Leaving a step forward needs its checklist ticked and its validation circuit
+    /// approved. Every step between the current one and the target is left, so a step skipped on
+    /// the way still owes its points and its circuit — which is what keeps « Marquer gagné » from
+    /// jumping over the committee.</item>
+    /// </list>
+    /// Moving BACK needs nothing: it is how an agent reopens a step.
+    /// </summary>
+    private async Task<Result> ConditionsMetAsync(
+        Opportunity project, List<ProjectStepDto> steps, int currentIndex, int targetIndex, CancellationToken ct)
+    {
+        if (targetIndex <= currentIndex)
+            return Result.Ok();
+
+        var reached = steps.Take(Math.Min(targetIndex + 1, steps.Count)).ToList();
+        if (reached.Any(s => s.RequiresAmount) && (project.EstimatedAmount?.Amount ?? 0) <= 0)
+            return Result.Fail(ProjectTemplateErrors.AmountRequired);
+        if (reached.Any(s => s.RequiresCloseDate) && project.ExpectedCloseDate is null)
+            return Result.Fail(ProjectTemplateErrors.CloseDateRequired);
+
+        var left = steps.Skip(Math.Max(currentIndex, 0)).Take(targetIndex - Math.Max(currentIndex, 0)).ToList();
+
+        var ticked = project.CheckedChecklistItems.ToHashSet();
+        if (left.Any(s => (s.Checklist ?? []).Any(i => !ticked.Contains(i.Id))))
+            return Result.Fail(ProjectTemplateErrors.ChecklistIncomplete);
+
+        foreach (var step in left.Where(s => s.WorkflowCircuit is not null))
+        {
+            // Fail-closed: without the module there is no way to know the circuit approved.
+            var state = workflows is null
+                ? ProjectWorkflowState.Unknown
+                : await workflows.StateAsync(project, step.Id, ct);
+
+            switch (state)
+            {
+                case ProjectWorkflowState.Approved:
+                    continue;
+                case ProjectWorkflowState.Refused:
+                    return Result.Fail(ProjectTemplateErrors.WorkflowRejected);
+                case ProjectWorkflowState.Unknown:
+                    return Result.Fail(ProjectTemplateErrors.WorkflowUnavailable);
+                default:
+                    return Result.Fail(ProjectTemplateErrors.WorkflowPending);
+            }
         }
 
         return Result.Ok();

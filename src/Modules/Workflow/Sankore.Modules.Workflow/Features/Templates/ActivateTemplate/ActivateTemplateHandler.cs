@@ -26,9 +26,10 @@ internal sealed class ActivateTemplateHandler(WorkflowDbContext db)
         if (template.IsActive)
             return Result.Fail("Template is already active.");
 
-        // Check no other template for same entityType is already active
+        // Check no other template of the same circuit is already active
         var conflictExists = await db.WorkflowTemplates
             .AnyAsync(t => t.EntityType == template.EntityType
+                        && t.Circuit == template.Circuit
                         && t.IsActive
                         && t.Id != template.Id, ct);
 

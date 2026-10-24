@@ -25,6 +25,9 @@ public sealed class ProjectTemplate : AggregateRoot
     public const int MaxSteps = 12;
     public const int MaxLabelLength = 60;
     public const int MaxSuggestionLength = 200;
+    public const int MaxChecklistItems = 10;
+    public const int MaxChecklistLabelLength = 120;
+    public const int MaxCircuitLength = 60;
     public const int MaxNameLength = 100;
 
     public static readonly IReadOnlyList<OpportunityStage> OpenPhases =
@@ -181,6 +184,17 @@ public sealed class ProjectTemplate : AggregateRoot
             // 100 is a won project and 0 a lost one: an open step is strictly between.
             if (step.Probability is < 1 or > 99) return ProjectTemplateErrors.StepProbabilityOutOfRange;
             if (step.Suggestion?.Trim().Length > MaxSuggestionLength) return ProjectTemplateErrors.StepSuggestionTooLong;
+            if (step.WorkflowCircuit?.Trim().Length > MaxCircuitLength) return ProjectTemplateErrors.StepWorkflowInvalid;
+
+            var checklist = step.Checklist ?? [];
+            if (checklist.Count > MaxChecklistItems) return ProjectTemplateErrors.StepChecklistTooLong;
+            var items = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in checklist)
+            {
+                if (string.IsNullOrWhiteSpace(item.Label)) return ProjectTemplateErrors.StepChecklistItemRequired;
+                if (item.Label.Trim().Length > MaxChecklistLabelLength) return ProjectTemplateErrors.StepChecklistItemTooLong;
+                if (!items.Add(item.Label.Trim())) return ProjectTemplateErrors.StepChecklistItemDuplicate;
+            }
 
             var phase = OpenPhases.ToList().IndexOf(step.Phase);
             if (phase < 0) return ProjectTemplateErrors.StepPhaseInvalid;
@@ -241,6 +255,27 @@ public sealed class ProjectTemplateStep
     /// </summary>
     public bool RequiresQuestionnaires { get; private set; }
 
+    /// <summary>Reaching this step needs the project's amount filled in.</summary>
+    public bool RequiresAmount { get; private set; }
+
+    /// <summary>Reaching this step needs the project's expected close date filled in.</summary>
+    public bool RequiresCloseDate { get; private set; }
+
+    /// <summary>
+    /// Points the agent ticks WHILE on this step (« visite du chantier faite »…); leaving it —
+    /// forward, or by winning — needs every one ticked (product owner, 2026-10-24). An item keeps
+    /// its id across edits of the template, so the ticks already given survive a reworded label.
+    /// </summary>
+    public List<ProjectChecklistItem> Checklist { get; private set; } = [];
+
+    /// <summary>
+    /// The workflow circuit (M12, entity type « Opportunity ») started when a project REACHES this
+    /// step; leaving the step needs that run approved, and a refusal blocks the project until it
+    /// is lost or the circuit is run again. Names a circuit, never a template id: a new version of
+    /// the workflow keeps the link.
+    /// </summary>
+    public string? WorkflowCircuit { get; private set; }
+
     public int Order { get; private set; }
 
     private ProjectTemplateStep() { } // EF Core
@@ -261,6 +296,12 @@ public sealed class ProjectTemplateStep
         OpensClientFile = input.OpensClientFile;
         IsApproval      = input.IsApproval;
         RequiresQuestionnaires = input.RequiresQuestionnaires;
+        RequiresAmount    = input.RequiresAmount;
+        RequiresCloseDate = input.RequiresCloseDate;
+        Checklist = (input.Checklist ?? [])
+            .Select(i => new ProjectChecklistItem(i.Id ?? Guid.NewGuid(), i.Label.Trim()))
+            .ToList();
+        WorkflowCircuit = string.IsNullOrWhiteSpace(input.WorkflowCircuit) ? null : input.WorkflowCircuit.Trim();
         Order       = order;
     }
 }
@@ -274,7 +315,17 @@ public sealed record ProjectStepInput(
     string? Suggestion = null,
     bool OpensClientFile = false,
     bool IsApproval = false,
-    bool RequiresQuestionnaires = false);
+    bool RequiresQuestionnaires = false,
+    bool RequiresAmount = false,
+    bool RequiresCloseDate = false,
+    IReadOnlyList<ProjectChecklistItemInput>? Checklist = null,
+    string? WorkflowCircuit = null);
+
+/// <param name="Id">Send back an existing item's id: the ticks already given on it stay.</param>
+public sealed record ProjectChecklistItemInput(Guid? Id, string Label);
+
+/// <summary>One point of a step's checklist.</summary>
+public sealed record ProjectChecklistItem(Guid Id, string Label);
 
 public static class ProjectTemplateErrors
 {
@@ -304,8 +355,35 @@ public static class ProjectTemplateErrors
     public const string CriticalDateWithoutForecast = "PROJECT_TEMPLATE_CRITICAL_DATE_WITHOUT_FORECAST";
     public const string AmountKindInvalid = "PROJECT_TEMPLATE_AMOUNT_KIND_INVALID";
 
-    /// <summary>The project's template makes the close date a deadline, and none was given.</summary>
+    /// <summary>The project's template makes the close date a deadline — or a step needs it — and none was given.</summary>
     public const string CloseDateRequired = "PROJECT_CLOSE_DATE_REQUIRED";
+
+    public const string StepChecklistTooLong = "PROJECT_STEP_CHECKLIST_TOO_LONG";
+    public const string StepChecklistItemRequired = "PROJECT_STEP_CHECKLIST_ITEM_REQUIRED";
+    public const string StepChecklistItemTooLong = "PROJECT_STEP_CHECKLIST_ITEM_TOO_LONG";
+    public const string StepChecklistItemDuplicate = "PROJECT_STEP_CHECKLIST_ITEM_DUPLICATE";
+    public const string StepWorkflowInvalid = "PROJECT_STEP_WORKFLOW_INVALID";
+
+    /// <summary>A step on the way needs the project's amount.</summary>
+    public const string AmountRequired = "PROJECT_AMOUNT_REQUIRED";
+
+    /// <summary>A step being left still has unticked points.</summary>
+    public const string ChecklistIncomplete = "PROJECT_CHECKLIST_INCOMPLETE";
+
+    /// <summary>The checklist item is not one of the project's template.</summary>
+    public const string ChecklistItemUnknown = "PROJECT_CHECKLIST_ITEM_UNKNOWN";
+
+    /// <summary>The step's validation circuit has not approved yet (or was never started).</summary>
+    public const string WorkflowPending = "PROJECT_WORKFLOW_PENDING";
+
+    /// <summary>The step's validation circuit refused: lose the project, or run the circuit again.</summary>
+    public const string WorkflowRejected = "PROJECT_WORKFLOW_REJECTED";
+
+    /// <summary>The circuit could not be started or read — fail-closed.</summary>
+    public const string WorkflowUnavailable = "PROJECT_WORKFLOW_UNAVAILABLE";
+
+    /// <summary>Running the circuit again is only for a current step whose last run was refused or never started.</summary>
+    public const string WorkflowNotRestartable = "PROJECT_WORKFLOW_NOT_RESTARTABLE";
 
     /// <summary>A questionnaire the product asks — of the file or of a person — is unanswered.</summary>
     public const string QuestionnairesIncomplete = "PROJECT_QUESTIONNAIRES_INCOMPLETE";

@@ -16,7 +16,12 @@ public sealed record ProjectStepDto(
     string? Suggestion,
     bool OpensClientFile = false,
     bool IsApproval = false,
-    bool RequiresQuestionnaires = false);
+    bool RequiresQuestionnaires = false,
+    bool RequiresAmount = false,
+    bool RequiresCloseDate = false,
+    IReadOnlyList<ProjectChecklistItem>? Checklist = null,
+    /// <summary>The M12 circuit started on reaching the step; null when none.</summary>
+    string? WorkflowCircuit = null);
 
 /// <summary>
 /// The template that applies to one project, and where it came from.
@@ -100,7 +105,7 @@ internal sealed class ProjectTemplateResolver(
         template.ProductCode is not null ? "Product" : template.Category is not null ? "Category" : "Default",
         template.Steps.Select(s => new ProjectStepDto(
             s.Id, s.Label, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
-            s.RequiresQuestionnaires)).ToList(),
+            s.RequiresQuestionnaires, s.RequiresAmount, s.RequiresCloseDate, s.Checklist, s.WorkflowCircuit)).ToList(),
         template.TracksForecast,
         template.AmountKind,
         template.CriticalCloseDate);

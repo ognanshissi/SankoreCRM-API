@@ -27,9 +27,7 @@ internal sealed record MoveOpportunityToStepCommand(
 internal sealed class MoveOpportunityToStepHandler(
     LeadsDbContext db,
     ProjectTemplateResolver templates,
-    TimeProvider clock,
-    ProjectStepGate? gate = null,
-    ProjectLeadConversion? conversion = null)
+    ProjectStepTransition transition)
     : IRequestHandler<MoveOpportunityToStepCommand, Result>
 {
     public async Task<Result> Handle(MoveOpportunityToStepCommand cmd, CancellationToken ct)
@@ -49,28 +47,9 @@ internal sealed class MoveOpportunityToStepHandler(
         if (step is null)
             return Result.Fail(ProjectTemplateErrors.StepNotInTemplate);
 
-        // The marked steps (lot 3): a client record, and the KYC the product requires.
-        if (gate is not null)
-        {
-            var steps = template.Steps.ToList();
-            var current = template.CurrentStep(opportunity.StepId, opportunity.Stage);
-            var allowed = await gate.CheckAsync(
-                opportunity, template,
-                currentIndex: current is null ? -1 : steps.FindIndex(s => s.Id == current.Id),
-                targetIndex:  steps.FindIndex(s => s.Id == step.Id),
-                ct);
-            if (allowed.IsFailure)
-                return allowed;
-        }
-
-        var moved = opportunity.MoveToStep(step.Id, step.Phase, step.Probability, clock.GetUtcNow());
+        var moved = await transition.MoveAsync(opportunity, template, step, ct);
         if (moved.IsFailure)
             return moved;
-
-        // Reaching the approval step converts the lead (product owner, 2026-10-24).
-        if (conversion is not null)
-            await conversion.ConvertIfApprovedAsync(
-                opportunity, template, template.Steps.ToList().FindIndex(s => s.Id == step.Id), ct);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

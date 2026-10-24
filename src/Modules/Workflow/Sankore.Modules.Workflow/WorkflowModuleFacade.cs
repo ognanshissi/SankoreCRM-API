@@ -21,12 +21,15 @@ internal sealed class WorkflowModuleFacade(WorkflowDbContext db) : IWorkflowModu
             .Include(t => t.Steps)
             .Where(t => t.TenantId == request.TenantId
                      && t.EntityType == request.EntityType
-                     && t.IsActive)
+                     && t.IsActive
+                     && (request.Circuit == null || t.Circuit == request.Circuit))
+            .OrderBy(t => t.Circuit)
             .FirstOrDefaultAsync(ct);
 
         if (template is null)
-            return Result.Fail<Guid>(
-                $"No active workflow template found for entity type '{request.EntityType}'.");
+            return Result.Fail<Guid>(request.Circuit is null
+                ? $"No active workflow template found for entity type '{request.EntityType}'."
+                : $"No active '{request.EntityType}' workflow for circuit '{request.Circuit}'.");
 
         // A caller-supplied ladder that matches no step would skip EVERY step, and an instance with
         // nothing left to do completes itself on the spot — reporting a fully approved entity
@@ -48,6 +51,9 @@ internal sealed class WorkflowModuleFacade(WorkflowDbContext db) : IWorkflowModu
             template, request.EntityId, request.StartedByUserId,
             requiredStepOrders: request.RequiredStepOrders);
 
+        if (request.Subject is { } subject)
+            instance.DescribeSubject(subject.Label, subject.Detail, subject.Link);
+
         db.WorkflowInstances.Add(instance);
 
         if (instance.PendingAuditEntries.Count > 0)
@@ -57,6 +63,49 @@ internal sealed class WorkflowModuleFacade(WorkflowDbContext db) : IWorkflowModu
 
         return Result.Ok(instance.Id);
     }
+
+    public async Task<IReadOnlyList<WorkflowInstanceDecisions>> GetInstanceDecisionsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default)
+    {
+        if (instanceIds.Count == 0)
+            return [];
+
+        var instances = await db.WorkflowInstances
+            .IgnoreQueryFilters()
+            .Include(i => i.Steps)
+            .Where(i => i.TenantId == tenantId && instanceIds.Contains(i.Id))
+            .ToListAsync(ct);
+
+        var templateIds = instances.Select(i => i.TemplateId).Distinct().ToList();
+        var names = await db.WorkflowTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TenantId == tenantId && templateIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+
+        return instances
+            .Select(i => new WorkflowInstanceDecisions(
+                i.Id,
+                names.GetValueOrDefault(i.TemplateId, string.Empty),
+                i.Status.ToString(),
+                i.StartedAt,
+                i.CompletedAt,
+                i.Steps
+                    .OrderBy(s => s.Order)
+                    .Select(s => new WorkflowStepDecision(
+                        s.Order, s.Name, s.ApproverRoleCode, s.Status.ToString(), s.ActedByUserId,
+                        s.Comment, s.DueAt, s.CompletedAt))
+                    .ToList()))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<WorkflowCircuitSummary>> ListActiveCircuitsAsync(
+        Guid tenantId, string entityType, CancellationToken ct = default)
+        => await db.WorkflowTemplates
+            .IgnoreQueryFilters()
+            .Where(t => t.TenantId == tenantId && t.EntityType == entityType && t.IsActive)
+            .OrderBy(t => t.Name)
+            .Select(t => new WorkflowCircuitSummary(t.Circuit, t.Name, t.Version, t.Steps.Count))
+            .ToListAsync(ct);
 
     public async Task<Result<WorkflowInstanceStatus>> GetInstanceStatusAsync(
         Guid instanceId,

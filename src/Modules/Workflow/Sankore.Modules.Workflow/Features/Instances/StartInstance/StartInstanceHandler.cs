@@ -22,7 +22,11 @@ internal sealed class StartInstanceHandler(
             .Include(t => t.Steps)
                 .ThenInclude(s => s.Rules)
             .Include(t => t.Transitions)
-            .FirstOrDefaultAsync(t => t.EntityType == request.EntityType && t.IsActive, ct);
+            .Where(t => t.EntityType == request.EntityType && t.IsActive)
+            // Several project circuits can be active; started by hand without one, the empty
+            // (historic) circuit comes first, then the others in a stable order.
+            .OrderBy(t => t.Circuit)
+            .FirstOrDefaultAsync(ct);
 
         if (template is null)
             return Result.Fail<Guid>(

@@ -16,6 +16,20 @@ public sealed class WorkflowTemplate : AggregateRoot
 
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
+
+    /// <summary>
+    /// Which circuit of <see cref="EntityType"/> this template versions — empty for the single
+    /// circuit every entity type had until projects needed several (product owner, 2026-10-24: a
+    /// credit committee and a group-insurance committee are two circuits of the same project type).
+    /// Stable across versions — a project step names its circuit, never a template id, so
+    /// publishing version 2 does not break the link. Uniqueness (one version-1, one draft, one
+    /// active) is per (entity type, circuit).
+    /// </summary>
+    public string Circuit { get; private set; } = string.Empty;
+
+    /// <summary>The entity type whose templates are separate circuits, one per name.</summary>
+    public const string ProjectEntityType = "Opportunity";
+    public const int MaxCircuitLength = 60;
     public bool IsActive { get; private set; }
 
     /// <summary>
@@ -41,10 +55,13 @@ public sealed class WorkflowTemplate : AggregateRoot
         string entityType,
         string name,
         Guid createdByUserId,
-        string? description = null)
+        string? description = null,
+        string? circuit = null)
     {
         if (string.IsNullOrWhiteSpace(entityType))
             throw new DomainException("EntityType is required.");
+        if (circuit?.Length > MaxCircuitLength)
+            throw new DomainException("Circuit key is too long.");
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("Template name is required.");
 
@@ -54,6 +71,7 @@ public sealed class WorkflowTemplate : AggregateRoot
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             EntityType = entityType.Trim(),
+            Circuit = circuit?.Trim() ?? string.Empty,
             Name = name.Trim(),
             Description = description?.Trim(),
             IsActive = false,
@@ -221,6 +239,7 @@ public sealed class WorkflowTemplate : AggregateRoot
             Id              = Guid.NewGuid(),
             TenantId        = TenantId,
             EntityType      = EntityType,
+            Circuit         = Circuit,
             Name            = Name,
             Description     = Description,
             IsActive        = false,
@@ -272,5 +291,28 @@ public sealed class WorkflowTemplate : AggregateRoot
         // Remove all transitions referencing the deleted step
         _transitions.RemoveAll(t => t.FromStateId == stepId || t.ToStateId == stepId);
         UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// The circuit key a NEW project template gets from its name (« Comité crédit PME » →
+    /// « comite-credit-pme »); other entity types keep the single empty circuit.
+    /// </summary>
+    public static string CircuitFor(string entityType, string name)
+    {
+        if (entityType.Trim() != ProjectEntityType)
+            return string.Empty;
+
+        var normalized = name.Trim().Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in normalized)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.NonSpacingMark)
+                continue;
+            sb.Append(char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '-');
+        }
+
+        var slug = System.Text.RegularExpressions.Regex.Replace(sb.ToString(), "-{2,}", "-").Trim('-');
+        if (slug.Length == 0) slug = "circuit";
+        return slug.Length <= MaxCircuitLength ? slug : slug[..MaxCircuitLength].TrimEnd('-');
     }
 }

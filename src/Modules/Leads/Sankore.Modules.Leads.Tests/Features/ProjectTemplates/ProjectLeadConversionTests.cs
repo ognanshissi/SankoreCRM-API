@@ -179,7 +179,7 @@ public sealed class ProjectLeadConversionTests : IDisposable
     {
         await using var db = _factory.CreateContext();
         return await new MoveOpportunityToStepHandler(
-                db, Resolver(db), TimeProvider.System, Gate(db), new ProjectLeadConversion(db, _publisher))
+                db, Resolver(db), new ProjectStepTransition(TimeProvider.System, Gate(db), new ProjectLeadConversion(db, _publisher)))
             .Handle(new MoveOpportunityToStepCommand(projectId, stepId), CancellationToken.None);
     }
 

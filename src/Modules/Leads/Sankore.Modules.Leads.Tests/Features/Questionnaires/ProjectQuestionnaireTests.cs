@@ -416,7 +416,7 @@ public sealed class ProjectQuestionnaireTests : IDisposable
     {
         await using var db = _factory.CreateContext();
         return await new MoveOpportunityToStepHandler(
-                db, new ProjectTemplateResolver(db, _admin, new FixedTenantContext(_tenant)), TimeProvider.System, Gate(db))
+                db, new ProjectTemplateResolver(db, _admin, new FixedTenantContext(_tenant)), new ProjectStepTransition(TimeProvider.System, Gate(db)))
             .Handle(new MoveOpportunityToStepCommand(projectId, stepId), CancellationToken.None);
     }
 
