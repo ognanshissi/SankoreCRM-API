@@ -60,8 +60,7 @@ public static class ConvertLeadEndpoint
         // The file is not complete (BNF-B-04). 422 with the full report rather than 200: the
         // conversion did NOT happen, and a 200 carrying CustomerId = Guid.Empty was read as
         // success by anything that only checked the status code.
-        if (result.Value.BlockingCode is Features.Enrichment.LeadCompletenessCalculator.Incomplete
-            or Features.Questionnaires.QuestionnaireCompletenessChecker.MissingResponses)
+        if (result.Value.BlockingCode is Features.Enrichment.LeadCompletenessCalculator.Incomplete)
             return Results.UnprocessableEntity(result.Value);
 
         return Results.Ok(result.Value);

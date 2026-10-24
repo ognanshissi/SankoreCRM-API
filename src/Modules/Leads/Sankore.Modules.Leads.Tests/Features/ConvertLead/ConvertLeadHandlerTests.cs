@@ -74,7 +74,7 @@ public sealed class ConvertLeadHandlerTests : IDisposable
     // ── the point of the whole feature ──────────────────────────────────────
 
     [Fact]
-    public async Task Creates_the_client_and_stamps_its_real_id_on_the_lead()
+    public async Task Creates_the_client_and_attaches_the_lead_without_converting_it()
     {
         var lead = await SeedLeadAsync();
         var clientId = Guid.NewGuid();
@@ -86,9 +86,12 @@ public sealed class ConvertLeadHandlerTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value.CustomerId.Should().Be(clientId, "the id must come from M01, not be invented");
 
+        // The lead converts when one of its projects is approved (product owner, 2026-10-24).
         var reloaded = await ReloadAsync(lead.Id);
-        reloaded.Status.Should().Be(LeadStatus.Converted);
-        reloaded.ConvertedToCustomerId.Should().Be(clientId);
+        reloaded.Status.Should().NotBe(LeadStatus.Converted);
+        reloaded.CustomerId.Should().Be(clientId);
+        reloaded.ConvertedToCustomerId.Should().BeNull();
+        result.Value.LeadConverted.Should().BeFalse();
     }
 
     [Fact]
@@ -113,7 +116,7 @@ public sealed class ConvertLeadHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Both_downstream_events_carry_the_real_client_id()
+    public async Task The_KYC_request_carries_the_real_client_id_and_no_conversion_is_announced()
     {
         // KycRequested used to be published with the invented id, so M02 would have opened a
         // KYC file against a customer that did not exist.
@@ -126,7 +129,7 @@ public sealed class ConvertLeadHandlerTests : IDisposable
         var published = _publisher.ReceivedCalls().Select(c => c.GetArguments()[0]).ToList();
 
         published.OfType<Leads.Features.ConvertLead.Events.LeadConvertedIntegrationEvent>()
-            .Single().CustomerId.Should().Be(clientId);
+            .Should().BeEmpty("the lead converts at the project's approval, not at the file opening");
         published.OfType<Sankore.Modules.Kyc.PublicApi.KycRequestedIntegrationEvent>()
             .Single().CustomerEntityId.Should().Be(clientId);
     }

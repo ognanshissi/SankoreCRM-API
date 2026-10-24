@@ -15,7 +15,8 @@ public sealed record ProjectStepDto(
     int Probability,
     string? Suggestion,
     bool OpensClientFile = false,
-    bool IsApproval = false);
+    bool IsApproval = false,
+    bool RequiresQuestionnaires = false);
 
 /// <summary>
 /// The template that applies to one project, and where it came from.
@@ -92,7 +93,8 @@ internal sealed class ProjectTemplateResolver(
         template.Name,
         template.ProductCode is not null ? "Product" : template.Category is not null ? "Category" : "Default",
         template.Steps.Select(s => new ProjectStepDto(
-            s.Id, s.Label, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval)).ToList());
+            s.Id, s.Label, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
+            s.RequiresQuestionnaires)).ToList());
 
     public static ResolvedProjectTemplate BuiltIn() => new(
         null,

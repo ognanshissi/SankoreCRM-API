@@ -16,6 +16,15 @@ using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 
+/// <summary>
+/// OPENS THE CLIENT FILE of a lead — the endpoint keeps its historical name, « convert ». Product
+/// owner, 2026-10-24: a lead is CONVERTED when one of its projects is approved
+/// (<c>ProjectLeadConversion</c>), not here. What happens here is everything that has to exist
+/// before that approval: the client record (created by M01, active at once for a product that
+/// requires no KYC), the KYC file a KYC product asks for, the lead attached to the client, and the
+/// lead's projects moved onto the client record. The gates — completeness, duplicates, an identity
+/// document already on someone else — stay here, because they are about creating a client.
+/// </summary>
 internal sealed class ConvertLeadHandler(
     LeadsDbContext db,
     ICurrentUser currentUser,
@@ -26,6 +35,12 @@ internal sealed class ConvertLeadHandler(
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<ConvertLeadCommand, Result<ConvertLeadResult>>
 {
+    /// <summary>
+    /// The reason recorded on the lead's attachment when this handler CREATED the client — what
+    /// tells the later conversion that the lead produced a new customer.
+    /// </summary>
+    internal const string ClientFileOpenedReason = "Dossier client ouvert depuis le lead";
+
     public async Task<Result<ConvertLeadResult>> Handle(
         ConvertLeadCommand cmd, CancellationToken ct)
     {
@@ -53,6 +68,31 @@ internal sealed class ConvertLeadHandler(
                 LeadId:          cmd.LeadId,
                 CustomerId:      already,
                 ConvertedAt:     lead.ConvertedAt ?? default,
+                AlreadyConverted: true,
+                LeadConverted:   true));
+        }
+
+        // An open file names its client: naming ANOTHER one is not a choice to honour silently —
+        // one of the two records is wrong. Refused before any check that reads the client file.
+        if (lead.CustomerId is { } linked && cmd.CustomerId is { } named && named != linked)
+            return Result.Fail<ConvertLeadResult>("CUSTOMER_LINK_CONFLICT");
+
+        // ── The client file is already open: nothing to create ───────────
+        //
+        // A lead attached to a client — opened here earlier, or matched at capture — has its file.
+        // Its projects are moved onto it (one opened since), and that is all: what the client file
+        // must hold before a project is approved is the approval gate's question, not this one's.
+        if (lead.CustomerId is { } attachedClient
+            && (cmd.CustomerId is null || cmd.CustomerId == attachedClient))
+        {
+            await AttachProjectsAsync(lead, attachedClient, ct);
+            await db.SaveChangesAsync(ct);
+
+            return Result.Ok(new ConvertLeadResult(
+                LeadId:         lead.Id,
+                CustomerId:     attachedClient,
+                ConvertedAt:    default,
+                ConversionType: LeadConversionType.ExistingCustomerNewProduct,
                 AlreadyConverted: true));
         }
 
@@ -89,13 +129,8 @@ internal sealed class ConvertLeadHandler(
                 LeadId:       cmd.LeadId,
                 CustomerId:   Guid.Empty,
                 ConvertedAt:  default,
-                // The questionnaire code when questionnaires are what is missing, so a client
-                // written against Lot 4 keeps working; the general code otherwise.
-                BlockingCode: report.MissingQuestionnaires.Count > 0
-                    ? Features.Questionnaires.QuestionnaireCompletenessChecker.MissingResponses
-                    : Features.Enrichment.LeadCompletenessCalculator.Incomplete,
-                MissingQuestionnaires: report.MissingQuestionnaires,
-                Completeness:          report));
+                BlockingCode: Features.Enrichment.LeadCompletenessCalculator.Incomplete,
+                Completeness: report));
         }
 
         // ── Does this product require KYC at all? ───────────────────────
@@ -202,28 +237,16 @@ internal sealed class ConvertLeadHandler(
             }
         }
 
-        // ── Proceed with conversion (BNF-B-12) ──────────────────────────
+        // ── Open the client file (BNF-B-12) ─────────────────────────────
         //
-        // Three ways to end up with a client id, in priority order: the caller named one, the lead
-        // is already attached to one (BNF-B-22 — "sans ressaisie": nothing of their identity is
-        // re-entered and M01 is not asked to create anything), or M01 creates one now. Creation
-        // happens BEFORE lead.Convert so a refusal leaves the lead untouched rather than marking
-        // it converted against a client that was never created.
+        // Two ways to end up with a client id: the caller named an existing one, or M01 creates one
+        // now. Creation happens BEFORE the lead is attached so a refusal leaves the lead untouched.
         Guid customerId;
         string conversionType;
 
         if (cmd.CustomerId.HasValue)
         {
-            customerId = cmd.CustomerId.Value;
-            // An explicit id on an attached lead is the same client — the conflict was refused
-            // above — so this is the existing-customer path either way.
-            conversionType = lead.CustomerId.HasValue
-                ? LeadConversionType.ExistingCustomerNewProduct
-                : LeadConversionType.NewCustomer;
-        }
-        else if (lead.CustomerId is { } linkedCustomerId)
-        {
-            customerId     = linkedCustomerId;
+            customerId     = cmd.CustomerId.Value;
             conversionType = LeadConversionType.ExistingCustomerNewProduct;
         }
         else
@@ -236,8 +259,8 @@ internal sealed class ConvertLeadHandler(
 
             var created = creation.Value;
 
-            // M01 found the identity document on someone else. The lead stays unconverted and
-            // the agent is handed the existing client to attach it to by hand (US-M01-BE-06).
+            // M01 found the identity document on someone else. The lead stays as it is and the
+            // agent is handed the existing client to attach it to by hand (US-M01-BE-06).
             if (created.BlockingCode is { } blockingCode)
             {
                 return Result.Ok(new ConvertLeadResult(
@@ -252,33 +275,17 @@ internal sealed class ConvertLeadHandler(
             customerId = created.ClientId;
         }
 
-        var convertResult = lead.Convert(customerId);
-        if (convertResult.IsFailure)
-            return Result.Fail<ConvertLeadResult>(convertResult.Error!);
+        // Attached, NOT converted: the lead converts when one of its projects is approved.
+        var attachment = lead.AttachToCustomer(
+            customerId,
+            isAutomatic: false,
+            reason: conversionType == LeadConversionType.NewCustomer
+                ? ClientFileOpenedReason
+                : "Rattaché à un client existant à l'ouverture du dossier client");
+        if (attachment.IsFailure)
+            return Result.Fail<ConvertLeadResult>(attachment.Error!);
 
-        // The lead's projects follow it onto the client record.
-        var projects = await db.Opportunities
-            .AsTracking()
-            .Where(o => o.LeadId == lead.Id && o.CustomerEntityId == null)
-            .ToListAsync(ct);
-        foreach (var project in projects)
-            project.AttachToCustomer(customerId, lead.ConvertedAt!.Value);
-
-        // Publish LeadConverted integration event atomically via outbox
-        await publisher.PublishAsync(
-            new LeadConvertedIntegrationEvent(
-                LeadId:      lead.Id,
-                CustomerId:  customerId,
-                TenantId:    lead.TenantId,
-                FullName:    lead.FullName,
-                PhoneNumber: lead.PhoneNumber,
-                Email:       lead.Email,
-                ConvertedAt: lead.ConvertedAt!.Value,
-                // BNF-B-24: which path ran, and on which catalogue line. A consumer cannot derive
-                // either — both paths end with a lead pointing at a client.
-                ConversionType: conversionType,
-                ProductLineId:  lead.ProductLineId),
-            ct);
+        await AttachProjectsAsync(lead, customerId, ct);
 
         // ── US-M13-172: Publish KycRequested event via outbox ───────────
         if (kycRequired)
@@ -297,7 +304,7 @@ internal sealed class ConvertLeadHandler(
                     // the compliance officer to the approval ladder. The FLAG only — the function, the
                     // country and the family link stay behind lead:pep:read.
                     HasPepExposure:   lead.HasPepExposure,
-                    // KRM-B-02: which catalogue line this conversion is on. M02 decides from it
+                    // KRM-B-02: which catalogue line this file is opened on. M02 decides from it
                     // whether the new customer may send their documents remotely and how the file is
                     // validated. Null when the lead's product label resolved to nothing, which is
                     // ordinary — the file is then simply collected at the counter.
@@ -306,43 +313,28 @@ internal sealed class ConvertLeadHandler(
 
         await db.SaveChangesAsync(ct);
 
-        // ── The draft holding (BNF-B-24) ─────────────────────────────────
-        //
-        // AFTER the lead is committed, and BEST-EFFORT. The subscription is a consequence of the
-        // conversion, not a condition of it: a lead that produced a client has converted, and
-        // failing the whole command because M01 could not open a draft would leave the agent with
-        // a client, a converted lead and an error telling them none of it worked.
-        //
-        // Only when the product line is resolved — there is no line to subscribe to otherwise, and
-        // the completeness gate above already reported that.
-        var holdingId = await TryOpenHoldingAsync(lead, customerId, ct);
-
+        // No draft holding here any more: the contract is opened when the PROJECT is won
+        // (CloseOpportunityHandler), on the project's own product — the file opening is not a sale.
         return Result.Ok(new ConvertLeadResult(
             LeadId:         lead.Id,
             CustomerId:     customerId,
-            ConvertedAt:    lead.ConvertedAt!.Value,
+            ConvertedAt:    default,
             ConversionType: conversionType,
-            HoldingId:      holdingId,
             Completeness:   report));
     }
 
-    /// <summary>
-    /// Opens the draft product holding a converted lead leaves behind (BNF-B-24), or returns null
-    /// when there is nothing to open or M01 refused.
-    /// </summary>
-    /// <remarks>
-    /// <b>Swallows every failure, and logs none of them as an error.</b> Two of the refusals are
-    /// ordinary: <c>HOLDING_ALREADY_HELD</c> for a line that forbids a second holding (the client
-    /// already has one — the conversion is still correct), and a retried conversion, which M01
-    /// answers idempotently. The rest are an M12 or M01 problem the agent can resolve by opening
-    /// the subscription by hand on the client record.
-    ///
-    /// <para>
-    /// Suppressed transaction scope, like every other cross-module call on this path: M01 writes
-    /// through its own DbContext, and a second connection enlisting in the ambient
-    /// <c>System.Transactions</c> scope promotes it to a distributed transaction Npgsql cannot do.
-    /// </para>
-    /// </remarks>
+    /// <summary>The lead's projects not yet on a client record move onto this one.</summary>
+    private async Task AttachProjectsAsync(Lead lead, Guid customerId, CancellationToken ct)
+    {
+        var projects = await db.Opportunities
+            .AsTracking()
+            .Where(o => o.LeadId == lead.Id && o.CustomerEntityId == null)
+            .ToListAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var project in projects)
+            project.AttachToCustomer(customerId, now);
+    }
+
     /// <summary>
     /// Same rule as at capture — exact on the code or the name, active lines only, "Unknown"
     /// resolves to nothing — and the same posture: best-effort. A conversion is not refused
@@ -370,37 +362,6 @@ internal sealed class ConvertLeadHandler(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _ = ex;
-        }
-    }
-
-    private async Task<Guid?> TryOpenHoldingAsync(Lead lead, Guid customerId, CancellationToken ct)
-    {
-        if (lead.ProductLineId is not { } lineId)
-            return null;
-
-        try
-        {
-            using var suppressed = new TransactionScope(
-                TransactionScopeOption.Suppress,
-                TransactionScopeAsyncFlowOption.Enabled);
-
-            var result = await customersModule.CreateHoldingFromLeadAsync(
-                new CreateHoldingFromLeadRequest(
-                    TenantId:          lead.TenantId,
-                    ClientId:          customerId,
-                    ProductLineId:     lineId,
-                    SourceLeadId:      lead.Id,
-                    ConvertedByUserId: currentUser.Id),
-                ct);
-
-            suppressed.Complete();
-
-            return result.IsSuccess ? result.Value : null;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _ = ex;
-            return null;
         }
     }
 

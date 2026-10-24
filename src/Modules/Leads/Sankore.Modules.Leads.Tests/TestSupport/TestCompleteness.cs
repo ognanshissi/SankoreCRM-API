@@ -8,7 +8,6 @@ using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Enrichment;
 using Sankore.Modules.Leads.Features.Fatca;
-using Sankore.Modules.Leads.Features.Questionnaires;
 using Sankore.Modules.Leads.Infrastructure;
 
 /// <summary>
@@ -56,8 +55,6 @@ internal static class TestCompleteness
             admin,
             customers ?? Substitute.For<ICustomersModule>(),
             kyc ?? Substitute.For<IKycModule>(),
-            new QuestionnaireCompletenessChecker(
-                db, new ExpectedResponsePlanner(db, admin, TimeProvider.System)),
             new FatcaSubjectPlanner(admin, NullLogger<FatcaSubjectPlanner>.Instance),
             FixedSettings(requireProductLine));
     }

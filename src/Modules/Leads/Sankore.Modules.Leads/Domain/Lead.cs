@@ -905,6 +905,11 @@ public sealed class Lead : AggregateRoot
         if (LeadPipeline.IsProjectStage(newStage))
             return Result.Fail(LeadPipeline.StageIsAProjectStep);
 
+        // Converted is reached by Convert, when one of the lead's projects is approved — never by
+        // moving a card: a stage set by hand left a « converted » lead with no client.
+        if (newStage == PipelineStage.Converted)
+            return Result.Fail(LeadPipeline.ConvertedByProjectApproval);
+
         if (Status is LeadStatus.Converted or LeadStatus.Lost or LeadStatus.Disqualified or LeadStatus.Archived)
             return Result.Fail("Cannot move pipeline stage on a closed lead.");
 

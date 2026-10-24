@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.Questionnaires;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Messaging;
@@ -15,22 +16,28 @@ using Sankore.Shared.Kernel;
 /// What a project needs before it reaches a marked step of its template (lot 3).
 ///
 /// <list type="bullet">
+/// <item><b>« Questionnaires complets »</b> — every questionnaire the product asks, of the file and
+/// of each person, answered. Checked first: the agent fills them before converting. Winning a
+/// project whose template marks no such step still needs the PER-PERSON ones, which is the
+/// guarantee the conversion used to give (no contract without the health declarations); the file's
+/// questionnaire is then not required. An unreadable catalogue refuses.</item>
 /// <item><b>« Ouvre le dossier client »</b> — a client record. For a product that requires KYC,
-/// this is where it opens: the agent converts the lead (the conversion opens the KYC file), and a
-/// lead already converted whose client has no file yet gets one requested here.</item>
-/// <item><b>« Approbation »</b>, and winning the project — a client, and for a product that
-/// requires KYC, a file APPROVED at the tier the product asks for. For a product that requires
-/// none (a Standard line whose policy says None), only the client: it is created active when the
-/// agent converts at this step, which is the product owner's rule — a no-KYC customer exists once
-/// the project is approved, not before.</item>
+/// this is where it opens: the agent opens the client file from the lead (which opens the KYC
+/// file), and a lead whose client has no KYC file yet gets one requested here.</item>
+/// <item><b>« Approbation »</b>, and winning the project — winning IS the approval when the
+/// template has none — a client, and for a product that requires KYC, a file APPROVED at the tier
+/// the product asks for. For a product that requires none (a Standard line whose policy says
+/// None), only the client: it is created active when the agent opens it at this step, which is the
+/// product owner's rule — a no-KYC customer exists once the project is approved, not before. The
+/// lead converts there (<c>ProjectLeadConversion</c>).</item>
 /// </list>
 ///
 /// <para>
-/// <b>Refuses, never converts by itself.</b> A conversion can stop on things only the agent can
-/// settle — an incomplete file, a probable duplicate, an identity document already on someone
-/// else — so the gate answers <c>PROJECT_CLIENT_FILE_REQUIRED</c> and the screen opens the
-/// conversion the agent already knows. A template with no marked step gates nothing, which is
-/// every tenant that has not configured one: the built-in default marks none.
+/// <b>Refuses, never creates a client by itself.</b> Opening a client file can stop on things only
+/// the agent can settle — an incomplete file, a probable duplicate, an identity document already on
+/// someone else — so the gate answers <c>PROJECT_CLIENT_FILE_REQUIRED</c> and the screen opens the
+/// wizard the agent already knows. A template with no marked step gates only the WIN: the built-in
+/// default marks none.
 /// </para>
 ///
 /// <para>
@@ -44,7 +51,8 @@ internal sealed class ProjectStepGate(
     IKycModule kyc,
     ITenantContext tenant,
     ICurrentUser currentUser,
-    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
+    QuestionnaireCompletenessChecker? questionnaires = null)
 {
     /// <param name="targetIndex">
     /// The index of the step reached in <paramref name="template"/>; <c>Steps.Count</c> for a project
@@ -61,9 +69,23 @@ internal sealed class ProjectStepGate(
         var steps = template.Steps.ToList();
         var opens = steps.FindIndex(s => s.OpensClientFile);
         var approval = steps.FindIndex(s => s.IsApproval);
+        var asks = steps.FindIndex(s => s.RequiresQuestionnaires);
+
+        // Winning reaches past the last step: the per-person declarations are owed then, marked or
+        // not — a contract is not opened on a file whose declarations were never collected.
+        var reachesMarker = asks >= 0 && targetIndex >= asks;
+        var wins = targetIndex >= steps.Count;
+        if ((reachesMarker || wins) && questionnaires is not null)
+        {
+            var answered = await QuestionnairesAnsweredAsync(project, includeDossier: reachesMarker, ct);
+            if (answered.IsFailure)
+                return answered;
+        }
 
         var reachesFile = opens >= 0 && targetIndex >= opens;
-        var reachesApproval = approval >= 0 && targetIndex >= approval;
+        // Winning IS approving when the template has no approval step (product owner, 2026-10-24):
+        // the lead converts then, so it needs its client — and the KYC the product asks.
+        var reachesApproval = (approval >= 0 && targetIndex >= approval) || wins;
         if (!reachesFile && !reachesApproval)
             return Result.Ok();
 
@@ -111,6 +133,23 @@ internal sealed class ProjectStepGate(
         }
 
         return Result.Ok();
+    }
+
+    private async Task<Result> QuestionnairesAnsweredAsync(
+        Opportunity project, bool includeDossier, CancellationToken ct)
+    {
+        try
+        {
+            var lead = await questionnaires!.LeadOfAsync(project, ct);
+            var missing = await questionnaires.MissingAsync(project, lead, ct);
+            var blocking = missing.Where(m => includeDossier || m.SubjectType != nameof(QualificationSubjectType.Lead));
+            return blocking.Any() ? Result.Fail(ProjectTemplateErrors.QuestionnairesIncomplete) : Result.Ok();
+        }
+        catch (ProductLineUnavailableException)
+        {
+            // What the product asks is unknown: not known to be answered.
+            return Result.Fail(ProjectTemplateErrors.QuestionnairesIncomplete);
+        }
     }
 
     private async Task<Result> KycApprovedAsync(Guid clientId, string? tier, CancellationToken ct)

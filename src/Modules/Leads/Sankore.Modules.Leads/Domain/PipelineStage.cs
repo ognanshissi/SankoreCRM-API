@@ -48,4 +48,7 @@ public static class LeadPipeline
             or PipelineStage.DocumentCollection or PipelineStage.ApplicationCompleted or PipelineStage.ApprovalPending;
 
     public const string StageIsAProjectStep = "PIPELINE_STAGE_IS_A_PROJECT_STEP";
+
+    /// <summary>A lead converts when one of its projects is approved, not by a stage change.</summary>
+    public const string ConvertedByProjectApproval = "PIPELINE_STAGE_CONVERTED_BY_PROJECT_APPROVAL";
 }

@@ -1,6 +1,5 @@
 namespace Sankore.Modules.Leads.Features.QualifyLead;
 
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
@@ -44,8 +43,8 @@ internal sealed class QualifyLeadHandler(
                 return Result.Fail<QualifyLeadResult>("QUALIFICATION_TEMPLATE_NOT_FOUND");
 
             var answerMap     = cmd.Answers.ToDictionary(a => a.QuestionId, a => a.Value);
-            var hiddenIds     = GetHiddenQuestionIds(template.Questions, answerMap);
-            var extraRequired = GetExtraRequiredQuestionIds(template.Questions, answerMap);
+            var hiddenIds     = Questionnaires.QuestionnaireRules.HiddenQuestionIds(template.Questions, answerMap);
+            var extraRequired = Questionnaires.QuestionnaireRules.ExtraRequiredQuestionIds(template.Questions, answerMap);
 
             // Validate all required/rule-forced questions are answered.
             var missingRequired = template.Questions
@@ -56,7 +55,7 @@ internal sealed class QualifyLeadHandler(
             if (missingRequired.Count > 0)
                 return Result.Fail<QualifyLeadResult>("REQUIRED_QUESTIONS_NOT_ANSWERED");
 
-            (score, factorsJson) = ScoreFromTemplate(template, cmd.Answers, hiddenIds);
+            (score, factorsJson) = Questionnaires.QuestionnaireRules.Score(template, answerMap, hiddenIds);
 
             // Completeness = answered active questions / total active questions.
             var activeQuestions   = template.Questions.Where(q => !hiddenIds.Contains(q.Id)).ToList();
@@ -70,7 +69,7 @@ internal sealed class QualifyLeadHandler(
             // (lead, template, subject type, subject id) and `ux_qualification_responses_subject`
             // enforces it, so a blind Add here raised a unique violation on the second
             // qualification — a 500 on an ordinary re-qualify. Same shape as
-            // SubmitQuestionnaireResponseHandler, which has always looked first.
+            // SubmitProjectQuestionnaireResponseHandler, which has always looked first.
             //
             // Nothing is lost by overwriting: the ScoreHistory row written below keeps each
             // qualification's score, trigger and factors, so the succession stays on the lead's
@@ -152,113 +151,6 @@ internal sealed class QualifyLeadHandler(
             NextAction:              nextAction,
             NextActionDetail:        nextDetail,
             QualificationResponseId: qualificationResponseId));
-    }
-
-    // ── Rule evaluation ────────────────────────────────────────────────────
-
-    private static HashSet<Guid> GetHiddenQuestionIds(
-        IReadOnlyList<QualificationQuestion> questions,
-        Dictionary<Guid, string> answerMap)
-    {
-        var hidden = new HashSet<Guid>();
-        foreach (var q in questions)
-            foreach (var rule in q.GetRules())
-            {
-                if (rule.Action != QuestionRuleAction.Hide) continue;
-                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var v) &&
-                    v.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
-                {
-                    hidden.Add(q.Id);
-                    break;
-                }
-            }
-        return hidden;
-    }
-
-    private static HashSet<Guid> GetExtraRequiredQuestionIds(
-        IReadOnlyList<QualificationQuestion> questions,
-        Dictionary<Guid, string> answerMap)
-    {
-        var required = new HashSet<Guid>();
-        foreach (var q in questions)
-            foreach (var rule in q.GetRules())
-            {
-                if (rule.Action != QuestionRuleAction.Require) continue;
-                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var v) &&
-                    v.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
-                {
-                    required.Add(q.Id);
-                    break;
-                }
-            }
-        return required;
-    }
-
-    // ── Scoring helpers ────────────────────────────────────────────────────
-
-    private static (int Score, string FactorsJson) ScoreFromTemplate(
-        QualificationTemplate template,
-        IReadOnlyList<QualificationAnswerInput> answers,
-        HashSet<Guid> hiddenIds)
-    {
-        var answerMap       = answers.ToDictionary(a => a.QuestionId, a => a.Value);
-        var activeQuestions = template.Questions.Where(q => !hiddenIds.Contains(q.Id)).ToList();
-
-        int earnedWeight = 0;
-        int totalWeight  = activeQuestions.Sum(q => q.Weight);
-
-        var factorDetails = activeQuestions.Select(q =>
-        {
-            answerMap.TryGetValue(q.Id, out var value);
-            var earned = ComputeEarned(q, value);
-            earnedWeight += earned;
-            return new { questionId = q.Id, label = q.Label, weight = q.Weight, earned };
-        }).ToList();
-
-        var score = totalWeight > 0
-            ? Math.Clamp((int)Math.Round(earnedWeight / (double)totalWeight * 100), 0, 100)
-            : 0;
-
-        var factorsJson = JsonSerializer.Serialize(new
-        {
-            template    = template.Name,
-            totalWeight,
-            earnedWeight,
-            score,
-            factors     = factorDetails
-        });
-
-        return (score, factorsJson);
-    }
-
-    private static int ComputeEarned(QualificationQuestion question, string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return 0;
-        return question.Type switch
-        {
-            QuestionType.YesNo =>
-                value.Equals("true", StringComparison.OrdinalIgnoreCase) ? question.Weight : 0,
-            QuestionType.SingleChoice or QuestionType.MultiChoice => question.Weight,
-            QuestionType.Numeric => ComputeNumericEarned(question, value),
-            QuestionType.Text    => question.Weight,
-            _                    => 0
-        };
-    }
-
-    private static int ComputeNumericEarned(QualificationQuestion question, string value)
-    {
-        if (!decimal.TryParse(value, out var n)) return 0;
-
-        if (question.MinValue.HasValue && question.MaxValue.HasValue &&
-            question.MaxValue.Value > question.MinValue.Value)
-        {
-            var ratio = (n - question.MinValue.Value) /
-                        (question.MaxValue.Value - question.MinValue.Value);
-            ratio = Math.Clamp(ratio, 0m, 1m);
-            return (int)Math.Round((double)ratio * question.Weight);
-        }
-
-        return n > 0 ? question.Weight : 0;
     }
 
     // ── Intent & next-action helpers ───────────────────────────────────────

@@ -7,7 +7,6 @@ using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Fatca;
 using Sankore.Modules.Leads.Features.Household;
-using Sankore.Modules.Leads.Features.Questionnaires;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel.ValueObject;
 
@@ -42,7 +41,6 @@ internal sealed class LeadCompletenessCalculator(
     IAdministrationModule administration,
     ICustomersModule customers,
     IKycModule kyc,
-    QuestionnaireCompletenessChecker questionnaires,
     FatcaSubjectPlanner fatcaPlanner,
     ILeadSettings settings)
 {
@@ -170,30 +168,11 @@ internal sealed class LeadCompletenessCalculator(
             }
         }
 
-        // ── 3. Questionnaires (BNF-B-08) ─────────────────────────────────────
+        // ── 3. Questionnaires: not here any more ─────────────────────────────
         //
-        // Reuses the checker the conversion gate already used, rather than recomputing the plan:
-        // two implementations of "which questionnaires are owed" would eventually disagree, and
-        // the one in the gate is the one that matters.
-        var missingQuestionnaires = await questionnaires.MissingAsync(lead, ct);
-
-        foreach (var missing in missingQuestionnaires)
-        {
-            applicable++;
-            gaps.Add(new CompletenessGap(
-                Code:         CompletenessCodes.MissingQuestionnaire,
-                SubjectLabel: missing.SubjectLabel,
-                Detail:       missing.TemplateName));
-        }
-
-        // Answered questionnaires count towards the percentage too, or a lead that has completed
-        // six of seven would read the same as one that has completed none. One check each —
-        // applicable AND satisfied — which is why the same number is added twice.
-        var answered = await db.QualificationResponses
-            .CountAsync(r => r.LeadId == lead.Id
-                          && r.Status == QualificationResponseStatus.Completed, ct);
-        applicable += answered;
-        satisfied  += answered;
+        // They are asked by a PROJECT's product and required by its marked step (or its winning),
+        // through QuestionnaireCompletenessChecker — not by the lead's conversion. A lead carrying
+        // a credit and an insurance owes two different sets, which the lead cannot say.
 
         // ── 4. FATCA (BNF-B-11) ──────────────────────────────────────────────
         await AddFatcaChecksAsync(lead, Check, ct);
@@ -214,7 +193,6 @@ internal sealed class LeadCompletenessCalculator(
             Applicable: applicable,
             CanConvert: !gaps.Any(g => g.Blocking),
             Gaps:       gaps,
-            MissingQuestionnaires: missingQuestionnaires,
             RequiredConsents: [.. requiredConsentTypes.Select(t => t.ToString())]);
     }
 

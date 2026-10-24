@@ -12,7 +12,8 @@ using Sankore.Shared.Kernel.ValueObject;
 using Xunit;
 
 /// <summary>
-/// Covers <see cref="ExpectedResponsePlanner"/> — "ne jamais oublier un assuré" (BNF-B-08).
+/// Covers <see cref="ExpectedResponsePlanner"/> — "ne jamais oublier un assuré" (BNF-B-08), planned
+/// from the PROJECT's product.
 /// </summary>
 public sealed class ExpectedResponsePlannerTests : IDisposable
 {
@@ -26,7 +27,11 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
     {
         _factory = new TestDbContextFactory(_tenant);
         LineIs("SANTE-01", nameof(ProductCategory.HealthInsurance));
+        _admin.ResolveProductLineAsync(_tenant, Product, Arg.Any<CancellationToken>())
+            .Returns(_productLine);
     }
+
+    private const string Product = "Assurance santé";
 
     public void Dispose() => _factory.Dispose();
 
@@ -77,13 +82,20 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
         return template;
     }
 
+    /// <summary>The lead, ONE open project on its product (none named when the lead has no line), and the templates.</summary>
     private async Task SeedAsync(Lead lead, params QualificationTemplate[] templates)
     {
         await using var db = _factory.CreateContext();
         db.Leads.Add(lead);
+        db.Opportunities.Add(Opportunity.CreateFromLead(
+            _tenant, lead.Id, "Projet santé", lead.ProductLineId is null ? null : Product,
+            ownerId: null, TimeProvider.System));
         db.QualificationTemplates.AddRange(templates);
         await db.SaveChangesAsync(CancellationToken.None);
     }
+
+    private static Task<Opportunity> ProjectAsync(Sankore.Modules.Leads.Infrastructure.LeadsDbContext db)
+        => db.Opportunities.FirstAsync(CancellationToken.None);
 
     private async Task<List<QualificationResponse>> ResponsesAsync()
     {
@@ -181,7 +193,7 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
         var tracked = await db.Leads.AsTracking()
             .Include(l => l.HouseholdMembers).SingleAsync(CancellationToken.None);
 
-        var plan = await Planner(db).PlanAsync(tracked, CancellationToken.None);
+        var plan = await Planner(db).PlanAsync(await ProjectAsync(db), tracked, CancellationToken.None);
 
         plan.Should().ContainSingle();
     }
@@ -196,23 +208,94 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
         var tracked = await db.Leads.AsTracking()
             .Include(l => l.HouseholdMembers).SingleAsync(CancellationToken.None);
 
-        (await Planner(db).PlanAsync(tracked, CancellationToken.None)).Should().HaveCount(3);
+        (await Planner(db).PlanAsync(await ProjectAsync(db), tracked, CancellationToken.None)).Should().HaveCount(3);
     }
 
     [Fact]
-    public async Task A_lead_scoped_template_is_never_planned()
+    public async Task A_lead_scoped_template_is_planned_ONCE_for_the_file()
     {
-        // The pre-existing behaviour BNF-B-07 requires to stay unchanged: a BANT questionnaire is
-        // answered once by whoever is qualifying, not expected of each person.
+        // The questionnaire the lead's « Qualification » tab used to ask: answered once for the
+        // whole file, not expected of each person — whatever the household.
         var lead = LeadWith(_productLine, children: 2);
-        await SeedAsync(lead, PublishedTemplate(
-            QualificationSubjectScope.Lead, health: false, category: ProductCategory.Loan));
+        await SeedAsync(lead, PublishedTemplate(QualificationSubjectScope.Lead, health: false));
 
         await using var db = _factory.CreateContext();
         var tracked = await db.Leads.AsTracking()
             .Include(l => l.HouseholdMembers).SingleAsync(CancellationToken.None);
 
-        (await Planner(db).PlanAsync(tracked, CancellationToken.None)).Should().BeEmpty();
+        var plan = await Planner(db).PlanAsync(await ProjectAsync(db), tracked, CancellationToken.None);
+
+        var dossier = plan.Should().ContainSingle().Subject;
+        dossier.IsDossier.Should().BeTrue();
+        dossier.SubjectType.Should().Be(QualificationSubjectType.Lead);
+        dossier.SubjectId.Should().Be(lead.Id, "an answer given on the lead before projects held it must still match");
+    }
+
+    [Fact]
+    public async Task Only_the_most_specific_file_questionnaire_is_planned()
+    {
+        // Product's own, else its family's, else the generic one — never several.
+        var lead = LeadWith(_productLine);
+        var family = PublishedTemplate(QualificationSubjectScope.Lead, health: false);
+        var own = PublishedTemplate(QualificationSubjectScope.Lead, health: false, productCode: "SANTE-01");
+        await SeedAsync(lead, family, own);
+
+        await using var db = _factory.CreateContext();
+        var tracked = await db.Leads.AsTracking()
+            .Include(l => l.HouseholdMembers).SingleAsync(CancellationToken.None);
+
+        var plan = await Planner(db).PlanAsync(await ProjectAsync(db), tracked, CancellationToken.None);
+
+        plan.Should().ContainSingle().Which.TemplateId.Should().Be(own.Id);
+    }
+
+    [Fact]
+    public async Task A_project_on_a_client_with_no_lead_asks_its_holder_only()
+    {
+        // No household in this module for a client: the holder is asked, as CustomerPrincipal;
+        // the spouse and children scopes have nobody to name.
+        var customerId = Guid.NewGuid();
+        await using (var seed = _factory.CreateContext())
+        {
+            seed.Opportunities.Add(Opportunity.CreateForCustomer(
+                _tenant, customerId, "Projet santé", Product, ownerId: null, TimeProvider.System));
+            seed.QualificationTemplates.AddRange(
+                PublishedTemplate(QualificationSubjectScope.EachInsuredPerson),
+                PublishedTemplate(QualificationSubjectScope.ChildrenOnly));
+            await seed.SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using var db = _factory.CreateContext();
+        var plan = await Planner(db).PlanAsync(await ProjectAsync(db), lead: null, CancellationToken.None);
+
+        var holder = plan.Should().ContainSingle().Subject;
+        holder.SubjectType.Should().Be(QualificationSubjectType.CustomerPrincipal);
+        holder.SubjectId.Should().Be(customerId);
+    }
+
+    [Fact]
+    public async Task Each_open_project_of_the_lead_gets_its_own_rows()
+    {
+        var lead = LeadWith(_productLine);
+        await SeedAsync(lead, PublishedTemplate(QualificationSubjectScope.PrincipalOnly));
+        await using (var second = _factory.CreateContext())
+        {
+            second.Opportunities.Add(Opportunity.CreateFromLead(
+                _tenant, lead.Id, "Second projet", Product, ownerId: null, TimeProvider.System));
+            await second.SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var tracked = await db.Leads.AsTracking()
+                .Include(l => l.HouseholdMembers).SingleAsync(CancellationToken.None);
+            (await Planner(db).SyncAsync(tracked, CancellationToken.None)).Should().Be(2);
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+
+        var responses = await ResponsesAsync();
+        responses.Select(r => r.OpportunityId).Distinct().Should().HaveCount(2);
+        responses.Should().OnlyContain(r => r.LeadId == lead.Id);
     }
 
     [Fact]
@@ -238,7 +321,7 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
         reread.RemoveHouseholdMember(
             reread.HouseholdMembers[0].Id, "sorti du foyer", Now);
 
-        var plan = await Planner(read).PlanAsync(reread, CancellationToken.None);
+        var plan = await Planner(read).PlanAsync(await ProjectAsync(read), reread, CancellationToken.None);
 
         plan.Should().ContainSingle("only the principal remains expected");
         (await ResponsesAsync()).Should().HaveCount(2, "the removed member's row is kept");
@@ -257,7 +340,7 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
         var tracked = await db.Leads.AsTracking()
             .Include(l => l.HouseholdMembers).SingleAsync(CancellationToken.None);
 
-        (await Planner(db).PlanAsync(tracked, CancellationToken.None)).Should().ContainSingle();
+        (await Planner(db).PlanAsync(await ProjectAsync(db), tracked, CancellationToken.None)).Should().ContainSingle();
     }
 
     [Fact]
@@ -271,14 +354,13 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
         var tracked = await db.Leads.AsTracking()
             .Include(l => l.HouseholdMembers).SingleAsync(CancellationToken.None);
 
-        (await Planner(db).PlanAsync(tracked, CancellationToken.None)).Should().BeEmpty();
+        (await Planner(db).PlanAsync(await ProjectAsync(db), tracked, CancellationToken.None)).Should().BeEmpty();
     }
 
     [Fact]
-    public async Task A_lead_with_no_product_line_expects_nothing()
+    public async Task A_project_with_no_product_expects_nothing()
     {
-        // Not an error: BNF-B-01 lets the household be collected before anybody picks a line, and
-        // the completeness check reports PRODUCT_LINE_NOT_RESOLVED instead.
+        // Not an error: a project is opened on a need « à préciser » before anybody picks a product.
         var lead = LeadWith(productLineId: null, children: 2);
         await SeedAsync(lead, PublishedTemplate(QualificationSubjectScope.EachInsuredPerson));
 
@@ -286,7 +368,7 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
         var tracked = await db.Leads.AsTracking()
             .Include(l => l.HouseholdMembers).SingleAsync(CancellationToken.None);
 
-        (await Planner(db).PlanAsync(tracked, CancellationToken.None)).Should().BeEmpty();
+        (await Planner(db).PlanAsync(await ProjectAsync(db), tracked, CancellationToken.None)).Should().BeEmpty();
     }
 
     [Fact]
@@ -306,6 +388,10 @@ public sealed class ExpectedResponsePlannerTests : IDisposable
 
         var act = async () => await Planner(db).SyncAsync(tracked, CancellationToken.None);
         await act.Should().NotThrowAsync();
+
+        // …while a GATE learns that the plan is unknown, rather than reading it as empty.
+        var plan = async () => await Planner(db).PlanAsync(await ProjectAsync(db), tracked, CancellationToken.None);
+        await plan.Should().ThrowAsync<ProductLineUnavailableException>();
     }
 
     // ── The frozen version (BNF-B-07) ─────────────────────────────────────

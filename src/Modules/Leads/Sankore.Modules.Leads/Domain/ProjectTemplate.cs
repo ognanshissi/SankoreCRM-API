@@ -129,6 +129,7 @@ public sealed class ProjectTemplate : AggregateRoot
 
         if (steps.Count(s => s.OpensClientFile) > 1) return ProjectTemplateErrors.TooManyClientFileSteps;
         if (steps.Count(s => s.IsApproval) > 1) return ProjectTemplateErrors.TooManyApprovalSteps;
+        if (steps.Count(s => s.RequiresQuestionnaires) > 1) return ProjectTemplateErrors.TooManyQuestionnaireSteps;
 
         // The client file opens before the decision, never after: approving a project whose file
         // has not been opened would approve someone nobody identified.
@@ -200,6 +201,12 @@ public sealed class ProjectTemplateStep
     /// </summary>
     public bool IsApproval { get; private set; }
 
+    /// <summary>
+    /// Reaching this step needs every questionnaire the product asks — of the file and of each
+    /// person — answered. Winning a project needs the per-person ones even when no step is marked.
+    /// </summary>
+    public bool RequiresQuestionnaires { get; private set; }
+
     public int Order { get; private set; }
 
     private ProjectTemplateStep() { } // EF Core
@@ -219,6 +226,7 @@ public sealed class ProjectTemplateStep
         Suggestion  = string.IsNullOrWhiteSpace(input.Suggestion) ? null : input.Suggestion.Trim();
         OpensClientFile = input.OpensClientFile;
         IsApproval      = input.IsApproval;
+        RequiresQuestionnaires = input.RequiresQuestionnaires;
         Order       = order;
     }
 }
@@ -231,7 +239,8 @@ public sealed record ProjectStepInput(
     int Probability,
     string? Suggestion = null,
     bool OpensClientFile = false,
-    bool IsApproval = false);
+    bool IsApproval = false,
+    bool RequiresQuestionnaires = false);
 
 public static class ProjectTemplateErrors
 {
@@ -255,6 +264,10 @@ public static class ProjectTemplateErrors
     public const string TooManyClientFileSteps = "PROJECT_TEMPLATE_TOO_MANY_CLIENT_FILE_STEPS";
     public const string TooManyApprovalSteps = "PROJECT_TEMPLATE_TOO_MANY_APPROVAL_STEPS";
     public const string ApprovalBeforeClientFile = "PROJECT_TEMPLATE_APPROVAL_BEFORE_CLIENT_FILE";
+    public const string TooManyQuestionnaireSteps = "PROJECT_TEMPLATE_TOO_MANY_QUESTIONNAIRE_STEPS";
+
+    /// <summary>A questionnaire the product asks — of the file or of a person — is unanswered.</summary>
+    public const string QuestionnairesIncomplete = "PROJECT_QUESTIONNAIRES_INCOMPLETE";
 
     /// <summary>The project needs a client record first: convert its lead (or attach it).</summary>
     public const string ClientFileRequired = "PROJECT_CLIENT_FILE_REQUIRED";

@@ -13,6 +13,7 @@ using Sankore.Modules.Leads.Features.Opportunities.GetOpportunity;
 using Sankore.Modules.Leads.Features.Opportunities.ListOpportunities;
 using Sankore.Modules.Leads.Features.Opportunities.MoveToStep;
 using Sankore.Modules.Leads.Features.Opportunities.UpdateOpportunity;
+using Sankore.Modules.Leads.Features.Questionnaires;
 using Sankore.Shared.Kernel;
 
 public static class OpportunitiesEndpoints
@@ -21,6 +22,8 @@ public static class OpportunitiesEndpoints
         this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("opportunities");
+
+        group.MapProjectQuestionnaireEndpoints();
 
         // GET opportunities
         group.MapGet("", ListOpportunities)

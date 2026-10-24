@@ -1552,13 +1552,17 @@ redundant `db.Leads.Update(lead)` after an `AsTracking()` load; all were removed
 
 ### Per-person questionnaires and health data (BNF-B-07/08/09)
 
-A `QualificationResponse` is identified by **`(lead, template, subject type, subject id)`**, held by
-`ux_qualification_responses_subject`. A lead-scoped questionnaire stores the **lead's own id** as
-the subject, never null — PostgreSQL treats each null as distinct, so the constraint would constrain
-nothing.
+**Questionnaires belong to the PROJECT** (product owner, 2026-10-24) — see « Questionnaires in the
+project » below. A `QualificationResponse` carries `OpportunityId` and is identified by
+**`(project, template, subject type, subject id)`** (`ux_qualification_responses_project_subject`);
+a row with no project — answered on the lead before, or captured with it — keeps
+`ux_qualification_responses_subject` over `(lead, …)` and counts for every project of that lead.
+Both indexes are filtered on `opportunity_id`, because PostgreSQL treats each null as distinct. The
+file's questionnaire stores the **lead's own id** as the subject (the project's id when it has no
+lead), never null.
 
-`ExpectedResponsePlanner` creates the `ToComplete` rows **in the same transaction** as the household
-change that caused them, and is idempotent by diff. Removing a member deletes nothing: the planner
+`ExpectedResponsePlanner` creates the `ToComplete` rows of the lead's open projects **in the same
+transaction** as the household change that caused them, and is idempotent by diff. Removing a member deletes nothing: the planner
 reads **active** members only, so the expectation goes and the row stays.
 
 **`QuestionnaireVersion` is frozen at creation.** A response re-read through the live template would
@@ -1925,6 +1929,37 @@ Negotiation) unless it already had an open one, and put it back on NeedIdentifie
 keep the stage they ended on. The board shows the contact stages only, and the reports show
 `LeadPipeline.ReportStages` plus `LeadReportDto.Projects` (projects opened in the period, by phase
 today — under an agency filter, those of that agency's leads).
+
+**Questionnaires in the project.** The lead's « Qualification » and « Questionnaires » tabs are gone
+(routes redirect to `projets`): `ExpectedResponsePlanner.PlanAsync(project, lead)` plans, from the
+PROJECT's product, ONE file questionnaire (the most specific published lead-scoped template:
+product code, else category, else generic) plus every per-person template of the line crossed with
+the household. A project on a client with no lead asks its holder only (`CustomerPrincipal`) — no
+household in M13 for a client — and cannot take a health declaration (consents live on the lead).
+`GET opportunities/{id}/questionnaires` lists the file and each person with status, consent and
+respondents; `POST …/questionnaires/responses` (`lead:opportunity:manage` + `LeadAccessGuard` when
+there is a lead) refuses a template the product does not ask (`QUESTIONNAIRE_TEMPLATE_NOT_APPLICABLE`),
+blank required questions (`QuestionnaireRules`, shared with `QualifyLead`), and always writes a
+PROJECT row — an answer on the lead may serve other projects. The step marker
+`RequiresQuestionnaires` (one per template) makes `ProjectStepGate` refuse with
+`PROJECT_QUESTIONNAIRES_INCOMPLETE`, checked BEFORE the client file; winning needs the per-person
+ones even with no marked step (the guarantee the conversion used to give), the file's one only when
+a marked step is reached. An unreadable catalogue (`ProductLineUnavailableException`) refuses the
+gate and is swallowed by writes. The lead conversion and `LeadCompletenessCalculator` no longer look
+at questionnaires (`MissingQuestionnaires` left both DTOs). The lead's automatic score stays on the lead.
+
+**A lead converts when one of its projects is APPROVED** (product owner, 2026-10-24): reaching the
+step marked `IsApproval`, or WINNING when the template has none — `ProjectLeadConversion`, called by
+`MoveOpportunityToStep` and `CloseOpportunity` after the gate, in the same transaction, publishes
+`LeadConvertedIntegrationEvent` (`NewCustomer` when the lead's own file opening created the client,
+recognised by `ConvertLeadHandler.ClientFileOpenedReason`). Winning with no approval step therefore
+needs a client (and the product's KYC) too. `POST leads/{id}/convert` keeps its name but only OPENS
+THE CLIENT FILE: completeness and duplicate gates, M01 creation (active at once for a no-KYC
+product), `KycRequested`, the lead ATTACHED (`Lead.CustomerId`, `LeadDto.CustomerId`) and its projects
+moved onto the client — no `Lead.Convert`, no draft holding (the won project opens it). A lead
+already attached short-circuits. Closed (lost…) leads are not converted by an approval. The
+`Converted` pipeline stage is refused to a move (`PIPELINE_STAGE_CONVERTED_BY_PROJECT_APPROVAL`);
+the Kanban places a lead in « Converti » from its STATUS only.
 
 **A converted lead's projects follow it onto the client** (`Opportunity.AttachToCustomer`, in
 `ConvertLeadHandler`; migration `AddProjectStepGates` backfills older ones), so they show on the

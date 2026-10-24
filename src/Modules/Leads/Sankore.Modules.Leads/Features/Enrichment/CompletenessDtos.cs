@@ -46,12 +46,6 @@ public sealed record CompletenessGap(
 /// informational, and this is the single answer a screen should disable its button on.
 /// </param>
 /// <param name="Kind">"NewProspect" | "ExistingCustomer" — which rules were applied.</param>
-/// <param name="MissingQuestionnaires">
-/// The questionnaire gaps again, in their own typed shape (BNF-B-08). Repeated rather than left to
-/// be filtered out of <paramref name="Gaps"/> because the conversion response has carried this
-/// list since Lot 4 and a screen branches on its template ids — a <c>CompletenessGap</c> carries a
-/// template NAME, which is a label and not something to branch on.
-/// </param>
 /// <param name="RequiredConsents">
 /// The <c>ConsentType</c> names the product line requires before conversion, given or not. The
 /// gaps only name the MISSING ones, and a consent screen has to keep saying « obligatoire » once
@@ -65,5 +59,4 @@ public sealed record LeadCompletenessDto(
     int Applicable,
     bool CanConvert,
     IReadOnlyList<CompletenessGap> Gaps,
-    IReadOnlyList<Questionnaires.MissingQuestionnaire> MissingQuestionnaires,
     IReadOnlyList<string>? RequiredConsents = null);

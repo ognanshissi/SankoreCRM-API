@@ -81,7 +81,8 @@ public static class ProjectTemplatesEndpoints
 
     private static IReadOnlyList<ProjectStepInput> Inputs(IReadOnlyList<ProjectStepRequest>? steps)
         => (steps ?? []).Select(s => new ProjectStepInput(
-            s.Id, s.Label ?? string.Empty, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval)).ToList();
+            s.Id, s.Label ?? string.Empty, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
+            s.RequiresQuestionnaires)).ToList();
 
     private static IResult ToProblem(string error) => error switch
     {
@@ -108,6 +109,7 @@ public sealed record UpdateProjectTemplateRequest(
 /// <param name="Probability">Chance of signing, 1 to 99 %.</param>
 /// <param name="OpensClientFile">Reaching this step needs a client record; at most one step.</param>
 /// <param name="IsApproval">The decision step, gated on the client's KYC; at most one, never before the client file.</param>
+/// <param name="RequiresQuestionnaires">Reaching this step needs the product's questionnaires answered; at most one step.</param>
 public sealed record ProjectStepRequest(
     Guid? Id,
     string? Label,
@@ -115,4 +117,5 @@ public sealed record ProjectStepRequest(
     int Probability,
     string? Suggestion,
     bool OpensClientFile = false,
-    bool IsApproval = false);
+    bool IsApproval = false,
+    bool RequiresQuestionnaires = false);

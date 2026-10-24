@@ -147,7 +147,7 @@ public sealed class AnonymizeClosedLeadsJob(
         var responses = await db.QualificationResponses
             .IgnoreQueryFilters()
             .AsTracking()
-            .Where(r => r.TenantId == tenantId && leadIds.Contains(r.LeadId) && !r.IsPurged)
+            .Where(r => r.TenantId == tenantId && r.LeadId != null && leadIds.Contains(r.LeadId.Value) && !r.IsPurged)
             .ToListAsync(ct);
 
         var consents = await db.LeadConsents

@@ -6,30 +6,46 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-/// <summary>One questionnaire a particular person is expected to answer (BNF-B-08).</summary>
+/// <summary>One questionnaire a particular person — or the project's file — is expected to answer.</summary>
+/// <param name="IsDossier">
+/// True for the questionnaire asked once for the whole file (a lead-scoped template): the one the
+/// lead's « Qualification » tab used to ask.
+/// </param>
 internal sealed record ExpectedResponse(
     Guid TemplateId,
     int TemplateVersion,
     bool IsHealthData,
     QualificationSubjectType SubjectType,
-    Guid SubjectId);
+    Guid SubjectId,
+    bool IsDossier = false);
 
 /// <summary>
-/// Works out which questionnaires each person of a lead is expected to answer, and creates the
-/// missing <c>ToComplete</c> rows (BNF-B-08).
+/// Works out which questionnaires a PROJECT owes, from its product, and creates the missing
+/// <c>ToComplete</c> rows (BNF-B-08).
 ///
 /// <para>
-/// <b>Why the system creates them rather than the screen asking.</b> The story's point is that an
+/// <b>The product of the project, not of the lead.</b> A lead can carry a credit and an insurance
+/// at once; each asks its own questions, so each project is planned from its own product line.
+/// Two kinds of questionnaire come out of it:
+/// </para>
+/// <list type="bullet">
+/// <item>the FILE's questionnaire — one lead-scoped template, the most specific published one:
+/// the product's own, else its family's, else the generic one;</item>
+/// <item>every per-person questionnaire of the product line, crossed with the people its scope
+/// names. On a project opened on a client with no lead there is no household: only the holder
+/// is asked, as <see cref="QualificationSubjectType.CustomerPrincipal"/>.</item>
+/// </list>
+///
+/// <para>
+/// <b>Why the system creates rows rather than the screen asking.</b> The story's point is that an
 /// insured person is never forgotten: adding a child to a household has to produce that child's
-/// health questionnaire without anybody remembering to. A screen that enumerated the expectation
-/// itself would get it right until a second screen existed.
+/// health questionnaire without anybody remembering to.
 /// </para>
 ///
 /// <para>
 /// <b>Idempotent by construction.</b> It diffs against what is already stored and inserts only
-/// what is missing, so it is safe to run on every household change — and
-/// <c>ux_qualification_responses_subject</c> is what makes it safe under two concurrent requests,
-/// which no diff can be.
+/// what is missing — and <c>ux_qualification_responses_project_subject</c> is what makes it safe
+/// under two concurrent requests, which no diff can be.
 /// </para>
 /// </summary>
 internal sealed class ExpectedResponsePlanner(
@@ -38,7 +54,8 @@ internal sealed class ExpectedResponsePlanner(
     TimeProvider clock)
 {
     /// <summary>
-    /// Creates the responses <paramref name="lead"/> is missing. Returns how many were added.
+    /// Creates the rows the OPEN projects of <paramref name="lead"/> are missing — what a household
+    /// change calls. Returns how many were added.
     /// </summary>
     /// <remarks>
     /// Does NOT call SaveChanges — the caller commits, so the new rows land in the same
@@ -50,17 +67,52 @@ internal sealed class ExpectedResponsePlanner(
     {
         ArgumentNullException.ThrowIfNull(lead);
 
-        var expected = await PlanAsync(lead, ct);
+        var projects = await db.Opportunities
+            .Where(o => o.LeadId == lead.Id
+                     && o.Stage != OpportunityStage.ClosedWon
+                     && o.Stage != OpportunityStage.ClosedLost)
+            .ToListAsync(ct);
+
+        var added = 0;
+        foreach (var project in projects)
+            added += await SyncAsync(project, lead, ct);
+
+        return added;
+    }
+
+    /// <summary>Creates the rows <paramref name="project"/> is missing. Same contract as above.</summary>
+    /// <param name="lead">The project's lead, loaded WITH its household; null when it has none.</param>
+    internal async Task<int> SyncAsync(Opportunity project, Lead? lead, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+
+        IReadOnlyList<ExpectedResponse> expected;
+        try
+        {
+            expected = await PlanAsync(project, lead, ct);
+        }
+        catch (ProductLineUnavailableException)
+        {
+            // A write never fails for want of the catalogue: the rows come on the next sync, and
+            // the gate reads the plan itself.
+            return 0;
+        }
+
         if (expected.Count == 0)
             return 0;
 
+        // Tracked rows too: a submission adds its response before syncing, and the database does
+        // not have it yet.
         var existing = await db.QualificationResponses
-            .Where(r => r.LeadId == lead.Id)
+            .Where(r => r.OpportunityId == project.Id)
             .Select(r => new { r.TemplateId, r.SubjectType, r.SubjectId })
             .ToListAsync(ct);
 
         var already = existing
             .Select(e => (e.TemplateId, e.SubjectType, e.SubjectId))
+            .Concat(db.QualificationResponses.Local
+                .Where(r => r.OpportunityId == project.Id)
+                .Select(r => (r.TemplateId, r.SubjectType, r.SubjectId)))
             .ToHashSet();
 
         var now = clock.GetUtcNow();
@@ -72,14 +124,15 @@ internal sealed class ExpectedResponsePlanner(
                 continue;
 
             db.QualificationResponses.Add(QualificationResponse.Expected(
-                tenantId:             lead.TenantId,
-                leadId:               lead.Id,
+                tenantId:             project.TenantId,
+                leadId:               project.LeadId,
                 templateId:           want.TemplateId,
                 questionnaireVersion: want.TemplateVersion,
                 subjectType:          want.SubjectType,
                 subjectId:            want.SubjectId,
                 isHealthData:         want.IsHealthData,
-                now:                  now));
+                now:                  now,
+                opportunityId:        project.Id));
 
             added++;
         }
@@ -88,38 +141,52 @@ internal sealed class ExpectedResponsePlanner(
     }
 
     /// <summary>
-    /// The complete expectation for a lead: every per-person questionnaire of its product line,
-    /// crossed with the people that questionnaire's scope names.
+    /// Everything <paramref name="project"/> owes: the file's questionnaire, then the per-person
+    /// ones of its product line.
     /// </summary>
-    internal async Task<IReadOnlyList<ExpectedResponse>> PlanAsync(Lead lead, CancellationToken ct)
+    /// <param name="lead">The project's lead, loaded WITH its household; null when it has none.</param>
+    internal async Task<IReadOnlyList<ExpectedResponse>> PlanAsync(
+        Opportunity project, Lead? lead, CancellationToken ct)
     {
-        // No resolved product line means no catalogue row, so no questionnaire can be attributed
-        // to it. NOT an error: BNF-B-01 lets a lead be captured and its household collected before
-        // anybody picks a product line, and the completeness check reports the gap instead.
-        if (lead.ProductLineId is not { } lineId)
-            return [];
+        ArgumentNullException.ThrowIfNull(project);
 
-        BeneficiaryPolicyDto? line;
-        try
+        var line = await LineOfAsync(project, ct);
+        var code = line?.ProductCode?.Trim().ToUpperInvariant();
+        var category = line?.Category;
+
+        var plan = new List<ExpectedResponse>();
+
+        // ── The file's questionnaire: the most specific lead-scoped template ─────
+        var dossierTemplates = await db.QualificationTemplates
+            .Where(t => t.Status == TemplateStatus.Published
+                     && t.SubjectScope == QualificationSubjectScope.Lead)
+            .Select(t => new { t.Id, t.Version, t.IsHealthQuestionnaire, t.ProductCode, t.ProductCategory })
+            .ToListAsync(ct);
+
+        var dossier =
+            (code is null ? null : dossierTemplates.FirstOrDefault(t => t.ProductCode == code))
+            ?? (category is null ? null : dossierTemplates.FirstOrDefault(
+                t => t.ProductCode is null && t.ProductCategory.ToString() == category))
+            ?? dossierTemplates.FirstOrDefault(t => t.ProductCode is null && t.ProductCategory is null);
+
+        if (dossier is not null)
         {
-            using var suppressed = new System.Transactions.TransactionScope(
-                System.Transactions.TransactionScopeOption.Suppress,
-                System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
-
-            line = await administration.GetBeneficiaryPolicyAsync(lead.TenantId, lineId, ct);
-            suppressed.Complete();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // The CALLER decides what an outage means. Here it means "no expectation computed",
-            // and the household write it accompanies still succeeds — a missing ToComplete row is
-            // recreated on the next household change or by the completeness check, whereas failing
-            // the write would lose the member.
-            return [];
+            plan.Add(new ExpectedResponse(
+                TemplateId:      dossier.Id,
+                TemplateVersion: dossier.Version,
+                IsHealthData:    dossier.IsHealthQuestionnaire,
+                SubjectType:     QualificationSubjectType.Lead,
+                SubjectId:       DossierSubjectId(project),
+                IsDossier:       true));
         }
 
+        // ── The per-person questionnaires of the product line ───────────────────
+        //
+        // No resolved product line means no catalogue row, so no per-person questionnaire can be
+        // attributed to it. NOT an error: a project is opened on a need « à préciser » before
+        // anybody picks a product.
         if (line is null)
-            return [];   // a dangling product line id — see HouseholdPolicyResolver
+            return plan;
 
         var templates = await db.QualificationTemplates
             .Where(t => t.Status == TemplateStatus.Published
@@ -132,14 +199,9 @@ internal sealed class ExpectedResponsePlanner(
             })
             .ToListAsync(ct);
 
-        if (templates.Count == 0)
-            return [];
-
-        var plan = new List<ExpectedResponse>();
-
         foreach (var template in templates)
         {
-            foreach (var (subjectType, subjectId) in SubjectsFor(lead, template.SubjectScope))
+            foreach (var (subjectType, subjectId) in SubjectsFor(project, lead, template.SubjectScope))
             {
                 plan.Add(new ExpectedResponse(
                     TemplateId:      template.Id,
@@ -157,12 +219,59 @@ internal sealed class ExpectedResponsePlanner(
     }
 
     /// <summary>
+    /// Who « the file » is, as a subject: the lead when there is one — so an answer given on the
+    /// lead before projects held questionnaires still counts — else the project itself.
+    /// </summary>
+    internal static Guid DossierSubjectId(Opportunity project) => project.LeadId ?? project.Id;
+
+    /// <summary>The product line the project's product names, or null.</summary>
+    private async Task<BeneficiaryPolicyDto?> LineOfAsync(Opportunity project, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(project.Product))
+            return null;
+
+        try
+        {
+            // Suppressed: M12 reads through its own DbContext, and a second connection enlisting
+            // in a command's ambient scope promotes it to a distributed transaction Npgsql refuses.
+            using var suppressed = new System.Transactions.TransactionScope(
+                System.Transactions.TransactionScopeOption.Suppress,
+                System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+
+            var lineId = await administration.ResolveProductLineAsync(project.TenantId, project.Product, ct);
+            var line = lineId is { } id
+                ? await administration.GetBeneficiaryPolicyAsync(project.TenantId, id, ct)
+                : null;
+
+            suppressed.Complete();
+            return line;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The CALLER decides what an outage means: a household write still succeeds (its rows
+            // come on the next sync), the step gate refuses — an unread catalogue must not pass a
+            // project as complete.
+            _ = ex;
+            throw new ProductLineUnavailableException();
+        }
+    }
+
+    /// <summary>
     /// The people a scope names. ACTIVE household members only — a removed member's expectation
     /// falls out of scope without its stored response being deleted (BNF-B-08).
     /// </summary>
     private static IEnumerable<(QualificationSubjectType Type, Guid Id)> SubjectsFor(
-        Lead lead, QualificationSubjectScope scope)
+        Opportunity project, Lead? lead, QualificationSubjectScope scope)
     {
+        if (lead is null)
+        {
+            // A client with no lead has no household in this module: only its holder is asked.
+            if (project.CustomerEntityId is { } customerId
+                && scope is QualificationSubjectScope.PrincipalOnly or QualificationSubjectScope.EachInsuredPerson)
+                yield return (QualificationSubjectType.CustomerPrincipal, customerId);
+            yield break;
+        }
+
         // The principal has no id of its own: it IS the lead, so the lead's id identifies it.
         var principal = (QualificationSubjectType.Principal, lead.Id);
 
@@ -197,4 +306,14 @@ internal sealed class ExpectedResponsePlanner(
                 break;
         }
     }
+}
+
+/// <summary>
+/// The catalogue could not be read, so the questionnaires a project owes are unknown. Callers that
+/// write (a household change) swallow it; callers that GATE treat it as incomplete.
+/// </summary>
+internal sealed class ProductLineUnavailableException : Exception
+{
+    public ProductLineUnavailableException()
+        : base("The product line of the project could not be read.") { }
 }

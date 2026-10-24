@@ -38,6 +38,19 @@ public sealed class LeadPipelineStopsAtNeedTests
         => LeadTestBuilder.Create().Build().AdvancePipelineStage(stage).IsSuccess.Should().BeTrue();
 
     [Fact]
+    public void Converted_is_never_reached_by_moving_the_lead()
+    {
+        // A lead converts when one of its projects is approved (product owner, 2026-10-24); the
+        // old Kanban drop left a « converted » lead with no client.
+        var lead = LeadTestBuilder.Create().Build();
+
+        var result = lead.AdvancePipelineStage(PipelineStage.Converted);
+
+        result.Error.Should().Be(LeadPipeline.ConvertedByProjectApproval);
+        lead.Status.Should().NotBe(LeadStatus.Converted);
+    }
+
+    [Fact]
     public void A_report_shows_the_contact_stages_and_the_two_outcomes()
         => LeadPipeline.ReportStages.Should().Equal(
             PipelineStage.New, PipelineStage.ContactAttempted, PipelineStage.ContactEstablished,

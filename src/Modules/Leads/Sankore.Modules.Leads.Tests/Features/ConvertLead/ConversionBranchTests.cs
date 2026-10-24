@@ -198,7 +198,7 @@ public sealed class ConversionBranchTests : IDisposable
     }
 
     [Fact]
-    public async Task A_converted_lead_cannot_be_re_pointed_at_another_client()
+    public async Task An_open_client_file_cannot_be_re_pointed_at_another_client()
     {
         M01Creates(Guid.NewGuid());
         var lead = await SeedAsync();
@@ -208,23 +208,10 @@ public sealed class ConversionBranchTests : IDisposable
             new ConvertLeadCommand(lead.Id, CustomerId: Guid.NewGuid()));
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("LEAD_ALREADY_CONVERTED_TO_ANOTHER_CUSTOMER");
+        result.Error.Should().Be("CUSTOMER_LINK_CONFLICT");
     }
 
     // ── what the events carry (BNF-B-24) ────────────────────────────────────
-
-    [Fact]
-    public async Task LeadConverted_carries_the_conversion_type_and_the_product_line()
-    {
-        var lead = await SeedAsync(attached: true, lineId: _line);
-
-        await ConvertAsync(new ConvertLeadCommand(lead.Id));
-
-        var evt = Published<LeadConvertedIntegrationEvent>();
-        evt.ConversionType.Should().Be(LeadConversionType.ExistingCustomerNewProduct);
-        evt.ProductLineId.Should().Be(_line,
-            "a back-office push needs to know which system and which line receive the subscription");
-    }
 
     [Fact]
     public async Task KycRequested_carries_the_PEP_exposure_flag()
@@ -252,85 +239,21 @@ public sealed class ConversionBranchTests : IDisposable
             .Should().NotContain("Députée");
     }
 
-    // ── the draft holding (BNF-B-24) ────────────────────────────────────────
+    // ── no draft holding at the file opening ────────────────────────────────
 
     [Fact]
-    public async Task A_lead_with_a_resolved_product_line_leaves_a_draft_holding_behind()
+    public async Task Opening_the_client_file_opens_no_draft_holding()
     {
-        var holdingId = Guid.NewGuid();
+        // The contract is opened when the PROJECT is won, on the project's own product.
         M01Creates(Guid.NewGuid());
-        _customers.CreateHoldingFromLeadAsync(
-                Arg.Any<CreateHoldingFromLeadRequest>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Ok(holdingId));
-
         var lead = await SeedAsync(lineId: _line);
 
         var result = await ConvertAsync(new ConvertLeadCommand(lead.Id));
 
-        result.Value.HoldingId.Should().Be(holdingId);
-
-        var request = _customers.ReceivedCalls()
-            .Select(c => c.GetArguments()[0])
-            .OfType<CreateHoldingFromLeadRequest>()
-            .Should().ContainSingle().Subject;
-
-        request.ProductLineId.Should().Be(_line);
-        request.SourceLeadId.Should().Be(lead.Id, "this is what makes the call idempotent");
-        request.ConvertedByUserId.Should().Be(_agent);
-    }
-
-    [Fact]
-    public async Task A_lead_with_no_product_line_asks_for_no_holding()
-    {
-        // There is nothing to subscribe to, and the completeness report already said so.
-        M01Creates(Guid.NewGuid());
-        var lead = await SeedAsync();
-
-        var result = await ConvertAsync(new ConvertLeadCommand(lead.Id));
-
+        result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.HoldingId.Should().BeNull();
-
         await _customers.DidNotReceive().CreateHoldingFromLeadAsync(
             Arg.Any<CreateHoldingFromLeadRequest>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task A_refused_holding_does_not_undo_the_conversion()
-    {
-        // HOLDING_ALREADY_HELD is the ordinary case — the client already holds the line. Failing
-        // the command would leave the agent with a client, a converted lead and an error saying
-        // none of it worked.
-        M01Creates(Guid.NewGuid());
-        _customers.CreateHoldingFromLeadAsync(
-                Arg.Any<CreateHoldingFromLeadRequest>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Fail<Guid>("HOLDING_ALREADY_HELD"));
-
-        var lead = await SeedAsync(lineId: _line);
-
-        var result = await ConvertAsync(new ConvertLeadCommand(lead.Id));
-
-        result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value.HoldingId.Should().BeNull();
-
-        await using var db = _factory.CreateContext();
-        (await db.Leads.FirstAsync(l => l.Id == lead.Id, CancellationToken.None))
-            .Status.Should().Be(LeadStatus.Converted);
-    }
-
-    [Fact]
-    public async Task An_unreachable_customers_module_does_not_undo_it_either()
-    {
-        M01Creates(Guid.NewGuid());
-        _customers.CreateHoldingFromLeadAsync(
-                Arg.Any<CreateHoldingFromLeadRequest>(), Arg.Any<CancellationToken>())
-            .Returns<Task<Result<Guid>>>(_ => throw new InvalidOperationException("M01 down"));
-
-        var lead = await SeedAsync(lineId: _line);
-
-        var result = await ConvertAsync(new ConvertLeadCommand(lead.Id));
-
-        result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value.HoldingId.Should().BeNull();
     }
 
     [Fact]

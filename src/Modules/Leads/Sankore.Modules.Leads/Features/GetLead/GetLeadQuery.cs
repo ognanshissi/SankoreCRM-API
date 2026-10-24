@@ -107,7 +107,13 @@ public sealed record LeadDto(
     /// The first-contact SLA of the current assignment. Null when the lead has no agent. Filled on
     /// the detail read AND in lists — the lead board flags late and soon-late leads from it.
     /// </param>
-    LeadSlaDto? Sla = null);
+    LeadSlaDto? Sla = null,
+    /// <param name="CustomerId">
+    /// The client the lead is attached to: matched at capture, or its client file opened from the
+    /// lead. Not a conversion — the lead converts when one of its projects is approved. Filled by
+    /// the single read only.
+    /// </param>
+    Guid? CustomerId = null);
 
 /// <summary>The principal's address, as the identity screen edits it.</summary>
 /// <param name="PostalCode">Also the boîte postale — the only postal code most of the network has.</param>

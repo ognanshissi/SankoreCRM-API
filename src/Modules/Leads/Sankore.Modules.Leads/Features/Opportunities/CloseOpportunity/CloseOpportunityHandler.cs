@@ -31,7 +31,8 @@ internal sealed class CloseOpportunityHandler(
     TimeProvider clock,
     ILogger<CloseOpportunityHandler> logger,
     ProjectTemplates.ProjectTemplateResolver? templates = null,
-    ProjectTemplates.ProjectStepGate? gate = null)
+    ProjectTemplates.ProjectStepGate? gate = null,
+    ProjectTemplates.ProjectLeadConversion? conversion = null)
     : IRequestHandler<CloseOpportunityCommand, Result<CloseOpportunityResult>>
 {
     public async Task<Result<CloseOpportunityResult>> Handle(
@@ -64,9 +65,19 @@ internal sealed class CloseOpportunityHandler(
                 return Result.Fail<CloseOpportunityResult>(allowed.Error!);
         }
 
+        // Winning approves the project when no earlier step did: the lead converts (product
+        // owner, 2026-10-24). Read BEFORE closing — a closed project stands on no step.
+        var wonTemplate = cmd.Outcome == OpportunityStage.ClosedWon && conversion is not null && templates is not null
+            && opportunity.Stage is not (OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
+            ? await templates.ResolveAsync(opportunity.Product, ct)
+            : null;
+
         var closed = opportunity.Close(cmd.Outcome, clock.GetUtcNow(), cmd.Reason);
         if (closed.IsFailure)
             return Result.Fail<CloseOpportunityResult>(closed.Error!);
+
+        if (wonTemplate is not null)
+            await conversion!.ConvertIfApprovedAsync(opportunity, wonTemplate, wonTemplate.Steps.Count, ct);
 
         await db.SaveChangesAsync(ct);
 

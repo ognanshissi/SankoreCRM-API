@@ -101,6 +101,7 @@ internal sealed class GetLeadHandler(
             IdentitySourceActivityId: lead.IdentitySourceActivityId,
             QualificationThreshold:   settings.Value.QualificationThreshold,
             NextStep:                 nextSteps.GetValueOrDefault(lead.Id),
-            Sla:                      sla));
+            Sla:                      sla,
+            CustomerId:               lead.CustomerId));
     }
 }

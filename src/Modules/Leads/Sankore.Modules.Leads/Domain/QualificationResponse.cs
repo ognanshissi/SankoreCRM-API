@@ -17,6 +17,15 @@ using Sankore.Shared.Kernel;
 /// </para>
 ///
 /// <para>
+/// <b>Kept on the PROJECT.</b> The questions a product asks are answered for the project that
+/// carries the product, so <see cref="OpportunityId"/> joins the identity:
+/// <c>(project, template, subject type, subject id)</c>, enforced by
+/// <c>ux_qualification_responses_project_subject</c>. A row with no project — answered on the lead
+/// before projects held questionnaires, or captured with the lead — counts for every project of
+/// that lead; <c>ux_qualification_responses_subject</c> still keeps those unique per lead.
+/// </para>
+///
+/// <para>
 /// <b>Health answers are encrypted in bulk and never blind-indexed</b> (BNF-B-09). A blind index
 /// exists so an encrypted column stays searchable by exact match; nothing searches for a person by
 /// the answer they gave about their health, and an index would make "who answered yes to question
@@ -27,7 +36,18 @@ public sealed class QualificationResponse : ITenant
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
-    public Guid LeadId { get; private set; }
+    /// <summary>
+    /// The lead whose people answered. Null for a project opened on a client with no lead: its
+    /// questions are about the client's file and its holder.
+    /// </summary>
+    public Guid? LeadId { get; private set; }
+
+    /// <summary>
+    /// The project these answers serve. Null for a row answered on the lead itself — those count
+    /// for every project of the lead.
+    /// </summary>
+    public Guid? OpportunityId { get; private set; }
+
     public Guid TemplateId { get; private set; }
 
     // ── Who it is about (BNF-B-08) ──────────────────────────────────────────
@@ -140,18 +160,20 @@ public sealed class QualificationResponse : ITenant
     /// </summary>
     public static QualificationResponse Expected(
         Guid tenantId,
-        Guid leadId,
+        Guid? leadId,
         Guid templateId,
         int questionnaireVersion,
         QualificationSubjectType subjectType,
         Guid subjectId,
         bool isHealthData,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        Guid? opportunityId = null)
         => new()
         {
             Id                   = Guid.NewGuid(),
             TenantId             = tenantId,
             LeadId               = leadId,
+            OpportunityId        = opportunityId,
             TemplateId           = templateId,
             QuestionnaireVersion = questionnaireVersion,
             SubjectType          = subjectType,
@@ -167,7 +189,7 @@ public sealed class QualificationResponse : ITenant
     /// </summary>
     public static QualificationResponse Create(
         Guid tenantId,
-        Guid leadId,
+        Guid? leadId,
         Guid templateId,
         Guid answeredBy,
         TimeProvider clock,
@@ -176,8 +198,12 @@ public sealed class QualificationResponse : ITenant
         int questionnaireVersion = 0,
         QualificationSubjectType subjectType = QualificationSubjectType.Lead,
         Guid? subjectId = null,
-        bool isHealthData = false)
+        bool isHealthData = false,
+        Guid? opportunityId = null)
     {
+        if (leadId is null && opportunityId is null)
+            throw new ArgumentException("A response belongs to a lead, a project, or both.", nameof(leadId));
+
         var now = clock.GetUtcNow();
 
         var response = new QualificationResponse
@@ -185,6 +211,7 @@ public sealed class QualificationResponse : ITenant
             Id                   = Guid.NewGuid(),
             TenantId             = tenantId,
             LeadId               = leadId,
+            OpportunityId        = opportunityId,
             TemplateId           = templateId,
             QuestionnaireVersion = questionnaireVersion,
             SubjectType          = subjectType,
@@ -192,7 +219,7 @@ public sealed class QualificationResponse : ITenant
             // subject, and Guid.Empty across two leads would be two rows the index does not
             // separate — but Guid.Empty TWICE on one lead would collide, which is the correct
             // outcome and only works if the value is per-lead.
-            SubjectId            = subjectId ?? leadId,
+            SubjectId            = subjectId ?? leadId ?? opportunityId!.Value,
             IsHealthData         = isHealthData,
             Status               = QualificationResponseStatus.Completed,
             AnsweredBy           = answeredBy,

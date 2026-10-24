@@ -126,6 +126,7 @@ public static class LeadsModule
         services.AddScoped<Features.Visibility.LeadVisibility>();
         services.AddScoped<Features.ProjectTemplates.ProjectTemplateResolver>();
         services.AddScoped<Features.ProjectTemplates.ProjectStepGate>();
+        services.AddScoped<Features.ProjectTemplates.ProjectLeadConversion>();
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Visibility.LeadVisibilityBehavior<,>));
 
         // DispatchLead slice-internal services

@@ -5,39 +5,15 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Features.Household;
-using Sankore.Modules.Leads.Features.Questionnaires.GetQuestionnaires;
+using Sankore.Modules.Leads.Features.Questionnaires.ProjectQuestionnaires;
 using Sankore.Modules.Leads.Features.Questionnaires.RecordHealthConsent;
-using Sankore.Modules.Leads.Features.Questionnaires.SubmitResponse;
 using Sankore.Shared.Kernel;
 
-/// <summary>Per-person questionnaires and health consent (BNF-B-07/08/09).</summary>
+/// <summary>Project questionnaires and per-person health consent (BNF-B-07/08/09).</summary>
 internal static class QuestionnaireEndpoints
 {
     public static IEndpointRouteBuilder MapQuestionnaireEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("{leadId:guid}/questionnaires", GetQuestionnaires)
-            .WithName("GetLeadQuestionnaires")
-            .WithTags("Leads")
-            .WithSummary("Questionnaires owed and answered by each person of a lead")
-            .RequireAuthorization(Permissions.CanReadLead.Code)
-            .Produces<LeadQuestionnairesDto>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status403Forbidden)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
-
-        app.MapPost("{leadId:guid}/questionnaires/responses", SubmitResponse)
-            .WithName("SubmitLeadQuestionnaireResponse")
-            .WithTags("Leads")
-            .WithSummary("Record one person's answers to a questionnaire")
-            .RequireAuthorization(Permissions.CanQualifyLead.Code)
-            .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status403Forbidden)
-            .Produces(StatusCodes.Status404NotFound)
-            .Produces(StatusCodes.Status409Conflict)
-            .Produces(StatusCodes.Status422UnprocessableEntity)
-            .WithOpenApi();
-
         app.MapPost("{leadId:guid}/health-consents", RecordConsent)
             .WithName("RecordLeadHealthConsent")
             .WithTags("Leads")
@@ -52,30 +28,59 @@ internal static class QuestionnaireEndpoints
         return app;
     }
 
-    private static async Task<IResult> GetQuestionnaires(
-        Guid leadId, ISender sender, HttpContext http, CancellationToken ct)
+    /// <summary>
+    /// The questionnaires of a PROJECT: the file's and each person's, as its product asks them.
+    /// Mapped on the opportunities group.
+    /// </summary>
+    public static RouteGroupBuilder MapProjectQuestionnaireEndpoints(this RouteGroupBuilder group)
+    {
+        group.MapGet("{id:guid}/questionnaires", GetProjectQuestionnaires)
+            .WithName("GetProjectQuestionnaires")
+            .WithTags("Opportunities")
+            .WithSummary("Questionnaires a project's product asks, of its file and of each person, with their answers")
+            .RequireAuthorization(Permissions.CanReadOpportunities.Code)
+            .Produces<ProjectQuestionnairesDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        group.MapPost("{id:guid}/questionnaires/responses", SubmitProjectResponse)
+            .WithName("SubmitProjectQuestionnaireResponse")
+            .WithTags("Opportunities")
+            .WithSummary("Record the answers to one of a project's questionnaires")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        return group;
+    }
+
+    private static async Task<IResult> GetProjectQuestionnaires(
+        Guid id, ISender sender, HttpContext http, CancellationToken ct)
     {
         // The health gate, decided HERE from the caller's claims — never inside the handler, so an
         // authorization reviewer finds it where they look for it (BNF-B-09).
         var canReadHealth = http.User.HasClaim("permission", Permissions.CanReadLeadHealth.Code);
 
-        var result = await sender.Send(
-            new GetLeadQuestionnairesQuery(leadId, canReadHealth), ct);
+        var result = await sender.Send(new GetProjectQuestionnairesQuery(id, canReadHealth), ct);
 
         return result.IsSuccess ? Results.Ok(result.Value) : Problem(result.Error);
     }
 
-    private static async Task<IResult> SubmitResponse(
-        Guid leadId, SubmitQuestionnaireResponseRequest req, ISender sender, CancellationToken ct)
+    private static async Task<IResult> SubmitProjectResponse(
+        Guid id, SubmitProjectQuestionnaireResponseRequest req, ISender sender, CancellationToken ct)
     {
-        var result = await sender.Send(new SubmitQuestionnaireResponseCommand(
-            LeadId:            leadId,
-            TemplateId:        req.TemplateId,
-            SubjectType:       req.SubjectType,
-            SubjectId:         req.SubjectId,
-            Answers:           req.Answers,
-            RespondentId:      req.RespondentId,
-            ExpectedUpdatedAt: req.ExpectedUpdatedAt), ct);
+        var result = await sender.Send(new SubmitProjectQuestionnaireResponseCommand(
+            ProjectId:    id,
+            TemplateId:   req.TemplateId,
+            SubjectType:  req.SubjectType,
+            SubjectId:    req.SubjectId,
+            Answers:      req.Answers,
+            RespondentId: req.RespondentId), ct);
 
         return result.IsSuccess ? Results.NoContent() : Problem(result.Error);
     }
@@ -101,6 +106,7 @@ internal static class QuestionnaireEndpoints
     private static IResult Problem(string? error) => error switch
     {
         "LEAD_NOT_FOUND" or "TEMPLATE_NOT_FOUND" or "QUALIFICATION_SUBJECT_NOT_FOUND"
+        or Opportunities.OpportunityErrors.NotFound
             => Results.NotFound(new { error }),
         LeadAccessGuard.Forbidden or HealthAnswerAccess.Forbidden
             => Results.Problem(title: "Not permitted", detail: error, statusCode: 403),
@@ -113,16 +119,6 @@ internal static class QuestionnaireEndpoints
         _   => Results.Problem(title: "Questionnaire operation failed", detail: error, statusCode: 422),
     };
 }
-
-public sealed record SubmitQuestionnaireResponseRequest(
-    Guid TemplateId,
-    /// <summary>"Principal" | "HouseholdMember".</summary>
-    string SubjectType,
-    Guid SubjectId,
-    IReadOnlyList<QuestionnaireAnswerInput> Answers,
-    /// <summary>Required for a minor; must be the principal or the spouse (BNF-B-08).</summary>
-    Guid? RespondentId = null,
-    DateTimeOffset? ExpectedUpdatedAt = null);
 
 public sealed record RecordHealthConsentRequest(
     string SubjectType,

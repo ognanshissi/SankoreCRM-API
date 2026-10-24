@@ -2587,9 +2587,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_purged");
 
-                    b.Property<Guid>("LeadId")
+                    b.Property<Guid?>("LeadId")
                         .HasColumnType("uuid")
                         .HasColumnName("lead_id");
+
+                    b.Property<Guid?>("OpportunityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("opportunity_id");
 
                     b.Property<string>("PlainAnswersJson")
                         .IsRequired()
@@ -2647,7 +2651,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
 
                     b.HasIndex("LeadId", "TemplateId", "SubjectType", "SubjectId")
                         .IsUnique()
-                        .HasDatabaseName("ux_qualification_responses_subject");
+                        .HasDatabaseName("ux_qualification_responses_subject")
+                        .HasFilter("opportunity_id IS NULL");
+
+                    b.HasIndex("OpportunityId", "TemplateId", "SubjectType", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_qualification_responses_project_subject")
+                        .HasFilter("opportunity_id IS NOT NULL");
 
                     b.ToTable("qualification_responses", "leads");
                 });
@@ -4577,6 +4587,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                                 .HasColumnType("integer")
                                 .HasColumnName("probability");
 
+                            b1.Property<bool>("RequiresQuestionnaires")
+                                .HasColumnType("boolean")
+                                .HasColumnName("requires_questionnaires");
+
                             b1.Property<string>("Suggestion")
                                 .HasMaxLength(200)
                                 .HasColumnType("character varying(200)")
@@ -4611,8 +4625,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("LeadId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
                         .HasConstraintName("fk_qualification_responses_leads_lead_id");
+
+                    b.HasOne("Sankore.Modules.Leads.Domain.Opportunity", null)
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_qualification_responses_opportunities_opportunity_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.QualificationSection", b =>

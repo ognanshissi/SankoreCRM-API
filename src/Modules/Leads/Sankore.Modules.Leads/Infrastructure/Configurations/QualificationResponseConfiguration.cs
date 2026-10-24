@@ -14,11 +14,18 @@ internal sealed class QualificationResponseConfiguration(IFieldEncryptor encrypt
     : IEntityTypeConfiguration<QualificationResponse>
 {
     /// <summary>
-    /// One response per person per questionnaire (BNF-B-08). The aggregate cannot enforce this —
-    /// responses are not children of the Lead aggregate — so the index IS the invariant, and it is
-    /// what makes the auto-creation of expected responses safe to run twice.
+    /// One response per person per questionnaire (BNF-B-08), for the rows answered on the lead
+    /// itself. The aggregate cannot enforce this — responses are not children of the Lead
+    /// aggregate — so the index IS the invariant.
     /// </summary>
     internal const string SubjectIndex = "ux_qualification_responses_subject";
+
+    /// <summary>
+    /// The same invariant per PROJECT — what makes the auto-creation of expected responses safe to
+    /// run twice. Two indexes filtered on the project column, because PostgreSQL treats nulls as
+    /// distinct: one index over a nullable project would let the lead-level rows duplicate.
+    /// </summary>
+    internal const string ProjectSubjectIndex = "ux_qualification_responses_project_subject";
 
     public void Configure(EntityTypeBuilder<QualificationResponse> builder)
     {
@@ -51,12 +58,23 @@ internal sealed class QualificationResponseConfiguration(IFieldEncryptor encrypt
                .HasForeignKey(r => r.LeadId)
                .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasOne<Opportunity>()
+               .WithMany()
+               .HasForeignKey(r => r.OpportunityId)
+               .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasIndex(r => new { r.TenantId, r.LeadId });
         builder.HasIndex(r => new { r.TenantId, r.TemplateId });
 
         builder.HasIndex(r => new { r.LeadId, r.TemplateId, r.SubjectType, r.SubjectId })
                .IsUnique()
+               .HasFilter("opportunity_id IS NULL")
                .HasDatabaseName(SubjectIndex);
+
+        builder.HasIndex(r => new { r.OpportunityId, r.TemplateId, r.SubjectType, r.SubjectId })
+               .IsUnique()
+               .HasFilter("opportunity_id IS NOT NULL")
+               .HasDatabaseName(ProjectSubjectIndex);
 
         // Serves the retention purge (BNF-B-09): health rows transmitted and not yet purged.
         // Partial, because health responses are a small minority of the table.
