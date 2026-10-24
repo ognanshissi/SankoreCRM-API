@@ -34,8 +34,17 @@ internal static class LeadReportWorkbook
             r.Progression.Select(s => new object?[] { Stage(s.Stage), s.Count, (double)s.Count / captured }),
             percentColumns: [3]);
 
-        Table(wb, "Projets", ["Phase actuelle", "Projets ouverts dans la période", "Montant estimé"],
-            (r.Projects ?? []).Select(p => new object?[] { Phase(p.Phase), p.Count, p.Amount }));
+        Table(wb, "Projets", ["Phase actuelle", "Projets ouverts dans la période", "Montant estimé", "Montant pondéré"],
+            (r.Projects ?? []).Select(p => new object?[] { Phase(p.Phase), p.Count, p.Amount, p.WeightedAmount }));
+
+        if (r.Forecast is { } f)
+        {
+            Table(wb, "Prévision", ["Indicateur", "Projets", "Montant estimé", "Montant pondéré"],
+            [
+                ["Clôture prévue dans la période", f.Count, f.Amount, f.WeightedAmount],
+                ["Clôture prévue dépassée (à relancer)", f.Overdue, null, f.OverdueWeightedAmount],
+            ]);
+        }
 
         Table(wb, "Statuts", ["Statut actuel", "Leads"],
             r.ByStatus.Select(s => new object?[] { Status(s.Status), s.Count }));

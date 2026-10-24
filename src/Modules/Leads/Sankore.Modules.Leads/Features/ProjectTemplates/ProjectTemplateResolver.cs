@@ -23,11 +23,13 @@ public sealed record ProjectStepDto(
 /// </summary>
 /// <param name="Id">Null for the built-in default, which is not stored.</param>
 /// <param name="Scope">« Product », « Category » or « Default ».</param>
+/// <param name="TracksForecast">The projects show a probability and an expected close date — see <c>ProjectTemplate.TracksForecast</c>.</param>
 public sealed record ResolvedProjectTemplate(
     Guid? Id,
     string Name,
     string Scope,
-    IReadOnlyList<ProjectStepDto> Steps)
+    IReadOnlyList<ProjectStepDto> Steps,
+    bool TracksForecast = true)
 {
     /// <summary>
     /// The step a project stands on: its own when this template still has it, else the last step
@@ -94,7 +96,8 @@ internal sealed class ProjectTemplateResolver(
         template.ProductCode is not null ? "Product" : template.Category is not null ? "Category" : "Default",
         template.Steps.Select(s => new ProjectStepDto(
             s.Id, s.Label, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
-            s.RequiresQuestionnaires)).ToList());
+            s.RequiresQuestionnaires)).ToList(),
+        template.TracksForecast);
 
     public static ResolvedProjectTemplate BuiltIn() => new(
         null,

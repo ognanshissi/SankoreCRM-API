@@ -37,7 +37,8 @@ internal sealed class GetLeadReportHandler(
     LeadsDbContext db,
     ITenantContext tenant,
     IAdministrationModule admin,
-    TimeProvider clock) : IRequestHandler<GetLeadReportQuery, Result<LeadReportDto>>
+    TimeProvider clock,
+    ProjectTemplates.ProjectTemplateResolver? templates = null) : IRequestHandler<GetLeadReportQuery, Result<LeadReportDto>>
 {
     private static readonly LeadStatus[] Terminal =
         [LeadStatus.Converted, LeadStatus.Lost, LeadStatus.Disqualified, LeadStatus.Archived];
@@ -151,7 +152,7 @@ internal sealed class GetLeadReportHandler(
                 && db.Leads.Any(l => l.Id == o.LeadId && l.AgencyId == projectAgency));
 
         var projectRows = await projectQuery
-            .Select(o => new { o.Stage, Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m })
+            .Select(o => new { o.Stage, o.Probability, Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m })
             .ToListAsync(ct);
 
         var projects = new[]
@@ -160,8 +161,13 @@ internal sealed class GetLeadReportHandler(
                 OpportunityStage.Proposal, OpportunityStage.Negotiation, OpportunityStage.ClosedWon, OpportunityStage.ClosedLost,
             }
             .Select(p => new LeadReportProjectPhase(
-                p, projectRows.Count(r => r.Stage == p), projectRows.Where(r => r.Stage == p).Sum(r => r.Amount)))
+                p,
+                projectRows.Count(r => r.Stage == p),
+                projectRows.Where(r => r.Stage == p).Sum(r => r.Amount),
+                projectRows.Where(r => r.Stage == p).Sum(r => r.Amount * (decimal)r.Probability)))
             .ToList();
+
+        var forecast = await ForecastAsync(q, now, ct);
 
         var byStatus = cohortRows.GroupBy(r => r.Status)
             .Select(g => new LeadReportStatus(g.Key, g.Count()))
@@ -244,7 +250,49 @@ internal sealed class GetLeadReportHandler(
             .ToList();
 
         return Result.Ok(new LeadReportDto(
-            q.From, q.To, granularity, kpis, series, progression, byStatus, bySource, agents, agencies, projects));
+            q.From, q.To, granularity, kpis, series, progression, byStatus, bySource, agents, agencies, projects,
+            forecast));
+    }
+
+    /// <summary>
+    /// The open projects expected to close in the period, and those already late — whatever the
+    /// period they were opened in: a forecast looks at what is coming, not at what was captured.
+    /// Only templates that track a forecast count: a product sold in a meeting has no meaningful
+    /// close date, and its 10 % would be noise in a figure management plans with.
+    /// </summary>
+    private async Task<LeadReportForecast> ForecastAsync(GetLeadReportQuery q, DateTimeOffset now, CancellationToken ct)
+    {
+        var open = db.Opportunities.AsNoTracking()
+            .Where(o => o.Stage != OpportunityStage.ClosedWon && o.Stage != OpportunityStage.ClosedLost
+                     && o.ExpectedCloseDate != null
+                     && (o.ExpectedCloseDate < now || (o.ExpectedCloseDate >= q.From && o.ExpectedCloseDate < q.To)));
+        if (q.AgencyId is { } agency)
+            open = open.Where(o => o.LeadId != null && db.Leads.Any(l => l.Id == o.LeadId && l.AgencyId == agency));
+
+        var rows = await open
+            .Select(o => new
+            {
+                o.Product,
+                o.Probability,
+                Close = o.ExpectedCloseDate!.Value,
+                Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m,
+            })
+            .ToListAsync(ct);
+
+        var tracked = new List<(DateTimeOffset Close, decimal Amount, decimal Weighted)>();
+        foreach (var r in rows)
+        {
+            if (templates is not null && !(await templates.ResolveAsync(r.Product, ct)).TracksForecast)
+                continue;
+            tracked.Add((r.Close, r.Amount, r.Amount * (decimal)r.Probability));
+        }
+
+        var inPeriod = tracked.Where(t => t.Close >= q.From && t.Close < q.To).ToList();
+        var overdue = tracked.Where(t => t.Close < now).ToList();
+
+        return new LeadReportForecast(
+            inPeriod.Count, inPeriod.Sum(t => t.Amount), inPeriod.Sum(t => t.Weighted),
+            overdue.Count, overdue.Sum(t => t.Weighted));
     }
 
     internal static double Rate(int part, int total) => total > 0 ? Math.Round((double)part / total * 100, 1) : 0;

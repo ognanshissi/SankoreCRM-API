@@ -73,7 +73,7 @@ public sealed class GetLeadReportHandlerTests : IDisposable
         var report = await RunAsync(ReportGranularity.Day);
 
         report.Projects!.Single(p => p.Phase == OpportunityStage.ClosedWon).Should().Be(
-            new LeadReportProjectPhase(OpportunityStage.ClosedWon, 1, 500_000m));
+            new LeadReportProjectPhase(OpportunityStage.ClosedWon, 1, 500_000m, 500_000m));
         report.Projects!.Single(p => p.Phase == OpportunityStage.Prospecting).Count.Should().Be(1);
         report.Projects!.Sum(p => p.Count).Should().Be(2);
         report.Progression.Select(p => p.Stage).Should().NotContain(PipelineStage.DocumentCollection);
@@ -144,6 +144,63 @@ public sealed class GetLeadReportHandlerTests : IDisposable
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be("REPORT_RANGE_TOO_LONG");
+    }
+
+    // ── Forecast ────────────────────────────────────────────────────────────
+
+    private Opportunity Project(decimal amount, DateTimeOffset closeOn, OpportunityStage stage = OpportunityStage.Prospecting)
+    {
+        var p = Opportunity.CreateFromLead(_tenantId, Guid.NewGuid(), "Projet", "", null, TimeProvider.System,
+            estimatedAmount: new Sankore.Shared.Kernel.ValueObject.Money(amount, "XOF"), expectedCloseDate: closeOn);
+        if (stage != OpportunityStage.Prospecting)
+            p.AdvanceStage(stage, From);
+        return p;
+    }
+
+    private async Task<LeadReportForecast> ForecastAsync(bool tracksForecast = true)
+    {
+        await using (var db = _db.CreateContext())
+        {
+            if (!tracksForecast)
+                db.ProjectTemplates.Add(ProjectTemplate.Create(_tenantId, "Standard", null, null,
+                    [new(null, "Vente", OpportunityStage.Prospecting, 50)], From, tracksForecast: false).Value!);
+
+            db.Opportunities.AddRange(
+                Project(1_000_000m, From.AddDays(5), OpportunityStage.Negotiation), // in the period, 80 %
+                Project(500_000m, From.AddDays(-3)),                                // late, 10 %
+                Project(2_000_000m, To.AddDays(10)),                                // after the period
+                Project(3_000_000m, From.AddDays(2), OpportunityStage.ClosedWon));  // already won
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = _db.CreateContext();
+        var handler = new GetLeadReportHandler(
+            read, new FixedTenantContext(_tenantId), _admin, new FixedClock(From),
+            new Sankore.Modules.Leads.Features.ProjectTemplates.ProjectTemplateResolver(read, _admin, new FixedTenantContext(_tenantId)));
+        var result = await handler.Handle(new GetLeadReportQuery(From, To, null, ReportGranularity.Day), default);
+        return result.Value!.Forecast!;
+    }
+
+    [Fact]
+    public async Task The_forecast_weighs_the_open_projects_expected_to_close_in_the_period()
+    {
+        var forecast = await ForecastAsync();
+
+        forecast.Count.Should().Be(1);
+        forecast.Amount.Should().Be(1_000_000m);
+        forecast.WeightedAmount.Should().Be(800_000m, "1 000 000 × 80 % at the negotiation step");
+        forecast.Overdue.Should().Be(1, "a close date already passed is a project to chase");
+        forecast.OverdueWeightedAmount.Should().Be(50_000m);
+    }
+
+    [Fact]
+    public async Task A_template_that_tracks_no_forecast_is_left_out()
+    {
+        // A product sold in a meeting: its close date and its 10 % would be noise in the forecast.
+        var forecast = await ForecastAsync(tracksForecast: false);
+
+        forecast.Count.Should().Be(0);
+        forecast.Overdue.Should().Be(0);
     }
 
     // ── Harness ─────────────────────────────────────────────────────────────

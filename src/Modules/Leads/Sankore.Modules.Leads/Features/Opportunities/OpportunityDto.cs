@@ -40,7 +40,12 @@ public sealed record OpportunityDto(
     /// <param name="Steps">The steps of its template, in order: what the screens draw.</param>
     IReadOnlyList<ProjectTemplates.ProjectStepDto>? Steps = null,
     /// <param name="Contact">Who the project is for — filled on the list, for the board's search.</param>
-    ProjectContactDto? Contact = null);
+    ProjectContactDto? Contact = null,
+    /// <param name="TracksForecast">
+    /// Its template shows a probability and an expected close date; off for products sold in a
+    /// meeting or two, where the screens hide both.
+    /// </param>
+    bool TracksForecast = true);
 
 /// <summary>
 /// The person behind a project, as the projects board shows and searches it: the lead's name and
@@ -74,6 +79,7 @@ internal static class OpportunityStepEnrichment
                 TemplateName  = template.Name,
                 CurrentStepId = template.CurrentStep(item.StepId, item.Stage)?.Id,
                 Steps         = template.Steps,
+                TracksForecast = template.TracksForecast,
             });
         }
         return result;

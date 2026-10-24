@@ -1903,6 +1903,11 @@ catalogue, both under a suppressed `TransactionScope`.
 - `PUT opportunities/{id}/step` refuses a step of another template (`PROJECT_STEP_NOT_IN_TEMPLATE`)
   rather than mapping it. Every `OpportunityDto` carries `Steps`, `CurrentStepId`, `TemplateName`:
   agents never call `project-templates`, which is guarded by the pipeline-stage permissions.
+- **`TracksForecast` (per template, default true; owner, 2026-10-24).** Off for a product sold in
+  one meeting: the screens hide its probability, close date and weighted amount, and the report's
+  forecast (`LeadReportDto.Forecast` — open projects whose `ExpectedCloseDate` falls in the period,
+  plus the overdue ones, weighted by `Probability`) leaves it out. `Probability` is still written
+  by every step move, so turning it back on loses nothing. `OpportunityDto.TracksForecast` carries it.
 - `PipelineStageConfig` and its endpoints remain and are still read by nobody.
 
 **Marked steps (lot 3): the client file and the approval.** A step may carry `OpensClientFile`

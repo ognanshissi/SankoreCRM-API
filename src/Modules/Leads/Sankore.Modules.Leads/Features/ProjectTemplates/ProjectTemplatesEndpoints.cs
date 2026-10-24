@@ -57,7 +57,7 @@ public static class ProjectTemplatesEndpoints
         CreateProjectTemplateRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new CreateProjectTemplateCommand(
-            req.Name, req.Category, req.ProductCode, Inputs(req.Steps)), ct);
+            req.Name, req.Category, req.ProductCode, Inputs(req.Steps), req.TracksForecast), ct);
 
         return result.IsSuccess
             ? Results.Created($"project-templates/{result.Value}", result.Value)
@@ -68,7 +68,7 @@ public static class ProjectTemplatesEndpoints
         Guid templateId, UpdateProjectTemplateRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(
-            new UpdateProjectTemplateCommand(templateId, req.Name, Inputs(req.Steps)), ct);
+            new UpdateProjectTemplateCommand(templateId, req.Name, Inputs(req.Steps), req.TracksForecast), ct);
 
         return result.IsSuccess ? Results.NoContent() : ToProblem(result.Error!);
     }
@@ -98,11 +98,15 @@ public sealed record CreateProjectTemplateRequest(
     string Name,
     ProductCategory? Category,
     string? ProductCode,
-    IReadOnlyList<ProjectStepRequest> Steps);
+    IReadOnlyList<ProjectStepRequest> Steps,
+    /// <summary>The projects carry a probability and an expected close date (a sales forecast).</summary>
+    bool TracksForecast = true);
 
 public sealed record UpdateProjectTemplateRequest(
     string Name,
-    IReadOnlyList<ProjectStepRequest> Steps);
+    IReadOnlyList<ProjectStepRequest> Steps,
+    /// <summary>The projects carry a probability and an expected close date (a sales forecast).</summary>
+    bool TracksForecast = true);
 
 /// <param name="Id">Send back an existing step's id: the projects on it stay there.</param>
 /// <param name="Phase">One of the five open phases, never going backwards along the list.</param>

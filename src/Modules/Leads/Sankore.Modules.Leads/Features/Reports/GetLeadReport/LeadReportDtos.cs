@@ -26,10 +26,30 @@ public sealed record LeadReportDto(
     /// Projects opened in the period, by the phase they are in today — open phases, then won and
     /// lost. Under an agency filter, only the projects of that agency's leads.
     /// </param>
-    IReadOnlyList<LeadReportProjectPhase>? Projects = null);
+    IReadOnlyList<LeadReportProjectPhase>? Projects = null,
+    /// <param name="Forecast">
+    /// What the open projects should bring in during the period — see <see cref="LeadReportForecast"/>.
+    /// </param>
+    LeadReportForecast? Forecast = null);
 
 /// <param name="Amount">Sum of the estimated amounts, all currencies added as they are.</param>
-public sealed record LeadReportProjectPhase(OpportunityStage Phase, int Count, decimal Amount);
+/// <param name="WeightedAmount">
+/// Each amount × the project's probability of signing: what the phase is « worth » today.
+/// </param>
+public sealed record LeadReportProjectPhase(OpportunityStage Phase, int Count, decimal Amount, decimal WeightedAmount = 0m);
+
+/// <summary>
+/// The sales forecast: OPEN projects whose expected close date falls in the period, on templates
+/// that track a forecast (credit, insurance… — a product sold in a meeting tracks none). Under an
+/// agency filter, those of that agency's leads.
+/// </summary>
+/// <param name="Count">Projects expected to close in the period.</param>
+/// <param name="Amount">Their estimated amounts, all currencies added as they are.</param>
+/// <param name="WeightedAmount">The same, each × its probability: the expected signature.</param>
+/// <param name="Overdue">Open projects whose expected close date has passed — to chase.</param>
+/// <param name="OverdueWeightedAmount">Their weighted amount.</param>
+public sealed record LeadReportForecast(
+    int Count, decimal Amount, decimal WeightedAmount, int Overdue, decimal OverdueWeightedAmount);
 
 /// <param name="Captured">Leads whose <c>CapturedAt</c> falls in the period.</param>
 /// <param name="ConvertedInPeriod">

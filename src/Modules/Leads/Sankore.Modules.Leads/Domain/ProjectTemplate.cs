@@ -48,6 +48,15 @@ public sealed class ProjectTemplate : AggregateRoot
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// Whether the projects of this template carry a sales FORECAST: a probability of signing and
+    /// an expected close date, shown to the agent and summed into the weighted forecast of the
+    /// reports. On for long sales whose outcome is uncertain (credit, insurance, term deposits);
+    /// off for a product sold in one or two meetings, where both would be decoration the agent is
+    /// asked to fill. The step probabilities are still stored either way.
+    /// </summary>
+    public bool TracksForecast { get; private set; } = true;
+
     private readonly List<ProjectTemplateStep> _steps = [];
     public IReadOnlyList<ProjectTemplateStep> Steps => _steps.OrderBy(s => s.Order).ToList();
 
@@ -61,7 +70,8 @@ public sealed class ProjectTemplate : AggregateRoot
         ProductCategory? category,
         string? productCode,
         IReadOnlyList<ProjectStepInput> steps,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool tracksForecast = true)
     {
         if (category is not null && !string.IsNullOrWhiteSpace(productCode))
             return Result.Fail<ProjectTemplate>(ProjectTemplateErrors.ScopeInvalid);
@@ -75,7 +85,7 @@ public sealed class ProjectTemplate : AggregateRoot
             CreatedAt   = now,
         };
 
-        var updated = template.Update(name, steps, now);
+        var updated = template.Update(name, steps, now, tracksForecast);
         return updated.IsSuccess ? Result.Ok(template) : Result.Fail<ProjectTemplate>(updated.Error!);
     }
 
@@ -84,7 +94,8 @@ public sealed class ProjectTemplate : AggregateRoot
     /// edited in place — the projects standing on it stay there; a step left out is removed, and
     /// its projects fall back to the step of their phase.
     /// </summary>
-    public Result Update(string name, IReadOnlyList<ProjectStepInput> steps, DateTimeOffset now)
+    public Result Update(
+        string name, IReadOnlyList<ProjectStepInput> steps, DateTimeOffset now, bool tracksForecast = true)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Result.Fail(ProjectTemplateErrors.NameRequired);
@@ -96,6 +107,7 @@ public sealed class ProjectTemplate : AggregateRoot
             return Result.Fail(invalid);
 
         Name = name.Trim();
+        TracksForecast = tracksForecast;
 
         var incomingIds = steps.Where(s => s.Id is not null).Select(s => s.Id!.Value).ToHashSet();
         _steps.RemoveAll(s => !incomingIds.Contains(s.Id));
