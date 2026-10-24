@@ -24,12 +24,16 @@ public sealed record ProjectStepDto(
 /// <param name="Id">Null for the built-in default, which is not stored.</param>
 /// <param name="Scope">« Product », « Category » or « Default ».</param>
 /// <param name="TracksForecast">The projects show a probability and an expected close date — see <c>ProjectTemplate.TracksForecast</c>.</param>
+/// <param name="AmountKind">What the project's amount stands for — see <c>ProjectTemplate.AmountKind</c>.</param>
+/// <param name="CriticalCloseDate">The close date is a deadline — see <c>ProjectTemplate.CriticalCloseDate</c>.</param>
 public sealed record ResolvedProjectTemplate(
     Guid? Id,
     string Name,
     string Scope,
     IReadOnlyList<ProjectStepDto> Steps,
-    bool TracksForecast = true)
+    bool TracksForecast = true,
+    ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
+    bool CriticalCloseDate = false)
 {
     /// <summary>
     /// The step a project stands on: its own when this template still has it, else the last step
@@ -97,7 +101,9 @@ internal sealed class ProjectTemplateResolver(
         template.Steps.Select(s => new ProjectStepDto(
             s.Id, s.Label, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
             s.RequiresQuestionnaires)).ToList(),
-        template.TracksForecast);
+        template.TracksForecast,
+        template.AmountKind,
+        template.CriticalCloseDate);
 
     public static ResolvedProjectTemplate BuiltIn() => new(
         null,

@@ -38,7 +38,8 @@ internal sealed class GetLeadReportHandler(
     ITenantContext tenant,
     IAdministrationModule admin,
     TimeProvider clock,
-    ProjectTemplates.ProjectTemplateResolver? templates = null) : IRequestHandler<GetLeadReportQuery, Result<LeadReportDto>>
+    ProjectTemplates.ProjectTemplateResolver? templates = null,
+    Sankore.Modules.Customers.PublicApi.ICustomersModule? customers = null) : IRequestHandler<GetLeadReportQuery, Result<LeadReportDto>>
 {
     private static readonly LeadStatus[] Terminal =
         [LeadStatus.Converted, LeadStatus.Lost, LeadStatus.Disqualified, LeadStatus.Archived];
@@ -151,9 +152,14 @@ internal sealed class GetLeadReportHandler(
             projectQuery = projectQuery.Where(o => o.LeadId != null
                 && db.Leads.Any(l => l.Id == o.LeadId && l.AgencyId == projectAgency));
 
-        var projectRows = await projectQuery
-            .Select(o => new { o.Stage, o.Probability, Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m })
-            .ToListAsync(ct);
+        var projectRows = new List<(OpportunityStage Stage, ProjectAmountKind Kind, decimal Amount)>();
+        foreach (var r in await projectQuery
+                     .Select(o => new { o.Stage, o.Product, Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m })
+                     .ToListAsync(ct))
+        {
+            var kind = templates is null ? ProjectAmountKind.Generic : (await templates.ResolveAsync(r.Product, ct)).AmountKind;
+            projectRows.Add((r.Stage, kind, r.Amount));
+        }
 
         var projects = new[]
             {
@@ -163,8 +169,11 @@ internal sealed class GetLeadReportHandler(
             .Select(p => new LeadReportProjectPhase(
                 p,
                 projectRows.Count(r => r.Stage == p),
-                projectRows.Where(r => r.Stage == p).Sum(r => r.Amount),
-                projectRows.Where(r => r.Stage == p).Sum(r => r.Amount * (decimal)r.Probability)))
+                projectRows.Where(r => r.Stage == p && r.Amount != 0)
+                    .GroupBy(r => r.Kind)
+                    .OrderBy(g => g.Key)
+                    .Select(g => new LeadReportKindAmount(g.Key, g.Sum(r => r.Amount)))
+                    .ToList()))
             .ToList();
 
         var forecast = await ForecastAsync(q, now, ct);
@@ -262,37 +271,97 @@ internal sealed class GetLeadReportHandler(
     /// </summary>
     private async Task<LeadReportForecast> ForecastAsync(GetLeadReportQuery q, DateTimeOffset now, CancellationToken ct)
     {
-        var open = db.Opportunities.AsNoTracking()
+        var rows = await db.Opportunities.AsNoTracking()
             .Where(o => o.Stage != OpportunityStage.ClosedWon && o.Stage != OpportunityStage.ClosedLost
                      && o.ExpectedCloseDate != null
-                     && (o.ExpectedCloseDate < now || (o.ExpectedCloseDate >= q.From && o.ExpectedCloseDate < q.To)));
-        if (q.AgencyId is { } agency)
-            open = open.Where(o => o.LeadId != null && db.Leads.Any(l => l.Id == o.LeadId && l.AgencyId == agency));
-
-        var rows = await open
+                     && (o.ExpectedCloseDate < now || (o.ExpectedCloseDate >= q.From && o.ExpectedCloseDate < q.To)))
             .Select(o => new
             {
                 o.Product,
                 o.Probability,
+                o.CustomerEntityId,
                 Close = o.ExpectedCloseDate!.Value,
                 Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m,
+                LeadAgency = db.Leads.Where(l => l.Id == o.LeadId).Select(l => l.AgencyId).FirstOrDefault(),
             })
             .ToListAsync(ct);
 
-        var tracked = new List<(DateTimeOffset Close, decimal Amount, decimal Weighted)>();
+        // The agency is the lead's, else the client's: a project opened on an existing client has
+        // no lead, and leaving it « sans agence » would hide most of a branch's renewals.
+        var customerAgencies = new Dictionary<Guid, Guid?>();
+        var tracked = new List<(ProjectAmountKind Kind, Guid? Agency, DateTimeOffset Close, decimal Amount, decimal Weighted)>();
         foreach (var r in rows)
         {
-            if (templates is not null && !(await templates.ResolveAsync(r.Product, ct)).TracksForecast)
+            var template = templates is null ? null : await templates.ResolveAsync(r.Product, ct);
+            if (template is { TracksForecast: false })
                 continue;
-            tracked.Add((r.Close, r.Amount, r.Amount * (decimal)r.Probability));
+
+            var agency = r.LeadAgency;
+            if (agency is null && r.CustomerEntityId is { } customerId && customers is not null)
+            {
+                if (!customerAgencies.TryGetValue(customerId, out agency))
+                {
+                    agency = (await customers.GetCustomerAsync(tenant.CurrentTenantId, customerId, ct))?.AgencyId;
+                    customerAgencies[customerId] = agency;
+                }
+            }
+
+            if (q.AgencyId is { } wanted && agency != wanted)
+                continue;
+
+            tracked.Add((template?.AmountKind ?? ProjectAmountKind.Generic, agency, r.Close, r.Amount, r.Amount * (decimal)r.Probability));
         }
 
-        var inPeriod = tracked.Where(t => t.Close >= q.From && t.Close < q.To).ToList();
-        var overdue = tracked.Where(t => t.Close < now).ToList();
+        bool InPeriod(DateTimeOffset close) => close >= q.From && close < q.To;
 
-        return new LeadReportForecast(
-            inPeriod.Count, inPeriod.Sum(t => t.Amount), inPeriod.Sum(t => t.Weighted),
-            overdue.Count, overdue.Sum(t => t.Weighted));
+        var kinds = tracked.GroupBy(t => t.Kind)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var inPeriod = g.Where(t => InPeriod(t.Close)).ToList();
+                var overdue = g.Where(t => t.Close < now).ToList();
+                return new LeadReportForecastKind(
+                    g.Key, inPeriod.Count, inPeriod.Sum(t => t.Amount), inPeriod.Sum(t => t.Weighted),
+                    overdue.Count, overdue.Sum(t => t.Weighted));
+            })
+            .ToList();
+
+        var schedule = new List<LeadReportForecastMonth>();
+        foreach (var kind in kinds.Select(k => k.Kind))
+        {
+            for (var month = new DateOnly(q.From.UtcDateTime.Year, q.From.UtcDateTime.Month, 1);
+                 month.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) < q.To.UtcDateTime;
+                 month = month.AddMonths(1))
+            {
+                var m = month;
+                var due = tracked.Where(t => t.Kind == kind && InPeriod(t.Close)
+                                          && t.Close.UtcDateTime.Year == m.Year && t.Close.UtcDateTime.Month == m.Month).ToList();
+                schedule.Add(new LeadReportForecastMonth(m, kind, due.Count, due.Sum(t => t.Amount), due.Sum(t => t.Weighted)));
+            }
+        }
+
+        var agencyNames = new Dictionary<Guid, string>();
+        foreach (var id in tracked.Select(t => t.Agency).OfType<Guid>().Distinct())
+        {
+            var summary = await admin.GetAgencyAsync(tenant.CurrentTenantId, id, ct);
+            if (summary is not null) agencyNames[id] = summary.Name;
+        }
+
+        var agencies = tracked.GroupBy(t => (t.Agency, t.Kind))
+            .Select(g =>
+            {
+                var inPeriod = g.Where(t => InPeriod(t.Close)).ToList();
+                var overdue = g.Where(t => t.Close < now).ToList();
+                var name = g.Key.Agency is { } id ? agencyNames.GetValueOrDefault(id, "Agence inconnue") : "Sans agence";
+                return new LeadReportForecastAgency(
+                    g.Key.Agency, name, g.Key.Kind, inPeriod.Count, inPeriod.Sum(t => t.Weighted),
+                    overdue.Count, overdue.Sum(t => t.Weighted));
+            })
+            .OrderBy(a => a.Kind)
+            .ThenByDescending(a => a.WeightedAmount)
+            .ToList();
+
+        return new LeadReportForecast(kinds, schedule, agencies);
     }
 
     internal static double Rate(int part, int total) => total > 0 ? Math.Round((double)part / total * 100, 1) : 0;

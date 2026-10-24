@@ -24,7 +24,11 @@ public sealed record ProjectTemplateDto(
     IReadOnlyList<ProjectStepDto> Steps,
     DateTimeOffset? UpdatedAt,
     /// <summary>Whether the projects carry a probability and an expected close date.</summary>
-    bool TracksForecast = true);
+    bool TracksForecast = true,
+    /// <summary>What a project's amount stands for: the forecast never adds two kinds together.</summary>
+    ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
+    /// <summary>The close date is a deadline: required, and an urgent task once it has passed.</summary>
+    bool CriticalCloseDate = false);
 
 // ── List ────────────────────────────────────────────────────────────────────────
 
@@ -85,7 +89,7 @@ internal sealed class ListProjectTemplatesHandler(
         var resolved = ProjectTemplateResolver.From(t);
         return new ProjectTemplateDto(
             t.Id, t.Name, resolved.Scope, t.Category, t.ProductCode, productName, false, resolved.Steps, t.UpdatedAt,
-            t.TracksForecast);
+            t.TracksForecast, t.AmountKind, t.CriticalCloseDate);
     }
 }
 
@@ -97,7 +101,7 @@ internal sealed record CreateProjectTemplateCommand(
     ProductCategory? Category,
     string? ProductCode,
     IReadOnlyList<ProjectStepInput> Steps,
-    bool TracksForecast = true)
+    ProjectForecastOptions? Forecast = null)
     : IRequest<Result<Guid>>, ICommand, IResourceCommand
 {
     public string ResourceType => "ProjectTemplate";
@@ -139,7 +143,7 @@ internal sealed class CreateProjectTemplateHandler(
             return Result.Fail<Guid>(ProjectTemplateErrors.ScopeTaken);
 
         var created = ProjectTemplate.Create(
-            tenant.CurrentTenantId, cmd.Name, cmd.Category, code, cmd.Steps, clock.GetUtcNow(), cmd.TracksForecast);
+            tenant.CurrentTenantId, cmd.Name, cmd.Category, code, cmd.Steps, clock.GetUtcNow(), cmd.Forecast);
         if (created.IsFailure)
             return Result.Fail<Guid>(created.Error!);
 
@@ -156,7 +160,7 @@ internal sealed record UpdateProjectTemplateCommand(
     Guid TemplateId,
     string Name,
     IReadOnlyList<ProjectStepInput> Steps,
-    bool TracksForecast = true)
+    ProjectForecastOptions? Forecast = null)
     : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "ProjectTemplate";
@@ -175,7 +179,7 @@ internal sealed class UpdateProjectTemplateHandler(LeadsDbContext db, TimeProvid
         if (template is null)
             return Result.Fail(ProjectTemplateErrors.NotFound);
 
-        var updated = template.Update(cmd.Name, cmd.Steps, clock.GetUtcNow(), cmd.TracksForecast);
+        var updated = template.Update(cmd.Name, cmd.Steps, clock.GetUtcNow(), cmd.Forecast);
         if (updated.IsFailure)
             return updated;
 

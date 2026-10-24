@@ -69,7 +69,9 @@ public sealed class SyncClaimsJob(
         var sp = scope.ServiceProvider;
         var db = sp.GetRequiredService<IntegrationDbContext>();
         var resolver = sp.GetRequiredService<IntegrationAdapterResolver>();
-        var publisher = sp.GetRequiredService<IEventPublisher>();
+        // Keyed per module (one outbox per DbContext): the unkeyed lookup has no registration
+        // and failed every run in production, while the tests registered one unkeyed.
+        var publisher = sp.GetRequiredKeyedService<IEventPublisher>(nameof(IntegrationDbContext));
         var administration = sp.GetRequiredService<IAdministrationModule>();
         var clock = sp.GetRequiredService<TimeProvider>();
 

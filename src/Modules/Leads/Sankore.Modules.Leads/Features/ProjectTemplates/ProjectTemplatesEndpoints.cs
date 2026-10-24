@@ -57,7 +57,8 @@ public static class ProjectTemplatesEndpoints
         CreateProjectTemplateRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new CreateProjectTemplateCommand(
-            req.Name, req.Category, req.ProductCode, Inputs(req.Steps), req.TracksForecast), ct);
+            req.Name, req.Category, req.ProductCode, Inputs(req.Steps),
+            new ProjectForecastOptions(req.TracksForecast, req.AmountKind, req.CriticalCloseDate)), ct);
 
         return result.IsSuccess
             ? Results.Created($"project-templates/{result.Value}", result.Value)
@@ -68,7 +69,8 @@ public static class ProjectTemplatesEndpoints
         Guid templateId, UpdateProjectTemplateRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(
-            new UpdateProjectTemplateCommand(templateId, req.Name, Inputs(req.Steps), req.TracksForecast), ct);
+            new UpdateProjectTemplateCommand(templateId, req.Name, Inputs(req.Steps),
+                new ProjectForecastOptions(req.TracksForecast, req.AmountKind, req.CriticalCloseDate)), ct);
 
         return result.IsSuccess ? Results.NoContent() : ToProblem(result.Error!);
     }
@@ -100,13 +102,21 @@ public sealed record CreateProjectTemplateRequest(
     string? ProductCode,
     IReadOnlyList<ProjectStepRequest> Steps,
     /// <summary>The projects carry a probability and an expected close date (a sales forecast).</summary>
-    bool TracksForecast = true);
+    bool TracksForecast = true,
+    /// <summary>What a project's amount stands for: Generic, Loan, Premium or Deposit.</summary>
+    ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
+    /// <summary>The close date is a deadline (requires TracksForecast).</summary>
+    bool CriticalCloseDate = false);
 
 public sealed record UpdateProjectTemplateRequest(
     string Name,
     IReadOnlyList<ProjectStepRequest> Steps,
     /// <summary>The projects carry a probability and an expected close date (a sales forecast).</summary>
-    bool TracksForecast = true);
+    bool TracksForecast = true,
+    /// <summary>What a project's amount stands for: Generic, Loan, Premium or Deposit.</summary>
+    ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
+    /// <summary>The close date is a deadline (requires TracksForecast).</summary>
+    bool CriticalCloseDate = false);
 
 /// <param name="Id">Send back an existing step's id: the projects on it stay there.</param>
 /// <param name="Phase">One of the five open phases, never going backwards along the list.</param>

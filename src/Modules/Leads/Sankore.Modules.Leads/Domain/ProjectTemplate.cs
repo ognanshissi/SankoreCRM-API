@@ -57,6 +57,20 @@ public sealed class ProjectTemplate : AggregateRoot
     /// </summary>
     public bool TracksForecast { get; private set; } = true;
 
+    /// <summary>
+    /// What a project's amount IS for this product: a loan to disburse, a premium to collect, a
+    /// deposit to collect. The forecast never adds two kinds together — a disbursement and a deposit
+    /// are flows in opposite directions — and the screens name the amount accordingly.
+    /// </summary>
+    public ProjectAmountKind AmountKind { get; private set; } = ProjectAmountKind.Generic;
+
+    /// <summary>
+    /// The close date is a deadline, not an estimate (a seasonal crop loan is useless once the rains
+    /// have started): a project cannot be saved without one, and a passed date raises an urgent task
+    /// for whoever follows the project. Requires <see cref="TracksForecast"/>.
+    /// </summary>
+    public bool CriticalCloseDate { get; private set; }
+
     private readonly List<ProjectTemplateStep> _steps = [];
     public IReadOnlyList<ProjectTemplateStep> Steps => _steps.OrderBy(s => s.Order).ToList();
 
@@ -71,7 +85,7 @@ public sealed class ProjectTemplate : AggregateRoot
         string? productCode,
         IReadOnlyList<ProjectStepInput> steps,
         DateTimeOffset now,
-        bool tracksForecast = true)
+        ProjectForecastOptions? forecast = null)
     {
         if (category is not null && !string.IsNullOrWhiteSpace(productCode))
             return Result.Fail<ProjectTemplate>(ProjectTemplateErrors.ScopeInvalid);
@@ -85,7 +99,7 @@ public sealed class ProjectTemplate : AggregateRoot
             CreatedAt   = now,
         };
 
-        var updated = template.Update(name, steps, now, tracksForecast);
+        var updated = template.Update(name, steps, now, forecast);
         return updated.IsSuccess ? Result.Ok(template) : Result.Fail<ProjectTemplate>(updated.Error!);
     }
 
@@ -95,8 +109,10 @@ public sealed class ProjectTemplate : AggregateRoot
     /// its projects fall back to the step of their phase.
     /// </summary>
     public Result Update(
-        string name, IReadOnlyList<ProjectStepInput> steps, DateTimeOffset now, bool tracksForecast = true)
+        string name, IReadOnlyList<ProjectStepInput> steps, DateTimeOffset now, ProjectForecastOptions? forecast = null)
     {
+        forecast ??= ProjectForecastOptions.Default;
+
         if (string.IsNullOrWhiteSpace(name))
             return Result.Fail(ProjectTemplateErrors.NameRequired);
         if (name.Trim().Length > MaxNameLength)
@@ -105,9 +121,15 @@ public sealed class ProjectTemplate : AggregateRoot
         var invalid = Validate(steps);
         if (invalid is not null)
             return Result.Fail(invalid);
+        if (forecast.CriticalCloseDate && !forecast.TracksForecast)
+            return Result.Fail(ProjectTemplateErrors.CriticalDateWithoutForecast);
+        if (!Enum.IsDefined(forecast.AmountKind))
+            return Result.Fail(ProjectTemplateErrors.AmountKindInvalid);
 
         Name = name.Trim();
-        TracksForecast = tracksForecast;
+        TracksForecast = forecast.TracksForecast;
+        AmountKind = forecast.AmountKind;
+        CriticalCloseDate = forecast.CriticalCloseDate;
 
         var incomingIds = steps.Where(s => s.Id is not null).Select(s => s.Id!.Value).ToHashSet();
         _steps.RemoveAll(s => !incomingIds.Contains(s.Id));
@@ -278,6 +300,13 @@ public static class ProjectTemplateErrors
     public const string ApprovalBeforeClientFile = "PROJECT_TEMPLATE_APPROVAL_BEFORE_CLIENT_FILE";
     public const string TooManyQuestionnaireSteps = "PROJECT_TEMPLATE_TOO_MANY_QUESTIONNAIRE_STEPS";
 
+    /// <summary>A critical close date is a forecast setting: it means nothing on a template that hides the date.</summary>
+    public const string CriticalDateWithoutForecast = "PROJECT_TEMPLATE_CRITICAL_DATE_WITHOUT_FORECAST";
+    public const string AmountKindInvalid = "PROJECT_TEMPLATE_AMOUNT_KIND_INVALID";
+
+    /// <summary>The project's template makes the close date a deadline, and none was given.</summary>
+    public const string CloseDateRequired = "PROJECT_CLOSE_DATE_REQUIRED";
+
     /// <summary>A questionnaire the product asks — of the file or of a person — is unanswered.</summary>
     public const string QuestionnairesIncomplete = "PROJECT_QUESTIONNAIRES_INCOMPLETE";
 
@@ -289,4 +318,26 @@ public static class ProjectTemplateErrors
 
     /// <summary>The file is approved, below the tier the product requires.</summary>
     public const string KycTierInsufficient = "PROJECT_KYC_TIER_INSUFFICIENT";
+}
+
+/// <summary>What a project's amount stands for — see <see cref="ProjectTemplate.AmountKind"/>.</summary>
+public enum ProjectAmountKind
+{
+    /// <summary>« Montant estimé » — no particular flow.</summary>
+    Generic,
+    /// <summary>The loan amount, to be disbursed.</summary>
+    Loan,
+    /// <summary>The (annual) premium, to be collected.</summary>
+    Premium,
+    /// <summary>The deposit, to be collected.</summary>
+    Deposit,
+}
+
+/// <summary>The forecast settings of a template, set together.</summary>
+public sealed record ProjectForecastOptions(
+    bool TracksForecast = true,
+    ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
+    bool CriticalCloseDate = false)
+{
+    public static readonly ProjectForecastOptions Default = new();
 }

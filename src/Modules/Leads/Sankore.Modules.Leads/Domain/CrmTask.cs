@@ -90,6 +90,20 @@ public sealed class CrmTask : ITenant
             TriggerEventId   = triggerEventId
         };
 
+    /// <summary>
+    /// Points a system task at a client rather than a lead — a project opened on an existing
+    /// client has none. Ignored once the task is about a lead: dispatching reads <see cref="LeadId"/>.
+    /// </summary>
+    public CrmTask AboutClient(Guid clientId)
+    {
+        if (LeadId is null)
+        {
+            EntityType = TaskEntityType.Client;
+            EntityId = clientId;
+        }
+        return this;
+    }
+
     public const int TitleMaxLength = 200;
     public const int DescriptionMaxLength = 4000;
 

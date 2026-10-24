@@ -32,24 +32,47 @@ public sealed record LeadReportDto(
     /// </param>
     LeadReportForecast? Forecast = null);
 
-/// <param name="Amount">Sum of the estimated amounts, all currencies added as they are.</param>
-/// <param name="WeightedAmount">
-/// Each amount × the project's probability of signing: what the phase is « worth » today.
+/// <param name="Amounts">
+/// The estimated amounts, one line per kind of amount present — a loan and a deposit are not
+/// added together. All currencies added as they are.
 /// </param>
-public sealed record LeadReportProjectPhase(OpportunityStage Phase, int Count, decimal Amount, decimal WeightedAmount = 0m);
+public sealed record LeadReportProjectPhase(OpportunityStage Phase, int Count, IReadOnlyList<LeadReportKindAmount> Amounts);
+
+public sealed record LeadReportKindAmount(ProjectAmountKind Kind, decimal Amount);
 
 /// <summary>
-/// The sales forecast: OPEN projects whose expected close date falls in the period, on templates
-/// that track a forecast (credit, insurance… — a product sold in a meeting tracks none). Under an
-/// agency filter, those of that agency's leads.
+/// The sales forecast: OPEN projects whose expected close date falls in the period (or has already
+/// passed), on templates that track a forecast — a product sold in a meeting tracks none.
+///
+/// <para>
+/// <b>Never one total.</b> Every figure is per <see cref="ProjectAmountKind"/>: a loan disbursed and
+/// a deposit collected are flows in opposite directions, and their sum is a number nobody can plan
+/// with. Under an agency filter, the projects of that agency — the lead's, else the client's.
+/// </para>
 /// </summary>
+/// <param name="Kinds">One line per kind of amount that has a project to show.</param>
+/// <param name="Schedule">Month by month over the period, per kind: what treasury plans with.</param>
+/// <param name="Agencies">Per agency and kind, every agency side by side.</param>
+public sealed record LeadReportForecast(
+    IReadOnlyList<LeadReportForecastKind> Kinds,
+    IReadOnlyList<LeadReportForecastMonth> Schedule,
+    IReadOnlyList<LeadReportForecastAgency> Agencies);
+
 /// <param name="Count">Projects expected to close in the period.</param>
 /// <param name="Amount">Their estimated amounts, all currencies added as they are.</param>
 /// <param name="WeightedAmount">The same, each × its probability: the expected signature.</param>
 /// <param name="Overdue">Open projects whose expected close date has passed — to chase.</param>
 /// <param name="OverdueWeightedAmount">Their weighted amount.</param>
-public sealed record LeadReportForecast(
-    int Count, decimal Amount, decimal WeightedAmount, int Overdue, decimal OverdueWeightedAmount);
+public sealed record LeadReportForecastKind(
+    ProjectAmountKind Kind, int Count, decimal Amount, decimal WeightedAmount, int Overdue, decimal OverdueWeightedAmount);
+
+/// <param name="Month">First day of the month (UTC). Every month of the period is present, zeros included.</param>
+public sealed record LeadReportForecastMonth(
+    DateOnly Month, ProjectAmountKind Kind, int Count, decimal Amount, decimal WeightedAmount);
+
+/// <param name="AgencyId">Null groups the projects attached to no agency.</param>
+public sealed record LeadReportForecastAgency(
+    Guid? AgencyId, string Name, ProjectAmountKind Kind, int Count, decimal WeightedAmount, int Overdue, decimal OverdueWeightedAmount);
 
 /// <param name="Captured">Leads whose <c>CapturedAt</c> falls in the period.</param>
 /// <param name="ConvertedInPeriod">

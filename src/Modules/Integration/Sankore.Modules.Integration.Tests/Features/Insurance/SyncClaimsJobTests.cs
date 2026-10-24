@@ -147,7 +147,7 @@ public sealed class SyncClaimsJobTests : IDisposable
         services.AddSingleton<TimeProvider>(Clock(Now));
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
-        services.AddSingleton(_publisher);
+        services.AddKeyedSingleton(nameof(IntegrationDbContext), _publisher);
         services.AddSingleton(_administration);
         services.AddScoped(_ => _factory.CreateContext());
         services.AddScoped<IntegrationAdapterResolver>();

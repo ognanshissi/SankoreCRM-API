@@ -12,12 +12,16 @@ internal sealed class CreateOpportunityForCustomerHandler(
     LeadsDbContext db,
     TimeProvider clock,
     IPhoneBlindIndexer phoneBlindIndexer,
-    Administration.PublicApi.IAdministrationModule? administration = null)
+    Administration.PublicApi.IAdministrationModule? administration = null,
+    ProjectTemplates.ProjectTemplateResolver? templates = null)
     : IRequestHandler<CreateOpportunityForCustomerCommand, Result<CreateOpportunityForCustomerResult>>
 {
     public async Task<Result<CreateOpportunityForCustomerResult>> Handle(
         CreateOpportunityForCustomerCommand cmd, CancellationToken ct)
     {
+        if (await ProjectTemplates.ProjectCloseDateRule.MissingAsync(templates, cmd.Product, cmd.ExpectedCloseDate, ct))
+            return Result.Fail<CreateOpportunityForCustomerResult>(ProjectTemplateErrors.CloseDateRequired);
+
         // ── Duplicate check: existing open opportunities for the same customer + product ──
         if (!cmd.Force)
         {

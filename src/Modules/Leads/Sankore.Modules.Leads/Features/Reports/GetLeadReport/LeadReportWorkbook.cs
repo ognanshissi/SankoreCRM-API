@@ -34,16 +34,31 @@ internal static class LeadReportWorkbook
             r.Progression.Select(s => new object?[] { Stage(s.Stage), s.Count, (double)s.Count / captured }),
             percentColumns: [3]);
 
-        Table(wb, "Projets", ["Phase actuelle", "Projets ouverts dans la période", "Montant estimé", "Montant pondéré"],
-            (r.Projects ?? []).Select(p => new object?[] { Phase(p.Phase), p.Count, p.Amount, p.WeightedAmount }));
+        // One amount column per kind of amount: a loan and a deposit are never added together.
+        var kinds = (r.Projects ?? []).SelectMany(p => p.Amounts).Select(a => a.Kind).Distinct().Order().ToList();
+        Table(wb, "Projets",
+            ["Phase actuelle", "Projets ouverts dans la période", .. kinds.Select(AmountKind)],
+            (r.Projects ?? []).Select(p => new object?[] { Phase(p.Phase), p.Count }
+                .Concat(kinds.Select(k => (object?)p.Amounts.FirstOrDefault(a => a.Kind == k)?.Amount)).ToArray()));
 
         if (r.Forecast is { } f)
         {
-            Table(wb, "Prévision", ["Indicateur", "Projets", "Montant estimé", "Montant pondéré"],
-            [
-                ["Clôture prévue dans la période", f.Count, f.Amount, f.WeightedAmount],
-                ["Clôture prévue dépassée (à relancer)", f.Overdue, null, f.OverdueWeightedAmount],
-            ]);
+            // One line per kind of amount, never a grand total: a disbursement and a deposit are
+            // flows in opposite directions.
+            Table(wb, "Prévision",
+                ["Nature du montant", "Clôtures prévues", "Montant estimé", "Montant pondéré", "Clôtures dépassées", "Pondéré dépassé"],
+                f.Kinds.Select(k => new object?[]
+                    { AmountKind(k.Kind), k.Count, k.Amount, k.WeightedAmount, k.Overdue, k.OverdueWeightedAmount }));
+
+            Table(wb, "Prévision par mois", ["Mois", "Nature du montant", "Clôtures prévues", "Montant estimé", "Montant pondéré"],
+                f.Schedule.Select(m => new object?[]
+                    { m.Month.ToDateTime(TimeOnly.MinValue), AmountKind(m.Kind), m.Count, m.Amount, m.WeightedAmount }),
+                dateColumns: [1], dateFormat: "mmmm yyyy");
+
+            Table(wb, "Prévision par agence",
+                ["Agence", "Nature du montant", "Clôtures prévues", "Montant pondéré", "Clôtures dépassées", "Pondéré dépassé"],
+                f.Agencies.Select(a => new object?[]
+                    { a.Name, AmountKind(a.Kind), a.Count, a.WeightedAmount, a.Overdue, a.OverdueWeightedAmount }));
         }
 
         Table(wb, "Statuts", ["Statut actuel", "Leads"],
@@ -175,6 +190,11 @@ internal static class LeadReportWorkbook
             case null: cell.Clear(XLClearOptions.Contents); break;
             case int i: cell.Value = i; break;
             case double d: cell.Value = d; break;
+            // Amounts: a number Excel can sum, not their text — the default branch wrote them as text.
+            case decimal m:
+                cell.Value = (double)m;
+                cell.Style.NumberFormat.Format = "#,##0";
+                break;
             case DateTime dt: cell.Value = dt; break;
             default: cell.Value = value.ToString(); break;
         }
@@ -195,6 +215,14 @@ internal static class LeadReportWorkbook
         PipelineStage.Converted => "Converti",
         PipelineStage.Lost => "Perdu",
         _ => s.ToString(),
+    };
+
+    private static string AmountKind(ProjectAmountKind k) => k switch
+    {
+        ProjectAmountKind.Loan => "Décaissements (crédit)",
+        ProjectAmountKind.Premium => "Primes (assurance)",
+        ProjectAmountKind.Deposit => "Collecte (épargne, dépôts)",
+        _ => "Montant estimé",
     };
 
     private static string Phase(OpportunityStage s) => s switch

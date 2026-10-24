@@ -10,7 +10,8 @@ using Sankore.Shared.Kernel.ValueObject;
 internal sealed class UpdateOpportunityHandler(
     LeadsDbContext db,
     TimeProvider clock,
-    Administration.PublicApi.IAdministrationModule? administration = null)
+    Administration.PublicApi.IAdministrationModule? administration = null,
+    ProjectTemplates.ProjectTemplateResolver? templates = null)
     : IRequestHandler<UpdateOpportunityCommand, Result>
 {
     public async Task<Result> Handle(UpdateOpportunityCommand cmd, CancellationToken ct)
@@ -33,6 +34,13 @@ internal sealed class UpdateOpportunityHandler(
             : null;
 
         var previousProduct = opportunity.Product;
+
+        // Only when the product changes: a patch cannot clear the date, and a project created
+        // before its template made the date critical must stay editable — its screen asks for one.
+        if (cmd.Product is not null && cmd.Product != previousProduct
+            && await ProjectTemplates.ProjectCloseDateRule.MissingAsync(
+                templates, cmd.Product, cmd.ExpectedCloseDate ?? opportunity.ExpectedCloseDate, ct))
+            return Result.Fail(ProjectTemplateErrors.CloseDateRequired);
 
         opportunity.Update(
             title:             cmd.Title,

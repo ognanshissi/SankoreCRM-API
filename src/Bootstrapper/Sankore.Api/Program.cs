@@ -836,6 +836,13 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(tenantId),
             "*/10 * * * *");
 
+        // Projets à date de clôture critique (crédit de campagne…) : une tâche urgente par date
+        // dépassée, chaque matin.
+        AddOrUpdate<Sankore.Modules.Leads.Features.ProjectTemplates.ProjectCloseDateOverdueJob>(
+            $"{Sankore.Modules.Leads.Features.ProjectTemplates.ProjectCloseDateOverdueJob.RecurringJobPrefix}-{suffix}",
+            job => job.ExecuteAsync(tenantId),
+            Sankore.Modules.Leads.Features.ProjectTemplates.ProjectCloseDateOverdueJob.CronExpression);
+
         AddOrUpdate<Sankore.Modules.Leads.Features.ReactivateRecycledLeads.ReactivateRecycledLeadsJob>(
             $"reactivate-recycled-leads-{suffix}",
             job => job.ExecuteAsync(tenantId),

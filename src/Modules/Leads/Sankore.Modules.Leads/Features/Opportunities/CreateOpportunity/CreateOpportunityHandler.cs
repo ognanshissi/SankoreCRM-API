@@ -10,7 +10,8 @@ using Money = Sankore.Shared.Kernel.ValueObject.Money;
 internal sealed class CreateOpportunityHandler(
     LeadsDbContext db,
     TimeProvider clock,
-    Administration.PublicApi.IAdministrationModule? administration = null)
+    Administration.PublicApi.IAdministrationModule? administration = null,
+    ProjectTemplates.ProjectTemplateResolver? templates = null)
     : IRequestHandler<CreateOpportunityCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
@@ -19,6 +20,9 @@ internal sealed class CreateOpportunityHandler(
         var leadExists = await db.Leads.AnyAsync(l => l.Id == cmd.LeadId, ct);
         if (!leadExists)
             return Result.Fail<Guid>("LEAD_NOT_FOUND");
+
+        if (await ProjectTemplates.ProjectCloseDateRule.MissingAsync(templates, cmd.Product, cmd.ExpectedCloseDate, ct))
+            return Result.Fail<Guid>(ProjectTemplateErrors.CloseDateRequired);
 
         Money? amount = cmd.EstimatedAmount.HasValue && cmd.EstimatedCurrency is not null
             ? new Money(cmd.EstimatedAmount.Value, cmd.EstimatedCurrency)

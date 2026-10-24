@@ -45,7 +45,11 @@ public sealed record OpportunityDto(
     /// Its template shows a probability and an expected close date; off for products sold in a
     /// meeting or two, where the screens hide both.
     /// </param>
-    bool TracksForecast = true);
+    bool TracksForecast = true,
+    /// <param name="AmountKind">What its amount stands for: a loan, a premium, a deposit — or nothing particular.</param>
+    ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
+    /// <param name="CriticalCloseDate">Its close date is a deadline: required, and chased once passed.</param>
+    bool CriticalCloseDate = false);
 
 /// <summary>
 /// The person behind a project, as the projects board shows and searches it: the lead's name and
@@ -80,6 +84,8 @@ internal static class OpportunityStepEnrichment
                 CurrentStepId = template.CurrentStep(item.StepId, item.Stage)?.Id,
                 Steps         = template.Steps,
                 TracksForecast = template.TracksForecast,
+                AmountKind     = template.AmountKind,
+                CriticalCloseDate = template.CriticalCloseDate,
             });
         }
         return result;

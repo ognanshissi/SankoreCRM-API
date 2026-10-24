@@ -13,6 +13,7 @@ internal sealed class ProjectTemplateConfiguration : IEntityTypeConfiguration<Pr
         builder.Property(t => t.Name).HasMaxLength(ProjectTemplate.MaxNameLength).IsRequired();
         builder.Property(t => t.Category).HasConversion<string>().HasMaxLength(30);
         builder.Property(t => t.ProductCode).HasMaxLength(50);
+        builder.Property(t => t.AmountKind).HasConversion<string>().HasMaxLength(20);
 
         // One template per scope. The handlers check first; these make a race lose instead of
         // leaving two templates that both claim the same products.

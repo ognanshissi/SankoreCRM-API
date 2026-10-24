@@ -57,5 +57,32 @@ public sealed class LeadReportWorkbookTests
         wb.Worksheet("Synthèse").Cell(5, 2).GetString().Should().Be("Agence 2");
     }
 
+    [Fact]
+    public void The_forecast_and_the_phases_keep_each_kind_of_amount_in_its_own_column()
+    {
+        var report = Report() with
+        {
+            Projects =
+            [
+                new LeadReportProjectPhase(OpportunityStage.ClosedWon, 2,
+                    [new LeadReportKindAmount(ProjectAmountKind.Generic, 200_000m), new LeadReportKindAmount(ProjectAmountKind.Loan, 402_000m)]),
+            ],
+            Forecast = new LeadReportForecast(
+                [new LeadReportForecastKind(ProjectAmountKind.Loan, 1, 50_000m, 5_000m, 1, 5_000m)],
+                [new LeadReportForecastMonth(new DateOnly(2026, 10, 1), ProjectAmountKind.Loan, 1, 50_000m, 5_000m)],
+                [new LeadReportForecastAgency(null, "Sans agence", ProjectAmountKind.Loan, 1, 5_000m, 1, 5_000m)]),
+        };
+
+        using var wb = Open(LeadReportWorkbook.Build(report, agencyName: null, DateTimeOffset.UtcNow));
+
+        wb.Worksheets.Select(w => w.Name).Should().Contain(["Prévision", "Prévision par mois", "Prévision par agence"]);
+        var projects = wb.Worksheet("Projets");
+        projects.Cell(1, 3).GetString().Should().Be("Montant estimé");
+        projects.Cell(1, 4).GetString().Should().Be("Décaissements (crédit)");
+        projects.Cell(2, 4).GetDouble().Should().Be(402_000);
+        wb.Worksheet("Prévision").Cell(2, 1).GetString().Should().Be("Décaissements (crédit)");
+        wb.Worksheet("Prévision par mois").Cell(2, 1).DataType.Should().Be(XLDataType.DateTime);
+    }
+
     private static XLWorkbook Open(byte[] bytes) => new(new MemoryStream(bytes));
 }

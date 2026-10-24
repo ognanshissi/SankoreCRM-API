@@ -2425,6 +2425,12 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AmountKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("amount_kind");
+
                     b.Property<string>("Category")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
@@ -2433,6 +2439,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<bool>("CriticalCloseDate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("critical_close_date");
 
                     b.Property<string>("Name")
                         .IsRequired()

@@ -1903,11 +1903,26 @@ catalogue, both under a suppressed `TransactionScope`.
 - `PUT opportunities/{id}/step` refuses a step of another template (`PROJECT_STEP_NOT_IN_TEMPLATE`)
   rather than mapping it. Every `OpportunityDto` carries `Steps`, `CurrentStepId`, `TemplateName`:
   agents never call `project-templates`, which is guarded by the pipeline-stage permissions.
-- **`TracksForecast` (per template, default true; owner, 2026-10-24).** Off for a product sold in
-  one meeting: the screens hide its probability, close date and weighted amount, and the report's
-  forecast (`LeadReportDto.Forecast` — open projects whose `ExpectedCloseDate` falls in the period,
-  plus the overdue ones, weighted by `Probability`) leaves it out. `Probability` is still written
-  by every step move, so turning it back on loses nothing. `OpportunityDto.TracksForecast` carries it.
+- **Forecast settings per template (owner, 2026-10-24)**, `ProjectForecastOptions`, all carried
+  by `OpportunityDto`:
+  - `TracksForecast` (default true). Off for a product sold in one meeting: the screens hide its
+    probability, close date and weighted amount, and the forecast leaves it out. `Probability` is
+    still written by every step move, so turning it back on loses nothing.
+  - `AmountKind` (Generic / Loan / Premium / Deposit): what the amount IS. **The forecast never adds
+    two kinds** — a disbursement and a deposit are opposite flows — so `LeadReportDto.Forecast` is
+    `Kinds` + `Schedule` (every month of the period × kind) + `Agencies` (× kind), never a total.
+    A project's agency is its lead's, else its client's (`ICustomersModule.GetCustomerAsync`).
+  - `CriticalCloseDate` (requires TracksForecast): the date is a deadline (seasonal crop loan).
+    `ProjectCloseDateRule` refuses a project created — or moved onto that product — without one
+    (`PROJECT_CLOSE_DATE_REQUIRED`); `ProjectCloseDateOverdueJob` (Hangfire, 06:00 daily) raises ONE
+    Critical task per passed date (trigger `ProjectCloseDateOverdue`, id = project; a task created
+    after the date means already chased) for the owner, else the lead's agent — and, for a project
+    with NO date (created before the template made it critical), one High task « Date limite à
+    fixer » (trigger `ProjectCloseDateMissing`), once.
+  - `GET opportunities/template?product=` (`ProjectTemplateSummaryDto`, read permission) gives the
+    creation forms the template BEFORE the project exists — amount label, required deadline; the
+    front reads it through `projectCreationRules` (`@sankore/crm/common`). « Projets par phase »
+    reports amounts per kind too (`LeadReportProjectPhase.Amounts`).
 - `PipelineStageConfig` and its endpoints remain and are still read by nobody.
 
 **Marked steps (lot 3): the client file and the approval.** A step may carry `OpensClientFile`

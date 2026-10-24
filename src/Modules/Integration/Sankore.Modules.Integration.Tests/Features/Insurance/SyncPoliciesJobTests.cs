@@ -81,7 +81,7 @@ public sealed class SyncPoliciesJobTests : IDisposable
         services.AddSingleton<TimeProvider>(new FixedSyncClock(Now));
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
-        services.AddSingleton(_publisher);
+        services.AddKeyedSingleton(nameof(IntegrationDbContext), _publisher);
         services.AddScoped(_ => _factory.CreateContext());
         services.AddScoped<IntegrationAdapterResolver>();
         // Keyed by the connection's kind, which is how IntegrationAdapterResolver finds it.
@@ -266,7 +266,7 @@ public sealed class SyncPoliciesJobTests : IDisposable
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(new FixedSyncClock(Now));
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
-        services.AddSingleton(_publisher);
+        services.AddKeyedSingleton(nameof(IntegrationDbContext), _publisher);
         services.AddScoped(_ => _factory.CreateContext());
         services.AddScoped<IntegrationAdapterResolver>();
         // Keyed by the connection's kind, which is how IntegrationAdapterResolver finds it.

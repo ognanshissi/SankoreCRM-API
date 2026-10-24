@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Sankore.Modules.Administration.PublicApi;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Reports.GetLeadReport;
 using Sankore.Modules.Leads.Tests.TestSupport;
@@ -72,8 +73,9 @@ public sealed class GetLeadReportHandlerTests : IDisposable
 
         var report = await RunAsync(ReportGranularity.Day);
 
-        report.Projects!.Single(p => p.Phase == OpportunityStage.ClosedWon).Should().Be(
-            new LeadReportProjectPhase(OpportunityStage.ClosedWon, 1, 500_000m, 500_000m));
+        var wonPhase = report.Projects!.Single(p => p.Phase == OpportunityStage.ClosedWon);
+        wonPhase.Count.Should().Be(1);
+        wonPhase.Amounts.Should().Equal(new LeadReportKindAmount(ProjectAmountKind.Generic, 500_000m));
         report.Projects!.Single(p => p.Phase == OpportunityStage.Prospecting).Count.Should().Be(1);
         report.Projects!.Sum(p => p.Count).Should().Be(2);
         report.Progression.Select(p => p.Stage).Should().NotContain(PipelineStage.DocumentCollection);
@@ -148,28 +150,82 @@ public sealed class GetLeadReportHandlerTests : IDisposable
 
     // ── Forecast ────────────────────────────────────────────────────────────
 
-    private Opportunity Project(decimal amount, DateTimeOffset closeOn, OpportunityStage stage = OpportunityStage.Prospecting)
+    private const string Loan = "Crédit PME";
+    private const string Savings = "Dépôt à terme";
+    private const string Shop = "Carte prépayée";
+
+    /// <summary>Three products, three templates: a loan, a deposit, and one sold in a meeting.</summary>
+    private async Task SeedCatalogueAsync()
     {
-        var p = Opportunity.CreateFromLead(_tenantId, Guid.NewGuid(), "Projet", "", null, TimeProvider.System,
+        var lines = new[] { (Loan, "CREDPME", "Loan"), (Savings, "DAT", "Savings"), (Shop, "CARTE", "Standard") }
+            .Select(p => (p.Item1, Summary: new ProductSummary(p.Item2, p.Item1, p.Item3, true, Guid.NewGuid())))
+            .ToList();
+        foreach (var (label, line) in lines)
+            _admin.ResolveProductLineAsync(_tenantId, label, Arg.Any<CancellationToken>()).Returns(line.Id);
+        _admin.ListProductsAsync(_tenantId, null, Arg.Any<CancellationToken>()).Returns(lines.Select(l => l.Summary).ToList());
+
+        List<ProjectStepInput> Steps() => [new(null, "Étude", OpportunityStage.Prospecting, 10), new(null, "Accord", OpportunityStage.Negotiation, 80)];
+        await using var db = _db.CreateContext();
+        db.ProjectTemplates.AddRange(
+            ProjectTemplate.Create(_tenantId, "Crédit", null, "CREDPME", Steps(), From, new(AmountKind: ProjectAmountKind.Loan)).Value!,
+            ProjectTemplate.Create(_tenantId, "DAT", null, "DAT", Steps(), From, new(AmountKind: ProjectAmountKind.Deposit)).Value!,
+            ProjectTemplate.Create(_tenantId, "Carte", null, "CARTE", Steps(), From, new(TracksForecast: false)).Value!);
+        await db.SaveChangesAsync();
+    }
+
+    private Opportunity Project(string product, decimal amount, DateTimeOffset closeOn,
+        OpportunityStage stage = OpportunityStage.Prospecting, Guid? leadId = null)
+    {
+        var p = Opportunity.CreateFromLead(_tenantId, leadId ?? Guid.NewGuid(), "Projet", product, null, TimeProvider.System,
             estimatedAmount: new Sankore.Shared.Kernel.ValueObject.Money(amount, "XOF"), expectedCloseDate: closeOn);
         if (stage != OpportunityStage.Prospecting)
             p.AdvanceStage(stage, From);
         return p;
     }
 
-    private async Task<LeadReportForecast> ForecastAsync(bool tracksForecast = true)
+    private async Task<LeadReportForecast> ForecastAsync(Guid? agencyId = null, ICustomersModule? customers = null)
     {
+        await using var read = _db.CreateContext();
+        var handler = new GetLeadReportHandler(
+            read, new FixedTenantContext(_tenantId), _admin, new FixedClock(From),
+            new Sankore.Modules.Leads.Features.ProjectTemplates.ProjectTemplateResolver(read, _admin, new FixedTenantContext(_tenantId)),
+            customers);
+        var result = await handler.Handle(new GetLeadReportQuery(From, To, agencyId, ReportGranularity.Day), default);
+        return result.Value!.Forecast!;
+    }
+
+    [Fact]
+    public async Task The_forecast_weighs_each_kind_of_amount_apart()
+    {
+        await SeedCatalogueAsync();
         await using (var db = _db.CreateContext())
         {
-            if (!tracksForecast)
-                db.ProjectTemplates.Add(ProjectTemplate.Create(_tenantId, "Standard", null, null,
-                    [new(null, "Vente", OpportunityStage.Prospecting, 50)], From, tracksForecast: false).Value!);
-
             db.Opportunities.AddRange(
-                Project(1_000_000m, From.AddDays(5), OpportunityStage.Negotiation), // in the period, 80 %
-                Project(500_000m, From.AddDays(-3)),                                // late, 10 %
-                Project(2_000_000m, To.AddDays(10)),                                // after the period
-                Project(3_000_000m, From.AddDays(2), OpportunityStage.ClosedWon));  // already won
+                Project(Loan, 1_000_000m, From.AddDays(5), OpportunityStage.Negotiation), // in the period, 80 %
+                Project(Loan, 500_000m, From.AddDays(-3)),                                // late, 10 %
+                Project(Loan, 2_000_000m, To.AddDays(10)),                                // after the period
+                Project(Loan, 3_000_000m, From.AddDays(2), OpportunityStage.ClosedWon),   // already won
+                Project(Savings, 4_000_000m, From.AddDays(6)));                           // a deposit, 10 %
+            await db.SaveChangesAsync();
+        }
+
+        var forecast = await ForecastAsync();
+
+        // A disbursement and a deposit are opposite flows: never one total.
+        forecast.Kinds.Should().BeEquivalentTo(new[]
+        {
+            new LeadReportForecastKind(ProjectAmountKind.Loan, 1, 1_000_000m, 800_000m, 1, 50_000m),
+            new LeadReportForecastKind(ProjectAmountKind.Deposit, 1, 4_000_000m, 400_000m, 0, 0m),
+        });
+    }
+
+    [Fact]
+    public async Task The_schedule_has_every_month_of_the_period_for_each_kind()
+    {
+        await SeedCatalogueAsync();
+        await using (var db = _db.CreateContext())
+        {
+            db.Opportunities.Add(Project(Loan, 1_000_000m, From.AddDays(40), OpportunityStage.Negotiation));
             await db.SaveChangesAsync();
         }
 
@@ -177,30 +233,50 @@ public sealed class GetLeadReportHandlerTests : IDisposable
         var handler = new GetLeadReportHandler(
             read, new FixedTenantContext(_tenantId), _admin, new FixedClock(From),
             new Sankore.Modules.Leads.Features.ProjectTemplates.ProjectTemplateResolver(read, _admin, new FixedTenantContext(_tenantId)));
-        var result = await handler.Handle(new GetLeadReportQuery(From, To, null, ReportGranularity.Day), default);
-        return result.Value!.Forecast!;
-    }
+        var schedule = (await handler.Handle(new GetLeadReportQuery(From, From.AddMonths(3), null, null), default))
+            .Value!.Forecast!.Schedule;
 
-    [Fact]
-    public async Task The_forecast_weighs_the_open_projects_expected_to_close_in_the_period()
-    {
-        var forecast = await ForecastAsync();
-
-        forecast.Count.Should().Be(1);
-        forecast.Amount.Should().Be(1_000_000m);
-        forecast.WeightedAmount.Should().Be(800_000m, "1 000 000 × 80 % at the negotiation step");
-        forecast.Overdue.Should().Be(1, "a close date already passed is a project to chase");
-        forecast.OverdueWeightedAmount.Should().Be(50_000m);
+        schedule.Select(m => m.Month).Should().Equal(new DateOnly(2026, 10, 1), new DateOnly(2026, 11, 1), new DateOnly(2026, 12, 1));
+        schedule.Select(m => m.WeightedAmount).Should().Equal(0m, 800_000m, 0m);
     }
 
     [Fact]
     public async Task A_template_that_tracks_no_forecast_is_left_out()
     {
         // A product sold in a meeting: its close date and its 10 % would be noise in the forecast.
-        var forecast = await ForecastAsync(tracksForecast: false);
+        await SeedCatalogueAsync();
+        await using (var db = _db.CreateContext())
+        {
+            db.Opportunities.Add(Project(Shop, 50_000m, From.AddDays(1)));
+            await db.SaveChangesAsync();
+        }
 
-        forecast.Count.Should().Be(0);
-        forecast.Overdue.Should().Be(0);
+        (await ForecastAsync()).Kinds.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_client_project_counts_in_its_client_s_agency()
+    {
+        // No lead, so no lead agency: the client's agency is the branch that will sign it.
+        await SeedCatalogueAsync();
+        var agency = Guid.NewGuid();
+        var client = Guid.NewGuid();
+        var customers = Substitute.For<ICustomersModule>();
+        customers.GetCustomerAsync(_tenantId, client, Arg.Any<CancellationToken>())
+            .Returns(new CustomerSummary(client, "Sahel Agro", null, null, agency));
+        _admin.GetAgencyAsync(_tenantId, agency, Arg.Any<CancellationToken>())
+            .Returns(new AgencySummary(agency, "SEG", "Agence de Ségou", null, true));
+        await using (var db = _db.CreateContext())
+        {
+            db.Opportunities.Add(Opportunity.CreateForCustomer(_tenantId, client, "Campagne", Loan, null, TimeProvider.System,
+                estimatedAmount: new Sankore.Shared.Kernel.ValueObject.Money(1_000_000m, "XOF"), expectedCloseDate: From.AddDays(3)));
+            await db.SaveChangesAsync();
+        }
+
+        var forecast = await ForecastAsync(agencyId: agency, customers: customers);
+
+        forecast.Agencies.Should().ContainSingle().Which.Name.Should().Be("Agence de Ségou");
+        forecast.Kinds.Single().Count.Should().Be(1);
     }
 
     // ── Harness ─────────────────────────────────────────────────────────────

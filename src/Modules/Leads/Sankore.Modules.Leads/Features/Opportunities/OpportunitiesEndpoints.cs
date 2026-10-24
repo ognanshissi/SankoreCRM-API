@@ -33,6 +33,14 @@ public static class OpportunitiesEndpoints
             .Produces<IReadOnlyList<OpportunityDto>>()
             .WithOpenApi();
 
+        // GET opportunities/template?product= — what a NEW project on this product will follow
+        group.MapGet("template", GetTemplateForProduct)
+            .WithName("GetProjectTemplateForProduct")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanReadOpportunities.Code)
+            .Produces<ProjectTemplateSummaryDto>()
+            .WithOpenApi();
+
         // GET opportunities/{id}
         group.MapGet("{id:guid}", GetOpportunity)
             .WithName("GetOpportunity")
@@ -224,6 +232,19 @@ public static class OpportunitiesEndpoints
         return Results.Ok(result.Value);
     }
 
+    /// <summary>
+    /// The template a project on <paramref name="product"/> would follow, as the creation forms need
+    /// it before the project exists: how to name the amount, whether the close date is required.
+    /// Agents may read it — <c>project-templates</c> is for those who manage the steps.
+    /// </summary>
+    private static async Task<IResult> GetTemplateForProduct(
+        string? product, ProjectTemplates.ProjectTemplateResolver templates, CancellationToken ct)
+    {
+        var template = await templates.ResolveAsync(product, ct);
+        return Results.Ok(new ProjectTemplateSummaryDto(
+            template.Name, template.TracksForecast, template.AmountKind, template.CriticalCloseDate));
+    }
+
     private static async Task<IResult> GetOpportunity(
         Guid id, ISender sender, CancellationToken ct)
     {
@@ -347,3 +368,9 @@ public sealed record UpdateOpportunityRequest(
     DateOnly? NextStepDueOn = null,
     /// <summary>Vrai : l'agent confirme que cette demande est un autre besoin que celui du lead.</summary>
     bool ConfirmSeparateNeed = false);
+
+/// <param name="TracksForecast">The project will carry a probability and an expected close date.</param>
+/// <param name="AmountKind">What its amount stands for: Generic, Loan, Premium or Deposit.</param>
+/// <param name="CriticalCloseDate">The close date is a deadline: creating the project without one is refused.</param>
+public sealed record ProjectTemplateSummaryDto(
+    string Name, bool TracksForecast, ProjectAmountKind AmountKind, bool CriticalCloseDate);
