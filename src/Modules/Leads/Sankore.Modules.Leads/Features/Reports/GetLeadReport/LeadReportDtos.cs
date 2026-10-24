@@ -21,7 +21,15 @@ public sealed record LeadReportDto(
     IReadOnlyList<LeadReportStatus> ByStatus,
     IReadOnlyList<LeadReportSource> BySource,
     IReadOnlyList<LeadReportAgent> Agents,
-    IReadOnlyList<LeadReportAgency> Agencies);
+    IReadOnlyList<LeadReportAgency> Agencies,
+    /// <param name="Projects">
+    /// Projects opened in the period, by the phase they are in today — open phases, then won and
+    /// lost. Under an agency filter, only the projects of that agency's leads.
+    /// </param>
+    IReadOnlyList<LeadReportProjectPhase>? Projects = null);
+
+/// <param name="Amount">Sum of the estimated amounts, all currencies added as they are.</param>
+public sealed record LeadReportProjectPhase(OpportunityStage Phase, int Count, decimal Amount);
 
 /// <param name="Captured">Leads whose <c>CapturedAt</c> falls in the period.</param>
 /// <param name="ConvertedInPeriod">
@@ -51,7 +59,10 @@ public sealed record LeadReportKpis(
 
 public sealed record LeadReportPoint(DateTimeOffset PeriodStart, int Captured, int Converted);
 
-/// <summary>Leads captured in the period, by the pipeline stage they are in today.</summary>
+/// <summary>
+/// Leads captured in the period, by the pipeline stage they are in today — the contact stages and
+/// the two outcomes (<see cref="LeadPipeline.ReportStages"/>); the application stages are projects.
+/// </summary>
 public sealed record LeadReportStage(PipelineStage Stage, int Count);
 
 public sealed record LeadReportStatus(LeadStatus Status, int Count);

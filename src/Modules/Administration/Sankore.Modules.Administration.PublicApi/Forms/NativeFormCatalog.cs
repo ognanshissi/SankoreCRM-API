@@ -149,7 +149,7 @@ public static class NativeFormCatalog
             new("identity", "Identité", 1, QuickAdd: true),
             new("company", "Entreprise", 2, QuickAdd: true, VisibleWhen: Corporate),
             new("contact", "Coordonnées", 3, QuickAdd: true),
-            new("request", "Demande", 4, QuickAdd: true),
+            new("request", "Besoin", 4, QuickAdd: true),
             new("origin", "Origine", 5),
             new("assignment", "Affectation", 6),
         ],

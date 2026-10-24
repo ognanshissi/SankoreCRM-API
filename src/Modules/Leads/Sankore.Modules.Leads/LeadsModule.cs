@@ -76,6 +76,7 @@ using Sankore.Modules.Leads.Features.PipelineStages;
 using Sankore.Modules.Leads.Features.SlaConfigs;
 using Sankore.Modules.Leads.Features.GetPipeline;
 using Sankore.Modules.Leads.Features.Opportunities;
+using Sankore.Modules.Leads.Features.ProjectTemplates;
 using Sankore.Modules.Leads.Features.SlaMonitoring;
 using Sankore.Modules.Leads.Features.NurturingExecution;
 using Sankore.Modules.Leads.Features.Ingestion.Pull;
@@ -123,6 +124,8 @@ public static class LeadsModule
 
         // Assigned-only reads: an Agent or a CommercialAgent sees the leads they hold.
         services.AddScoped<Features.Visibility.LeadVisibility>();
+        services.AddScoped<Features.ProjectTemplates.ProjectTemplateResolver>();
+        services.AddScoped<Features.ProjectTemplates.ProjectStepGate>();
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Visibility.LeadVisibilityBehavior<,>));
 
         // DispatchLead slice-internal services
@@ -506,6 +509,7 @@ public static class LeadsModule
 
         // Opportunities (US-M13-130/131)
         group.MapOpportunitiesEndpoints();
+        group.MapProjectTemplatesEndpoints();
 
         // Nurturing Sequences catalogue (US-M13-150)
         group.MapNurturingSequencesEndpoints();

@@ -404,7 +404,7 @@ internal sealed class LeadCompletenessCalculator(
 
             // Only asked when the line requires a tier — GetLimitsAsync is a cached read but it is
             // still a read, and a line with no tier requirement has no use for the answer.
-            limits = policy?.RequiredKycTier is null
+            limits = KycRequirement.Tier(policy?.RequiredKycTier) is null
                 ? null
                 : await kyc.GetLimitsAsync(lead.TenantId, customerId, ct);
 
@@ -433,6 +433,11 @@ internal sealed class LeadCompletenessCalculator(
                   CompletenessCodes.CustomerNotActive, PersonLabel.Principal,
                   client.Status, FixOnCustomer));
 
+        // A line that requires no KYC (a Standard product whose policy says None) sells to an
+        // active client whatever its file says — it may have none at all.
+        if (!KycRequirement.IsRequired(policy?.RequiredKycTier))
+            return;
+
         check(kycStatus == KycStatus.Approved, () => new CompletenessGap(
             Code: kycStatus switch
             {
@@ -444,7 +449,7 @@ internal sealed class LeadCompletenessCalculator(
             Detail:       kycStatus?.ToString() ?? "NoFile",
             ActionHint:   FixOnCustomer));
 
-        if (policy?.RequiredKycTier is not { } requiredTier)
+        if (KycRequirement.Tier(policy?.RequiredKycTier) is not { } requiredTier)
             return;
 
         // A null from GetLimitsAsync means no file, a rejected one or a suspended one — never "no

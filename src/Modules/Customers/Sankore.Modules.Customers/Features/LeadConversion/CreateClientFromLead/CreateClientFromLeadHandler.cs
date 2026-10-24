@@ -260,6 +260,11 @@ internal sealed class CreateClientFromLeadHandler(
         //     expected reason a key does not carry over, not an error.
         await CarryCustomFieldsAsync(client, cmd, ct);
 
+        // 8c. A product that requires no KYC: the client is a customer as of now, with no file to
+        //     wait for. Through the ordinary transition, so the status history says when and why.
+        if (!cmd.KycRequired)
+            client.ActivateWithoutKyc(actor, now);
+
         db.Clients.Add(client);
 
         // 9. Outbox BEFORE SaveChanges: the publisher only enqueues the row, so the event and
@@ -275,8 +280,12 @@ internal sealed class CreateClientFromLeadHandler(
                 AgencyId: client.AgencyId,
                 AdvisorUserId: client.AdvisorUserId,
                 SourceLeadId: cmd.LeadId,
-                CreatedBy: actor),
+                CreatedBy: actor,
+                KycRequired: cmd.KycRequired),
             ct);
+
+        if (!cmd.KycRequired)
+            await publisher.PublishAsync(new ClientActivatedEvent(tenantId, client.Id), ct);
 
         try
         {

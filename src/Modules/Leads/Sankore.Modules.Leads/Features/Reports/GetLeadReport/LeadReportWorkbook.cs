@@ -34,6 +34,9 @@ internal static class LeadReportWorkbook
             r.Progression.Select(s => new object?[] { Stage(s.Stage), s.Count, (double)s.Count / captured }),
             percentColumns: [3]);
 
+        Table(wb, "Projets", ["Phase actuelle", "Projets ouverts dans la période", "Montant estimé"],
+            (r.Projects ?? []).Select(p => new object?[] { Phase(p.Phase), p.Count, p.Amount }));
+
         Table(wb, "Statuts", ["Statut actuel", "Leads"],
             r.ByStatus.Select(s => new object?[] { Status(s.Status), s.Count }));
 
@@ -182,6 +185,18 @@ internal static class LeadReportWorkbook
         PipelineStage.ApprovalPending => "En approbation",
         PipelineStage.Converted => "Converti",
         PipelineStage.Lost => "Perdu",
+        _ => s.ToString(),
+    };
+
+    private static string Phase(OpportunityStage s) => s switch
+    {
+        OpportunityStage.Prospecting => "Prospection",
+        OpportunityStage.Qualification => "Qualification",
+        OpportunityStage.NeedsAnalysis => "Étude",
+        OpportunityStage.Proposal => "Proposition",
+        OpportunityStage.Negotiation => "Négociation",
+        OpportunityStage.ClosedWon => "Gagné",
+        OpportunityStage.ClosedLost => "Perdu",
         _ => s.ToString(),
     };
 

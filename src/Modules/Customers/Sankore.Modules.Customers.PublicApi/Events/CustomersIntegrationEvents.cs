@@ -28,7 +28,13 @@ public sealed record ClientCreatedEvent(
     Guid AgencyId,
     Guid? AdvisorUserId,
     Guid? SourceLeadId,
-    Guid CreatedBy) : IntegrationEventBase;
+    Guid CreatedBy,
+    /// <summary>
+    /// False for a client converted on a product that requires no KYC: M02 then opens no file.
+    /// Defaults to true so every other publisher — screens, imports — keeps KYC-B-01's guarantee
+    /// that no client exists without one.
+    /// </summary>
+    bool KycRequired = true) : IntegrationEventBase;
 
 /// <summary>The client became Active (KYC approved, or reactivated).</summary>
 public sealed record ClientActivatedEvent(

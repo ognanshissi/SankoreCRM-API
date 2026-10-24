@@ -54,6 +54,37 @@ public sealed class GetLeadReportHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Projects_opened_in_the_period_are_counted_by_their_phase_today()
+    {
+        // Projects, lot 4: the application stages left the lead pipeline for the projects.
+        await using (var db = _db.CreateContext())
+        {
+            var inside = new FixedClock(From.AddDays(2));
+            var won = Opportunity.CreateFromLead(_tenantId, Guid.NewGuid(), "Crédit", "CREDCOM", null, inside,
+                estimatedAmount: new Sankore.Shared.Kernel.ValueObject.Money(500_000m, "XOF"));
+            won.Close(OpportunityStage.ClosedWon, From.AddDays(3));
+            db.Opportunities.Add(won);
+            db.Opportunities.Add(Opportunity.CreateFromLead(_tenantId, Guid.NewGuid(), "Épargne", "EPARGNE", null, inside));
+            // Opened before the period: not in this report.
+            db.Opportunities.Add(Opportunity.CreateFromLead(_tenantId, Guid.NewGuid(), "Ancien", "", null, new FixedClock(From.AddDays(-5))));
+            await db.SaveChangesAsync();
+        }
+
+        var report = await RunAsync(ReportGranularity.Day);
+
+        report.Projects!.Single(p => p.Phase == OpportunityStage.ClosedWon).Should().Be(
+            new LeadReportProjectPhase(OpportunityStage.ClosedWon, 1, 500_000m));
+        report.Projects!.Single(p => p.Phase == OpportunityStage.Prospecting).Count.Should().Be(1);
+        report.Projects!.Sum(p => p.Count).Should().Be(2);
+        report.Progression.Select(p => p.Stage).Should().NotContain(PipelineStage.DocumentCollection);
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    [Fact]
     public async Task The_series_has_every_bucket_including_the_empty_ones()
     {
         await AddLeadAsync(capturedAt: From.AddHours(10));

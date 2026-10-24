@@ -115,6 +115,38 @@ public sealed class CreateClientFromLeadHandlerTests : IDisposable
         BlindIndexPurpose.IdentityDocument,
         SensitiveValueNormalizer.NormalizeDocumentNumber(documentNumber));
 
+    // ── A product that requires no KYC (projects, lot 3) ────────────────────
+
+    [Fact]
+    public async Task A_client_converted_on_a_no_kyc_product_is_active_at_once_and_asks_for_no_file()
+    {
+        var handler = BuildHandler(out var publisher, out _);
+
+        var result = await handler.Handle(Command() with { KycRequired = false }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var client = await LoadAsync(result.Value.ClientId);
+        client!.Status.Should().Be(ClientStatus.Active);
+        client.KycStatus.Should().Be(Sankore.Modules.Kyc.PublicApi.KycStatus.NotStarted);
+        // Through the ordinary transition, so the history says when and why.
+        client.StatusHistory.OrderBy(h => h.OldStatus.HasValue).Select(h => h.NewStatus).Should().Equal(ClientStatus.PendingKyc, ClientStatus.Active);
+
+        publisher.OfType<ClientCreatedEvent>().Single().KycRequired.Should().BeFalse();
+        publisher.OfType<ClientActivatedEvent>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Every_other_conversion_keeps_the_kyc_file_rule()
+    {
+        var handler = BuildHandler(out var publisher, out _);
+
+        var result = await handler.Handle(Command(), CancellationToken.None);
+
+        (await LoadAsync(result.Value.ClientId))!.Status.Should().Be(ClientStatus.PendingKyc);
+        publisher.OfType<ClientCreatedEvent>().Single().KycRequired.Should().BeTrue();
+        publisher.OfType<ClientActivatedEvent>().Should().BeEmpty();
+    }
+
     // ── Nominal conversion ──────────────────────────────────────────────────
 
     [Fact]

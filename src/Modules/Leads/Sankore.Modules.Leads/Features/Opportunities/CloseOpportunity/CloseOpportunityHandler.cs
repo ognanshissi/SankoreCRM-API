@@ -29,7 +29,9 @@ internal sealed class CloseOpportunityHandler(
     IAdministrationModule administration,
     ICurrentUser currentUser,
     TimeProvider clock,
-    ILogger<CloseOpportunityHandler> logger)
+    ILogger<CloseOpportunityHandler> logger,
+    ProjectTemplates.ProjectTemplateResolver? templates = null,
+    ProjectTemplates.ProjectStepGate? gate = null)
     : IRequestHandler<CloseOpportunityCommand, Result<CloseOpportunityResult>>
 {
     public async Task<Result<CloseOpportunityResult>> Handle(
@@ -44,6 +46,23 @@ internal sealed class CloseOpportunityHandler(
 
         if (opportunity.IsStale(cmd.ExpectedUpdatedAt))
             return Result.Fail<CloseOpportunityResult>(LeadConcurrency.ConflictError);
+
+        // Winning reaches every step of the template, the approval one included (lot 3): a project
+        // cannot be won around its KYC check by skipping the step that carries it. Losing is
+        // always allowed.
+        if (cmd.Outcome == OpportunityStage.ClosedWon && templates is not null && gate is not null
+            && opportunity.Stage is not (OpportunityStage.ClosedWon or OpportunityStage.ClosedLost))
+        {
+            var template = await templates.ResolveAsync(opportunity.Product, ct);
+            var current = template.CurrentStep(opportunity.StepId, opportunity.Stage);
+            var allowed = await gate.CheckAsync(
+                opportunity, template,
+                currentIndex: current is null ? -1 : template.Steps.ToList().FindIndex(s => s.Id == current.Id),
+                targetIndex:  template.Steps.Count,
+                ct);
+            if (allowed.IsFailure)
+                return Result.Fail<CloseOpportunityResult>(allowed.Error!);
+        }
 
         var closed = opportunity.Close(cmd.Outcome, clock.GetUtcNow(), cmd.Reason);
         if (closed.IsFailure)

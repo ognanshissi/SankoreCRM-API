@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Administration.Features.Products.SetBeneficiaryPolicy;
 
 using FluentValidation;
+using Sankore.Modules.Administration.PublicApi;
 
 internal sealed class SetBeneficiaryPolicyValidator : AbstractValidator<SetBeneficiaryPolicyCommand>
 {
@@ -10,7 +11,7 @@ internal sealed class SetBeneficiaryPolicyValidator : AbstractValidator<SetBenef
     /// otherwise sit in the policy until a conversion was refused against a tier that does not
     /// exist.
     /// </summary>
-    private static readonly string[] KycTiers = ["Simplified", "Full"];
+    private static readonly string[] KycTiers = ["Simplified", "Full", KycRequirement.None];
 
     public SetBeneficiaryPolicyValidator()
     {

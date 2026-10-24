@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Kernel;
 
 internal sealed class SetBeneficiaryPolicyHandler(
@@ -19,6 +20,12 @@ internal sealed class SetBeneficiaryPolicyHandler(
 
         if (product is null)
             return Result.Fail("PRODUCT_NOT_FOUND");
+
+        // « No KYC » is the socle's answer for products outside any regulated activity. A loan, an
+        // account or an insurance cover keeps a file whatever the administrator ticks: the category
+        // is what the regulator looks at, not this setting.
+        if (!KycRequirement.IsRequired(cmd.RequiredKycTier) && product.Category != ProductCategory.Standard)
+            return Result.Fail("BENEFICIARY_POLICY_KYC_NONE_STANDARD_ONLY");
 
         var policy = BeneficiaryPolicy.Create(
             allowedRoles: [.. (cmd.AllowedRoles ?? []).Select(r => new DesignationRoleDefinition(

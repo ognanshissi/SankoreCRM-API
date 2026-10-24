@@ -416,7 +416,10 @@ public interface IAdministrationModule
 /// a column on the entity, not part of the stored policy.
 /// </param>
 /// <param name="RequiredFieldsBeforeConversion">Stable field codes, not labels.</param>
-/// <param name="RequiredKycTier">"Simplified" | "Full", or null.</param>
+/// <param name="RequiredKycTier">
+/// "Simplified" | "Full", "None" (no KYC at all — Standard lines only), or null (the tenant's own
+/// baseline, which still means a KYC file). Read it through <see cref="KycRequirement"/>.
+/// </param>
 /// <param name="IntegrationSystem">An <c>IntegrationKind</c> name, or null when the line is CRM-only.</param>
 public sealed record BeneficiaryPolicyDto(
     Guid ProductLineId,
@@ -430,6 +433,27 @@ public sealed record BeneficiaryPolicyDto(
     IReadOnlyList<string> RequiredFieldsBeforeConversion,
     string? RequiredKycTier,
     string? IntegrationSystem);
+
+/// <summary>
+/// What a line's <see cref="BeneficiaryPolicyDto.RequiredKycTier"/> means for its customer.
+/// </summary>
+public static class KycRequirement
+{
+    /// <summary>The tier of a line that requires no KYC. Only a Standard line may carry it.</summary>
+    public const string None = "None";
+
+    /// <summary>
+    /// Whether a customer of this line must have a KYC file. True for null — an unconfigured line
+    /// keeps the tenant's baseline, which is a file — and for an unknown line: a gate that cannot
+    /// tell must not waive the check.
+    /// </summary>
+    public static bool IsRequired(string? requiredKycTier)
+        => !string.Equals(requiredKycTier, None, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The tier to compare a file against, or null when any approved file will do.</summary>
+    public static string? Tier(string? requiredKycTier)
+        => IsRequired(requiredKycTier) ? requiredKycTier : null;
+}
 
 /// <summary>
 /// A product line's remote-KYC policy as other modules see it (KRM-B-01). Enum-typed concepts are

@@ -54,13 +54,14 @@ public sealed class LeadContactProgressionTests : IDisposable
     [Fact]
     public void A_lead_already_further_along_is_never_moved_back()
     {
+        // « Besoin identifié » is as far as a lead goes since projects (lot 4).
         var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();   // Qualified
-        lead.AdvancePipelineStage(PipelineStage.DocumentCollection);
+        lead.AdvancePipelineStage(PipelineStage.NeedIdentified);
 
         lead.RecordContactEstablished().Should().BeFalse();
 
         lead.Status.Should().Be(LeadStatus.Qualified);
-        lead.PipelineStage.Should().Be(PipelineStage.DocumentCollection);
+        lead.PipelineStage.Should().Be(PipelineStage.NeedIdentified);
     }
 
     [Fact]

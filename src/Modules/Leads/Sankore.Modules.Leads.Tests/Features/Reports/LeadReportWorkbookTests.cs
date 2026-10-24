@@ -31,7 +31,7 @@ public sealed class LeadReportWorkbookTests
         using var wb = Open(LeadReportWorkbook.Build(Report(), agencyName: null, DateTimeOffset.UtcNow));
 
         wb.Worksheets.Select(w => w.Name).Should().Equal(
-            "Synthèse", "Évolution", "Progression", "Statuts", "Canaux", "Agents", "Agences");
+            "Synthèse", "Évolution", "Progression", "Projets", "Statuts", "Canaux", "Agents", "Agences");
     }
 
     [Fact]

@@ -139,8 +139,28 @@ internal sealed class GetLeadReportHandler(
             series.Add(new LeadReportPoint(b, capturedByBucket.GetValueOrDefault(b), convertedByBucket.GetValueOrDefault(b)));
 
         // ── Breakdowns of the cohort ──────────────────────────────────────────────────────
-        var progression = Enum.GetValues<PipelineStage>()
+        var progression = LeadPipeline.ReportStages
             .Select(s => new LeadReportStage(s, cohortRows.Count(r => r.PipelineStage == s)))
+            .ToList();
+
+        // ── Projects opened in the period, by phase today ───────────────────────────────────
+        var projectQuery = db.Opportunities.AsNoTracking()
+            .Where(o => o.CreatedAt >= q.From && o.CreatedAt < q.To);
+        if (q.AgencyId is { } projectAgency)
+            projectQuery = projectQuery.Where(o => o.LeadId != null
+                && db.Leads.Any(l => l.Id == o.LeadId && l.AgencyId == projectAgency));
+
+        var projectRows = await projectQuery
+            .Select(o => new { o.Stage, Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m })
+            .ToListAsync(ct);
+
+        var projects = new[]
+            {
+                OpportunityStage.Prospecting, OpportunityStage.Qualification, OpportunityStage.NeedsAnalysis,
+                OpportunityStage.Proposal, OpportunityStage.Negotiation, OpportunityStage.ClosedWon, OpportunityStage.ClosedLost,
+            }
+            .Select(p => new LeadReportProjectPhase(
+                p, projectRows.Count(r => r.Stage == p), projectRows.Where(r => r.Stage == p).Sum(r => r.Amount)))
             .ToList();
 
         var byStatus = cohortRows.GroupBy(r => r.Status)
@@ -224,7 +244,7 @@ internal sealed class GetLeadReportHandler(
             .ToList();
 
         return Result.Ok(new LeadReportDto(
-            q.From, q.To, granularity, kpis, series, progression, byStatus, bySource, agents, agencies));
+            q.From, q.To, granularity, kpis, series, progression, byStatus, bySource, agents, agencies, projects));
     }
 
     internal static double Rate(int part, int total) => total > 0 ? Math.Round((double)part / total * 100, 1) : 0;

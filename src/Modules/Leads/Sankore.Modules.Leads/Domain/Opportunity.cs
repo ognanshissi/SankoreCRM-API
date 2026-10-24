@@ -26,6 +26,16 @@ public sealed class Opportunity : AggregateRoot
     public string Product { get; private set; } = default!;
     public Money? EstimatedAmount { get; private set; }
     public OpportunityStage Stage { get; private set; }
+
+    /// <summary>
+    /// The step of the project's template it stands on (<see cref="ProjectTemplate"/>). Null for a
+    /// project moved by phase only — created before templates, or moved through the legacy stage
+    /// endpoint: it is then read as standing on the first step of its phase. Never a foreign key:
+    /// the template that applies follows the product, and a step that no longer exists in it falls
+    /// back the same way.
+    /// </summary>
+    public Guid? StepId { get; private set; }
+
     public double Probability { get; private set; }
     public DateTimeOffset? ExpectedCloseDate { get; private set; }
     public Guid? OwnerId { get; private set; }
@@ -147,10 +157,45 @@ public sealed class Opportunity : AggregateRoot
 
         Stage       = newStage;
         Probability = StageProbability(newStage);
+        StepId      = null;
         UpdatedAt   = now;
 
         if (newStage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
             ClosedAt = now;
+
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// The lead behind this project became (or was attached to) a client: the project follows it
+    /// onto the client record. Without it a converted lead's projects stayed lead-only — absent
+    /// from the client's « Projets » tab, and unable to open a contract when won. A project
+    /// already on a client keeps it.
+    /// </summary>
+    public void AttachToCustomer(Guid customerId, DateTimeOffset now)
+    {
+        if (CustomerEntityId is not null) return;
+        CustomerEntityType = "Customer";
+        CustomerEntityId   = customerId;
+        UpdatedAt          = now;
+    }
+
+    /// <summary>
+    /// Moves the project onto a step of its template. The caller resolved the template and checked
+    /// the step belongs to it; the phase and probability come from that step, so a renamed or split
+    /// funnel still reads as the five phases everywhere else. Same rule as
+    /// <see cref="AdvanceStage"/>: any open step to any open step, never from a closed project.
+    /// </summary>
+    /// <param name="probability">In percent, as a template step carries it.</param>
+    public Result MoveToStep(Guid stepId, OpportunityStage phase, int probability, DateTimeOffset now)
+    {
+        if (Stage == OpportunityStage.ClosedWon || Stage == OpportunityStage.ClosedLost)
+            return Result.Fail("OPPORTUNITY_ALREADY_CLOSED");
+
+        Stage       = phase;
+        Probability = probability / 100.0;
+        StepId      = stepId;
+        UpdatedAt   = now;
 
         return Result.Ok();
     }

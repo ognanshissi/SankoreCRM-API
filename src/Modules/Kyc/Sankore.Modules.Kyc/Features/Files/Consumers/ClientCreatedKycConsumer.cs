@@ -33,6 +33,11 @@ public sealed class ClientCreatedKycConsumer(
         // SYSTEM placeholder tenant: nothing to open for a tenant that does not exist.
         if (evt.TenantId == Guid.Empty) return;
 
+        // The one client created without a file: converted on a product that requires no KYC
+        // (a Standard line whose policy says None). M01 activated it already; a file opened here
+        // would put a customer nobody has to verify in the compliance backlog.
+        if (!evt.KycRequired) return;
+
         // Derived, not guessed. SourceLeadId is set by M01 exactly when the client record came
         // out of a lead conversion, which is the one piece of provenance the event carries — and
         // the channel is evidence an auditor reads, so it must reflect what happened rather than

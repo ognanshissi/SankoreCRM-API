@@ -10,20 +10,8 @@ using Sankore.Shared.Kernel;
 internal sealed class GetPipelineHandler(LeadsDbContext db, LeadVisibility? visibility = null)
     : IRequestHandler<GetPipelineQuery, Result<PipelineView>>
 {
-    // Stages shown on the board (exclude terminal stages).
-    private static readonly PipelineStage[] BoardStages =
-    [
-        PipelineStage.New,
-        PipelineStage.ContactAttempted,
-        PipelineStage.ContactEstablished,
-        PipelineStage.NeedIdentified,
-        PipelineStage.Qualified,
-        PipelineStage.ProductProposed,
-        PipelineStage.ApplicationStarted,
-        PipelineStage.DocumentCollection,
-        PipelineStage.ApplicationCompleted,
-        PipelineStage.ApprovalPending,
-    ];
+    // Stages shown on the board: the contact stages only — the rest is the projects board.
+    private static readonly IReadOnlyList<PipelineStage> BoardStages = LeadPipeline.ContactStages;
 
     public async Task<Result<PipelineView>> Handle(
         GetPipelineQuery query, CancellationToken ct)
@@ -51,7 +39,7 @@ internal sealed class GetPipelineHandler(LeadsDbContext db, LeadVisibility? visi
 
         var maxPerStage = Math.Clamp(query.MaxPerStage, 1, 100);
 
-        var columns = new List<PipelineColumn>(BoardStages.Length);
+        var columns = new List<PipelineColumn>(BoardStages.Count);
 
         foreach (var stage in BoardStages)
         {

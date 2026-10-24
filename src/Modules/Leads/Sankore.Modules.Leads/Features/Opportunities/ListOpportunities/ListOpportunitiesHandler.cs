@@ -14,7 +14,8 @@ internal sealed class ListOpportunitiesHandler(
     LeadsDbContext db,
     LeadVisibility? visibility = null,
     ICustomersModule? customers = null,
-    ICurrentUser? currentUser = null)
+    ICurrentUser? currentUser = null,
+    ProjectTemplates.ProjectTemplateResolver? templates = null)
     : IRequestHandler<ListOpportunitiesQuery, Result<IReadOnlyList<OpportunityDto>>>
 {
     public async Task<Result<IReadOnlyList<OpportunityDto>>> Handle(
@@ -38,10 +39,11 @@ internal sealed class ListOpportunitiesHandler(
                 o.Title, o.Description, o.Product, o.EstimatedAmount,
                 o.Stage, o.Probability, o.ExpectedCloseDate, o.OwnerId,
                 o.CreatedAt, o.UpdatedAt, o.ClosedAt, o.CloseReason,
-                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt))
+                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt, o.StepId))
             .ToListAsync(ct);
 
-        return Result.Ok<IReadOnlyList<OpportunityDto>>(items);
+        IReadOnlyList<OpportunityDto> enriched = templates is null ? items : await items.WithStepsAsync(templates, ct);
+        return Result.Ok(enriched);
     }
 
     /// <summary>

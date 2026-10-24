@@ -1864,6 +1864,72 @@ tenant's in one queue — the same choice as the module subscriptions.
   as `from`); admin app `/support` and a Support section on the tenant page. The thread is bubbles,
   not `tas-table` (owner's exception).
 
+### Project step templates: a project's steps follow its product
+
+The UI calls an `Opportunity` a **projet**. Its steps come from a `ProjectTemplate` (M13, tables
+`project_templates` / `project_template_steps`), resolved like the qualification templates:
+the product line's own (`ProductCode`), else its family's (`Category`), else the tenant's default
+(both null), else the **built-in default** — the five legacy stages, not stored, with FIXED step
+ids (`ProjectTemplate.BuiltInDefault`). `ProjectTemplateResolver` (scoped, memoised per label)
+does it from `Opportunity.Product`, which is free text: `ResolveProductLineAsync` then the cached
+catalogue, both under a suppressed `TransactionScope`.
+
+- **A step belongs to one of the five open phases** of `OpportunityStage`, phases never go
+  backwards along the order, probability 1–99. `MoveToStep` writes `StepId`, `Stage` (= the
+  phase) and `Probability`; reports, the duplicate check and closing keep reading `Stage`.
+- **`StepId` is not a foreign key.** The template follows the product, so the CURRENT step is
+  computed on read (`ResolvedProjectTemplate.CurrentStep`): the stored step when the template
+  still has it, else the last step whose phase is not past the project's. Projects created before
+  templates, moved through the legacy `PUT /stage` (which clears `StepId`), whose step was deleted
+  or whose product changed all land there — no data migration.
+- **Steps keyed by (template, id)**, not id alone: every tenant that saves the built-in default
+  keeps its fixed ids, which is what keeps projects already moved onto it in place. `Update` edits
+  a step sent back with its id IN PLACE (EF refuses a delete + insert of one owned key).
+- `PUT opportunities/{id}/step` refuses a step of another template (`PROJECT_STEP_NOT_IN_TEMPLATE`)
+  rather than mapping it. Every `OpportunityDto` carries `Steps`, `CurrentStepId`, `TemplateName`:
+  agents never call `project-templates`, which is guarded by the pipeline-stage permissions.
+- `PipelineStageConfig` and its endpoints remain and are still read by nobody.
+
+**Marked steps (lot 3): the client file and the approval.** A step may carry `OpensClientFile`
+and/or `IsApproval` (one each, approval never before the client file). `ProjectStepGate` runs on
+`PUT /step` AND on a WON close — winning reaches every step, so the approval cannot be skipped:
+- reaching the client-file step on a product that requires KYC needs a client
+  (`PROJECT_CLIENT_FILE_REQUIRED`); crossing it with a converted lead whose client has no KYC file
+  publishes `KycRequestedIntegrationEvent` on the project's line (idempotent in M02);
+- reaching the approval step needs a client, and for a KYC product a file `Approved` at the
+  line's tier (`PROJECT_KYC_NOT_APPROVED` / `PROJECT_KYC_TIER_INSUFFICIENT`);
+- **the gate refuses, it never converts**: a conversion can stop on things only the agent settles
+  (completeness, duplicates, a known identity document), so the screen opens the conversion wizard.
+- Fail-closed: an unresolved product, an unreadable policy or an unreachable M02 read as « KYC
+  required, not approved ». The built-in default marks no step, so an unconfigured tenant is ungated.
+
+**A product may require no KYC — Standard lines only.** `BeneficiaryPolicy.RequiredKycTier =
+"None"` (`KycRequirement.None`, read through `KycRequirement.IsRequired`/`Tier`; null still means
+the tenant baseline, i.e. a file). `SetBeneficiaryPolicyHandler` refuses it for any other category
+(`BENEFICIARY_POLICY_KYC_NONE_STANDARD_ONLY`); a NEW Standard product starts at None, existing
+ones were not touched. Converting on such a line: `CreateFromLeadRequest.KycRequired = false` →
+M01 creates the client then `ActivateWithoutKyc` (PendingKyc → Active in the history,
+`ClientActivatedEvent`), `ClientCreatedEvent.KycRequired = false` makes `ClientCreatedKycConsumer`
+and the dev auto-validator skip it, and M13 publishes no `KycRequested`. This is the ONE exception
+to KYC-B-01 « every client gets a file »: every other publisher keeps the default `true`. Its
+`KycStatus` stays `NotStarted` — nothing was approved — and the completeness gate skips the KYC
+checks for that line only.
+
+**A lead stops at « besoin identifié » (lot 4).** `LeadPipeline.ContactStages` (New,
+ContactAttempted, ContactEstablished, NeedIdentified) is what a lead moves through;
+`Lead.AdvancePipelineStage` refuses the application stages (`PIPELINE_STAGE_IS_A_PROJECT_STEP`) —
+they are a project's steps. The enum values stay: old rows and event history hold them. The
+migration `MoveLeadApplicationStagesToProjects` gave every OPEN lead still on one of them a project
+at the equivalent phase (Qualified → Qualification, ProductProposed → Proposal, the rest →
+Negotiation) unless it already had an open one, and put it back on NeedIdentified; closed leads
+keep the stage they ended on. The board shows the contact stages only, and the reports show
+`LeadPipeline.ReportStages` plus `LeadReportDto.Projects` (projects opened in the period, by phase
+today — under an agency filter, those of that agency's leads).
+
+**A converted lead's projects follow it onto the client** (`Opportunity.AttachToCustomer`, in
+`ConvertLeadHandler`; migration `AddProjectStepGates` backfills older ones), so they show on the
+client's « Projets » tab and a won one can open its contract.
+
 ### Assigned-only reads: an agent consults the leads, clients and KYC files assigned to them
 
 Product owner, 2026-10-23. Three permissions widen a READ and grant no verb: `lead:read:all`,

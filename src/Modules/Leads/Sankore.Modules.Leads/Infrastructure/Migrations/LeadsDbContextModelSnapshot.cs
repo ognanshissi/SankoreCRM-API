@@ -2321,6 +2321,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("stage");
 
+                    b.Property<Guid?>("StepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("step_id");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -2412,6 +2416,62 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasDatabaseName("ix_pipeline_stage_configs_tenant_id_code");
 
                     b.ToTable("pipeline_stage_configs", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("category");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ProductCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("product_code");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_templates");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_project_templates_default")
+                        .HasFilter("category IS NULL AND product_code IS NULL");
+
+                    b.HasIndex("TenantId", "Category")
+                        .IsUnique()
+                        .HasDatabaseName("ux_project_templates_category")
+                        .HasFilter("category IS NOT NULL AND product_code IS NULL");
+
+                    b.HasIndex("TenantId", "ProductCode")
+                        .IsUnique()
+                        .HasDatabaseName("ux_project_templates_product")
+                        .HasFilter("product_code IS NOT NULL");
+
+                    b.ToTable("project_templates", "leads");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.QualificationQuestion", b =>
@@ -4475,6 +4535,64 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         });
 
                     b.Navigation("EstimatedAmount");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplate", b =>
+                {
+                    b.OwnsMany("Sankore.Modules.Leads.Domain.ProjectTemplateStep", "Steps", b1 =>
+                        {
+                            b1.Property<Guid>("TemplateId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("template_id");
+
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<bool>("IsApproval")
+                                .HasColumnType("boolean")
+                                .HasColumnName("is_approval");
+
+                            b1.Property<string>("Label")
+                                .IsRequired()
+                                .HasMaxLength(60)
+                                .HasColumnType("character varying(60)")
+                                .HasColumnName("label");
+
+                            b1.Property<bool>("OpensClientFile")
+                                .HasColumnType("boolean")
+                                .HasColumnName("opens_client_file");
+
+                            b1.Property<int>("Order")
+                                .HasColumnType("integer")
+                                .HasColumnName("order");
+
+                            b1.Property<string>("Phase")
+                                .IsRequired()
+                                .HasMaxLength(30)
+                                .HasColumnType("character varying(30)")
+                                .HasColumnName("phase");
+
+                            b1.Property<int>("Probability")
+                                .HasColumnType("integer")
+                                .HasColumnName("probability");
+
+                            b1.Property<string>("Suggestion")
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("suggestion");
+
+                            b1.HasKey("TemplateId", "Id")
+                                .HasName("pk_project_template_steps");
+
+                            b1.ToTable("project_template_steps", "leads");
+
+                            b1.WithOwner()
+                                .HasForeignKey("TemplateId")
+                                .HasConstraintName("fk_project_template_steps_project_templates_template_id");
+                        });
+
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.QualificationQuestion", b =>

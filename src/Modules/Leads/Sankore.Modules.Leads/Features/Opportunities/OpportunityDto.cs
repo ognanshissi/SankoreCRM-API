@@ -26,4 +26,40 @@ public sealed record OpportunityDto(
     /// <param name="SeparateNeedConfirmedAt">
     /// When an agent said this request is a different need from the lead's, despite the amounts.
     /// </param>
-    DateTimeOffset? SeparateNeedConfirmedAt = null);
+    DateTimeOffset? SeparateNeedConfirmedAt = null,
+    /// <param name="StepId">The step stored on the project; null when it was moved by phase only.</param>
+    Guid? StepId = null,
+    /// <param name="TemplateId">The template its product resolves to; null for the built-in default.</param>
+    Guid? TemplateId = null,
+    string? TemplateName = null,
+    /// <param name="CurrentStepId">
+    /// The step it stands on, as resolved — <see cref="StepId"/> when the template still has it,
+    /// else the step of its phase. Null once closed.
+    /// </param>
+    Guid? CurrentStepId = null,
+    /// <param name="Steps">The steps of its template, in order: what the screens draw.</param>
+    IReadOnlyList<ProjectTemplates.ProjectStepDto>? Steps = null);
+
+internal static class OpportunityStepEnrichment
+{
+    /// <summary>Adds each project's template and current step. One resolution per distinct product.</summary>
+    public static async Task<IReadOnlyList<OpportunityDto>> WithStepsAsync(
+        this IEnumerable<OpportunityDto> items,
+        ProjectTemplates.ProjectTemplateResolver resolver,
+        CancellationToken ct)
+    {
+        var result = new List<OpportunityDto>();
+        foreach (var item in items)
+        {
+            var template = await resolver.ResolveAsync(item.Product, ct);
+            result.Add(item with
+            {
+                TemplateId    = template.Id,
+                TemplateName  = template.Name,
+                CurrentStepId = template.CurrentStep(item.StepId, item.Stage)?.Id,
+                Steps         = template.Steps,
+            });
+        }
+        return result;
+    }
+}

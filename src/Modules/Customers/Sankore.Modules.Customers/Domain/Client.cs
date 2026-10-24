@@ -676,6 +676,21 @@ public sealed class Client : AggregateRoot
     }
 
     /// <summary>
+    /// A client converted on a product that requires no KYC (a Standard product whose policy says
+    /// <c>None</c>): active at once, its KYC status left at <c>NotStarted</c> — no file was opened,
+    /// none was approved. A later product that does require KYC opens a file then, and the
+    /// per-product gate checks that file; the client's own status does not stand in for it.
+    /// </summary>
+    public Result ActivateWithoutKyc(Guid actor, DateTimeOffset at)
+    {
+        if (Status != ClientStatus.PendingKyc)
+            return Result.Fail(CustomerErrors.InvalidStatusTransition);
+
+        ChangeStatus(ClientStatus.Active, "KYC non requis par le produit", actor, at);
+        return Result.Ok();
+    }
+
+    /// <summary>
     /// Un dossier KYC vient d'être ouvert. Ne fait avancer que ce qui n'est pas encore tranché :
     /// un client déjà validé dont on ouvre un dossier de revue reste validé — une revue ne le
     /// dévalide pas, comme le statut public <c>UnderReview</c> le dit déjà côté KYC. Renvoie vrai

@@ -58,6 +58,11 @@ public sealed class DevKycAutoValidateConsumer(
         if (!environment.IsDevelopment())
             return;
 
+        // A client that needs no KYC is already active; « validating » a file it never had would
+        // stamp it Approved and hide that nobody checked anything.
+        if (!evt.KycRequired)
+            return;
+
         var messageId = context.MessageId ?? evt.EventId;
 
         // At-least-once delivery: a replay loses on the inbox primary key, so the

@@ -98,6 +98,13 @@ internal sealed class ConvertLeadHandler(
                 Completeness:          report));
         }
 
+        // ── Does this product require KYC at all? ───────────────────────
+        //
+        // A Standard line whose policy says None sells without a file: the client is created
+        // active and nothing asks M02 for anything. Anything else — an unresolved product, an
+        // unreadable policy — keeps the file, because a gate that cannot tell must not waive it.
+        var kycRequired = await IsKycRequiredAsync(lead, ct);
+
         // ── US-M13-171: Validate existing customer if provided ──────────
         if (cmd.CustomerId.HasValue)
         {
@@ -223,7 +230,7 @@ internal sealed class ConvertLeadHandler(
         {
             conversionType = LeadConversionType.NewCustomer;
 
-            var creation = await CreateClientAsync(lead, ct);
+            var creation = await CreateClientAsync(lead, kycRequired, ct);
             if (creation.IsFailure)
                 return Result.Fail<ConvertLeadResult>(creation.Error!);
 
@@ -249,6 +256,14 @@ internal sealed class ConvertLeadHandler(
         if (convertResult.IsFailure)
             return Result.Fail<ConvertLeadResult>(convertResult.Error!);
 
+        // The lead's projects follow it onto the client record.
+        var projects = await db.Opportunities
+            .AsTracking()
+            .Where(o => o.LeadId == lead.Id && o.CustomerEntityId == null)
+            .ToListAsync(ct);
+        foreach (var project in projects)
+            project.AttachToCustomer(customerId, lead.ConvertedAt!.Value);
+
         // Publish LeadConverted integration event atomically via outbox
         await publisher.PublishAsync(
             new LeadConvertedIntegrationEvent(
@@ -266,27 +281,28 @@ internal sealed class ConvertLeadHandler(
             ct);
 
         // ── US-M13-172: Publish KycRequested event via outbox ───────────
-        await publisher.PublishAsync(
-            new KycRequestedIntegrationEvent(
-                TenantId:         lead.TenantId,
-                CustomerEntityId: customerId,
-                LeadId:           lead.Id,
-                FullName:         lead.FullName,
-                PhoneNumber:      lead.PhoneNumber,
-                Email:            lead.Email,
-                NationalId:       lead.NationalId,
-                DateOfBirth:      lead.DateOfBirth,
-                RequestedBy:      currentUser.Id,
-                // BNF-B-24: an exposed household opens the KYC file at High vigilance, which adds
-                // the compliance officer to the approval ladder. The FLAG only — the function, the
-                // country and the family link stay behind lead:pep:read.
-                HasPepExposure:   lead.HasPepExposure,
-                // KRM-B-02: which catalogue line this conversion is on. M02 decides from it
-                // whether the new customer may send their documents remotely and how the file is
-                // validated. Null when the lead's product label resolved to nothing, which is
-                // ordinary — the file is then simply collected at the counter.
-                ProductLineId:    lead.ProductLineId),
-            ct);
+        if (kycRequired)
+            await publisher.PublishAsync(
+                new KycRequestedIntegrationEvent(
+                    TenantId:         lead.TenantId,
+                    CustomerEntityId: customerId,
+                    LeadId:           lead.Id,
+                    FullName:         lead.FullName,
+                    PhoneNumber:      lead.PhoneNumber,
+                    Email:            lead.Email,
+                    NationalId:       lead.NationalId,
+                    DateOfBirth:      lead.DateOfBirth,
+                    RequestedBy:      currentUser.Id,
+                    // BNF-B-24: an exposed household opens the KYC file at High vigilance, which adds
+                    // the compliance officer to the approval ladder. The FLAG only — the function, the
+                    // country and the family link stay behind lead:pep:read.
+                    HasPepExposure:   lead.HasPepExposure,
+                    // KRM-B-02: which catalogue line this conversion is on. M02 decides from it
+                    // whether the new customer may send their documents remotely and how the file is
+                    // validated. Null when the lead's product label resolved to nothing, which is
+                    // ordinary — the file is then simply collected at the counter.
+                    ProductLineId:    lead.ProductLineId),
+                ct);
 
         await db.SaveChangesAsync(ct);
 
@@ -400,7 +416,34 @@ internal sealed class ConvertLeadHandler(
     /// SourceLeadId. If the lead conversion fails after the client was created, retrying the
     /// conversion returns the SAME client instead of creating a second one.
     /// </summary>
-    private async Task<Result<CreateFromLeadResult>> CreateClientAsync(Lead lead, CancellationToken ct)
+    /// <summary>
+    /// False only for a resolved line whose policy says <c>None</c>. Best-effort like the line
+    /// resolution above, and fail-closed: an outage reads as « KYC required ».
+    /// </summary>
+    private async Task<bool> IsKycRequiredAsync(Lead lead, CancellationToken ct)
+    {
+        if (lead.ProductLineId is not { } lineId)
+            return true;
+
+        try
+        {
+            using var suppressed = new TransactionScope(
+                TransactionScopeOption.Suppress,
+                TransactionScopeAsyncFlowOption.Enabled);
+
+            var policy = await administration.GetBeneficiaryPolicyAsync(lead.TenantId, lineId, ct);
+
+            suppressed.Complete();
+            return policy is null || KycRequirement.IsRequired(policy.RequiredKycTier);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _ = ex;
+            return true;
+        }
+    }
+
+    private async Task<Result<CreateFromLeadResult>> CreateClientAsync(Lead lead, bool kycRequired, CancellationToken ct)
     {
         // A client belongs to an agency. A lead that was never routed to one cannot become a
         // client without someone choosing where it lands.
@@ -434,7 +477,8 @@ internal sealed class ConvertLeadHandler(
             Profession:             null,
             PreferredLanguage:      lead.PreferredLanguage,
             RequestedClientId:      null,
-            CustomFieldsJson:       lead.CustomFieldsJson);
+            CustomFieldsJson:       lead.CustomFieldsJson,
+            KycRequired:            kycRequired);
 
         using var suppressed = new TransactionScope(
             TransactionScopeOption.Suppress,

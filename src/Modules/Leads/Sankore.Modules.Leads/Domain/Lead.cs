@@ -900,6 +900,11 @@ public sealed class Lead : AggregateRoot
     /// <summary>Advances the pipeline stage, enforcing the allow-list of forward transitions.</summary>
     public Result AdvancePipelineStage(PipelineStage newStage)
     {
+        // Qualification, proposal, application, documents, approval: a project's steps now
+        // (lot 4). A lead stops at « besoin identifié », where its project takes over.
+        if (LeadPipeline.IsProjectStage(newStage))
+            return Result.Fail(LeadPipeline.StageIsAProjectStep);
+
         if (Status is LeadStatus.Converted or LeadStatus.Lost or LeadStatus.Disqualified or LeadStatus.Archived)
             return Result.Fail("Cannot move pipeline stage on a closed lead.");
 

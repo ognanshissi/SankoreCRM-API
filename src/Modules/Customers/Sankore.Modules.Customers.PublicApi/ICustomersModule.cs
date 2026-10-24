@@ -762,7 +762,14 @@ public sealed record CreateFromLeadRequest(
     /// The lead's custom values as it stores them (dynamic forms, lot 6). The client keeps those
     /// whose key its own form also has and accepts; a lead-only field is simply not carried over.
     /// </summary>
-    string? CustomFieldsJson = null);
+    string? CustomFieldsJson = null,
+    /// <summary>
+    /// False only when the product the lead converts on requires NO KYC (a Standard product whose
+    /// policy says <c>None</c>). The client is then created <c>Active</c> and no KYC file is
+    /// opened for it — see <see cref="Events.ClientCreatedEvent.KycRequired"/>. True everywhere
+    /// else, which is the KYC-B-01 rule: every other client gets a file.
+    /// </summary>
+    bool KycRequired = true);
 
 /// <summary>
 /// <c>AlreadyExisted</c> is true when the lead had already been converted — the

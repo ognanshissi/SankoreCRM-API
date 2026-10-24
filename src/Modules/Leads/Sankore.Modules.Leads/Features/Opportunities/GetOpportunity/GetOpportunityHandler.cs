@@ -6,7 +6,10 @@ using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetOpportunityHandler(LeadsDbContext db, LeadVisibility? visibility = null)
+internal sealed class GetOpportunityHandler(
+    LeadsDbContext db,
+    LeadVisibility? visibility = null,
+    ProjectTemplates.ProjectTemplateResolver? templates = null)
     : IRequestHandler<GetOpportunityQuery, Result<OpportunityDto>>
 {
     public async Task<Result<OpportunityDto>> Handle(
@@ -20,11 +23,12 @@ internal sealed class GetOpportunityHandler(LeadsDbContext db, LeadVisibility? v
                 o.Title, o.Description, o.Product, o.EstimatedAmount,
                 o.Stage, o.Probability, o.ExpectedCloseDate, o.OwnerId,
                 o.CreatedAt, o.UpdatedAt, o.ClosedAt, o.CloseReason,
-                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt))
+                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt, o.StepId))
             .FirstOrDefaultAsync(ct);
 
-        return opp is null
-            ? Result.Fail<OpportunityDto>("OPPORTUNITY_NOT_FOUND")
-            : Result.Ok(opp);
+        if (opp is null)
+            return Result.Fail<OpportunityDto>("OPPORTUNITY_NOT_FOUND");
+
+        return Result.Ok(templates is null ? opp : (await new[] { opp }.WithStepsAsync(templates, ct))[0]);
     }
 }

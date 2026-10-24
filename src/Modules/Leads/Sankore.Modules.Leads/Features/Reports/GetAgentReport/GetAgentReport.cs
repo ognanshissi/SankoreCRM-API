@@ -179,7 +179,7 @@ internal sealed class GetAgentReportHandler(
                 OpenSlaBreaches: breaches.GetValueOrDefault(id),
                 Series: buckets.Select(b => new AgentReportPoint(
                     b, assignedBy.GetValueOrDefault(b), contactedBy.GetValueOrDefault(b), convertedBy.GetValueOrDefault(b))).ToList(),
-                Progression: Enum.GetValues<PipelineStage>()
+                Progression: LeadPipeline.ReportStages
                     .Select(s => new LeadReportStage(s, myLeads.Count(l => l!.PipelineStage == s)))
                     .ToList());
         }).ToList();

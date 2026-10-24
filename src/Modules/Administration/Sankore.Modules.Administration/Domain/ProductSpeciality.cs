@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Administration.Domain;
 
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -94,7 +95,12 @@ public sealed class ProductSpeciality
             IsActive       = true,
             EffectiveFrom  = effectiveFrom ?? DateOnly.FromDateTime(DateTime.UtcNow),
             CreatedAt      = DateTimeOffset.UtcNow,
-            BeneficiaryPolicy = BeneficiaryPolicy.None,
+            // A Standard product starts without KYC — the reason that category exists (the
+            // product owner's choice); an administrator can raise it. Every other category starts
+            // unconfigured, which keeps the tenant's KYC baseline.
+            BeneficiaryPolicy = category == ProductCategory.Standard
+                ? new BeneficiaryPolicy(RequiredKycTier: KycRequirement.None)
+                : BeneficiaryPolicy.None,
             AllowMultipleHoldings = true,
             KycRemotePolicy = KycRemotePolicy.Disabled,
         };

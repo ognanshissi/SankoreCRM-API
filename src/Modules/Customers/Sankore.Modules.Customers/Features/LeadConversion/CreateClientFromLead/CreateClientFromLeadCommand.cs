@@ -71,7 +71,8 @@ internal sealed record CreateClientFromLeadCommand(
     string? Profession,
     string? PreferredLanguage,
     Guid? RequestedClientId,
-    string? CustomFieldsJson = null
+    string? CustomFieldsJson = null,
+    bool KycRequired = true
 ) : IRequest<Result<CreateFromLeadResult>>, ICommand, IResourceCommand
 {
     /// <summary>ISO-8601 date format used by <see cref="DateOfBirth"/>.</summary>
@@ -114,7 +115,8 @@ internal sealed record CreateClientFromLeadCommand(
         Profession: request.Profession,
         PreferredLanguage: request.PreferredLanguage,
         RequestedClientId: request.RequestedClientId,
-        CustomFieldsJson: request.CustomFieldsJson);
+        CustomFieldsJson: request.CustomFieldsJson,
+        KycRequired: request.KycRequired);
 }
 
 /// <summary>

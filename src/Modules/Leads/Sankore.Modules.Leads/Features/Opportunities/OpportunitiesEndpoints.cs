@@ -11,6 +11,7 @@ using Sankore.Modules.Leads.Features.Opportunities.CreateOpportunity;
 using Sankore.Modules.Leads.Features.Opportunities.CreateOpportunityForCustomer;
 using Sankore.Modules.Leads.Features.Opportunities.GetOpportunity;
 using Sankore.Modules.Leads.Features.Opportunities.ListOpportunities;
+using Sankore.Modules.Leads.Features.Opportunities.MoveToStep;
 using Sankore.Modules.Leads.Features.Opportunities.UpdateOpportunity;
 using Sankore.Shared.Kernel;
 
@@ -59,6 +60,17 @@ public static class OpportunitiesEndpoints
         // PUT opportunities/{id}/stage
         group.MapPut("{id:guid}/stage", AdvanceStage)
             .WithName("AdvanceOpportunityStage")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // PUT opportunities/{id}/step
+        group.MapPut("{id:guid}/step", MoveToStep)
+            .WithName("MoveOpportunityToStep")
             .WithTags("Opportunities")
             .RequireAuthorization(Permissions.CanManageOpportunities.Code)
             .Produces(StatusCodes.Status204NoContent)
@@ -121,6 +133,26 @@ public static class OpportunitiesEndpoints
                 "CONFLICT"                 => Results.Conflict(new { error = result.Error }),
                 _ => Results.Problem(
                         title: "Stage update failed", detail: result.Error, statusCode: 422),
+            };
+    }
+
+    private static async Task<IResult> MoveToStep(
+        Guid id,
+        MoveOpportunityToStepRequest req,
+        ISender sender,
+        CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new MoveOpportunityToStepCommand(id, req.StepId, req.ExpectedUpdatedAt), ct);
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error switch
+            {
+                OpportunityErrors.NotFound => Results.NotFound(new { error = result.Error }),
+                "CONFLICT"                 => Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem(
+                        title: "Step update failed", detail: result.Error, statusCode: 422),
             };
     }
 
