@@ -38,7 +38,23 @@ public sealed record OpportunityDto(
     /// </param>
     Guid? CurrentStepId = null,
     /// <param name="Steps">The steps of its template, in order: what the screens draw.</param>
-    IReadOnlyList<ProjectTemplates.ProjectStepDto>? Steps = null);
+    IReadOnlyList<ProjectTemplates.ProjectStepDto>? Steps = null,
+    /// <param name="Contact">Who the project is for — filled on the list, for the board's search.</param>
+    ProjectContactDto? Contact = null);
+
+/// <summary>
+/// The person behind a project, as the projects board shows and searches it: the lead's name and
+/// coordinates when the project came from a lead, else the client's name and number. A client's
+/// phone and e-mail are not here: M01 keeps them encrypted and exposes no contract that reveals
+/// them to a list.
+/// </summary>
+public sealed record ProjectContactDto(
+    string Name,
+    string? FirstName,
+    string? LastName,
+    string? PhoneNumber,
+    string? Email,
+    string? ClientNumber);
 
 internal static class OpportunityStepEnrichment
 {

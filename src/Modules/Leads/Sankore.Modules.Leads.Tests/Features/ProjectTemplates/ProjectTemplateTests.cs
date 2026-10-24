@@ -247,6 +247,41 @@ public sealed class ProjectTemplateTests : IDisposable
         dto.CurrentStepId.Should().Be(dto.Steps![0].Id);
     }
 
+    [Fact]
+    public async Task Each_project_says_who_it_is_for_so_the_board_can_search_it()
+    {
+        var clientId = Guid.NewGuid();
+        Guid leadProject, clientProject;
+        await using (var db = _factory.CreateContext())
+        {
+            var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+            db.Leads.Add(lead);
+            var fromLead = Opportunity.CreateFromLead(_tenantId, lead.Id, "Projet lead", "", null, _clock);
+            var onClient = Opportunity.CreateForCustomer(_tenantId, clientId, "Projet client", "EPARGNE", null, _clock);
+            db.Opportunities.AddRange(fromLead, onClient);
+            await db.SaveChangesAsync();
+            (leadProject, clientProject) = (fromLead.Id, onClient.Id);
+        }
+
+        var customers = Substitute.For<Sankore.Modules.Customers.PublicApi.ICustomersModule>();
+        customers.GetClientSummariesAsync(_tenantId, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, Sankore.Modules.Customers.PublicApi.ClientSummary>
+            {
+                [clientId] = new(clientId, "CL-0042", "Individual", "Awa Koné", "Active", Guid.NewGuid(), null, "Approved", "Low", null),
+            });
+
+        await using var read = _factory.CreateContext();
+        var list = (await new Sankore.Modules.Leads.Features.Opportunities.ListOpportunities.ListOpportunitiesHandler(
+                read, customers: customers, tenant: new FixedTenantContext(_tenantId))
+            .Handle(new Sankore.Modules.Leads.Features.Opportunities.ListOpportunities.ListOpportunitiesQuery(), CancellationToken.None)).Value!;
+
+        var lead1 = list.Single(o => o.Id == leadProject).Contact!;
+        lead1.PhoneNumber.Should().NotBeNullOrEmpty();
+        lead1.Name.Should().NotBeNullOrEmpty();
+        list.Single(o => o.Id == clientProject).Contact.Should().Be(
+            new ProjectContactDto("Awa Koné", null, null, null, null, "CL-0042"));
+    }
+
     // ── Les commandes de gabarit ────────────────────────────────────────────
 
     [Fact]
