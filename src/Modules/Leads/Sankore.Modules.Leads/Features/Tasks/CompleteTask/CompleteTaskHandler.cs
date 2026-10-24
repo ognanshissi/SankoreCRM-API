@@ -3,6 +3,7 @@ namespace Sankore.Modules.Leads.Features.Tasks.CompleteTask;
 using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
@@ -37,6 +38,8 @@ internal sealed class CompleteTaskHandler(
         var result = task.Complete();
         if (result.IsFailure) return result;
 
+        await RecordFirstContactAsync(task, ct);
+
         await db.SaveChangesAsync(ct);
 
         if (agentId.HasValue)
@@ -51,6 +54,33 @@ internal sealed class CompleteTaskHandler(
             TaskType:        task.Type.ToString()), ct);
 
         return Result.Ok();
+    }
+
+    /// <summary>
+    /// The dispatch's « Premier contact » task marked done IS the agent declaring the call, as the
+    /// « 1er contact eu » button does. Before, only the reverse was wired (recording the contact
+    /// closed the task): completing the task left the assignment owing its first contact, so the
+    /// lead's next step came back as « Premier contact » right after the agent ticked it off, the
+    /// SLA kept running and the lead stayed « Nouveau ».
+    /// </summary>
+    private async Task RecordFirstContactAsync(CrmTask task, CancellationToken ct)
+    {
+        if (task.Type != CrmTaskType.FirstContact
+            || task.TriggerEventType != TaskTriggerEvents.LeadDispatched
+            || task.LeadId is not { } leadId)
+            return;
+
+        var lead = await db.Leads.AsTracking().FirstOrDefaultAsync(l => l.Id == leadId, ct);
+        if (lead?.CurrentAssignmentId is not { } assignmentId) return;
+
+        var assignment = await db.LeadAssignments.AsTracking()
+            .FirstOrDefaultAsync(a => a.Id == assignmentId, ct);
+        // Only the CURRENT assignment's task: one left over from a reassignment says nothing about
+        // whether the agent who has the lead now has called.
+        if (assignment is null || assignment.AgentId != task.AssignedAgentId) return;
+
+        if (assignment.RecordFirstContact(DateTimeOffset.UtcNow, FirstContactSource.AgentDeclared))
+            lead.RecordContactEstablished();
     }
 
     private bool IsSupervisor() =>

@@ -8,7 +8,10 @@ using NSubstitute;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Consumers;
 using Sankore.Modules.Leads.Features.DispatchLead.Events;
+using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Features.RecordFirstContact;
+using Sankore.Modules.Leads.Features.Tasks.CompleteTask;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Modules.Leads.Tests.TestSupport;
 using Xunit;
 
@@ -169,7 +172,51 @@ public sealed class LeadDispatchedTaskConsumerTests : IDisposable
         (await TasksAsync(lead.Id)).Single().Status.Should().Be(CrmTaskStatus.Completed);
     }
 
+    [Fact]
+    public async Task Completing_the_first_contact_task_records_the_first_contact()
+    {
+        var lead = await AddLeadAsync();
+        var deadline = DateTimeOffset.UtcNow.AddHours(4);
+        var assignment = await AssignAsync(lead.Id, deadline);
+        await DispatchAsync(lead.Id, _awa, deadline);
+        var task = (await TasksAsync(lead.Id)).Single();
+
+        var user = Substitute.For<ICurrentUser>();
+        user.Id.Returns(_awa);
+        user.Roles.Returns(Array.Empty<string>());
+        await using (var db = _db.CreateContext())
+        {
+            var result = await new CompleteTaskHandler(db, new AgentCapacityService(db), Substitute.For<IBus>(), user)
+                .Handle(new CompleteTaskCommand(task.Id), default);
+            result.IsSuccess.Should().BeTrue();
+        }
+
+        // Before, the assignment still owed its first contact: the lead's next step came back as
+        // « Premier contact » the moment the agent ticked the task off.
+        await using (var db = _db.CreateContext())
+        {
+            var stored = await db.LeadAssignments.SingleAsync(a => a.Id == assignment.Id);
+            stored.FirstContactAt.Should().NotBeNull();
+            stored.FirstContactSource.Should().Be(FirstContactSource.AgentDeclared);
+            var storedLead = await db.Leads.SingleAsync(l => l.Id == lead.Id);
+            storedLead.PipelineStage.Should().Be(PipelineStage.ContactEstablished);
+        }
+    }
+
     // ── Harness ─────────────────────────────────────────────────────────────
+
+    private async Task<LeadAssignment> AssignAsync(Guid leadId, DateTimeOffset deadline)
+    {
+        var assignment = LeadAssignment.Create(_tenantId, leadId, _awa, DispatchingStrategy.RoundRobin, 50,
+            slaDeadline: deadline, createdAt: DateTimeOffset.UtcNow);
+        await using var db = _db.CreateContext();
+        var tracked = await db.Leads.AsTracking().FirstAsync(l => l.Id == leadId);
+        tracked.AssignTo(assignment, currentAssignment: null).IsSuccess.Should().BeTrue();
+        tracked.ClearDomainEvents();
+        db.LeadAssignments.Add(assignment);
+        await db.SaveChangesAsync();
+        return assignment;
+    }
 
     private async Task<Lead> AddLeadAsync()
     {
