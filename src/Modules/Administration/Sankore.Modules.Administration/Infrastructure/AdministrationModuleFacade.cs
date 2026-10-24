@@ -481,7 +481,16 @@ internal sealed class AdministrationModuleFacade(
             .Where(f => f.TenantId == tenantId && f.Entity == entity)
             .FirstOrDefaultAsync(ct);
 
-        return Domain.Forms.EntityFormResolver.Resolve(entity, layout?.Version ?? 0, layout?.Layout);
+        // With the institution's currency: CustomFieldValues holds every Money value written through
+        // this form to it.
+        var currency = await db.CompanyInfos
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId)
+            .Select(c => c.Currency)
+            .FirstOrDefaultAsync(ct);
+
+        return Domain.Forms.EntityFormResolver.Resolve(entity, layout?.Version ?? 0, layout?.Layout)
+            with { Currency = string.IsNullOrWhiteSpace(currency) ? InstitutionCurrencies.Default : currency };
     }
 
     public async Task<ProductSummary?> GetProductAsync(

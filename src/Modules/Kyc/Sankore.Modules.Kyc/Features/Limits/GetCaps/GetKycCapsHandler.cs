@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Kyc.Features.Limits.GetCaps;
 
 using MediatR;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Kyc.Features.Files;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Kyc.Domain;
@@ -34,7 +35,8 @@ internal sealed class GetKycCapsHandler(
     IAgencyScopeProvider agencyScope,
     IKycModule kyc,
     IKycSettings settings,
-    KycVisibility? visibility = null)
+    KycVisibility? visibility = null,
+    IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<GetKycCapsQuery, Result<KycCapsDto>>
 {
     public async Task<Result<KycCapsDto>> Handle(GetKycCapsQuery request, CancellationToken ct)
@@ -86,6 +88,8 @@ internal sealed class GetKycCapsHandler(
 
         var currency = await settings.GetStringAsync(
             currentUser.TenantId, KycSettingKeys.CapsCurrency, ct);
+        if (string.IsNullOrWhiteSpace(currency))
+            currency = await institutionCurrency.GetOrDefaultAsync(currentUser.TenantId, ct);
 
         return Result.Ok(new KycCapsDto(
             CustomerId: request.CustomerId,

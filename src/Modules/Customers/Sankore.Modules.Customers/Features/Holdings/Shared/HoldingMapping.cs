@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Customers.Features.Holdings.Shared;
 
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Shared.Kernel;
 
@@ -19,6 +20,22 @@ internal static class HoldingMapping
                 currency:          dto.Currency,
                 effectiveFrom:     dto.EffectiveFrom,
                 notes:             dto.Notes);
+
+    /// <summary>
+    /// <see cref="ToSpecifics"/>, the amounts in the institution's currency — or in the one the
+    /// holding already had (<paramref name="stored"/>), if it predates a change. The currency
+    /// applies to every amount of the record; without any amount it is left as sent.
+    /// </summary>
+    internal static async Task<Result<HoldingSpecifics>> ToSpecificsAsync(
+        HoldingSpecificsDto? dto, Guid tenantId, string? stored, IInstitutionCurrency? institutionCurrency, CancellationToken ct)
+    {
+        if (dto is null || dto is { InsuredCapital: null, Premium: null, InitialDeposit: null })
+            return ToSpecifics(dto);
+
+        var currency = await institutionCurrency.ResolveAsync(tenantId, dto.Currency, stored, ct);
+        if (currency.IsFailure) return Result.Fail<HoldingSpecifics>(currency.Error!);
+        return ToSpecifics(dto with { Currency = currency.Value });
+    }
 
     internal static HoldingSpecificsDto ToDto(HoldingSpecifics specifics) => new(
         InsuredCapital:    specifics.InsuredCapital,

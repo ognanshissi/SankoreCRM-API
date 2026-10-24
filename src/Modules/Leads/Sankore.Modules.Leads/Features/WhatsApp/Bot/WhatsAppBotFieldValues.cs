@@ -8,6 +8,7 @@ using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Administration.PublicApi.Forms;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.FindDuplicates;
+using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
 
 /// <summary>
@@ -15,7 +16,10 @@ using Sankore.Shared.Kernel.ValueObject;
 /// and the tenant's lead form (the custom fields). The form is null when it could not be read —
 /// the custom fields are then neither offered nor written, the native ones go on.
 /// </summary>
-internal sealed record BotFieldContext(IReadOnlyList<ProductSummary> Catalogue, EntityFormDto? LeadForm)
+internal sealed record BotFieldContext(
+    IReadOnlyList<ProductSummary> Catalogue,
+    EntityFormDto? LeadForm,
+    string Currency = InstitutionCurrencies.Default)
 {
     /// <summary>The form's custom fields the bot may collect: live, not sensitive, not a reference to another record.</summary>
     public FormField? CustomField(string code) =>
@@ -45,7 +49,8 @@ internal sealed class WhatsAppBotFieldValues(
     ILeadEmailIndexer emailIndexer,
     IAdministrationModule admin,
     TimeProvider clock,
-    ILogger<WhatsAppBotFieldValues> logger)
+    ILogger<WhatsAppBotFieldValues> logger,
+    IInstitutionCurrency? institutionCurrency = null)
 {
     /// <summary>The catalogue and the lead form, read once per turn. Neither failing stops the turn.</summary>
     public async Task<BotFieldContext> ContextAsync(Guid tenantId, CancellationToken ct)
@@ -74,7 +79,17 @@ internal sealed class WhatsAppBotFieldValues(
             logger.LogWarning("WhatsApp bot: the lead form could not be read ({Reason}); custom fields skipped.", ex.GetType().Name);
         }
 
-        return new BotFieldContext(catalogue, form);
+        var currency = InstitutionCurrencies.Default;
+        try
+        {
+            currency = await institutionCurrency.GetOrDefaultAsync(tenantId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("WhatsApp bot: the institution's currency could not be read ({Reason}).", ex.GetType().Name);
+        }
+
+        return new BotFieldContext(catalogue, form, currency);
     }
 
     /// <summary>
@@ -108,9 +123,9 @@ internal sealed class WhatsAppBotFieldValues(
                 };
 
             case WhatsAppBotFields.DesiredAmount:
-                return WhatsAppBotEngine.ParseAmount(value) is { } amount
+                return WhatsAppBotEngine.ParseAmount(value, ctx.Currency) is { } amount
                     ? ($"{amount.Amount.ToString(CultureInfo.InvariantCulture)} {amount.Currency}", null)
-                    : (null, "Montant illisible.");
+                    : (null, $"Montant illisible, ou dans une autre monnaie que {ctx.Currency}.");
 
             case WhatsAppBotFields.Product:
             {

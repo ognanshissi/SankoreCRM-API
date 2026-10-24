@@ -17,4 +17,6 @@ public record TenantContextResponse(
     string? LogoUrl,
     string? PrimaryColor,
     string? SecondaryColor,
-    string? DefaultLanguage);
+    string? DefaultLanguage,
+    // Every amount of the institution is in it; the platform default until registration completes.
+    string Currency);

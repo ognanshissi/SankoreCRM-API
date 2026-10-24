@@ -160,17 +160,27 @@ public sealed class WhatsAppBotTests : IDisposable
         => WhatsAppBotRedactor.Redact(text).Should().Be(expected);
 
     [Theory]
-    [InlineData("500 000 FCFA", 500_000, "XOF")]
-    [InlineData("1,5 million", 1_500_000, "XOF")]
-    [InlineData("750k", 750_000, "XOF")]
-    [InlineData("2.000.000", 2_000_000, "XOF")]
-    [InlineData("3000 euros", 3_000, "EUR")]
-    public void Amounts_are_read_the_way_customers_type_them(string text, decimal amount, string currency)
+    [InlineData("500 000 FCFA", "XOF", 500_000)]
+    [InlineData("1,5 million", "XOF", 1_500_000)]
+    [InlineData("750k", "XOF", 750_000)]
+    [InlineData("2.000.000", "XOF", 2_000_000)]
+    [InlineData("3000 euros", "EUR", 3_000)]
+    [InlineData("250 000 FCFA", "XAF", 250_000)]
+    public void Amounts_are_read_the_way_customers_type_them_in_the_institution_currency(
+        string text, string institution, decimal amount)
     {
-        var money = WhatsAppBotEngine.ParseAmount(text);
+        var money = WhatsAppBotEngine.ParseAmount(text, institution);
         money!.Amount.Should().Be(amount);
-        money.Currency.Should().Be(currency);
+        money.Currency.Should().Be(institution);
     }
+
+    [Theory]
+    [InlineData("3000 euros", "XOF")]
+    [InlineData("500 000 FCFA", "EUR")]
+    [InlineData("200 dollars", "XOF")]
+    public void An_amount_named_in_another_currency_is_no_amount(string text, string institution)
+        // Every amount of the institution is in its currency: the bot asks again rather than convert.
+        => WhatsAppBotEngine.ParseAmount(text, institution).Should().BeNull();
 
     [Fact]
     public void A_text_with_no_number_is_no_amount() => WhatsAppBotEngine.ParseAmount("beaucoup").Should().BeNull();

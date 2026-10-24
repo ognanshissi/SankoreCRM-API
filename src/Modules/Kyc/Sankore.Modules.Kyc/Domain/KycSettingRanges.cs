@@ -127,7 +127,8 @@ public static class KycSettingRanges
     /// is visible on the first screen that renders an amount.
     /// </summary>
     private static string? Currency(string value)
-        => value.Length == 3 && value.All(char.IsAsciiLetter)
+        // Empty: the institution's currency.
+        => value.Length == 0 || (value.Length == 3 && value.All(char.IsAsciiLetter))
             ? null
             : "La devise est un code ISO 4217 de trois lettres, par exemple XOF.";
 }

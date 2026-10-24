@@ -12,7 +12,8 @@ internal sealed class GetHouseholdHandler(
     LeadsDbContext db,
     IAdministrationModule administration,
     LeadAccessGuard accessGuard,
-    TimeProvider clock)
+    TimeProvider clock,
+    IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<GetHouseholdQuery, Result<LeadHouseholdDto>>
 {
     public async Task<Result<LeadHouseholdDto>> Handle(
@@ -92,6 +93,10 @@ internal sealed class GetHouseholdHandler(
             })
             .ToList();
 
+        // Resources declared before they carried a currency are in the institution's.
+        var resourcesCurrency = lead.HouseholdResourcesCurrency
+            ?? (lead.HouseholdResourcesDeclaredAt is null ? null : await institutionCurrency.GetOrDefaultAsync(lead.TenantId, ct));
+
         return Result.Ok(new LeadHouseholdDto(
             LeadId:                lead.Id,
             MaxChildren:           policy?.MaxChildren,
@@ -108,7 +113,7 @@ internal sealed class GetHouseholdHandler(
                                            MonthlyIncome: lead.HouseholdMonthlyIncome,
                                            HousingCost:   lead.HouseholdHousingCost,
                                            OtherDebts:    lead.HouseholdOtherDebts,
-                                           Currency:      lead.HouseholdResourcesCurrency ?? "XOF",
+                                           Currency:      resourcesCurrency!,
                                            DeclaredAt:    declaredAt)
                                        : null));
     }

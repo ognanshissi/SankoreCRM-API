@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.Opportunities.CreateOpportunityForCusto
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.FindDuplicates;
 using Sankore.Modules.Leads.Infrastructure;
@@ -13,7 +14,8 @@ internal sealed class CreateOpportunityForCustomerHandler(
     TimeProvider clock,
     IPhoneBlindIndexer phoneBlindIndexer,
     Administration.PublicApi.IAdministrationModule? administration = null,
-    ProjectTemplates.ProjectTemplateResolver? templates = null)
+    ProjectTemplates.ProjectTemplateResolver? templates = null,
+    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<CreateOpportunityForCustomerCommand, Result<CreateOpportunityForCustomerResult>>
 {
     public async Task<Result<CreateOpportunityForCustomerResult>> Handle(
@@ -56,9 +58,14 @@ internal sealed class CreateOpportunityForCustomerHandler(
             // Could be extended to return matched lead IDs if needed.
         }
 
-        Money? amount = cmd.EstimatedAmount.HasValue && cmd.EstimatedCurrency is not null
-            ? new Money(cmd.EstimatedAmount.Value, cmd.EstimatedCurrency)
-            : null;
+        // In the institution's currency: there is no other to choose.
+        Money? amount = null;
+        if (cmd.EstimatedAmount is { } estimated)
+        {
+            var currency = await institutionCurrency.ResolveAsync(cmd.TenantId, cmd.EstimatedCurrency, stored: null, ct);
+            if (currency.IsFailure) return Result.Fail<CreateOpportunityForCustomerResult>(currency.Error!);
+            amount = new Money(estimated, currency.Value);
+        }
 
         var opp = Opportunity.CreateForCustomer(
             tenantId:          cmd.TenantId,

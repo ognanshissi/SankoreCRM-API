@@ -10,4 +10,5 @@ public sealed record UpdateCompanyInfoCommand(
     string LogoUrl,
     string PrimaryColor,
     string SecondaryColor,
-    Languages DefaultLanguage) : IRequest<Result>, ICommand;
+    Languages DefaultLanguage,
+    string? Currency = null) : IRequest<Result>, ICommand;

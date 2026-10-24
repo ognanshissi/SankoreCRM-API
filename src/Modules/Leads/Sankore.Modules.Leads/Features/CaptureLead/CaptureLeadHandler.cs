@@ -31,7 +31,8 @@ public sealed class CaptureLeadHandler(
     ILeadEmailIndexer emailIndexer,
     ICustomersModule customers,
     IAdministrationModule administration,
-    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
+    IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<CaptureLeadCommand, Result<CaptureLeadResult>>
 {
     public async Task<Result<CaptureLeadResult>> Handle(
@@ -48,6 +49,15 @@ public sealed class CaptureLeadHandler(
 
         if (customFields.IsFailure)
             return Result.Fail<CaptureLeadResult>(customFields.Error!);
+
+        // ── The desired amount, in the institution's currency ────────────────
+        Money? desiredAmount = null;
+        if (cmd.DesiredAmount is { } desired)
+        {
+            var currency = await institutionCurrency.ResolveAsync(cmd.TenantId, cmd.DesiredCurrency, stored: null, ct);
+            if (currency.IsFailure) return Result.Fail<CaptureLeadResult>(currency.Error!);
+            desiredAmount = new Money(desired, currency.Value);
+        }
 
         // ── Blind indexes (HMAC-SHA256) — the searchable half of the protected columns ────
         var phoneIndex = phoneBlindIndexer.Compute(cmd.PhoneNumber);
@@ -174,9 +184,7 @@ public sealed class CaptureLeadHandler(
                                       : "Client renseigné par l'appelant à la capture",
             gender:               cmd.Gender,
             dateOfBirth:          cmd.DateOfBirth,
-            desiredAmount:        cmd.DesiredAmount.HasValue && cmd.DesiredCurrency is not null
-                                      ? new Money(cmd.DesiredAmount.Value, cmd.DesiredCurrency)
-                                      : null,
+            desiredAmount:        desiredAmount,
             campaign:             cmd.Campaign,
             channel:              cmd.Channel,
             comment:              cmd.Comment,

@@ -12,7 +12,8 @@ public record CompanyInfoDto(
     string LogoUrl,
     string PrimaryColor,
     string SecondaryColor,
-    string DefaultLanguage);
+    string DefaultLanguage,
+    string Currency);
 
 internal sealed class GetCompanyInfoHandler(AdministrationDbContext db)
     : IRequestHandler<GetCompanyInfoQuery, CompanyInfoDto?>
@@ -28,7 +29,8 @@ internal sealed class GetCompanyInfoHandler(AdministrationDbContext db)
                 c.LogoUrl,
                 c.PrimaryColor,
                 c.SecondaryColor,
-                c.DefaultLanguage.ToString()))
+                c.DefaultLanguage.ToString(),
+                c.Currency))
             .FirstOrDefaultAsync(cancellationToken);
 
         return info;

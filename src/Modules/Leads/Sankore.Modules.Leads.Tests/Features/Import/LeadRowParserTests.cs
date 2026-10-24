@@ -106,12 +106,14 @@ public sealed class LeadRowParserTests
     }
 
     [Fact]
-    public void An_amount_without_a_currency_is_rejected()
+    public void An_amount_without_a_currency_is_accepted_for_the_institution_currency()
     {
         var row = ValidRow() with { DesiredAmount = "150000" };
 
-        LeadRowParser.Parse(row, NoDefaults, LeadSource.FileImport)
-            .Errors.Should().ContainSingle().Which.Should().Contain("DesiredCurrency is required");
+        // The capture gives it the institution's currency (InstitutionCurrencies.Resolve).
+        var result = LeadRowParser.Parse(row, NoDefaults, LeadSource.FileImport);
+        result.IsValid.Should().BeTrue();
+        result.Row!.DesiredCurrency.Should().BeNull();
     }
 
     [Fact]

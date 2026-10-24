@@ -146,8 +146,9 @@ public static class KycSettingKeys
             "Largeur de la fenêtre de calcul du flux, en jours glissants."),
         new(SimplifiedAlertPct, "80", TypeInt,
             "Pourcentage du plafond de flux qui déclenche l'alerte à l'agent."),
-        new(CapsCurrency, "XOF", TypeString,
-            "Devise des plafonds du KYC simplifié (code ISO 4217)."),
+        // Vide : la monnaie de l'institution (profil de l'entreprise), celle de tous ses montants.
+        new(CapsCurrency, "", TypeString,
+            "Devise des plafonds du KYC simplifié (code ISO 4217). Vide : la monnaie de l'institution."),
 
         new(ReviewYearsHigh, "1", TypeInt,
             "Périodicité de revue pour un risque élevé, en années."),

@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.Opportunities.CreateOpportunity;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
@@ -11,7 +12,8 @@ internal sealed class CreateOpportunityHandler(
     LeadsDbContext db,
     TimeProvider clock,
     Administration.PublicApi.IAdministrationModule? administration = null,
-    ProjectTemplates.ProjectTemplateResolver? templates = null)
+    ProjectTemplates.ProjectTemplateResolver? templates = null,
+    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<CreateOpportunityCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
@@ -24,9 +26,14 @@ internal sealed class CreateOpportunityHandler(
         if (await ProjectTemplates.ProjectCloseDateRule.MissingAsync(templates, cmd.Product, cmd.ExpectedCloseDate, ct))
             return Result.Fail<Guid>(ProjectTemplateErrors.CloseDateRequired);
 
-        Money? amount = cmd.EstimatedAmount.HasValue && cmd.EstimatedCurrency is not null
-            ? new Money(cmd.EstimatedAmount.Value, cmd.EstimatedCurrency)
-            : null;
+        // In the institution's currency: there is no other to choose.
+        Money? amount = null;
+        if (cmd.EstimatedAmount is { } estimated)
+        {
+            var currency = await institutionCurrency.ResolveAsync(cmd.TenantId, cmd.EstimatedCurrency, stored: null, ct);
+            if (currency.IsFailure) return Result.Fail<Guid>(currency.Error!);
+            amount = new Money(estimated, currency.Value);
+        }
 
         var opp = Opportunity.CreateFromLead(
             tenantId:          cmd.TenantId,

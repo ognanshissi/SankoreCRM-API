@@ -632,6 +632,14 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("XOF")
+                        .HasColumnName("currency");
+
                     b.Property<string>("DefaultLanguage")
                         .IsRequired()
                         .HasColumnType("text")

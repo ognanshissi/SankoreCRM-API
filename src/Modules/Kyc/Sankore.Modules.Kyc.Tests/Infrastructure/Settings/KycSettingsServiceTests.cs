@@ -40,7 +40,10 @@ public sealed class KycSettingsServiceTests : IDisposable
         var all = await Service().GetAllAsync(_tenantId, CancellationToken.None);
 
         all.Should().HaveCount(KycSettingKeys.Defaults.Count);
-        all.Values.Should().OnlyContain(v => !string.IsNullOrWhiteSpace(v));
+        // Except the caps' currency: empty IS its default — the institution's currency, set on the
+        // company profile (owner, 2026-10-24) — and GetKycCapsHandler reads it there.
+        all.Where(kv => kv.Key != KycSettingKeys.CapsCurrency)
+            .Select(kv => kv.Value).Should().OnlyContain(v => !string.IsNullOrWhiteSpace(v));
     }
 
     [Fact]

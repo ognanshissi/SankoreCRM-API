@@ -130,9 +130,8 @@ public static class LeadRowParser
                 errors.Add($"DesiredAmount '{rawAmount}' is not a number.");
         }
 
+        // Optional: the capture gives an amount without one the institution's currency.
         var currency = Clean(raw.DesiredCurrency);
-        if (desiredAmount.HasValue && currency is null)
-            errors.Add("DesiredCurrency is required when DesiredAmount is set.");
 
         var ownerId  = ParseGuid(raw.OwnerId, "OwnerId", errors);
         var agencyId = ParseGuid(raw.AgencyId, "AgencyId", errors);

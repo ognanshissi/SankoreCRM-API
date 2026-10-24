@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Holdings.Subscribe;
 
 using MediatR;
+using Sankore.Modules.Administration.PublicApi;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Features.Holdings.Shared;
@@ -10,7 +11,8 @@ using Sankore.Shared.Kernel;
 internal sealed class SubscribeToProductHandler(
     CustomersDbContext db,
     HoldingWriteContext context,
-    DesignationSubjectValidator subjects)
+    DesignationSubjectValidator subjects,
+    IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<SubscribeToProductCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(SubscribeToProductCommand cmd, CancellationToken ct)
@@ -42,7 +44,8 @@ internal sealed class SubscribeToProductHandler(
                 return Result.Fail<Guid>(CustomerErrors.HoldingAlreadyHeld);
         }
 
-        var specifics = HoldingMapping.ToSpecifics(cmd.Specifics);
+        var specifics = await HoldingMapping.ToSpecificsAsync(
+            cmd.Specifics, client.Value.TenantId, stored: null, institutionCurrency, ct);
         if (specifics.IsFailure)
             return Result.Fail<Guid>(specifics.Error!);
 

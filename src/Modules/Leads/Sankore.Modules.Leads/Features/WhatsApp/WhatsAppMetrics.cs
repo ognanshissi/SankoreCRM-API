@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
@@ -71,7 +72,8 @@ internal sealed record GetWhatsAppMetricsQuery(DateTimeOffset? From, DateTimeOff
 /// </para>
 /// </summary>
 internal sealed class GetWhatsAppMetricsHandler(
-    LeadsDbContext db, WhatsAppPerimeter perimeter, ICurrentUser me, ILeadSettings settings, TimeProvider clock)
+    LeadsDbContext db, WhatsAppPerimeter perimeter, ICurrentUser me, ILeadSettings settings, TimeProvider clock,
+    IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<GetWhatsAppMetricsQuery, Result<WhatsAppMetricsDto>>
 {
     private static readonly TimeSpan MaxPeriod = TimeSpan.FromDays(366);
@@ -192,7 +194,9 @@ internal sealed class GetWhatsAppMetricsHandler(
                 .OrderByDescending(r => r.Count)
                 .ToList(),
             cost,
-            string.IsNullOrWhiteSpace(currency) ? "XOF" : currency.Trim(),
+            string.IsNullOrWhiteSpace(currency)
+                ? await institutionCurrency.GetOrDefaultAsync(me.TenantId, ct)
+                : currency.Trim(),
             cost.Count > 0 && cost.All(c => c.EstimatedCost is not null) ? cost.Sum(c => c.EstimatedCost) : null));
     }
 

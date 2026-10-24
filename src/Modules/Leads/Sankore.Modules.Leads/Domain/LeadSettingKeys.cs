@@ -180,8 +180,10 @@ public static class LeadSettingKeys
         new(WhatsAppTemplateUnitPrices, "{}", TypeJson,
             "Price of one WhatsApp template per Meta category, for the cost estimate, e.g. "
             + "{\"MARKETING\": 45, \"UTILITY\": 10}. Empty: counts only."),
-        new(WhatsAppPriceCurrency, "XOF", TypeString,
-            "Currency of the WhatsApp template prices."),
+        // Empty: the institution's currency (company profile) — what Meta bills is the tenant's
+        // business, and a tenant billed in another currency sets it here.
+        new(WhatsAppPriceCurrency, "", TypeString,
+            "Currency of the WhatsApp template prices. Empty: the institution's currency."),
     ];
 
     /// <summary>

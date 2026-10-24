@@ -1,4 +1,5 @@
 using FluentValidation;
+using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.CompanyInfo.UpdateCompanyInfo;
 
@@ -12,5 +13,9 @@ internal sealed class UpdateCompanyInfoValidator : AbstractValidator<UpdateCompa
         RuleFor(x => x.PrimaryColor).MaximumLength(10);
         RuleFor(x => x.SecondaryColor).MaximumLength(10);
         RuleFor(x => x.DefaultLanguage).IsInEnum();
+        RuleFor(x => x.Currency)
+            .Must(InstitutionCurrencies.IsSupported)
+            .When(x => x.Currency is not null)
+            .WithMessage("Devise non prise en charge.");
     }
 }

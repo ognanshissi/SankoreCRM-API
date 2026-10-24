@@ -79,7 +79,7 @@ public static class CustomFieldValues
                     continue;
                 }
 
-                var normalised = Normalise(field, raw);
+                var normalised = Normalise(field, raw, form.Currency, StoredCurrency(merged, key));
                 if (normalised.IsFailure)
                     return Result.Fail<string?>(normalised.Error!);
 
@@ -98,7 +98,7 @@ public static class CustomFieldValues
                 if (field.IsArchived || field.DefaultValue is null) continue;
                 if (merged.ContainsKey(field.Key) || (changes?.ContainsKey(field.Key) ?? false)) continue;
 
-                var normalised = Normalise(field, JsonSerializer.SerializeToElement(field.DefaultValue, Json));
+                var normalised = Normalise(field, JsonSerializer.SerializeToElement(field.DefaultValue, Json), form.Currency, stored: null);
                 if (normalised.IsSuccess)
                     merged[field.Key] = normalised.Value;
             }
@@ -217,6 +217,7 @@ public static class CustomFieldValues
             "CUSTOM_FIELD_OUT_OF_RANGE" => "valeur hors des limites du champ",
             "CUSTOM_FIELD_TOO_LONG" => "texte trop long",
             "CUSTOM_FIELD_PATTERN_MISMATCH" => "format non respecté",
+            "CUSTOM_FIELD_CURRENCY_NOT_INSTITUTION" => "montant dans une autre monnaie que celle de l'institution",
             "CUSTOM_FIELDS_UNAVAILABLE" => "réglages du formulaire indisponibles, relancez l'import",
             _ => "valeur refusée",
         };
@@ -354,7 +355,16 @@ public static class CustomFieldValues
     private static bool IsBlankString(JsonElement raw)
         => raw.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(raw.GetString());
 
-    private static Result<JsonNode?> Normalise(FormField field, JsonElement raw)
+    /// <summary>The currency a Money value already stored under <paramref name="key"/> has, if any.</summary>
+    private static string? StoredCurrency(JsonObject merged, string key) =>
+        merged[key] is JsonObject money && money["currency"] is JsonValue code && code.TryGetValue<string>(out var c) ? c : null;
+
+    /// <param name="institution">
+    /// The form's currency (<see cref="EntityFormDto.Currency"/>): a Money value takes it when sent
+    /// bare and must be in it — or in <paramref name="stored"/>, its own before a change of currency.
+    /// Null: no constraint, a bare amount takes <see cref="InstitutionCurrencies.Default"/>.
+    /// </param>
+    private static Result<JsonNode?> Normalise(FormField field, JsonElement raw, string? institution = null, string? stored = null)
     {
         var key = field.Key;
         Result<JsonNode?> Invalid() => Result.Fail<JsonNode?>($"CUSTOM_FIELD_INVALID:{key}");
@@ -413,9 +423,11 @@ public static class CustomFieldValues
                 if (raw.ValueKind is JsonValueKind.String or JsonValueKind.Number)
                 {
                     if (!TryReadMoneyText(raw.ValueKind == JsonValueKind.Number ? raw.GetRawText() : raw.GetString()!,
-                            out var textAmount, out var textCurrency))
+                            out var textAmount, out var textCurrency, institution))
                         return Invalid();
                     if (OutOfRange(field, textAmount)) return Result.Fail<JsonNode?>($"CUSTOM_FIELD_OUT_OF_RANGE:{key}");
+                    if (!InInstitutionCurrency(textCurrency, institution, stored))
+                        return Result.Fail<JsonNode?>($"CUSTOM_FIELD_CURRENCY_NOT_INSTITUTION:{key}");
                     return Result.Ok<JsonNode?>(new JsonObject { ["amount"] = textAmount, ["currency"] = textCurrency });
                 }
 
@@ -429,6 +441,8 @@ public static class CustomFieldValues
                 var currency = currencyRaw.GetString()!.Trim().ToUpperInvariant();
                 if (currency.Length != 3 || !currency.All(char.IsAsciiLetterUpper)) return Invalid();
                 if (OutOfRange(field, amount)) return Result.Fail<JsonNode?>($"CUSTOM_FIELD_OUT_OF_RANGE:{key}");
+                if (!InInstitutionCurrency(currency, institution, stored))
+                    return Result.Fail<JsonNode?>($"CUSTOM_FIELD_CURRENCY_NOT_INSTITUTION:{key}");
 
                 return Result.Ok<JsonNode?>(new JsonObject { ["amount"] = amount, ["currency"] = currency });
             }
@@ -542,12 +556,16 @@ public static class CustomFieldValues
         return false;
     }
 
-    /// <summary>The currency a bare amount takes — the zone this platform serves.</summary>
-    public const string DefaultCurrency = "XOF";
+    /// <summary>The currency a bare amount takes when the form carries none — the zone this platform first served.</summary>
+    public const string DefaultCurrency = InstitutionCurrencies.Default;
 
-    private static bool TryReadMoneyText(string text, out decimal amount, out string currency)
+    /// <summary>No institution currency (a form without one): any currency, as before.</summary>
+    private static bool InInstitutionCurrency(string currency, string? institution, string? stored) =>
+        institution is null || InstitutionCurrencies.Resolve(currency, institution, stored).IsSuccess;
+
+    private static bool TryReadMoneyText(string text, out decimal amount, out string currency, string? institution = null)
     {
-        currency = DefaultCurrency;
+        currency = string.IsNullOrWhiteSpace(institution) ? DefaultCurrency : institution.Trim().ToUpperInvariant();
         var parts = text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
         var code = parts.FirstOrDefault(p => p.Length == 3 && p.All(char.IsAsciiLetter));
         if (code is not null)

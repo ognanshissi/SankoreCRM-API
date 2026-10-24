@@ -29,7 +29,9 @@ internal static class ProductFormGate
         CancellationToken ct)
     {
         var layout = await db.EntityFormLayouts.FirstOrDefaultAsync(f => f.Entity == FormEntity.Product, ct);
-        var form = EntityFormResolver.Resolve(FormEntity.Product, layout?.Version ?? 0, layout?.Layout);
+        var currency = await db.CompanyInfos.Select(c => c.Currency).FirstOrDefaultAsync(ct);
+        var form = EntityFormResolver.Resolve(FormEntity.Product, layout?.Version ?? 0, layout?.Layout)
+            with { Currency = string.IsNullOrWhiteSpace(currency) ? InstitutionCurrencies.Default : currency };
 
         if (isCreate)
         {

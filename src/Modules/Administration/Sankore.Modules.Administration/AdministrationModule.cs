@@ -93,6 +93,7 @@ public static class AdministrationModule
             sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
+        services.AddScoped<IInstitutionCurrency, InstitutionCurrency>();
 
         // Paid modules: the registry (Sankore.Admin) holds them; this writes on the tenant's
         // behalf through the named client AddTenantStore registers.

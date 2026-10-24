@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.LeadSources.UpdateLeadSource;
 
 using MediatR;
+using Sankore.Modules.Administration.PublicApi;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Leads.Features.LeadSources.Events;
@@ -11,7 +12,8 @@ using Sankore.Shared.Kernel.ValueObject;
 
 internal sealed class UpdateLeadSourceHandler(
     LeadsDbContext db,
-    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
+    IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<UpdateLeadSourceCommand, Result>
 {
     public async Task<Result> Handle(UpdateLeadSourceCommand cmd, CancellationToken ct)
@@ -25,9 +27,16 @@ internal sealed class UpdateLeadSourceHandler(
         if (source.Version != cmd.ExpectedVersion)
             return Result.Fail("CONFLICT");
 
-        Money? costPerLead = cmd.CostPerLead.HasValue && cmd.CostCurrency is not null
-            ? new Money(cmd.CostPerLead.Value, cmd.CostCurrency)
-            : null;
+        // In the institution's currency — or the one this cost already had, if it predates a change.
+        // Before, a cost sent without a currency was dropped silently.
+        Money? costPerLead = null;
+        if (cmd.CostPerLead is { } cost)
+        {
+            var currency = await institutionCurrency.ResolveAsync(
+                source.TenantId, cmd.CostCurrency, source.CostPerLead?.Currency, ct);
+            if (currency.IsFailure) return currency;
+            costPerLead = new Money(cost, currency.Value);
+        }
 
         var changedFields = source.Update(
             label:                cmd.Label,

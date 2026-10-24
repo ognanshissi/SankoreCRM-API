@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.LeadSources.CreateLeadSource;
 
 using MediatR;
+using Sankore.Modules.Administration.PublicApi;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Leads.Domain;
@@ -12,7 +13,8 @@ using Sankore.Shared.Kernel.ValueObject;
 
 internal sealed class CreateLeadSourceHandler(
     LeadsDbContext db,
-    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
+    IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<CreateLeadSourceCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
@@ -24,9 +26,14 @@ internal sealed class CreateLeadSourceHandler(
         if (codeExists)
             return Result.Fail<Guid>("LEAD_SOURCE_CODE_ALREADY_EXISTS");
 
-        Money? costPerLead = cmd.CostPerLead.HasValue && cmd.CostCurrency is not null
-            ? new Money(cmd.CostPerLead.Value, cmd.CostCurrency)
-            : null;
+        // In the institution's currency. Before, a cost sent without a currency was dropped silently.
+        Money? costPerLead = null;
+        if (cmd.CostPerLead is { } cost)
+        {
+            var currency = await institutionCurrency.ResolveAsync(cmd.TenantId, cmd.CostCurrency, stored: null, ct);
+            if (currency.IsFailure) return Result.Fail<Guid>(currency.Error!);
+            costPerLead = new Money(cost, currency.Value);
+        }
 
         var source = LeadSourceConfig.Create(
             tenantId:             cmd.TenantId,

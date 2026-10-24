@@ -82,12 +82,13 @@ public sealed class ClientsValidatorTests
     }
 
     [Fact]
-    public void Rejects_a_declared_income_without_its_currency()
+    public void Accepts_a_declared_income_without_currency_for_the_institution_one()
     {
+        // The handler gives it the institution's currency (InstitutionCurrencies.Resolve).
         var result = new CreateIndividualClientValidator()
             .Validate(CreateCommand() with { DeclaredIncome = 500000m, DeclaredIncomeCurrency = null });
 
-        result.IsValid.Should().BeFalse();
+        result.IsValid.Should().BeTrue();
     }
 
     [Fact]

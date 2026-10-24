@@ -23,9 +23,9 @@ internal sealed class UpdateLeadValidator : AbstractValidator<UpdateLeadCommand>
         RuleFor(x => x.DesiredAmount)
             .GreaterThan(0).When(x => x.DesiredAmount.HasValue);
 
+        // Optional: an amount without one takes the institution's currency (the handler decides).
         RuleFor(x => x.DesiredCurrency)
-            .NotEmpty().WithMessage("DesiredCurrency is required when DesiredAmount is provided.")
             .Length(3).WithMessage("Currency must be an ISO 4217 code (3 letters).")
-            .When(x => x.DesiredAmount.HasValue);
+            .When(x => x.DesiredAmount.HasValue && !string.IsNullOrWhiteSpace(x.DesiredCurrency));
     }
 }

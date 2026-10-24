@@ -45,11 +45,7 @@ public sealed class CreateIndividualClientValidator : AbstractValidator<CreateIn
         RuleFor(x => x.DeclaredIncomeCurrency)
             .Length(3)
             .When(x => !string.IsNullOrWhiteSpace(x.DeclaredIncomeCurrency));
-
-        RuleFor(x => x.DeclaredIncomeCurrency)
-            .NotEmpty()
-            .When(x => x.DeclaredIncome.HasValue)
-            .WithMessage("A declared income requires its currency.");
+        // Optional: an income without one takes the institution's currency (the handler decides).
 
         RuleFor(x => x.PreferredLanguage).MaximumLength(10);
 

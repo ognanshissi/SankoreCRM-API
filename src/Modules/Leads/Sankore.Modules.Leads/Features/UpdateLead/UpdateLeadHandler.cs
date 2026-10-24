@@ -17,7 +17,8 @@ internal sealed class UpdateLeadHandler(
     LeadsDbContext db,
     ILeadEmailIndexer emailIndexer,
     IAdministrationModule administration,
-    ILogger<UpdateLeadHandler> logger)
+    ILogger<UpdateLeadHandler> logger,
+    IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<UpdateLeadCommand, Result>
 {
     public async Task<Result> Handle(UpdateLeadCommand cmd, CancellationToken ct)
@@ -33,6 +34,16 @@ internal sealed class UpdateLeadHandler(
             return Result.Fail(LeadConcurrency.ConflictError);
 
 
+        // In the institution's currency — or the one this amount already had, if it predates a change.
+        Money? desiredAmount = null;
+        if (cmd.DesiredAmount is { } desired)
+        {
+            var currency = await institutionCurrency.ResolveAsync(
+                lead.TenantId, cmd.DesiredCurrency, lead.DesiredAmount?.Currency, ct);
+            if (currency.IsFailure) return currency;
+            desiredAmount = new Money(desired, currency.Value);
+        }
+
         GeoPoint? location = null;
         if (cmd.Latitude.HasValue && cmd.Longitude.HasValue)
             location = new GeoPoint(cmd.Latitude.Value, cmd.Longitude.Value);
@@ -44,9 +55,7 @@ internal sealed class UpdateLeadHandler(
             gender:           cmd.Gender,
             dateOfBirth:      cmd.DateOfBirth,
             interestedProduct: cmd.InterestedProduct,
-            desiredAmount:    cmd.DesiredAmount.HasValue && cmd.DesiredCurrency is not null
-                                  ? new Money(cmd.DesiredAmount.Value, cmd.DesiredCurrency)
-                                  : null,
+            desiredAmount:    desiredAmount,
             preferredLanguage: cmd.PreferredLanguage,
             campaign:         cmd.Campaign,
             comment:          cmd.Comment,

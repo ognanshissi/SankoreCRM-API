@@ -41,7 +41,8 @@ internal sealed class CreateIndividualClientHandler(
     IPhoneticKeyCalculator phoneticKeys,
     [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
     IAdministrationModule? administration = null,
-    ILogger<CreateIndividualClientHandler>? logger = null
+    ILogger<CreateIndividualClientHandler>? logger = null,
+    IInstitutionCurrency? institutionCurrency = null
 ) : IRequestHandler<CreateIndividualClientCommand, Result<CreateClientResult>>
 {
     public async Task<Result<CreateClientResult>> Handle(
@@ -146,6 +147,15 @@ internal sealed class CreateIndividualClientHandler(
             ? encryptor.Encrypt(cmd.DeclaredIncome.Value.ToString(CultureInfo.InvariantCulture))
             : null;
 
+        // A declared income is in the institution's currency: there is no other to choose.
+        string? declaredIncomeCurrency = null;
+        if (cmd.DeclaredIncome.HasValue)
+        {
+            var currency = await institutionCurrency.ResolveAsync(tenantId, cmd.DeclaredIncomeCurrency, stored: null, ct);
+            if (currency.IsFailure) return Result.Fail<CreateClientResult>(currency.Error!);
+            declaredIncomeCurrency = currency.Value;
+        }
+
         var encryptedDocumentNumber = encryptor.Encrypt(documentNumber);
 
         // ── 7. Aggregate ─────────────────────────────────────────────────────
@@ -169,7 +179,7 @@ internal sealed class CreateIndividualClientHandler(
             profession: cmd.Profession,
             employer: cmd.Employer,
             encryptedDeclaredIncome: encryptedDeclaredIncome,
-            declaredIncomeCurrency: cmd.DeclaredIncomeCurrency,
+            declaredIncomeCurrency: declaredIncomeCurrency,
             // Blank falls back to the module default inside the aggregate.
             preferredLanguage: cmd.PreferredLanguage ?? string.Empty,
             docType: cmd.IdentityDocumentType,

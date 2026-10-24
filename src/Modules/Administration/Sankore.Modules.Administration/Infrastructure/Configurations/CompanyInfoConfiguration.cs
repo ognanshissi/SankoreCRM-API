@@ -21,6 +21,7 @@ public class CompanyInfoConfiguration: IEntityTypeConfiguration<CompanyInfo>
         
         builder.Property(b => b.PrimaryColor).HasMaxLength(10);
         builder.Property(b => b.SecondaryColor).HasMaxLength(10);
+        builder.Property(b => b.Currency).HasMaxLength(3).IsRequired().HasDefaultValue(InstitutionCurrencies.Default);
 
         builder.HasIndex(b => b.TenantId);
 

@@ -1,5 +1,7 @@
 namespace Sankore.Modules.Administration.PublicApi.Forms;
 
+using Sankore.Shared.Kernel;
+
 /// <summary>
 /// The three entities whose form a tenant lays out (dynamic forms, lot 1).
 ///
@@ -130,8 +132,14 @@ public sealed record FormField(
 /// <c>expectedVersion</c> when saving, so two administrators editing at once cannot overwrite each
 /// other.
 /// </param>
+/// <param name="Currency">
+/// The institution's currency, which every Money value written through this form must be in (or
+/// keep the one it already has). Null — a test double, a form read without its tenant — leaves
+/// Money values as sent, a bare amount taking <see cref="InstitutionCurrencies.Default"/>.
+/// </param>
 public sealed record EntityFormDto(
     FormEntity Entity,
     int Version,
     IReadOnlyList<FormSection> Sections,
-    IReadOnlyList<FormField> Fields);
+    IReadOnlyList<FormField> Fields,
+    string? Currency = null);

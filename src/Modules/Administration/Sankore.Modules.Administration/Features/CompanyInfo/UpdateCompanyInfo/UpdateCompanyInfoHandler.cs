@@ -23,7 +23,8 @@ internal sealed class UpdateCompanyInfoHandler(
             request.LogoUrl,
             request.PrimaryColor,
             request.SecondaryColor,
-            request.DefaultLanguage);
+            request.DefaultLanguage,
+            request.Currency);
 
         await db.SaveChangesAsync(ct);
 

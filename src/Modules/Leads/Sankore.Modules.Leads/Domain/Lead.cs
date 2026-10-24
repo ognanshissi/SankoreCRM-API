@@ -1571,7 +1571,8 @@ public sealed class Lead : AggregateRoot
         HouseholdOtherDebts    = otherDebts;
 
         var declared = monthlyIncome is not null || housingCost is not null || otherDebts is not null;
-        HouseholdResourcesCurrency   = declared ? (Blank(currency)?.ToUpperInvariant() ?? "XOF") : null;
+        // The handler resolves the institution's currency; the default only guards a caller that did not.
+        HouseholdResourcesCurrency   = declared ? (Blank(currency)?.ToUpperInvariant() ?? InstitutionCurrencies.Default) : null;
         HouseholdResourcesDeclaredAt = declared ? now : null;
 
         UpdatedAt = now;

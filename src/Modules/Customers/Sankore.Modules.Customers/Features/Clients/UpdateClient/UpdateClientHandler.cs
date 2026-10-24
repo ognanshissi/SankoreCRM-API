@@ -29,7 +29,8 @@ internal sealed class UpdateClientHandler(
     IAgencyScopeProvider agencyScope,
     IFieldEncryptor encryptor,
     IAdministrationModule? administration = null,
-    ILogger<UpdateClientHandler>? logger = null
+    ILogger<UpdateClientHandler>? logger = null,
+    IInstitutionCurrency? institutionCurrency = null
 ) : IRequestHandler<UpdateClientCommand, Result>
 {
     public async Task<Result> Handle(UpdateClientCommand cmd, CancellationToken ct)
@@ -65,12 +66,22 @@ internal sealed class UpdateClientHandler(
             ? encryptor.Encrypt(cmd.DeclaredIncome.Value.ToString(CultureInfo.InvariantCulture))
             : null;
 
+        // In the institution's currency — or the one the income already had, if it predates a change.
+        string? declaredIncomeCurrency = null;
+        if (cmd.DeclaredIncome.HasValue || !string.IsNullOrWhiteSpace(cmd.DeclaredIncomeCurrency))
+        {
+            var currency = await institutionCurrency.ResolveAsync(
+                tenantId, cmd.DeclaredIncomeCurrency, client.DeclaredIncomeCurrency, ct);
+            if (currency.IsFailure) return currency;
+            declaredIncomeCurrency = currency.Value;
+        }
+
         var update = client.UpdateNonSensitive(
             profession: cmd.Profession,
             employer: cmd.Employer,
             maritalStatus: cmd.MaritalStatus,
             encryptedDeclaredIncome: encryptedDeclaredIncome,
-            declaredIncomeCurrency: cmd.DeclaredIncomeCurrency,
+            declaredIncomeCurrency: declaredIncomeCurrency,
             preferredLanguage: cmd.PreferredLanguage,
             actor: actor);
 

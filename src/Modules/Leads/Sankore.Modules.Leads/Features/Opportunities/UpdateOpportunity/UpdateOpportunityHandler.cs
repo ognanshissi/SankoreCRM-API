@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.Opportunities.UpdateOpportunity;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
@@ -11,7 +12,8 @@ internal sealed class UpdateOpportunityHandler(
     LeadsDbContext db,
     TimeProvider clock,
     Administration.PublicApi.IAdministrationModule? administration = null,
-    ProjectTemplates.ProjectTemplateResolver? templates = null)
+    ProjectTemplates.ProjectTemplateResolver? templates = null,
+    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<UpdateOpportunityCommand, Result>
 {
     public async Task<Result> Handle(UpdateOpportunityCommand cmd, CancellationToken ct)
@@ -26,12 +28,17 @@ internal sealed class UpdateOpportunityHandler(
         if (opportunity.IsStale(cmd.ExpectedUpdatedAt))
             return Result.Fail(LeadConcurrency.ConflictError);
 
-        // The amount is a value object: both halves or neither. A currency without an amount would
-        // silently keep the old amount under a new currency, which is how a figure changes meaning
-        // without anybody editing it.
-        var amount = cmd.EstimatedAmount is { } value && !string.IsNullOrWhiteSpace(cmd.EstimatedCurrency)
-            ? new Money(value, cmd.EstimatedCurrency)
-            : null;
+        // A currency comes only with an amount: alone, it would keep the old amount under a new
+        // currency, which is how a figure changes meaning without anybody editing it. The amount is
+        // in the institution's currency — or the one it already had, if it predates a change.
+        Money? amount = null;
+        if (cmd.EstimatedAmount is { } value)
+        {
+            var currency = await institutionCurrency.ResolveAsync(
+                opportunity.TenantId, cmd.EstimatedCurrency, opportunity.EstimatedAmount?.Currency, ct);
+            if (currency.IsFailure) return currency;
+            amount = new Money(value, currency.Value);
+        }
 
         var previousProduct = opportunity.Product;
 

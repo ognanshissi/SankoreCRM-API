@@ -3075,6 +3075,26 @@ also gets the `task.assigned` e-mail.
 Front: « Nouvelle tâche » on Ma journée (`NewTaskDrawer`), the page `/tasks/:taskId`
 (`TaskPage`), « Ouvrir la fiche » from the work drawer.
 
+### The institution's currency: one per tenant, set by its administrator
+
+`CompanyInfo.Currency` (migration `AddInstitutionCurrency`, default XOF), edited on Paramétrage ›
+Entreprise and served to the front in `TenantContextResponse.Currency`. Owner's choices (2026-10-24):
+**one currency** — no currency picker anywhere — and **a free change, without conversion**: an amount
+keeps the currency it was typed in, only new amounts take the new one.
+
+Every write of a user-typed amount resolves its currency through
+`IInstitutionCurrency.ResolveAsync(tenantId, requested, stored)` (Administration.PublicApi) →
+`InstitutionCurrencies.Resolve`: none given → the institution's; the institution's or the one this
+amount ALREADY HAS (typed before a change — refusing it would block every edit) → kept; anything
+else → `CURRENCY_NOT_INSTITUTION`. Handlers take `IInstitutionCurrency? = null` (null = the default,
+for hand-built test handlers). Covered: lead capture/update/import, projects (3 handlers), household
+resources, lead-source cost, client declared income, holding terms, the WhatsApp bot (an amount the
+customer names in another currency is no amount). Custom Money fields: `EntityFormDto.Currency`,
+filled by the facade and `ProductFormGate`, makes `CustomFieldValues.Apply` refuse
+`CUSTOM_FIELD_CURRENCY_NOT_INSTITUTION:<key>`; a form without one (test doubles) accepts any, as
+before. Settings `whatsapp-price-currency` and `caps-currency` default to empty = the institution's.
+Amounts from external systems (core banking, insurers) keep their own currency.
+
 ### Adding a new module
 
 Use `Sankore.Modules.Administration` as the template: PublicApi project (interface only) + main project (DbContext + domain + Features/) + Tests project. Register in `Program.cs` with `builder.Services.Add{Module}Module(...)` and `appVersion1.Map{Module}ModuleEndpoints()`. Initialize in the startup scope if the module needs migration or seeding.

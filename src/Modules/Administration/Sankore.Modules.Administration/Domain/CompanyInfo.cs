@@ -17,6 +17,9 @@ public class CompanyInfo
     public string SecondaryColor { get; private set; } = DefaultSecondaryColor;
     public Languages DefaultLanguage { get; private set; } = Languages.Fr;
 
+    /// <summary>ISO 4217 code of every amount typed in this institution — see <see cref="InstitutionCurrencies"/>.</summary>
+    public string Currency { get; private set; } = InstitutionCurrencies.Default;
+
     public DateTimeOffset CreatedAt { get; private set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? UpdatedAt { get; private set; } = DateTimeOffset.UtcNow;
 
@@ -47,7 +50,8 @@ public class CompanyInfo
         string logoUrl,
         string primaryColor,
         string secondaryColor,
-        Languages defaultLanguage)
+        Languages defaultLanguage,
+        string? currency = null)
     {
         Name = name;
         Description = description;
@@ -55,6 +59,8 @@ public class CompanyInfo
         PrimaryColor = primaryColor;
         SecondaryColor = secondaryColor;
         DefaultLanguage = defaultLanguage;
+        // Absent from an older client's request: the institution keeps its currency.
+        if (currency is not null) Currency = currency.Trim().ToUpperInvariant();
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 }

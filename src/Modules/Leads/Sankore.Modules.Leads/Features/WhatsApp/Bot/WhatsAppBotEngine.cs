@@ -18,6 +18,7 @@ using Sankore.Modules.Leads.Features.RecalculateLeadScore;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 using Sankore.Shared.Kernel.Realtime;
+using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
 
 /// <summary>
@@ -551,8 +552,13 @@ internal sealed class WhatsAppBotEngine(
         }
     }
 
-    /// <summary>« 500 000 FCFA », « 1,5 million », « 750k », « 2 000 000 » — XOF unless another currency is named.</summary>
-    internal static Money? ParseAmount(string text)
+    /// <summary>
+    /// « 500 000 FCFA », « 1,5 million », « 750k », « 2 000 000 » — in the institution's currency.
+    /// An amount the customer names in another (« 3000 euros » for a franc CFA institution) is no
+    /// amount: every amount of the institution is in its currency, and converting is not the bot's
+    /// call — it asks again.
+    /// </summary>
+    internal static Money? ParseAmount(string text, string institution = InstitutionCurrencies.Default)
     {
         var match = Regex.Match(text, @"\d[\d\s  .,]*");
         if (!match.Success) return null;
@@ -573,11 +579,17 @@ internal sealed class WhatsAppBotEngine(
 
         if (amount <= 0 || amount >= 1_000_000_000_000m) return null;
 
-        var currency = lower.Contains("eur") || text.Contains('€') ? "EUR"
+        var named = lower.Contains("eur") || text.Contains('€') ? "EUR"
             : lower.Contains("usd") || lower.Contains("dollar") || text.Contains('$') ? "USD"
-            : "XOF";
+            : Regex.IsMatch(lower, @"\b(f\s?cfa|cfa|xof|xaf)\b") ? "CFA"
+            : null;
+        var own = string.IsNullOrWhiteSpace(institution) ? InstitutionCurrencies.Default : institution.ToUpperInvariant();
+        var matches = named is null
+            || named == own
+            || (named == "CFA" && own is "XOF" or "XAF");
+        if (!matches) return null;
 
-        return new Money(decimal.Round(amount, 2), currency);
+        return new Money(decimal.Round(amount, 2), own);
     }
 
     /// <summary>

@@ -29,6 +29,7 @@ internal sealed class GetTenantContextHandler(ITenantStore tenantStore, ISender 
             LogoUrl: branding?.LogoUrl,
             PrimaryColor: branding?.PrimaryColor,
             SecondaryColor: branding?.SecondaryColor,
-            DefaultLanguage: branding?.DefaultLanguage);
+            DefaultLanguage: branding?.DefaultLanguage,
+            Currency: branding?.Currency ?? InstitutionCurrencies.Default);
     }
 }
