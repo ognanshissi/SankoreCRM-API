@@ -254,4 +254,15 @@ public sealed class KycDocument : AggregateRoot
 
     /// <summary>True once a validator has judged this image either way.</summary>
     public bool IsReviewed => ReviewDecision != KycDocumentReviewDecision.Pending;
+
+    /// <summary>
+    /// The client was anonymised (retention, or a person's request — data-purge lot 2): the bytes
+    /// are deleted by the caller first, then the row stops pointing at them. What was filed, when,
+    /// by whom and how it was reviewed stays — the file's history.
+    /// </summary>
+    public void Erase()
+    {
+        StorageRef = string.Empty;
+        RefusalReason = null;
+    }
 }

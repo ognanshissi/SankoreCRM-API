@@ -116,6 +116,7 @@ public static class ClientDtoMapper
             SourceLeadId: client.SourceLeadId,
             MergedInto: mergedInto,
             IsAnonymized: client.IsAnonymized,
+            ProcessingRestrictedAt: client.ProcessingRestrictedAt,
             ArchivedAt: client.ArchivedAt,
             CreatedAt: client.CreatedAt,
             UpdatedAt: client.UpdatedAt,

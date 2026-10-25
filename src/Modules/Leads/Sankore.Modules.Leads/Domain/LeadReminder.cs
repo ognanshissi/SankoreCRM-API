@@ -85,4 +85,11 @@ public sealed class LeadReminder
         DueAt = newDueAt;
         return Result.Ok();
     }
+
+    /// <summary>The lead is erased: the reminder's wording goes, its date and status stay.</summary>
+    public void Anonymize()
+    {
+        Title = "[anonymisé]";
+        Notes = null;
+    }
 }

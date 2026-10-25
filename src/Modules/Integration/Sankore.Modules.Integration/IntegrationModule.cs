@@ -86,6 +86,10 @@ public static class IntegrationModule
         services.AddValidatorsFromAssembly(typeof(IntegrationModule).Assembly, includeInternalTypes: true);
 
         services.AddOutboxForModule<IntegrationDbContext>();
+        // Nightly technical purge (TechnicalPurgeJob).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.IntegrationInboxPurge>();
+        // Emptying a TEST institution (data-purge lot 4).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.IntegrationTenantDataWipe>();
 
         // This module's own encryption keys, keyed. See IntegrationFieldProtection for why a
         // second AddFieldProtection call cannot be used.

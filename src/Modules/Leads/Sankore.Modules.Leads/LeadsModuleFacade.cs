@@ -50,6 +50,22 @@ public sealed class LeadsModuleFacade(
     /// </summary>
     private const string MissedCallCaptureFailed = "LEAD_MISSED_CALL_CAPTURE_FAILED";
 
+    public async Task<LeadErasureSubject?> GetErasureSubjectAsync(Guid tenantId, Guid leadId, CancellationToken ct)
+        => await db.Leads
+            .IgnoreQueryFilters()
+            .Where(l => l.TenantId == tenantId && l.Id == leadId)
+            .Select(l => new LeadErasureSubject(
+                l.Id,
+                // The first eight characters of the id: what an audit row can quote without the name.
+                "Lead " + l.Id.ToString().Substring(0, 8),
+                l.IsAnonymized,
+                l.ConvertedToCustomerId ?? l.CustomerId))
+            .FirstOrDefaultAsync(ct);
+
+    public Task<bool> EraseLeadAsync(Guid tenantId, Guid leadId, CancellationToken ct)
+        => (sender ?? throw new InvalidOperationException("Erasing a lead needs the mediator."))
+            .Send(new Features.Retention.EraseLeadCommand(tenantId, leadId), ct);
+
     public async Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)
     {
         var lead = await db.Leads

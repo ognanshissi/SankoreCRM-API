@@ -115,6 +115,22 @@ public static class CustomerErrors
     public const string RetentionNotReached = "RETENTION_NOT_REACHED";
     public const string KycRetentionNotCleared = "KYC_RETENTION_NOT_CLEARED";
 
+    // ── Erasure on request (data-purge lot 2) ────────────────────────────────
+    public const string ErasureNotFound = "ERASURE_REQUEST_NOT_FOUND";
+    public const string ErasureSubjectNotFound = "ERASURE_SUBJECT_NOT_FOUND";
+    public const string ErasureAlreadyRequested = "ERASURE_ALREADY_REQUESTED";
+    public const string ErasureAlreadyDone = "ERASURE_ALREADY_DONE";
+    public const string ErasureNotPending = "ERASURE_NOT_PENDING";
+    /// <summary>The person who recorded the request cannot be the one who approves or rejects it.</summary>
+    public const string ErasureFourEyes = "ERASURE_FOUR_EYES";
+    /// <summary>The client's relationship is still active: archive it first; the retention runs from there.</summary>
+    public const string ClientRelationshipActive = "CLIENT_RELATIONSHIP_ACTIVE";
+    /// <summary>
+    /// The person asked to be forgotten and is waiting for the end of their legal retention: no
+    /// prospection, no contact, no reading in clear (data-purge lot 3).
+    /// </summary>
+    public const string ProcessingRestricted = "CLIENT_PROCESSING_RESTRICTED";
+
     // ── Tenant settings ─────────────────────────────────────────────────────
     public const string SettingUnknown = "SETTING_UNKNOWN";
 

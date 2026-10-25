@@ -179,6 +179,15 @@ public sealed class Client : AggregateRoot
     public string? ArchiveReason { get; private set; }
     public bool IsAnonymized { get; private set; }
 
+    /// <summary>
+    /// The person asked to be forgotten while still under legal retention (data-purge lot 2): the
+    /// processing is restricted — no prospection, no contact — until the erasure becomes possible.
+    /// Null: not restricted.
+    /// </summary>
+    public DateTimeOffset? ProcessingRestrictedAt { get; private set; }
+
+    public void RestrictProcessing(DateTimeOffset now) => ProcessingRestrictedAt ??= now;
+
     // ── Audit & concurrency ─────────────────────────────────────────────────
     public Guid CreatedBy { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }

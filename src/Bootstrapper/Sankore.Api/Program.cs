@@ -500,6 +500,12 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Integration.Features.Telephony.Recordings
         .ClientAnonymizedRecordingConsumer>();
 
+    // Purge de données, lot 2 : un client anonymisé emporte ses leads, fils WhatsApp et rendez-vous
+    // (Leads) ; un lead effacé à la demande emporte ses appels et enregistrements (Intégrations).
+    x.AddConsumer<Sankore.Modules.Leads.Features.Retention.ClientAnonymizedLeadsConsumer>();
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Retention.ClientAnonymizedKycConsumer>();
+    x.AddConsumer<Sankore.Modules.Integration.Features.Telephony.Recordings.LeadErasedRecordingConsumer>();
+
     // TEL-B-19 : la qualification d'un appel rafraîchit le jour de cet appel dans le modèle de
     // lecture des indicateurs. Ce n'est PAS un incrément — l'événement dit quel jour a changé, et
     // le recalcul recompte ce jour depuis le journal — donc un message redélivré, deux agents qui
@@ -651,6 +657,10 @@ if (emitOpenApiTo is null)
 // Platform job: the one-shot copy of stored objects to the bucket. Transient like every module's
 // job type — Hangfire activates it from the container.
 builder.Services.AddTransient<MigrateObjectsJob>();
+// Platform job: the nightly purge of technical data, every module's ITechnicalPurge.
+builder.Services.AddTransient<Sankore.Api.Features.Retention.TechnicalPurgeJob>();
+// Platform job: empties the TEST institutions a platform administrator asked to wipe (data-purge lot 4).
+builder.Services.AddTransient<Sankore.Api.Features.Retention.TenantDataWipeJob>();
 
 // Redis distributed cache — used by Notifications module for provider resolution
 builder.AddRedisDistributedCache("redis");
@@ -1030,6 +1040,28 @@ if (emitOpenApiTo is null) {
         // schedule that misses its single slot loses the month — and an INSERT past the last
         // partition FAILS rather than landing somewhere. 02:00 is already the duplicate-detection
         // slot below; the two touch different schemas and neither holds a long lock.
+        // 03:30 daily: processed messages, dead sessions and tokens, read notifications, sent e-mails
+        // and SMS, import and export files — every module's ITechnicalPurge, durations fixed by the
+        // platform (TechnicalRetention). After the 02:00 partition jobs, before the working day.
+        // 04:00 daily: the approved erasures that had to wait for the end of a client's legal
+        // retention run on the day it ends (data-purge lot 2).
+        AddOrUpdate<Sankore.Modules.Customers.Features.Compliance.Erasure.ProcessRestrictedErasuresOrchestratorJob>(
+            Sankore.Modules.Customers.Features.Compliance.Erasure.ProcessRestrictedErasuresOrchestratorJob.RecurringJobId,
+            job => job.ExecuteAsync(),
+            "0 4 * * *");
+
+        // Every minute: a wipe requested on the platform (Sankore.Admin) for a TEST institution.
+        // Cheap when there is none — one GET to the registry.
+        AddOrUpdate<Sankore.Api.Features.Retention.TenantDataWipeJob>(
+            Sankore.Api.Features.Retention.TenantDataWipeJob.RecurringJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            "* * * * *");
+
+        AddOrUpdate<Sankore.Api.Features.Retention.TechnicalPurgeJob>(
+            Sankore.Api.Features.Retention.TechnicalPurgeJob.RecurringJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            "30 3 * * *");
+
         AddOrUpdate<Sankore.Modules.Integration.Infrastructure.CallLog.EnsureCallLogPartitionsJob>(
             "integration-call-log-partitions",
             job => job.ExecuteAsync(CancellationToken.None),

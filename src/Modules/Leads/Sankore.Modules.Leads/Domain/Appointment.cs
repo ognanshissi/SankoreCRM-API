@@ -177,4 +177,17 @@ public sealed class Appointment : ITenant
         => !string.IsNullOrWhiteSpace(id) && TimeZoneInfo.TryFindSystemTimeZoneById(id, out var tz)
             ? tz
             : TimeZoneInfo.Utc;
+
+    /// <summary>
+    /// The lead or client is erased: what the appointment said about them goes — title, notes,
+    /// place, link. The slot itself (when, how long, who attended) stays in the agendas.
+    /// </summary>
+    public void Anonymize()
+    {
+        Title = "[anonymisé]";
+        Description = null;
+        Location = null;
+        MeetingUrl = null;
+        CancellationReason = null;
+    }
 }

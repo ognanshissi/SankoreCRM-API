@@ -123,6 +123,11 @@ internal sealed class CustomersModuleFacade(
     /// contract for why this act is traced by the telephony module's own row rather than by a
     /// <c>SensitiveDataAccessLog</c> entry.
     /// </remarks>
+    public Task<bool> IsProcessingRestrictedAsync(Guid tenantId, Guid clientId, CancellationToken ct)
+        => db.Clients
+            .IgnoreQueryFilters()
+            .AnyAsync(c => c.TenantId == tenantId && c.Id == clientId && c.ProcessingRestrictedAt != null, ct);
+
     public async Task<Result<string>> ResolvePhoneForCallAsync(
         Guid tenantId, Guid clientId, PhoneSlot slot, Guid actorUserId, CancellationToken ct)
     {
@@ -152,6 +157,10 @@ internal sealed class CustomersModuleFacade(
         // exists, which is the one thing the perimeter is there to hide.
         if (!await agencyScope.CanAccessAgencyAsync(tenantId, actorUserId, client.AgencyId, ct))
             return Result.Fail<string>(CustomerErrors.ClientNotFound);
+
+        // Data-purge lot 3: a person who asked to be forgotten is not called any more.
+        if (client.ProcessingRestrictedAt is not null)
+            return Result.Fail<string>(CustomerErrors.ProcessingRestricted);
 
         // Primary first, then most recently valid — the same ordering RevealSensitiveFieldHandler
         // uses to pick "the" phone, so the number an agent sees on the screen is the number the

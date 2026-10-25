@@ -10,6 +10,12 @@ public class Tenant
 
     public DateTimeOffset? TrialExpiresAt { get; private set; }
     public bool IsMaintenance { get; private set; }
+
+    /// <summary>
+    /// A recette or demo institution (data-purge lot 4): the only kind whose business data the
+    /// platform may wipe. Set by a platform administrator, never by the tenant.
+    /// </summary>
+    public bool IsTest { get; private set; }
     public DateTimeOffset? BlockedAt { get; private set; }
     
     public string BlockedReason { get; private set; } = null!;
@@ -59,6 +65,12 @@ public class Tenant
     {
         IsActive = false;
         BlockedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkAsTest(bool isTest)
+    {
+        IsTest = isTest;
         UpdatedAt = DateTime.UtcNow;
     }
 

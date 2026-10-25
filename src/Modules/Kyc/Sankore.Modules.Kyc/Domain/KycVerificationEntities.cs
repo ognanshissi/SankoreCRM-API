@@ -102,6 +102,17 @@ public sealed class KycIdentityDocument : AggregateRoot
     public bool IsExpiredOn(DateOnly day) => ExpiryDate is { } expiry && expiry < day;
 
     public void ReplaceOcrFields(string? ocrFieldsJson) => OcrFieldsJson = ocrFieldsJson;
+
+    /// <summary>The client was anonymised: the number, what was read off the document and its image go.</summary>
+    public void Erase()
+    {
+        EncryptedNumber = string.Empty;
+        NumberBlindIndex = string.Empty;
+        OcrFieldsJson = null;
+        OcrFieldConfidencesJson = null;
+        MrzDataJson = null;
+        StorageRef = null;
+    }
 }
 
 /// <summary>
@@ -156,6 +167,13 @@ public sealed class KycFaceVerification : AggregateRoot
             EncryptedFacePayload = encryptedFacePayload,
             CreatedAt = clock.GetUtcNow(),
         };
+
+    /// <summary>The client was anonymised: the selfie and the face payload go; the score and outcome stay.</summary>
+    public void Erase()
+    {
+        SelfieStorageRef = null;
+        EncryptedFacePayload = null;
+    }
 }
 
 /// <summary>
@@ -243,5 +261,12 @@ public sealed class KycFieldCorrection : AggregateRoot
             CorrectedBy = correctedBy,
             CorrectedAt = clock.GetUtcNow(),
         };
+    }
+
+    /// <summary>The client was anonymised: the values go; which field was corrected, by whom and when, stays.</summary>
+    public void Erase()
+    {
+        EncryptedPreviousValue = null;
+        EncryptedNewValue = string.Empty;
     }
 }

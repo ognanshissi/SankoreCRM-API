@@ -125,4 +125,18 @@ public sealed class LeadActivity
             VisitPhotoReference = visitPhotoReference,
             RetentionExpiresAt  = retentionExpiresAt,
         };
+
+    /// <summary>
+    /// The lead is erased (retention or a person's request): what was said and shown goes — notes,
+    /// attachments, the visit's photo and place. The fact stays (type, when, by whom, outcome):
+    /// it is the lead's activity history, which statistics count.
+    /// </summary>
+    public void Anonymize()
+    {
+        Subject = "[anonymisé]";
+        Notes = null;
+        AttachmentsJson = null;
+        VisitPhotoReference = null;
+        VisitLocation = null;
+    }
 }

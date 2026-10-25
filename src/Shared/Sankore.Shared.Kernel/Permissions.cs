@@ -501,6 +501,19 @@ public static class Permissions
     public static readonly PermissionItem CanArchiveCustomer =
         new("customers:archive", "Archive a Customer Record", ApplicationModules.Customers, "archive");
 
+    /// <summary>
+    /// Record that a person asked to be forgotten, and read the requests (data-purge lot 2).
+    /// Recording erases nothing: a second person decides.
+    /// </summary>
+    public static readonly PermissionItem CanRequestErasure =
+        new("privacy:erasure:request", "Record a Request to Erase a Person's Data", ApplicationModules.Customers, "erasure_request");
+
+    /// <summary>
+    /// Decide an erasure request recorded by SOMEONE ELSE — the irreversible half (data-purge lot 2).
+    /// </summary>
+    public static readonly PermissionItem CanApproveErasure =
+        new("privacy:erasure:approve", "Approve or Reject a Request to Erase a Person's Data", ApplicationModules.Customers, "erasure_approve");
+
     public static readonly PermissionItem CanMergeCustomers =
         new("customers:merge", "Request or Approve a Customer Merge", ApplicationModules.Customers, "merge");
 
@@ -1049,6 +1062,8 @@ public static class Permissions
         CanUpdateCustomerSensitive,
         CanRevealCustomerSensitive,
         CanArchiveCustomer,
+        CanRequestErasure,
+        CanApproveErasure,
         CanMergeCustomers,
         CanManageCustomerGroups,
         CanExportCustomers,

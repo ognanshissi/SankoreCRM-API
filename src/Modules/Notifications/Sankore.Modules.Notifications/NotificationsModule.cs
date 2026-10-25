@@ -46,6 +46,11 @@ public static class NotificationsModule
                 .UseSnakeCaseNamingConvention());
 
         services.AddScoped<INotificationsModule, NotificationsModuleFacade>();
+        // Nightly technical purge (TechnicalPurgeJob).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.UserNotificationsPurge>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.MessageDeliveryPurge>();
+        // Emptying a TEST institution (data-purge lot 4).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.NotificationsTenantDataWipe>();
 
         // Provider resolution: cache-aside via IDistributedCache (Redis in prod, in-memory in tests)
         services.AddScoped<IEmailProviderResolver, CachedEmailProviderResolver>();

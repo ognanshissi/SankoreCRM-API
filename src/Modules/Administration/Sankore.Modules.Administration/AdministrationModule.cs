@@ -1,3 +1,4 @@
+using Sankore.Shared.Infrastructure.Retention;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
@@ -94,6 +95,14 @@ public static class AdministrationModule
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
         services.AddScoped<IInstitutionCurrency, InstitutionCurrency>();
+
+        // Nightly technical purge (TechnicalPurgeJob): sessions, tokens, sign-in traces, import files.
+        services.AddScoped<ITechnicalPurge, Infrastructure.Retention.DeadRefreshTokensPurge>();
+        services.AddScoped<ITechnicalPurge, Infrastructure.Retention.EndedSessionsPurge>();
+        services.AddScoped<ITechnicalPurge, Infrastructure.Retention.LoginLocationsPurge>();
+        services.AddScoped<ITechnicalPurge, Infrastructure.Retention.UserImportFilesPurge>();
+        // Emptying a TEST institution (data-purge lot 4): only the user imports here.
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.AdministrationTenantDataWipe>();
 
         // Paid modules: the registry (Sankore.Admin) holds them; this writes on the tenant's
         // behalf through the named client AddTenantStore registers.

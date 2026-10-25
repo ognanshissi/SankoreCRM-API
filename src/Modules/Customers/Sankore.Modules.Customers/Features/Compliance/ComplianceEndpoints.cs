@@ -3,6 +3,7 @@ namespace Sankore.Modules.Customers.Features.Compliance;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Customers.Features.Compliance.Erasure;
 using Sankore.Modules.Customers.Features.Compliance.Export.DownloadClientExport;
 using Sankore.Modules.Customers.Features.Compliance.Export.GetClientExport;
 using Sankore.Modules.Customers.Features.Compliance.Export.RequestClientExport;
@@ -50,6 +51,8 @@ public static class ComplianceEndpoints
             // The fifteen-day integration deadline (CIMA LBC/FT), which is measurable only
             // against the moment the institution learned of the change.
             .MapProfileNoticeEndpoints();
+
+        app.MapErasureRequestsEndpoints();
 
         return app;
     }

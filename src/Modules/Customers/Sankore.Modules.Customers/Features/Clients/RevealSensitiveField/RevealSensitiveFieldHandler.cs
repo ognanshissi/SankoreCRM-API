@@ -65,6 +65,13 @@ internal sealed class RevealSensitiveFieldHandler(
         if (!await agencyScope.CanAccessAgencyAsync(tenantId, actor, client.AgencyId, ct))
             return Result.Fail<RevealSensitiveFieldResult>(CustomerErrors.ClientNotFound);
 
+        // Data-purge lot 3: the person asked to be forgotten and is waiting for the end of their
+        // legal retention — their data is kept for the regulator, not read. Compliance (the
+        // deciders) may still, for the regulator's request that justified keeping it.
+        if (client.ProcessingRestrictedAt is not null
+            && !currentUser.Permissions.Contains(Permissions.CanApproveErasure.Code))
+            return Result.Fail<RevealSensitiveFieldResult>(CustomerErrors.ProcessingRestricted);
+
         // ── 1. Rolling-hour quota, per USER and not per client ───────────────
         // Per user is what catches the real abuse pattern: harvesting one field from many
         // clients. A per-client counter would let an operator walk the whole base.

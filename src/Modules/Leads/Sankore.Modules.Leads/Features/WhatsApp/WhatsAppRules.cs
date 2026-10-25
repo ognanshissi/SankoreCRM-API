@@ -40,6 +40,9 @@ public static class WhatsAppErrors
     /// <summary>A template went out less than 24 hours ago and the customer has not answered.</summary>
     public const string TemplateCooldown = "WHATSAPP_TEMPLATE_COOLDOWN";
 
+    /// <summary>The person asked to be forgotten (data-purge lot 3): we no longer start a contact.</summary>
+    public const string ProcessingRestricted = Retention.ProcessingRestriction.Error;
+
     public const string MessageNotFound = "WHATSAPP_MESSAGE_NOT_FOUND";
 
     /// <summary>The message carries no media to download.</summary>
@@ -146,9 +149,13 @@ public static class WhatsAppEligibility
         bool channelActive,
         WhatsAppConversation? conversation,
         bool mayForce,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool processingRestricted = false)
     {
         var blockers = new List<string>();
+
+        // First: neither consent nor a forced send overrides a person's request to be forgotten.
+        if (processingRestricted) blockers.Add(WhatsAppErrors.ProcessingRestricted);
 
         if (!lead.IsDispatchable) blockers.Add(WhatsAppErrors.LeadClosed);
 

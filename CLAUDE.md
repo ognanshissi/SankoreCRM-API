@@ -3095,6 +3095,71 @@ filled by the facade and `ProductFormGate`, makes `CustomFieldValues.Apply` refu
 before. Settings `whatsapp-price-currency` and `caps-currency` default to empty = the institution's.
 Amounts from external systems (core banking, insurers) keep their own currency.
 
+### Technical purge: every night, durations fixed by the platform
+
+`TechnicalPurgeJob` (Sankore.Api, recurring `technical-purge`, 03:30) runs every registered
+`ITechnicalPurge` (Shared.Infrastructure/Retention), one scope each, all tenants at once
+(`IgnoreQueryFilters()`), one failing does not stop the others (the job ends red). Durations live in
+ONE place, `TechnicalRetention` — fixed by the platform, not per tenant (owner, 2026-10-24). Business
+data is never purged here. Covered: processed outbox of every module (`OutboxPurge<T>`, registered by
+`AddOutboxForModule`; an unpublished row is kept as evidence), inboxes (Customers, Integration),
+refresh tokens, sessions, sign-in locations, user/lead/client import files + failure details (row
+kept, `SourceReference` emptied), expired client export CSVs (`FileReference` nulled), raw lead
+ingestion payloads, user notifications, e-mail/SMS outbox and delivery logs. A file that cannot be
+deleted is NOT marked gone (retried next night) — `TechnicalFiles.DeleteAsync`. NOT purged: the audit
+journal (immutable by trigger), access logs (compliance evidence), partitioned webhook tables (old
+partitions still detached by hand). Each purge has a SQL-translation test against an unreachable
+Npgsql (`*/Retention/TechnicalPurgeSqlTranslationTests`), since InMemory cannot run ExecuteDelete.
+
+### Erasure on request: one records, another decides (data-purge lot 2)
+
+`customers.erasure_requests` (migration `AddErasureRequests`), endpoints `erasure-requests`
+(Customers, `Features/Compliance/Erasure`). `privacy:erasure:request` reads and records (sales
+manager, branch manager, regulation manager); `privacy:erasure:approve` decides (regulation manager) —
+NEVER the requester (`ERASURE_FOUR_EYES`). One open request per person (filtered unique index).
+`ErasureEligibility` is the one rule (preview, request, approval, daily job): a prospect (lead with no
+`CustomerId`/`ConvertedToCustomerId`) is erasable; a client — or a lead of a client — only once
+archived + `retention-years` (`RetentionWindow`) AND `IKycModule.IsRetentionClearedAsync`. Not
+erasable yet → approval RESTRICTS (`Client.ProcessingRestrictedAt`, request `Restricted` with
+`Blocker`/`EligibleFrom`) and `ProcessRestrictedErasuresJob` (04:00) erases on the day it becomes
+possible. Execution (`ErasureExecutor`): client → `Client.Anonymize` + `ClientAnonymizedEvent`, now
+consumed by Leads (`ClientAnonymizedLeadsConsumer`: its leads, threads, appointments), KYC
+(`ClientAnonymizedKycConsumer`: documents bytes+rows, identity numbers/OCR/MRZ, selfies, corrections)
+and Integration (calls, recordings); prospect → `ILeadsModule.EraseLeadAsync` → `LeadErasure` (the
+retention job's cascade, now also activities, reminders, appointments) + `LeadErasedEvent` →
+`LeadErasedRecordingConsumer`. Cross-module calls from the Customers command go through
+`TransactionScope(Suppress)`. `KycModuleFacade.IsRetentionClearedAsync` is now real: no file
+collecting/verifying/validating/complement/under review/SUSPENDED (suspension = the legal hold); the
+DURATION is the client's. The request row never holds the name (`SubjectReference` = client number or
+« Lead 1a2b3c4d »). What « restricted » forbids (lot 3, `ProcessingRestrictedAt`, read by other modules
+through `ICustomersModule.IsProcessingRestrictedAsync`): a new project (`CreateOpportunity*` →
+`CLIENT_PROCESSING_RESTRICTED`, also for a lead of that client), a WhatsApp TEMPLATE (first blocker,
+`mayForce` does not lift it; replying to the person's own message stays possible), a click-to-call
+(`ResolvePhoneForCallAsync`), and revealing sensitive fields in clear (except holders of
+`privacy:erasure:approve`). System notifications (KYC invitations, contract notices) are NOT blocked —
+they are the institution's obligations, not prospection. Read scope: deciders read every request,
+others only those they recorded (`ErasureReadScope`).
+
+### Emptying a TEST institution (data-purge lot 4)
+
+Only from the platform (Sankore.Admin), only by a platform administrator, only for a tenant marked
+`IsTest` (`PUT tenants/{id}/test-flag`, migration `AddTenantDataWipes`), only after retyping its name
+exactly (`POST tenants/{id}/data-wipes`, rules in `DataWipeRules`, one in flight per tenant). The
+registry only RECORDS it; `TenantDataWipeJob` (Sankore.Api, every minute) pulls
+`GET data-wipes/pending` with the service key, re-reads the tenant FRESH and refuses a non-test one,
+takes the wipe with an atomic conditional start (two instances cannot both), runs every module's
+`ITenantDataWipe` and reports `complete` (row counts per module) or `fail` (module + error).
+Each module wipes through `TenantRows.WipeAsync` (Shared.Infrastructure/Retention): EVERY table of
+its EF model with a `TenantId` (or a single-column FK to one) EXCEPT its `Keep` list — configuration
+is kept by explicit decision, a business table added later is wiped by default; dependents first,
+ordered from the model's FKs; one transaction per module; the outbox is never touched. Files after
+rows: the generic `IFileStore` (imports, exports) from the rows' references, the six tenant-prefixed
+object concerns by listing `sha256(tenantId)[..16]/` (`TenantObjects`). Administration wipes only
+user imports (the rest of its schema IS configuration). Users, roles, agencies, catalogue, forms,
+templates, settings, client number sequence stay. Each module's `TenantDataWipePlanTests` checks its
+plan against its real model; with `TENANT_WIPE_SQL_OUT` set they dump the SQL — replayed on the dev
+database inside BEGIN…ROLLBACK on 2026-10-25: 102 statements, no constraint error.
+
 ### Adding a new module
 
 Use `Sankore.Modules.Administration` as the template: PublicApi project (interface only) + main project (DbContext + domain + Features/) + Tests project. Register in `Program.cs` with `builder.Services.Add{Module}Module(...)` and `appVersion1.Map{Module}ModuleEndpoints()`. Initialize in the startup scope if the module needs migration or seeding.

@@ -125,6 +125,12 @@ public static class LeadsModule
         // Assigned-only reads: an Agent or a CommercialAgent sees the leads they hold.
         services.AddScoped<Features.Visibility.LeadVisibility>();
         services.AddScoped<Features.ProjectTemplates.ProjectTemplateResolver>();
+
+        // Nightly technical purge (TechnicalPurgeJob).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.LeadImportFilesPurge>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.RawIngestionsPurge>();
+        // Emptying a TEST institution (data-purge lot 4).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.LeadsTenantDataWipe>();
         services.AddScoped<Features.ProjectTemplates.ProjectStepGate>();
         services.AddScoped<Features.ProjectTemplates.ProjectWorkflows>();
         services.AddScoped<Features.ProjectTemplates.ProjectStepTransition>();

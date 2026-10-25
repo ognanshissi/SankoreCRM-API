@@ -13,15 +13,23 @@ internal sealed class CreateOpportunityHandler(
     TimeProvider clock,
     Administration.PublicApi.IAdministrationModule? administration = null,
     ProjectTemplates.ProjectTemplateResolver? templates = null,
-    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null)
+    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null,
+    Customers.PublicApi.ICustomersModule? customers = null)
     : IRequestHandler<CreateOpportunityCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
         CreateOpportunityCommand cmd, CancellationToken ct)
     {
-        var leadExists = await db.Leads.AnyAsync(l => l.Id == cmd.LeadId, ct);
-        if (!leadExists)
+        var lead = await db.Leads
+            .Where(l => l.Id == cmd.LeadId)
+            .Select(l => new { ClientId = l.ConvertedToCustomerId ?? l.CustomerId })
+            .FirstOrDefaultAsync(ct);
+        if (lead is null)
             return Result.Fail<Guid>("LEAD_NOT_FOUND");
+
+        // Data-purge lot 3: no prospection of a person who asked to be forgotten.
+        if (await Retention.ProcessingRestriction.IsRestrictedAsync(customers, cmd.TenantId, lead.ClientId, ct))
+            return Result.Fail<Guid>(Retention.ProcessingRestriction.Error);
 
         if (await ProjectTemplates.ProjectCloseDateRule.MissingAsync(templates, cmd.Product, cmd.ExpectedCloseDate, ct))
             return Result.Fail<Guid>(ProjectTemplateErrors.CloseDateRequired);

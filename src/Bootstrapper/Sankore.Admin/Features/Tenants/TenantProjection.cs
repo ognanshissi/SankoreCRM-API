@@ -30,5 +30,6 @@ internal static class TenantProjection
                 .Select(s => s.ModuleCode)
                 .Distinct()
                 .OrderBy(code => code)
-                .ToList()));
+                .ToList(),
+            t.IsTest));
 }

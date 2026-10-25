@@ -29,7 +29,8 @@ public sealed record TenantInfo(
     /// Modules deactivated and not active again (<c>TenantResponse.ReadOnlyModules</c>): readable,
     /// not writable. <c>null</c> on an older record reads as none.
     /// </summary>
-    IReadOnlyList<string>? ReadOnlyModules = null)
+    IReadOnlyList<string>? ReadOnlyModules = null,
+    bool IsTest = false)
 {
     /// <summary>True when <paramref name="module"/> is in force, or when the list is unknown.</summary>
     public bool HasModule(string module) => ActiveModules is null || ActiveModules.Contains(module);

@@ -120,6 +120,8 @@ public static class KycModule
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Files.KycVisibilityBehavior<,>));
 
         services.AddOutboxForModule<KycDbContext>();
+        // Emptying a TEST institution (data-purge lot 4).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.KycTenantDataWipe>();
 
         // Field protection, keyed to this module — see KycFieldProtection for why the shared
         // AddFieldProtection cannot be called a second time.

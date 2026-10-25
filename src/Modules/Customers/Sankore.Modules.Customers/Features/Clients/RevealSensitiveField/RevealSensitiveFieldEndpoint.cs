@@ -65,6 +65,7 @@ public static class RevealSensitiveFieldEndpoint
         {
             CustomerErrors.ClientNotFound or CustomerErrors.UnknownSensitiveField =>
                 Results.Problem(result.Error, statusCode: StatusCodes.Status404NotFound),
+            CustomerErrors.ProcessingRestricted => Results.Conflict(new { error = result.Error }),
             CustomerErrors.RevealRateLimitExceeded =>
                 Results.Problem(result.Error, statusCode: StatusCodes.Status429TooManyRequests),
             _ => Results.Problem(result.Error, statusCode: StatusCodes.Status400BadRequest)

@@ -15,7 +15,8 @@ internal sealed class CreateOpportunityForCustomerHandler(
     IPhoneBlindIndexer phoneBlindIndexer,
     Administration.PublicApi.IAdministrationModule? administration = null,
     ProjectTemplates.ProjectTemplateResolver? templates = null,
-    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null)
+    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null,
+    Customers.PublicApi.ICustomersModule? customers = null)
     : IRequestHandler<CreateOpportunityForCustomerCommand, Result<CreateOpportunityForCustomerResult>>
 {
     public async Task<Result<CreateOpportunityForCustomerResult>> Handle(
@@ -23,6 +24,10 @@ internal sealed class CreateOpportunityForCustomerHandler(
     {
         if (await ProjectTemplates.ProjectCloseDateRule.MissingAsync(templates, cmd.Product, cmd.ExpectedCloseDate, ct))
             return Result.Fail<CreateOpportunityForCustomerResult>(ProjectTemplateErrors.CloseDateRequired);
+
+        // Data-purge lot 3: no prospection of a person who asked to be forgotten.
+        if (await Retention.ProcessingRestriction.IsRestrictedAsync(customers, cmd.TenantId, cmd.CustomerEntityId, ct))
+            return Result.Fail<CreateOpportunityForCustomerResult>(Retention.ProcessingRestriction.Error);
 
         // ── Duplicate check: existing open opportunities for the same customer + product ──
         if (!cmd.Force)

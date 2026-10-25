@@ -476,6 +476,10 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("preferred_language");
 
+                    b.Property<DateTimeOffset?>("ProcessingRestrictedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processing_restricted_at");
+
                     b.Property<string>("Profession")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)")
@@ -1598,6 +1602,102 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasDatabaseName("ux_duplicate_candidates_pair");
 
                     b.ToTable("duplicate_candidates", "customers");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.ErasureRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Blocker")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("blocker");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_note");
+
+                    b.Property<DateTimeOffset?>("EligibleFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("eligible_from");
+
+                    b.Property<string>("Evidence")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("evidence");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<string>("SubjectReference")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("subject_reference");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("subject_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_erasure_requests");
+
+                    b.HasIndex("TenantId", "Status", "RequestedAt")
+                        .HasDatabaseName("ix_erasure_requests_tenant_id_status_requested_at");
+
+                    b.HasIndex("TenantId", "SubjectType", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_erasure_requests_open_subject")
+                        .HasFilter("status IN ('Pending', 'Restricted')");
+
+                    b.ToTable("erasure_requests", "customers");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.GroupMembership", b =>

@@ -64,7 +64,8 @@ internal sealed class SendWhatsAppTemplateHandler(
     IIntegrationModule integration,
     [FromKeyedServices(LeadsFieldProtection.Key)] IBlindIndexer blindIndexer,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
-    TimeProvider clock)
+    TimeProvider clock,
+    Sankore.Modules.Customers.PublicApi.ICustomersModule? customers = null)
     : IRequestHandler<SendWhatsAppTemplateCommand, Result<SendWhatsAppTemplateResult>>
 {
     /// <summary>Meta's own limit on one body parameter.</summary>
@@ -108,7 +109,8 @@ internal sealed class SendWhatsAppTemplateHandler(
                     c => c.ConnectionId == channel.ConnectionId && c.ContactPhoneBlindIndex == phoneIndex, ct);
 
         var blockers = WhatsAppEligibility.Blockers(
-            lead, consent, phone, channel is not null, conversation, cmd.MayForce, now);
+            lead, consent, phone, channel is not null, conversation, cmd.MayForce, now,
+            await Retention.ProcessingRestriction.IsRestrictedAsync(customers, tenantId, lead, ct));
 
         if (blockers.Count > 0) return Fail(blockers[0]);
 

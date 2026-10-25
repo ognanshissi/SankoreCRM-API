@@ -97,6 +97,8 @@ public sealed record ClientDetailDto(
     Guid? SourceLeadId,
     MergedIntoDto? MergedInto,
     bool IsAnonymized,
+    /// <summary>Data-purge lot 3: the person asked to be forgotten and waits for the end of the legal retention.</summary>
+    DateTimeOffset? ProcessingRestrictedAt,
     DateTimeOffset? ArchivedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,

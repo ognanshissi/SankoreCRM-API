@@ -83,19 +83,38 @@ public sealed class KycModuleFacade(
     }
 
     /// <summary>
-    /// Still fail-closed, on purpose.
+    /// Whether this module still needs the client's KYC evidence (data-purge lot 2, 2026-10-24).
     ///
-    /// The retention rule — how long KYC evidence must be kept after the end of a relationship,
-    /// and what lifts a legal hold — is not implemented in this module yet, and no tenant
-    /// parameter declares it. Returning anything but <c>false</c> here would let M01 anonymise
-    /// customers whose evidence a regulator may still demand, and it would do so silently, in a
-    /// nightly job, across every eligible record at once.
+    /// <para>
+    /// <b>How long</b> evidence is kept after the end of the relationship is the client's retention
+    /// (<c>retention-years</c>, LBC/FT, floored at 10), checked by M01 before it asks here — one
+    /// duration, not two that could disagree. What this module adds is what only it knows: a file
+    /// still being worked (collection, verification, validation, complement, review) or
+    /// <b>suspended</b> — a compliance block, which is this module's legal hold. Any of those, and
+    /// the answer is no.
+    /// </para>
     ///
-    /// When the rule lands, this method changes and the change is visible in one place. Until
-    /// then the answer is the same one the stub gave, which is the safe one.
+    /// <para>
+    /// Before, this answered false unconditionally ("the rule is not implemented yet"), so no
+    /// client could ever be anonymised, by the monthly proposal or by hand.
+    /// </para>
     /// </summary>
     public Task<bool> IsRetentionClearedAsync(Guid tenantId, Guid customerEntityId, CancellationToken ct)
-        => Task.FromResult(false);
+        => db.KycFiles
+            .IgnoreQueryFilters()
+            .Where(f => f.TenantId == tenantId && f.CustomerId == customerEntityId)
+            .AllAsync(f => !HoldingStatuses.Contains(f.Status), ct);
+
+    /// <summary>The statuses in which a file still needs its evidence — see <see cref="IsRetentionClearedAsync"/>.</summary>
+    private static readonly List<KycFileStatus> HoldingStatuses =
+    [
+        KycFileStatus.Collecting,
+        KycFileStatus.Verifying,
+        KycFileStatus.Validating,
+        KycFileStatus.ComplementRequired,
+        KycFileStatus.UnderReview,
+        KycFileStatus.Suspended,
+    ];
 
     /// <summary>
     /// Cache key for a customer's ceilings, stamped with the tenant's cache GENERATION.

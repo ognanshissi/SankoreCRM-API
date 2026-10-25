@@ -26,7 +26,12 @@ public record TenantResponse(
     /// Modules the tenant deactivated and has not switched on again: their screens stay open for
     /// CONSULTATION (product owner, 2026-10-23). Read into <c>TenantInfo.ReadOnlyModules</c> by name.
     /// </summary>
-    IReadOnlyList<string> ReadOnlyModules);
+    IReadOnlyList<string> ReadOnlyModules,
+    /// <summary>
+    /// A recette or demo institution (data-purge lot 4). Read into <c>TenantInfo.IsTest</c> by name:
+    /// the API checks it again before wiping anything.
+    /// </summary>
+    bool IsTest);
 
 internal sealed class GetTenantHandler(AdminDbContext db) : IRequestHandler<GetTenantQuery, TenantResponse?>
 {

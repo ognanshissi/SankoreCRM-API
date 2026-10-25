@@ -56,6 +56,13 @@ public static class CustomersModule
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Clients.Shared.ClientVisibilityBehavior<,>));
 
         services.AddOutboxForModule<CustomersDbContext>();
+
+        // Nightly technical purge (TechnicalPurgeJob).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.CustomersInboxPurge>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.ExpiredExportFilesPurge>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.ClientImportFilesPurge>();
+        // Emptying a TEST institution (data-purge lot 4).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.CustomersTenantDataWipe>();
         services.AddLocalization(o => o.ResourcesPath = "Resources");
 
         // Field-level AES-256-GCM encryption + HMAC blind indexes for this module's

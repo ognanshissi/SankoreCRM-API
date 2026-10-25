@@ -1,3 +1,4 @@
+using Sankore.Admin.Features.Tenants.DataWipes;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -138,6 +139,7 @@ app.MapTenantEndpoints();
 app.MapTenantDomainEndpoints();
 app.MapModuleEndpoints();
 app.MapSupportEndpoints();
+app.MapDataWipeEndpoints();
 
 if (emitOpenApiTo is not null)
 {

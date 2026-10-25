@@ -43,6 +43,8 @@ public static class WorkflowModule
                 .UseSnakeCaseNamingConvention());
 
         services.AddScoped<IWorkflowModule, WorkflowModuleFacade>();
+        // Emptying a TEST institution (data-purge lot 4).
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.WorkflowTenantDataWipe>();
         services.AddSingleton<IRuleEvaluator, RuleEvaluator>();
         services.AddSingleton<IConditionEvaluator, ConditionEvaluator>();
 

@@ -31,6 +31,8 @@ public static class ModuleServiceCollectionExtensions
     {
         services.AddKeyedScoped<IEventPublisher, OutboxEventPublisher<TDbContext>>(typeof(TDbContext).Name);
         services.AddHostedService<OutboxProcessor<TDbContext>>();
+        // The nightly technical purge empties what the processor has published.
+        services.AddScoped<Retention.ITechnicalPurge, OutboxPurge<TDbContext>>();
         return services;
     }
 }

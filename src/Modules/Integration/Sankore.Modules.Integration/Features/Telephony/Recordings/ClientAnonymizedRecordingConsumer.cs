@@ -74,12 +74,27 @@ public sealed class ClientAnonymizedRecordingConsumer(
     /// <c>Purge</c> and a call already anonymised has nothing left to blank, so a redelivered
     /// message does no second piece of work and needs no inbox table.
     /// </summary>
-    internal static async Task<int> ApplyAsync(
+    internal static Task<int> ApplyAsync(
         IntegrationDbContext db,
         IRecordingStore? store,
         TimeProvider clock,
         ILogger logger,
         Guid tenantId,
+        Guid clientId,
+        CancellationToken ct)
+        => ApplyToEntityAsync(db, store, clock, logger, tenantId, TelEntityTypes.Customer, clientId, ct);
+
+    /// <summary>
+    /// The same erasure for the calls of any entity — a client anonymised, a lead erased on
+    /// request (<c>LeadErasedRecordingConsumer</c>, data-purge lot 2).
+    /// </summary>
+    internal static async Task<int> ApplyToEntityAsync(
+        IntegrationDbContext db,
+        IRecordingStore? store,
+        TimeProvider clock,
+        ILogger logger,
+        Guid tenantId,
+        string entityType,
         Guid clientId,
         CancellationToken ct)
     {
@@ -93,7 +108,7 @@ public sealed class ClientAnonymizedRecordingConsumer(
             .IgnoreQueryFilters()
             .AsTracking()
             .Where(c => c.TenantId == tenantId
-                     && c.EntityType == TelEntityTypes.Customer
+                     && c.EntityType == entityType
                      && c.EntityId == clientId)
             .ToListAsync(ct);
 
@@ -154,8 +169,8 @@ public sealed class ClientAnonymizedRecordingConsumer(
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "Client {ClientId} of tenant {TenantId} anonymised: {CallCount} call(s) blanked, "
-            + "{Purged} recording(s) destroyed.", clientId, tenantId, calls.Count, purged);
+            "{EntityType} {EntityId} of tenant {TenantId} erased: {CallCount} call(s) blanked, "
+            + "{Purged} recording(s) destroyed.", entityType, clientId, tenantId, calls.Count, purged);
 
         return purged;
     }

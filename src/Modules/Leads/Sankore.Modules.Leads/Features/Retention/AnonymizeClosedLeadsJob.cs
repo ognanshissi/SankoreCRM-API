@@ -139,90 +139,9 @@ public sealed class AnonymizeClosedLeadsJob(
         if (leads.Count == 0)
             return 0;
 
-        var now = clock.GetUtcNow();
-        var leadIds = leads.Select(l => l.Id).ToList();
+        await LeadErasure.AnonymizeAsync(db, tenantId, leads, clock.GetUtcNow(), ct);
 
-        // The children, loaded in three queries rather than per lead: this job's whole shape is
-        // batched because it runs over a backlog.
-        var responses = await db.QualificationResponses
-            .IgnoreQueryFilters()
-            .AsTracking()
-            .Where(r => r.TenantId == tenantId && r.LeadId != null && leadIds.Contains(r.LeadId.Value) && !r.IsPurged)
-            .ToListAsync(ct);
-
-        var consents = await db.LeadConsents
-            .IgnoreQueryFilters()
-            .AsTracking()
-            .Where(c => c.TenantId == tenantId && leadIds.Contains(c.LeadId))
-            .ToListAsync(ct);
-
-        var declarations = await db.FatcaDeclarations
-            .IgnoreQueryFilters()
-            .AsTracking()
-            .Where(d => d.TenantId == tenantId && leadIds.Contains(d.LeadId))
-            .ToListAsync(ct);
-
-        // WhatsApp (WA lot 1): the conversations filed on these leads and their messages — the
-        // customer's number, profile name and every word exchanged. Same transaction, same rule:
-        // a lead anonymised while its thread stayed readable would keep exactly what the
-        // retention exists to destroy.
-        var conversations = await db.WhatsAppConversations
-            .IgnoreQueryFilters()
-            .AsTracking()
-            .Where(c => c.TenantId == tenantId && c.LeadId != null && leadIds.Contains(c.LeadId.Value))
-            .ToListAsync(ct);
-
-        var conversationIds = conversations.Select(c => c.Id).ToList();
-
-        var messages = conversationIds.Count == 0
-            ? []
-            : await db.WhatsAppMessages
-                .IgnoreQueryFilters()
-                .AsTracking()
-                .Where(m => m.TenantId == tenantId && conversationIds.Contains(m.ConversationId))
-                .ToListAsync(ct);
-
-        // The bot's turns (WA lot 3): the minimised transcript, the answer and the tool calls —
-        // which carry the values the bot wrote on the lead. The measurements stay.
-        var botTurns = conversationIds.Count == 0
-            ? []
-            : await db.WhatsAppBotTurns
-                .IgnoreQueryFilters()
-                .AsTracking()
-                .Where(t => t.TenantId == tenantId && conversationIds.Contains(t.ConversationId))
-                .ToListAsync(ct);
-
-        foreach (var conversation in conversations)
-            conversation.Anonymize(now);
-
-        foreach (var message in messages)
-            message.Anonymize();
-
-        foreach (var turn in botTurns)
-            turn.Anonymize();
-
-        foreach (var lead in leads)
-        {
-            lead.Anonymize(now);
-
-            // Every member, removed ones included: a spouse whose link was closed before the lead
-            // was is still a person whose name is in this table.
-            foreach (var member in lead.HouseholdMembers)
-                member.Anonymize();
-        }
-
-        // Purge and not just blank: the answers are the content, and IsPurged is what says the
-        // row's emptiness is deliberate rather than a declaration nobody filled in.
-        foreach (var response in responses)
-            response.Purge();
-
-        foreach (var consent in consents)
-            consent.Anonymize();
-
-        foreach (var declaration in declarations)
-            declaration.Anonymize();
-
-        // ONE save for the whole batch: all seven tables or none. A lead whose name is gone and
+        // ONE save for the whole batch: every table or none. A lead whose name is gone and
         // whose spouse's name is not would never be revisited, because it no longer matches the
         // selection above.
         await db.SaveChangesAsync(ct);

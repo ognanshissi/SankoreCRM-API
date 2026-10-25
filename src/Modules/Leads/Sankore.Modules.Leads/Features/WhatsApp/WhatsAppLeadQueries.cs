@@ -167,7 +167,8 @@ internal sealed class GetWhatsAppPanelHandler(
     IIntegrationModule integration,
     [FromKeyedServices(LeadsFieldProtection.Key)] IBlindIndexer blindIndexer,
     Bot.WhatsAppBotFieldValues fieldValues,
-    TimeProvider clock)
+    TimeProvider clock,
+    Sankore.Modules.Customers.PublicApi.ICustomersModule? customers = null)
     : IRequestHandler<GetWhatsAppPanelQuery, Result<WhatsAppPanelDto>>
 {
     public async Task<Result<WhatsAppPanelDto>> Handle(GetWhatsAppPanelQuery query, CancellationToken ct)
@@ -220,7 +221,8 @@ internal sealed class GetWhatsAppPanelHandler(
             .FirstOrDefault();
 
         var blockers = WhatsAppEligibility.Blockers(
-            lead, state, phone, channel is not null, conversation, query.MayForce, now);
+            lead, state, phone, channel is not null, conversation, query.MayForce, now,
+            await Retention.ProcessingRestriction.IsRestrictedAsync(customers, tenantId, lead, ct));
 
         var people = conversation is null
             ? []

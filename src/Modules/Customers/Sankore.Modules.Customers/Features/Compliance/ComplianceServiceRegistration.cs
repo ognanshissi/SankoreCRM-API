@@ -39,6 +39,13 @@ internal static class ComplianceServiceRegistration
         // Export (US-M01-BE-30)
         s.AddTransient<GenerateClientExportJob>();
 
+        // Erasure on request (data-purge lot 2)
+        s.AddScoped<Erasure.ErasureEligibility>();
+        s.AddScoped<Erasure.ErasureExecutor>();
+        s.AddScoped<Erasure.ErasurePerimeter>();
+        s.AddTransient<Erasure.ProcessRestrictedErasuresOrchestratorJob>();
+        s.AddTransient<Erasure.ProcessRestrictedErasuresJob>();
+
         return s;
     }
 }

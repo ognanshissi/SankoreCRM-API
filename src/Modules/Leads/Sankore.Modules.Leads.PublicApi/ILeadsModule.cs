@@ -222,6 +222,21 @@ public interface ILeadsModule
     /// </summary>
     Task<IReadOnlyList<AppointmentCalendarEntry>> ListAppointmentsForUserAsync(
         Guid tenantId, Guid userId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct);
+
+    /// <summary>
+    /// The lead as an erasure request sees it: is it there, already erased, and is its person a
+    /// client — linked or converted. A client's erasure follows the client's legal retention, not
+    /// the lead's (data-purge lot 2). Null: no such lead in that tenant.
+    /// </summary>
+    Task<LeadErasureSubject?> GetErasureSubjectAsync(Guid tenantId, Guid leadId, CancellationToken ct);
+
+    /// <summary>
+    /// Erases one lead now — the same cascade as the retention job (<c>LeadErasure</c>) — and
+    /// publishes <c>LeadErasedEvent</c> so the modules holding copies (calls, recordings) follow.
+    /// Only for a request a second person approved: the caller checked eligibility. False when
+    /// there was nothing to do (unknown, or already erased).
+    /// </summary>
+    Task<bool> EraseLeadAsync(Guid tenantId, Guid leadId, CancellationToken ct);
 }
 
 /// <summary>
@@ -347,3 +362,7 @@ public sealed record MessagingEventsOutcome(
     int MessagesDuplicate,
     int StatusesApplied,
     int StatusesUnmatched);
+
+/// <param name="Reference">What identifies the lead once its name is gone — never personal data.</param>
+/// <param name="ClientId">The client the lead's person is (linked or converted); null for a prospect.</param>
+public sealed record LeadErasureSubject(Guid LeadId, string Reference, bool IsErased, Guid? ClientId);

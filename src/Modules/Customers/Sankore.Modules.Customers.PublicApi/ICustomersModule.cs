@@ -25,6 +25,12 @@ public interface ICustomersModule
     Task<ClientSummary?> GetClientSummaryAsync(Guid tenantId, Guid clientId, CancellationToken ct);
 
     /// <summary>
+    /// The person asked to be forgotten and waits for the end of their legal retention (data-purge
+    /// lot 3): no prospection — no new project — and no contact we initiate. False for an unknown client.
+    /// </summary>
+    Task<bool> IsProcessingRestrictedAsync(Guid tenantId, Guid clientId, CancellationToken ct);
+
+    /// <summary>
     /// The same projection as <see cref="GetClientSummaryAsync"/> for a batch of ids, keyed by the
     /// id that was ASKED for — so a caller holding a page of opaque references can line the answers
     /// up positionally without a second lookup.
