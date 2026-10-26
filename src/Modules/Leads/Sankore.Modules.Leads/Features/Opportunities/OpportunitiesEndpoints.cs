@@ -1,9 +1,13 @@
 namespace Sankore.Modules.Leads.Features.Opportunities;
 
+using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Options;
+using Sankore.Modules.Leads.Infrastructure.TaskAttachments;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Opportunities.AdvanceStage;
 using Sankore.Modules.Leads.Features.Opportunities.CloseOpportunity;
@@ -140,6 +144,69 @@ public static class OpportunitiesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        // PUT opportunities/{id}/fields — the values of the template's fields (merge: null clears)
+        group.MapPut("{id:guid}/fields", async (Guid id, SetProjectFieldsRequest req, ISender sender, CancellationToken ct) =>
+                FieldResult(await sender.Send(new ProjectFields.SetProjectFieldsCommand(id, req.Values ?? new()), ct)))
+            .WithName("SetProjectFields")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // POST opportunities/{id}/attachments — a file for an Attachment field of the template
+        group.MapPost("{id:guid}/attachments", async (
+                Guid id, [FromForm] string fieldKey, IFormFile file, IOptions<TaskAttachmentStorageOptions> options,
+                ISender sender, CancellationToken ct) =>
+            {
+                // Refused before reading: the size is known from the request, the bytes are not needed.
+                if (file.Length > options.Value.MaxBytes)
+                    return Results.UnprocessableEntity(new { error = "TASK_ATTACHMENT_TOO_LARGE" });
+
+                using var buffer = new MemoryStream((int)file.Length);
+                await file.CopyToAsync(buffer, ct);
+                var result = await sender.Send(
+                    new ProjectFields.StoreProjectAttachment(id, fieldKey, file.FileName, buffer.ToArray()), ct);
+                return result.IsSuccess ? Results.Ok(result.Value) : FieldResult(Result.Fail(result.Error!));
+            })
+            .WithName("AddProjectAttachment")
+            .WithTags("Opportunities")
+            .WithSummary("Attaches a file (PDF, image, Office document, text; 10 MB) to an Attachment field: stored encrypted")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Accepts<IFormFile>("multipart/form-data")
+            .DisableAntiforgery()
+            .Produces<ProjectFields.ProjectAttachmentDto>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        group.MapGet("{id:guid}/attachments/{attachmentId:guid}/content", async (
+                Guid id, Guid attachmentId, ISender sender, CancellationToken ct) =>
+            {
+                var result = await sender.Send(new ProjectFields.GetProjectAttachmentContentQuery(id, attachmentId), ct);
+                return result.IsSuccess
+                    ? Results.File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+                    : Results.NotFound();
+            })
+            .WithName("DownloadProjectAttachment")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanReadOpportunities.Code)
+            .Produces(StatusCodes.Status200OK, contentType: "application/octet-stream")
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        group.MapDelete("{id:guid}/attachments/{attachmentId:guid}", async (
+                Guid id, Guid attachmentId, ISender sender, CancellationToken ct) =>
+                FieldResult(await sender.Send(new ProjectFields.RemoveProjectAttachmentCommand(id, attachmentId), ct)))
+            .WithName("RemoveProjectAttachment")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         // PUT opportunities/{id}
         group.MapPut("{id:guid}", Update)
             .WithName("UpdateOpportunity")
@@ -244,6 +311,13 @@ public static class OpportunitiesEndpoints
                 ? Results.NotFound(new { error = result.Error })
                 : Results.UnprocessableEntity(new { error = result.Error });
     }
+
+    /// <summary>The field and attachment routes: their codes under <c>error</c>, like the holdings'.</summary>
+    private static IResult FieldResult(Result result) => result.IsSuccess
+        ? Results.NoContent()
+        : result.Error is OpportunityErrors.NotFound or ProjectFields.ProjectAttachmentHandlers.NotFound
+            ? Results.NotFound(new { error = result.Error })
+            : Results.UnprocessableEntity(new { error = result.Error });
 
     private static async Task<IResult> Update(
         Guid id,
@@ -424,6 +498,9 @@ public sealed record CloseOpportunityRequest(
 /// reconnaît pas.
 /// </param>
 public sealed record CloseOpportunityResponse(Guid? HoldingId);
+
+/// <param name="Values">Field key → value, as the template's field type expects; null clears a value.</param>
+public sealed record SetProjectFieldsRequest(Dictionary<string, JsonElement>? Values);
 
 /// <summary>Tous les champs sont facultatifs : null laisse en place.</summary>
 public sealed record UpdateOpportunityRequest(

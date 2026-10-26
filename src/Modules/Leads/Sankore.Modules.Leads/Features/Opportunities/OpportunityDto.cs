@@ -57,7 +57,12 @@ public sealed record OpportunityDto(
     /// The validation circuits started for its steps, latest last. <c>State</c> is read from M12 on
     /// the single-project read only; a list leaves it null rather than call M12 once per row.
     /// </param>
-    IReadOnlyList<ProjectWorkflowRunDto>? WorkflowRuns = null);
+    IReadOnlyList<ProjectWorkflowRunDto>? WorkflowRuns = null,
+    /// <param name="Fields">The fields of its template; a step's RequiredFieldKeys name some of them.</param>
+    IReadOnlyList<ProjectFieldDefinition>? Fields = null,
+    /// <param name="CustomFields">Their values, keyed by field key — files are in Attachments.</param>
+    System.Text.Json.JsonElement? CustomFields = null,
+    IReadOnlyList<ProjectFields.ProjectAttachmentDto>? Attachments = null);
 
 /// <param name="State">NotStarted, InProgress, Approved, Refused or Unknown — null when not read.</param>
 public sealed record ProjectWorkflowRunDto(
@@ -95,6 +100,11 @@ internal static class OpportunityStepEnrichment
         var ids = items.Select(o => o.Id).ToList();
         var projects = await db.Opportunities.AsNoTracking().Where(o => ids.Contains(o.Id)).ToListAsync(ct);
         var byId = projects.ToDictionary(o => o.Id);
+        var files = (await db.ProjectAttachments.AsNoTracking()
+                .Where(a => ids.Contains(a.OpportunityId) && a.DeletedAt == null)
+                .OrderBy(a => a.UploadedAt)
+                .ToListAsync(ct))
+            .ToLookup(a => a.OpportunityId);
 
         var result = new List<OpportunityDto>(items.Count);
         foreach (var item in items)
@@ -115,7 +125,15 @@ internal static class OpportunityStepEnrichment
                 runs.Add(new ProjectWorkflowRunDto(run.StepId, run.Circuit, run.InstanceId, run.StartedAt, state));
             }
 
-            result.Add(item with { CheckedChecklistItemIds = project.CheckedChecklistItems, WorkflowRuns = runs });
+            result.Add(item with
+            {
+                CheckedChecklistItemIds = project.CheckedChecklistItems,
+                WorkflowRuns = runs,
+                CustomFields = project.CustomFieldsJson is null
+                    ? null
+                    : System.Text.Json.JsonDocument.Parse(project.CustomFieldsJson).RootElement.Clone(),
+                Attachments = files[project.Id].Select(ProjectFields.ProjectAttachmentHandlers.ToDto).ToList(),
+            });
         }
         return result;
     }
@@ -139,6 +157,7 @@ internal static class OpportunityStepEnrichment
                 TracksForecast = template.TracksForecast,
                 AmountKind     = template.AmountKind,
                 CriticalCloseDate = template.CriticalCloseDate,
+                Fields         = template.Fields ?? [],
             });
         }
         return result;

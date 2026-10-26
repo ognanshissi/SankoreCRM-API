@@ -75,6 +75,13 @@ public sealed class Opportunity : AggregateRoot
     public List<Guid> CheckedChecklistItems { get; private set; } = [];
 
     /// <summary>
+    /// The values of its template's fields (<see cref="ProjectTemplate.Fields"/>), as a JSON object
+    /// keyed by field key — checked by <c>CustomFieldValues</c> like a lead's custom values. Files
+    /// are not here: they are <see cref="ProjectAttachment"/> rows. Null when nothing is filled.
+    /// </summary>
+    public string? CustomFieldsJson { get; private set; }
+
+    /// <summary>
     /// The validation circuits (M12) started when the project reached a step linked to one — the
     /// latest run of a step decides whether it may be left. A run refused and run again is kept:
     /// the history of who refused stays readable.
@@ -230,6 +237,17 @@ public sealed class Opportunity : AggregateRoot
         CheckedChecklistItems = done
             ? [.. CheckedChecklistItems, itemId]
             : CheckedChecklistItems.Where(id => id != itemId).ToList();
+        UpdatedAt = now;
+        return Result.Ok();
+    }
+
+    /// <summary>Stores the values already checked against the template. A closed project is history: refused.</summary>
+    public Result SetCustomFields(string? json, DateTimeOffset now)
+    {
+        if (Stage == OpportunityStage.ClosedWon || Stage == OpportunityStage.ClosedLost)
+            return Result.Fail("OPPORTUNITY_ALREADY_CLOSED");
+
+        CustomFieldsJson = json;
         UpdatedAt = now;
         return Result.Ok();
     }

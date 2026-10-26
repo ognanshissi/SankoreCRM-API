@@ -28,7 +28,9 @@ public sealed record ProjectTemplateDto(
     /// <summary>What a project's amount stands for: the forecast never adds two kinds together.</summary>
     ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
     /// <summary>The close date is a deadline: required, and an urgent task once it has passed.</summary>
-    bool CriticalCloseDate = false);
+    bool CriticalCloseDate = false,
+    /// <summary>The fields its projects carry; a step names those needed to reach it.</summary>
+    IReadOnlyList<ProjectFieldDefinition>? Fields = null);
 
 // ── List ────────────────────────────────────────────────────────────────────────
 
@@ -89,7 +91,7 @@ internal sealed class ListProjectTemplatesHandler(
         var resolved = ProjectTemplateResolver.From(t);
         return new ProjectTemplateDto(
             t.Id, t.Name, resolved.Scope, t.Category, t.ProductCode, productName, false, resolved.Steps, t.UpdatedAt,
-            t.TracksForecast, t.AmountKind, t.CriticalCloseDate);
+            t.TracksForecast, t.AmountKind, t.CriticalCloseDate, t.Fields);
     }
 }
 
@@ -101,7 +103,8 @@ internal sealed record CreateProjectTemplateCommand(
     ProductCategory? Category,
     string? ProductCode,
     IReadOnlyList<ProjectStepInput> Steps,
-    ProjectForecastOptions? Forecast = null)
+    ProjectForecastOptions? Forecast = null,
+    IReadOnlyList<ProjectFieldInput>? Fields = null)
     : IRequest<Result<Guid>>, ICommand, IResourceCommand
 {
     public string ResourceType => "ProjectTemplate";
@@ -118,10 +121,10 @@ internal sealed class CreateProjectTemplateHandler(
     public async Task<Result<Guid>> Handle(CreateProjectTemplateCommand cmd, CancellationToken ct)
     {
         var code = string.IsNullOrWhiteSpace(cmd.ProductCode) ? null : cmd.ProductCode.Trim().ToUpperInvariant();
+        ProductSummary? product = null;
 
         if (code is not null)
         {
-            ProductSummary? product;
             // Suppressed: M12 reads through its own DbContext, inside this command's scope.
             using (var suppressed = new TransactionScope(
                 TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
@@ -143,14 +146,21 @@ internal sealed class CreateProjectTemplateHandler(
             return Result.Fail<Guid>(ProjectTemplateErrors.ScopeTaken);
 
         var created = ProjectTemplate.Create(
-            tenant.CurrentTenantId, cmd.Name, cmd.Category, code, cmd.Steps, clock.GetUtcNow(), cmd.Forecast);
+            tenant.CurrentTenantId, cmd.Name, cmd.Category, code, cmd.Steps, clock.GetUtcNow(), cmd.Forecast, cmd.Fields);
         if (created.IsFailure)
             return Result.Fail<Guid>(created.Error!);
+
+        if (cmd.Steps.Any(s => s.RequiresQuestionnaires)
+            && !await QuestionnaireFormAvailability.ExistsAsync(db, code, ScopeCategory(cmd.Category, product), ct))
+            return Result.Fail<Guid>(ProjectTemplateErrors.QuestionnaireFormMissing);
 
         db.ProjectTemplates.Add(created.Value!);
         await db.SaveChangesAsync(ct);
         return Result.Ok(created.Value!.Id);
     }
+
+    private static ProductCategory? ScopeCategory(ProductCategory? category, ProductSummary? product)
+        => category ?? (product is not null && Enum.TryParse<ProductCategory>(product.Category, true, out var c) ? c : null);
 }
 
 // ── Update ──────────────────────────────────────────────────────────────────────
@@ -160,14 +170,19 @@ internal sealed record UpdateProjectTemplateCommand(
     Guid TemplateId,
     string Name,
     IReadOnlyList<ProjectStepInput> Steps,
-    ProjectForecastOptions? Forecast = null)
+    ProjectForecastOptions? Forecast = null,
+    IReadOnlyList<ProjectFieldInput>? Fields = null)
     : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "ProjectTemplate";
     public string? ResourceId => TemplateId.ToString();
 }
 
-internal sealed class UpdateProjectTemplateHandler(LeadsDbContext db, TimeProvider clock)
+internal sealed class UpdateProjectTemplateHandler(
+    LeadsDbContext db,
+    TimeProvider clock,
+    IAdministrationModule? administration = null,
+    ITenantContext? tenant = null)
     : IRequestHandler<UpdateProjectTemplateCommand, Result>
 {
     public async Task<Result> Handle(UpdateProjectTemplateCommand cmd, CancellationToken ct)
@@ -179,13 +194,55 @@ internal sealed class UpdateProjectTemplateHandler(LeadsDbContext db, TimeProvid
         if (template is null)
             return Result.Fail(ProjectTemplateErrors.NotFound);
 
-        var updated = template.Update(cmd.Name, cmd.Steps, clock.GetUtcNow(), cmd.Forecast);
+        var updated = template.Update(cmd.Name, cmd.Steps, clock.GetUtcNow(), cmd.Forecast, cmd.Fields);
         if (updated.IsFailure)
             return updated;
+
+        if (cmd.Steps.Any(s => s.RequiresQuestionnaires))
+        {
+            var category = template.Category ?? await ProductCategoryAsync(template.ProductCode, ct);
+            if (!await QuestionnaireFormAvailability.ExistsAsync(db, template.ProductCode, category, ct))
+                return Result.Fail(ProjectTemplateErrors.QuestionnaireFormMissing);
+        }
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }
+
+    /// <summary>The family of a product template's product; null when the catalogue cannot say.</summary>
+    private async Task<ProductCategory?> ProductCategoryAsync(string? code, CancellationToken ct)
+    {
+        if (code is null || administration is null || tenant is null) return null;
+
+        // Suppressed: M12 reads through its own DbContext, inside this command's scope.
+        using var suppressed = new TransactionScope(
+            TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
+        var product = await administration.GetProductAsync(tenant.CurrentTenantId, code, ct);
+        suppressed.Complete();
+
+        return product is not null && Enum.TryParse<ProductCategory>(product.Category, true, out var c) ? c : null;
+    }
+}
+
+// ── Questionnaire marker ─────────────────────────────────────────────────────────
+
+/// <summary>
+/// Whether a published qualification form applies to a template's products — the levels the
+/// questionnaire plan reads: the product's own, then its family's. Without one, a step marked
+/// « Questionnaires remplis » would let every project through on nothing (product owner,
+/// 2026-10-26). A generic form is counted for completeness, but the column holding the family is
+/// required, so none exists: the tenant's default template, which names no product, therefore
+/// cannot carry the marker.
+/// </summary>
+internal static class QuestionnaireFormAvailability
+{
+    public static Task<bool> ExistsAsync(
+        LeadsDbContext db, string? productCode, ProductCategory? category, CancellationToken ct)
+        => db.QualificationTemplates.AnyAsync(q =>
+            q.Status == TemplateStatus.Published
+            && ((q.ProductCode == null && q.ProductCategory == null)
+                || (productCode != null && q.ProductCode == productCode)
+                || (category != null && q.ProductCode == null && q.ProductCategory == category)), ct);
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────────────

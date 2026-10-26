@@ -146,7 +146,7 @@ public sealed class HoldingSubscriptionConsumer(
                 var rejected = await customers.RejectHoldingSyncAsync(
                     evt.TenantId, holding.HoldingId,
                     $"{InsuranceErrors.NotPrepared}: le paiement de la prime et le consentement n'ont "
-                    + "pas été enregistrés. Finalisez la souscription depuis la page « Souscrire une assurance ».",
+                    + "pas été enregistrés. Finalisez-les avec « Envoyer à l'assureur » sur la page du contrat.",
                     ct);
 
                 logger.LogWarning(

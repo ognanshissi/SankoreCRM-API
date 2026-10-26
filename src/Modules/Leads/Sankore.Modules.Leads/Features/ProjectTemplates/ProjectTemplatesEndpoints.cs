@@ -70,7 +70,7 @@ public static class ProjectTemplatesEndpoints
     {
         var result = await sender.Send(new CreateProjectTemplateCommand(
             req.Name, req.Category, req.ProductCode, Inputs(req.Steps),
-            new ProjectForecastOptions(req.TracksForecast, req.AmountKind, req.CriticalCloseDate)), ct);
+            new ProjectForecastOptions(req.TracksForecast, req.AmountKind, req.CriticalCloseDate), Fields(req.Fields)), ct);
 
         return result.IsSuccess
             ? Results.Created($"project-templates/{result.Value}", result.Value)
@@ -82,7 +82,7 @@ public static class ProjectTemplatesEndpoints
     {
         var result = await sender.Send(
             new UpdateProjectTemplateCommand(templateId, req.Name, Inputs(req.Steps),
-                new ProjectForecastOptions(req.TracksForecast, req.AmountKind, req.CriticalCloseDate)), ct);
+                new ProjectForecastOptions(req.TracksForecast, req.AmountKind, req.CriticalCloseDate), Fields(req.Fields)), ct);
 
         return result.IsSuccess ? Results.NoContent() : ToProblem(result.Error!);
     }
@@ -96,7 +96,12 @@ public static class ProjectTemplatesEndpoints
     private static IReadOnlyList<ProjectStepInput> Inputs(IReadOnlyList<ProjectStepRequest>? steps)
         => (steps ?? []).Select(s => new ProjectStepInput(
             s.Id, s.Label ?? string.Empty, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
-            s.RequiresQuestionnaires, s.RequiresAmount, s.RequiresCloseDate, s.Checklist, s.WorkflowCircuit)).ToList();
+            s.RequiresQuestionnaires, s.RequiresAmount, s.RequiresCloseDate, s.Checklist, s.WorkflowCircuit,
+            s.RequiredFieldKeys)).ToList();
+
+    /// <summary>Null when the caller sent no list: the template keeps its fields.</summary>
+    private static IReadOnlyList<ProjectFieldInput>? Fields(IReadOnlyList<ProjectFieldRequest>? fields)
+        => fields?.Select(f => new ProjectFieldInput(f.Key, f.Label ?? string.Empty, f.Type, f.HelpText, f.Options)).ToList();
 
     private static IResult ToProblem(string error) => error switch
     {
@@ -118,7 +123,9 @@ public sealed record CreateProjectTemplateRequest(
     /// <summary>What a project's amount stands for: Generic, Loan, Premium or Deposit.</summary>
     ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
     /// <summary>The close date is a deadline (requires TracksForecast).</summary>
-    bool CriticalCloseDate = false);
+    bool CriticalCloseDate = false,
+    /// <summary>The fields its projects carry. Omit to keep them.</summary>
+    IReadOnlyList<ProjectFieldRequest>? Fields = null);
 
 public sealed record UpdateProjectTemplateRequest(
     string Name,
@@ -128,7 +135,19 @@ public sealed record UpdateProjectTemplateRequest(
     /// <summary>What a project's amount stands for: Generic, Loan, Premium or Deposit.</summary>
     ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
     /// <summary>The close date is a deadline (requires TracksForecast).</summary>
-    bool CriticalCloseDate = false);
+    bool CriticalCloseDate = false,
+    /// <summary>The fields its projects carry, replaced as a whole. Omit to keep them.</summary>
+    IReadOnlyList<ProjectFieldRequest>? Fields = null);
+
+/// <param name="Key">Send back a saved field's key: its values stay, and its type cannot change. Null for a new field.</param>
+/// <param name="Type">One of the 14 custom-field types, or Attachment (files).</param>
+/// <param name="Options">For SingleChoice and MultiChoice only; a value is derived from the label when empty.</param>
+public sealed record ProjectFieldRequest(
+    string? Key,
+    string? Label,
+    ProjectFieldType Type,
+    string? HelpText = null,
+    IReadOnlyList<ProjectFieldOption>? Options = null);
 
 /// <param name="Id">Send back an existing step's id: the projects on it stay there.</param>
 /// <param name="Phase">One of the five open phases, never going backwards along the list.</param>
@@ -152,4 +171,6 @@ public sealed record ProjectStepRequest(
     /// <summary>Points ticked while on the step, all required to leave it. Up to 10.</summary>
     IReadOnlyList<ProjectChecklistItemInput>? Checklist = null,
     /// <summary>The workflow circuit started on reaching the step (see GET project-templates/workflow-circuits).</summary>
-    string? WorkflowCircuit = null);
+    string? WorkflowCircuit = null,
+    /// <summary>Keys of the template's fields that must hold a value to reach the step.</summary>
+    IReadOnlyList<string>? RequiredFieldKeys = null);

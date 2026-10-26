@@ -764,6 +764,13 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         }
 
         /// <summary>
+        /// The read model, for a screen — see <see cref="Features.Insurance.Policies.RecordedPolicyReader"/>.
+        /// </summary>
+        public Task<IReadOnlyList<RecordedPolicy>> ListRecordedPoliciesAsync(
+            Guid crmCustomerId, CancellationToken ct)
+            => Features.Insurance.Policies.RecordedPolicyReader.ReadAsync(facade._db, crmCustomerId, ct);
+
+        /// <summary>
         /// Every policy the customer holds, across every insurer the tenant distributes for.
         ///
         /// <para>

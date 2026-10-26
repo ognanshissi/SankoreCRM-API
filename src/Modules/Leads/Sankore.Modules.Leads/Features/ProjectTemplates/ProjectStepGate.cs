@@ -71,7 +71,7 @@ internal sealed class ProjectStepGate(
 
         // The step conditions (product owner, 2026-10-24) first: they are the project's own data,
         // cheap to read, and what the agent can settle on the spot.
-        var conditions = await ConditionsMetAsync(project, steps, currentIndex, targetIndex, ct);
+        var conditions = await ConditionsMetAsync(project, steps, template.Fields ?? [], currentIndex, targetIndex, ct);
         if (conditions.IsFailure)
             return conditions;
 
@@ -155,7 +155,8 @@ internal sealed class ProjectStepGate(
     /// Moving BACK needs nothing: it is how an agent reopens a step.
     /// </summary>
     private async Task<Result> ConditionsMetAsync(
-        Opportunity project, List<ProjectStepDto> steps, int currentIndex, int targetIndex, CancellationToken ct)
+        Opportunity project, List<ProjectStepDto> steps, IReadOnlyList<ProjectFieldDefinition> fields,
+        int currentIndex, int targetIndex, CancellationToken ct)
     {
         if (targetIndex <= currentIndex)
             return Result.Ok();
@@ -165,6 +166,13 @@ internal sealed class ProjectStepGate(
             return Result.Fail(ProjectTemplateErrors.AmountRequired);
         if (reached.Any(s => s.RequiresCloseDate) && project.ExpectedCloseDate is null)
             return Result.Fail(ProjectTemplateErrors.CloseDateRequired);
+
+        // The template's own fields a reached step asks for (product owner, 2026-10-26). The screen
+        // names the missing ones from the project it already holds; the code only says « fields ».
+        var requiredKeys = reached.SelectMany(s => s.RequiredFieldKeys ?? []).ToList();
+        if (requiredKeys.Count > 0
+            && (await Opportunities.ProjectFields.ProjectFieldForms.MissingAsync(db, project, fields, requiredKeys, ct)).Count > 0)
+            return Result.Fail(ProjectTemplateErrors.FieldsRequired);
 
         var left = steps.Skip(Math.Max(currentIndex, 0)).Take(targetIndex - Math.Max(currentIndex, 0)).ToList();
 

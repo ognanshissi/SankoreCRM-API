@@ -88,6 +88,38 @@ public sealed record InsurancePolicy(
     DateOnly? NextDueDate,
     bool? FirstPremiumPaid = null);
 
+/// <summary>
+/// A policy as THIS platform recorded it — written at issuance, then kept up to date by the
+/// insurer's synchronisation (ASS-07). Unlike <see cref="InsurancePolicy"/>, which an insurer
+/// answers live, this is the read model: reading it calls no insurer.
+/// </summary>
+/// <param name="HoldingId">
+/// The CRM contract the policy realises, when it was subscribed from one. Null for a policy the
+/// insurer holds that was never sold here — the synchronisation brings those in too.
+/// </param>
+/// <param name="PremiumOutstanding">
+/// Issued is not in force: true while the subscription that produced it still waits for its
+/// premium, which the insurer's own status does not say until its next synchronisation.
+/// </param>
+public sealed record RecordedPolicy(
+    Guid PolicyId,
+    string PolicyNumber,
+    string Insurer,
+    Guid? ProductId,
+    string ProductName,
+    PolicyStatus Status,
+    string? StatusDetail,
+    DateOnly EffectiveDate,
+    DateOnly? ExpiryDate,
+    DateOnly? NextDueDate,
+    decimal PremiumAmount,
+    string Currency,
+    PremiumPeriodicity Periodicity,
+    decimal? InsuredAmount,
+    Guid? HoldingId,
+    DateTimeOffset LastSyncedAt,
+    bool PremiumOutstanding);
+
 public sealed record InsuranceClaimPayload(
     ExternalId PolicyId,
     DateOnly OccurredOn,

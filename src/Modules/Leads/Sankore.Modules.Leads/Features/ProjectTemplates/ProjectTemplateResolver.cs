@@ -21,7 +21,9 @@ public sealed record ProjectStepDto(
     bool RequiresCloseDate = false,
     IReadOnlyList<ProjectChecklistItem>? Checklist = null,
     /// <summary>The M12 circuit started on reaching the step; null when none.</summary>
-    string? WorkflowCircuit = null);
+    string? WorkflowCircuit = null,
+    /// <summary>Keys of the template's fields that must hold a value to reach the step.</summary>
+    IReadOnlyList<string>? RequiredFieldKeys = null);
 
 /// <summary>
 /// The template that applies to one project, and where it came from.
@@ -38,7 +40,8 @@ public sealed record ResolvedProjectTemplate(
     IReadOnlyList<ProjectStepDto> Steps,
     bool TracksForecast = true,
     ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
-    bool CriticalCloseDate = false)
+    bool CriticalCloseDate = false,
+    IReadOnlyList<ProjectFieldDefinition>? Fields = null)
 {
     /// <summary>
     /// The step a project stands on: its own when this template still has it, else the last step
@@ -105,10 +108,12 @@ internal sealed class ProjectTemplateResolver(
         template.ProductCode is not null ? "Product" : template.Category is not null ? "Category" : "Default",
         template.Steps.Select(s => new ProjectStepDto(
             s.Id, s.Label, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
-            s.RequiresQuestionnaires, s.RequiresAmount, s.RequiresCloseDate, s.Checklist, s.WorkflowCircuit)).ToList(),
+            s.RequiresQuestionnaires, s.RequiresAmount, s.RequiresCloseDate, s.Checklist, s.WorkflowCircuit,
+            s.RequiredFieldKeys)).ToList(),
         template.TracksForecast,
         template.AmountKind,
-        template.CriticalCloseDate);
+        template.CriticalCloseDate,
+        template.Fields);
 
     public static ResolvedProjectTemplate BuiltIn() => new(
         null,

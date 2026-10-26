@@ -247,6 +247,13 @@ public interface IInsuranceGateway
 
     Task<IReadOnlyList<InsurancePolicy>> GetPoliciesAsync(Guid crmCustomerId, CancellationToken ct);
 
+    /// <summary>
+    /// The client's policies as recorded here, newest effective date first, for the current
+    /// tenant — every insurer at once, and no insurer called. This is what a screen lists;
+    /// <see cref="GetPoliciesAsync"/> asks each insurer live and is for the synchronisation.
+    /// </summary>
+    Task<IReadOnlyList<RecordedPolicy>> ListRecordedPoliciesAsync(Guid crmCustomerId, CancellationToken ct);
+
     Task<IntegrationCommandId> RequestClaimDeclarationAsync(
         InsuranceClaimPayload payload, CancellationToken ct);
 

@@ -9,7 +9,8 @@ using Sankore.Modules.Customers.Features.Holdings.Designate;
 using Sankore.Modules.Customers.Features.Holdings.GetHolding;
 using Sankore.Modules.Customers.Features.Holdings.ListHoldings;
 using Sankore.Modules.Customers.Features.Holdings.Shared;
-using Sankore.Modules.Customers.Features.Holdings.Subscribe;
+using Sankore.Modules.Customers.Features.Holdings.UpdateSpecifics;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sankore.Modules.Customers.Features.Holdings.Transitions;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.PublicApi.Events;
@@ -50,8 +51,7 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
     // ── fixtures ────────────────────────────────────────────────────────────
 
-    // A savings line with a death beneficiary: an insurance line cannot be subscribed through
-    // this handler any more — it comes from a won project.
+    // A savings line with a death beneficiary.
     private void Line(
         bool allowMultipleHoldings = true,
         IReadOnlyList<DesignationRoleDto>? roles = null,
@@ -66,20 +66,44 @@ public sealed class ProductHoldingHandlerTests : IDisposable
     private HoldingWriteContext Context(CustomersDbContext db)
         => TestHouseholdContext.Holdings(db, _tenant, _actor, _admin);
 
+    /// <summary>
+    /// Opens a contract the only way there is — a won project (product owner, 2026-10-26) — then
+    /// fills its terms and, when given, its clause, as the agent does on the contract page.
+    /// </summary>
     private async Task<Result<Guid>> SubscribeAsync(
         IReadOnlyList<DesignationInput>? designations = null)
     {
-        await using var db = _factory.CreateContext();
+        Result<Guid> opened;
+        await using (var db = _factory.CreateContext())
+        {
+            opened = await new DraftHoldingOpener(
+                    db, _admin, TimeProvider.System, NullLogger<DraftHoldingOpener>.Instance)
+                .OpenAsync(DraftHoldingOrigin.FromOpportunity(
+                    _tenant, _clientId, _lineId, Guid.NewGuid(), _actor), CancellationToken.None);
+        }
 
-        var handler = new SubscribeToProductHandler(
-            db, Context(db), new DesignationSubjectValidator(db));
+        if (opened.IsFailure)
+            return opened;
 
-        return await handler.Handle(
-            new SubscribeToProductCommand(
-                _clientId, _lineId,
-                new HoldingSpecificsDto(InsuredCapital: 5_000_000m, Currency: "XOF"),
-                designations),
-            CancellationToken.None);
+        await using (var db = _factory.CreateContext())
+        {
+            var terms = await new UpdateHoldingSpecificsHandler(Context(db)).Handle(
+                new UpdateHoldingSpecificsCommand(
+                    opened.Value, new HoldingSpecificsDto(InsuredCapital: 5_000_000m, Currency: "XOF")),
+                CancellationToken.None);
+
+            if (terms.IsFailure)
+                return Result.Fail<Guid>(terms.Error!);
+        }
+
+        if (designations is { Count: > 0 })
+        {
+            var designated = await DesignateAsync(opened.Value, designations);
+            if (designated.IsFailure)
+                return Result.Fail<Guid>(designated.Error!);
+        }
+
+        return opened;
     }
 
     private async Task<Result<DesignateResult>> DesignateAsync(
@@ -107,7 +131,7 @@ public sealed class ProductHoldingHandlerTests : IDisposable
     // ── subscribing ─────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task A_subscription_snapshots_the_line_and_starts_as_a_draft()
+    public async Task A_won_project_opens_a_draft_that_snapshots_the_line()
     {
         var result = await SubscribeAsync();
 
@@ -125,20 +149,6 @@ public sealed class ProductHoldingHandlerTests : IDisposable
     }
 
     [Theory]
-    [InlineData(nameof(ProductCategory.Insurance))]
-    [InlineData(nameof(ProductCategory.HealthInsurance))]
-    [InlineData(nameof(ProductCategory.ForecastInsurance))]
-    public async Task An_insurance_line_is_subscribed_through_a_project_not_from_the_client_file(string category)
-    {
-        Line(category: category);
-
-        (await SubscribeAsync()).Error.Should().Be(CustomerErrors.InsuranceRequiresProject);
-
-        await using var db = _factory.CreateContext();
-        (await db.ProductHoldings.AnyAsync(CancellationToken.None)).Should().BeFalse();
-    }
-
-    [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
     public async Task The_holding_remembers_whether_its_line_forbids_a_second(bool allowMultiple, bool singlePerLine)
@@ -151,26 +161,6 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
         await using var db = _factory.CreateContext();
         (await db.ProductHoldings.SingleAsync(CancellationToken.None)).SinglePerLine.Should().Be(singlePerLine);
-    }
-
-    [Fact]
-    public async Task A_product_line_the_catalogue_does_not_have_is_refused()
-    {
-        _admin.GetBeneficiaryPolicyAsync(_tenant, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-              .Returns((BeneficiaryPolicyDto?)null);
-
-        (await SubscribeAsync()).Error.Should().Be(CustomerErrors.ProductLineNotFound);
-    }
-
-    [Fact]
-    public async Task An_unreachable_catalogue_refuses_the_subscription()
-    {
-        // Letting it through would store a holding with no category, no roles and no
-        // multiple-holding rule — and the designation gate would then accept anything.
-        _admin.GetBeneficiaryPolicyAsync(_tenant, _lineId, Arg.Any<CancellationToken>())
-              .Returns<Task<BeneficiaryPolicyDto?>>(_ => throw new InvalidOperationException("M12 down"));
-
-        (await SubscribeAsync()).Error.Should().Be(CustomerErrors.ProductLineUnavailable);
     }
 
     [Fact]
@@ -213,35 +203,6 @@ public sealed class ProductHoldingHandlerTests : IDisposable
         (await SubscribeAsync()).IsSuccess.Should().BeTrue(
             "the ceiling is on LIVE holdings, not on the history");
     }
-
-    [Fact]
-    public async Task An_invalid_clause_refuses_the_whole_subscription()
-    {
-        // Rather than leaving a holding behind with no beneficiaries for somebody to discover.
-        var result = await SubscribeAsync([Beneficiary(60m)]);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(CustomerErrors.DesignationSharesMustTotal100);
-
-        await using var db = _factory.CreateContext();
-        (await db.ProductHoldings.CountAsync(CancellationToken.None)).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task The_clause_may_travel_with_the_subscription()
-    {
-        var result = await SubscribeAsync([Beneficiary(100m)]);
-
-        result.IsSuccess.Should().BeTrue(result.Error);
-
-        await using var db = _factory.CreateContext();
-        var designation = await db.BeneficiaryDesignations.SingleAsync(CancellationToken.None);
-
-        designation.SharePercent.Should().Be(100m);
-        designation.ClauseVersion.Should().Be(1);
-    }
-
-    // ── designating on a LOADED holding ─────────────────────────────────────
 
     [Fact]
     public async Task A_clause_recorded_on_a_reloaded_holding_is_inserted_and_not_updated()

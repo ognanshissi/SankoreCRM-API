@@ -30,6 +30,24 @@ internal sealed class OpportunityConfiguration : IEntityTypeConfiguration<Opport
         builder.HasIndex(o => new { o.TenantId, o.Stage });
         JsonbList.Configure(builder.Property(o => o.CheckedChecklistItems));
         JsonbList.Configure(builder.Property(o => o.WorkflowRuns));
+        builder.Property(o => o.CustomFieldsJson).HasColumnName("custom_fields").HasColumnType("jsonb");
         builder.Ignore(o => o.DomainEvents);
+    }
+}
+
+internal sealed class ProjectAttachmentConfiguration : IEntityTypeConfiguration<ProjectAttachment>
+{
+    public void Configure(EntityTypeBuilder<ProjectAttachment> b)
+    {
+        b.ToTable("project_attachments");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Id).ValueGeneratedNever();
+        b.Property(x => x.FieldKey).HasMaxLength(60).IsRequired();
+        b.Property(x => x.FileName).HasMaxLength(CrmTaskAttachment.FileNameMaxLength).IsRequired();
+        b.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+        b.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+        b.Property(x => x.StorageRef).HasMaxLength(80).IsRequired();
+        b.HasIndex(x => new { x.OpportunityId, x.FieldKey });
+        b.HasOne<Opportunity>().WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
     }
 }

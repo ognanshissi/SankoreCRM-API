@@ -2401,7 +2401,8 @@ Product owner, 2026-10-25: **the holding is the contract**. There used to be two
 sent straight to the insurer (Active with no premium collected) and `POST integration/insurance/subscriptions`
 for a customer with no contract record. Now:
 
-1. The holding is created and signed in M01 (client record › Produits, or a won project).
+1. The holding is opened by a won project and signed in M01 — the only way a contract is opened
+   since 2026-10-26 (see « A client's contracts are one list »).
 2. `POST integration/insurance/subscriptions` takes `holdingId` + the insurer's `productId` + how the
    premium is paid (`paymentMode`: `CoreBankingDebit` with `accountRef`, or `RecordedByAgent` with
    `paymentMethod`/`paymentReference`/`paidOn` — an institution with no core banking) + the consent
@@ -2435,6 +2436,35 @@ for a customer with no contract record. Now:
   → payment + consent → send, then follows the subscription); the holding drawer shows « Finaliser
   la souscription » instead of « Envoyer » on insurance categories. **ORASS still refuses every
   insurance operation** — only the Fake adapter answers end to end.
+
+### A client's contracts are one list (2026-10-26)
+
+Product owner, 2026-10-26: the client record answers « what does this client hold », not « which
+system says so ». Two consequences on the server:
+
+- **Every contract is opened by a won project.** `POST clients/{clientId}/holdings` (the « Nouvelle
+  souscription » drawer) is GONE, with `SubscribeToProductCommand` and
+  `HOLDING_INSURANCE_REQUIRES_PROJECT`: `DraftHoldingOpener` (won project, converted lead) is the
+  only way in, so the questionnaires and the KYC a product requires cannot be walked round. Tests
+  open their contracts through it (`ProductHoldingHandlerTests.SubscribeAsync`).
+- **`GET clients/{clientId}/contracts`** (`ListClientContracts`, `customers:read`) folds three sources:
+  the holdings; the policies as RECORDED here (`IInsuranceGateway.ListRecordedPoliciesAsync`, the
+  read model — `GetPoliciesAsync` calls every insurer live and is for the synchronisation); the core
+  banking snapshot. A back-office line is folded into the holding it realises — a policy through
+  `RecordedPolicy.HoldingId` (the subscription that produced it), an account or loan through
+  `ProductHolding.ExternalRef` matched on the CBS id or number — and what no holding accounts for is
+  listed on its own (`Source` Insurer / CoreBanking, read-only). Keys: `holding:{id}`,
+  `policy:{id}`, `account:{ref}`, `loan:{ref}`.
+- **Each back office is read only when the caller may** (Ins.Policy.View; CoreBanking.Balance.ViewLive
+  or Integration.Command.View — the codes of the tabs it replaces) **and the module is readable**. A
+  failed read leaves the holdings and names the source in `UnavailableSources`, never an empty list
+  that would pass for « holds nothing there ».
+- **Known limit:** a non-insurance holding is never sent to the core banking system
+  (`HoldingSubscriptionConsumer` routes insurance lines only), so its `ExternalRef` stays empty and an
+  account opened at the bank for it is listed twice — the holding, and the bank's line. Matching on
+  the product code is not done: a client may hold two savings accounts.
+- `RecordedPolicyReader` is the one body behind `GET integration/insurance/policies` and the gateway
+  method, so « which contract is this policy » has one answer.
 
 ### Insurance lot 2: the blocking rules of the distribution process (2026-10-25)
 
@@ -2540,8 +2570,9 @@ honoured — that is what a settings typo produces, and the mistake is irreversi
 
 `ProductHolding.Designate` checks a subject's SHAPE — an external person is named and carries no
 id, anybody else carries one — and that is as far as an aggregate can go. **`DesignationSubjectValidator`
-does the rest**, on both paths that accept a clause (`DesignateHandler` and
-`SubscribeToProductHandler` — leaving it off one would make that endpoint the way round the rule):
+does the rest**, on every path that accepts a clause — today `DesignateHandler` alone, since the
+direct subscription went (2026-10-26); a new path that takes one must call it, or it becomes the way
+round the rule:
 
 - a `HouseholdMember` subject must be an **active member of THIS holding's client's household**;
 - a `Client` subject must be a client **of the same tenant**, not archived or merged.

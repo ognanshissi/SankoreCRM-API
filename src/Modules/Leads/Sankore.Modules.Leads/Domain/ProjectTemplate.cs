@@ -1,5 +1,8 @@
 namespace Sankore.Modules.Leads.Domain;
 
+using System.Globalization;
+using System.Text;
+using System.Text.Json.Serialization;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -29,6 +32,10 @@ public sealed class ProjectTemplate : AggregateRoot
     public const int MaxChecklistLabelLength = 120;
     public const int MaxCircuitLength = 60;
     public const int MaxNameLength = 100;
+    public const int MaxFields = 30;
+    public const int MaxFieldLabelLength = 100;
+    public const int MaxFieldHelpLength = 300;
+    public const int MaxFieldOptions = 50;
 
     public static readonly IReadOnlyList<OpportunityStage> OpenPhases =
     [
@@ -77,6 +84,16 @@ public sealed class ProjectTemplate : AggregateRoot
     private readonly List<ProjectTemplateStep> _steps = [];
     public IReadOnlyList<ProjectTemplateStep> Steps => _steps.OrderBy(s => s.Order).ToList();
 
+    /// <summary>
+    /// The fields the projects of this template carry (product owner, 2026-10-26): what this kind
+    /// of sale needs written down — the number of people covered, the site visited, the signed
+    /// estimate — beyond the amount and the date every project has. Values live on the project
+    /// (<see cref="Opportunity.CustomFieldsJson"/>, attachments in their own table); a step names
+    /// the ones needed to REACH it (<see cref="ProjectTemplateStep.RequiredFieldKeys"/>). A field
+    /// keeps its key across edits, so the values already entered stay attached to it.
+    /// </summary>
+    public List<ProjectFieldDefinition> Fields { get; private set; } = [];
+
     public bool IsDefault => Category is null && ProductCode is null;
 
     private ProjectTemplate() { } // EF Core
@@ -88,7 +105,8 @@ public sealed class ProjectTemplate : AggregateRoot
         string? productCode,
         IReadOnlyList<ProjectStepInput> steps,
         DateTimeOffset now,
-        ProjectForecastOptions? forecast = null)
+        ProjectForecastOptions? forecast = null,
+        IReadOnlyList<ProjectFieldInput>? fields = null)
     {
         if (category is not null && !string.IsNullOrWhiteSpace(productCode))
             return Result.Fail<ProjectTemplate>(ProjectTemplateErrors.ScopeInvalid);
@@ -102,7 +120,7 @@ public sealed class ProjectTemplate : AggregateRoot
             CreatedAt   = now,
         };
 
-        var updated = template.Update(name, steps, now, forecast);
+        var updated = template.Update(name, steps, now, forecast, fields ?? []);
         return updated.IsSuccess ? Result.Ok(template) : Result.Fail<ProjectTemplate>(updated.Error!);
     }
 
@@ -111,8 +129,13 @@ public sealed class ProjectTemplate : AggregateRoot
     /// edited in place — the projects standing on it stay there; a step left out is removed, and
     /// its projects fall back to the step of their phase.
     /// </summary>
+    /// <param name="fields">
+    /// The template's fields, replaced as a whole; null keeps them. A field sent back with its key
+    /// is the same field; one without gets a key derived from its label.
+    /// </param>
     public Result Update(
-        string name, IReadOnlyList<ProjectStepInput> steps, DateTimeOffset now, ProjectForecastOptions? forecast = null)
+        string name, IReadOnlyList<ProjectStepInput> steps, DateTimeOffset now, ProjectForecastOptions? forecast = null,
+        IReadOnlyList<ProjectFieldInput>? fields = null)
     {
         forecast ??= ProjectForecastOptions.Default;
 
@@ -121,15 +144,29 @@ public sealed class ProjectTemplate : AggregateRoot
         if (name.Trim().Length > MaxNameLength)
             return Result.Fail(ProjectTemplateErrors.NameTooLong);
 
+        List<ProjectFieldDefinition> definitions = Fields;
+        if (fields is not null)
+        {
+            var built = BuildFields(fields);
+            if (built.IsFailure) return Result.Fail(built.Error!);
+            definitions = built.Value!;
+        }
+
         var invalid = Validate(steps);
         if (invalid is not null)
             return Result.Fail(invalid);
+
+        // A step can only require a field the template declares.
+        var known = definitions.Select(f => f.Key).ToHashSet(StringComparer.Ordinal);
+        if (steps.Any(s => (s.RequiredFieldKeys ?? []).Any(k => !known.Contains(k))))
+            return Result.Fail(ProjectTemplateErrors.StepFieldUnknown);
         if (forecast.CriticalCloseDate && !forecast.TracksForecast)
             return Result.Fail(ProjectTemplateErrors.CriticalDateWithoutForecast);
         if (!Enum.IsDefined(forecast.AmountKind))
             return Result.Fail(ProjectTemplateErrors.AmountKindInvalid);
 
         Name = name.Trim();
+        Fields = definitions.ToList();
         TracksForecast = forecast.TracksForecast;
         AmountKind = forecast.AmountKind;
         CriticalCloseDate = forecast.CriticalCloseDate;
@@ -152,6 +189,99 @@ public sealed class ProjectTemplate : AggregateRoot
 
         UpdatedAt = now;
         return Result.Ok();
+    }
+
+    /// <summary>
+    /// The definitions the inputs describe, keys kept or derived from the label. Options are for the
+    /// two choice types only, and a choice field needs at least one.
+    /// </summary>
+    private Result<List<ProjectFieldDefinition>> BuildFields(IReadOnlyList<ProjectFieldInput> inputs)
+    {
+        if (inputs.Count > MaxFields) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.TooManyFields);
+
+        var labels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<ProjectFieldDefinition>();
+
+        // The saved keys sent back are reserved first: a new field listed before them must not
+        // derive the same key from its label.
+        var reserved = inputs
+            .Where(i => !string.IsNullOrWhiteSpace(i.Key) && Fields.Any(f => f.Key == i.Key))
+            .Select(i => i.Key!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var input in inputs)
+        {
+            var label = input.Label?.Trim() ?? string.Empty;
+            if (label.Length == 0) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldLabelRequired);
+            if (label.Length > MaxFieldLabelLength) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldLabelTooLong);
+            if (!labels.Add(label)) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldLabelDuplicate);
+            if (!Enum.IsDefined(input.Type)) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldTypeInvalid);
+            if (input.HelpText?.Trim().Length > MaxFieldHelpLength) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldHelpTooLong);
+
+            // A field already saved keeps its key — and its type: values entered as a date must not
+            // be re-read as an amount.
+            var existing = string.IsNullOrWhiteSpace(input.Key) ? null : Fields.FirstOrDefault(f => f.Key == input.Key);
+            if (existing is not null && existing.Type != input.Type)
+                return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldTypeChanged);
+
+            // A new field may come with its key already chosen — the settings screen derives it so a
+            // step of the same save can require the field; a valid one is kept as sent.
+            var key = existing?.Key
+                ?? (IsValidKey(input.Key) ? input.Key!.Trim() : UniqueKey(label, [.. keys, .. reserved]));
+            if (!keys.Add(key)) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldKeyDuplicate);
+
+            var isChoice = input.Type is ProjectFieldType.SingleChoice or ProjectFieldType.MultiChoice;
+            var options = (input.Options ?? [])
+                .Where(o => !string.IsNullOrWhiteSpace(o.Label))
+                .Select(o => new ProjectFieldOption(
+                    string.IsNullOrWhiteSpace(o.Value) ? Slug(o.Label) : o.Value.Trim(), o.Label.Trim()))
+                .ToList();
+            if (isChoice && options.Count == 0) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldOptionsRequired);
+            if (options.Count > MaxFieldOptions) return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldOptionsTooMany);
+            if (options.Select(o => o.Value).Distinct(StringComparer.OrdinalIgnoreCase).Count() != options.Count)
+                return Result.Fail<List<ProjectFieldDefinition>>(ProjectTemplateErrors.FieldOptionsDuplicate);
+
+            result.Add(new ProjectFieldDefinition(
+                key, label, input.Type,
+                string.IsNullOrWhiteSpace(input.HelpText) ? null : input.HelpText.Trim(),
+                isChoice ? options : null));
+        }
+
+        return Result.Ok(result);
+    }
+
+    private static bool IsValidKey(string? key)
+        => !string.IsNullOrWhiteSpace(key)
+           && System.Text.RegularExpressions.Regex.IsMatch(key.Trim(), "^[a-zA-Z][a-zA-Z0-9]{0,49}$");
+
+    /// <summary>A key from a label: lower-case ASCII, words joined in camelCase (« Nombre de personnes » → nombreDePersonnes).</summary>
+    private static string UniqueKey(string source, HashSet<string> taken)
+    {
+        var baseKey = Slug(source);
+        if (baseKey.Length == 0) baseKey = "champ";
+        var key = baseKey;
+        for (var i = 2; taken.Contains(key); i++)
+            key = $"{baseKey}{i}";
+        return key;
+    }
+
+    private static string Slug(string text)
+    {
+        var plain = new StringBuilder();
+        foreach (var c in text.Normalize(NormalizationForm.FormD))
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                plain.Append(c);
+
+        var spaced = new string(plain.ToString().Select(c => char.IsAsciiLetterOrDigit(c) ? c : ' ').ToArray());
+        var words = spaced
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w.ToLowerInvariant())
+            .ToList();
+        if (words.Count == 0) return string.Empty;
+
+        var key = words[0] + string.Concat(words.Skip(1).Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
+        return char.IsAsciiDigit(key[0]) ? "f" + key : key[..Math.Min(key.Length, 50)];
     }
 
     /// <summary>The first error the steps carry, or null.</summary>
@@ -276,6 +406,9 @@ public sealed class ProjectTemplateStep
     /// </summary>
     public string? WorkflowCircuit { get; private set; }
 
+    /// <summary>Keys of the template's fields that must hold a value to REACH this step.</summary>
+    public List<string> RequiredFieldKeys { get; private set; } = [];
+
     public int Order { get; private set; }
 
     private ProjectTemplateStep() { } // EF Core
@@ -302,6 +435,7 @@ public sealed class ProjectTemplateStep
             .Select(i => new ProjectChecklistItem(i.Id ?? Guid.NewGuid(), i.Label.Trim()))
             .ToList();
         WorkflowCircuit = string.IsNullOrWhiteSpace(input.WorkflowCircuit) ? null : input.WorkflowCircuit.Trim();
+        RequiredFieldKeys = (input.RequiredFieldKeys ?? []).Distinct(StringComparer.Ordinal).ToList();
         Order       = order;
     }
 }
@@ -319,13 +453,58 @@ public sealed record ProjectStepInput(
     bool RequiresAmount = false,
     bool RequiresCloseDate = false,
     IReadOnlyList<ProjectChecklistItemInput>? Checklist = null,
-    string? WorkflowCircuit = null);
+    string? WorkflowCircuit = null,
+    IReadOnlyList<string>? RequiredFieldKeys = null);
 
 /// <param name="Id">Send back an existing item's id: the ticks already given on it stay.</param>
 public sealed record ProjectChecklistItemInput(Guid? Id, string Label);
 
 /// <summary>One point of a step's checklist.</summary>
 public sealed record ProjectChecklistItem(Guid Id, string Label);
+
+/// <summary>
+/// The 14 types of the tenant's custom fields (<c>FormFieldType</c> without <c>Reference</c>), plus
+/// a file. Stored by NAME in the template's jsonb, so a value appended here never re-reads an old
+/// one.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ProjectFieldType
+{
+    Text,
+    LongText,
+    Integer,
+    Decimal,
+    Money,
+    Percent,
+    Date,
+    DateTime,
+    Boolean,
+    SingleChoice,
+    MultiChoice,
+    Email,
+    Phone,
+    Url,
+    /// <summary>One or more files, kept in <c>project_attachments</c> rather than in the values.</summary>
+    Attachment,
+}
+
+public sealed record ProjectFieldOption(string Value, string Label);
+
+/// <summary>A field of a template — see <see cref="ProjectTemplate.Fields"/>.</summary>
+public sealed record ProjectFieldDefinition(
+    string Key,
+    string Label,
+    ProjectFieldType Type,
+    string? HelpText = null,
+    IReadOnlyList<ProjectFieldOption>? Options = null);
+
+/// <param name="Key">Send back a saved field's key: its values stay. Null for a new field.</param>
+public sealed record ProjectFieldInput(
+    string? Key,
+    string Label,
+    ProjectFieldType Type,
+    string? HelpText = null,
+    IReadOnlyList<ProjectFieldOption>? Options = null);
 
 public static class ProjectTemplateErrors
 {
@@ -363,6 +542,27 @@ public static class ProjectTemplateErrors
     public const string StepChecklistItemTooLong = "PROJECT_STEP_CHECKLIST_ITEM_TOO_LONG";
     public const string StepChecklistItemDuplicate = "PROJECT_STEP_CHECKLIST_ITEM_DUPLICATE";
     public const string StepWorkflowInvalid = "PROJECT_STEP_WORKFLOW_INVALID";
+    public const string StepFieldUnknown = "PROJECT_STEP_FIELD_UNKNOWN";
+    public const string TooManyFields = "PROJECT_TEMPLATE_TOO_MANY_FIELDS";
+    public const string FieldLabelRequired = "PROJECT_FIELD_LABEL_REQUIRED";
+    public const string FieldLabelTooLong = "PROJECT_FIELD_LABEL_TOO_LONG";
+    public const string FieldLabelDuplicate = "PROJECT_FIELD_LABEL_DUPLICATE";
+    public const string FieldKeyDuplicate = "PROJECT_FIELD_KEY_DUPLICATE";
+    public const string FieldTypeInvalid = "PROJECT_FIELD_TYPE_INVALID";
+    public const string FieldTypeChanged = "PROJECT_FIELD_TYPE_CHANGED";
+    public const string FieldHelpTooLong = "PROJECT_FIELD_HELP_TOO_LONG";
+    public const string FieldOptionsRequired = "PROJECT_FIELD_OPTIONS_REQUIRED";
+    public const string FieldOptionsTooMany = "PROJECT_FIELD_OPTIONS_TOO_MANY";
+    public const string FieldOptionsDuplicate = "PROJECT_FIELD_OPTIONS_DUPLICATE";
+
+    /// <summary>
+    /// A step marked « Questionnaires remplis » on a template whose products have no published
+    /// qualification form: the marker would pass on nothing (product owner, 2026-10-26).
+    /// </summary>
+    public const string QuestionnaireFormMissing = "PROJECT_STEP_QUESTIONNAIRE_FORM_MISSING";
+
+    /// <summary>Reaching the step needs fields of the template the project has not filled.</summary>
+    public const string FieldsRequired = "PROJECT_FIELDS_REQUIRED";
 
     /// <summary>A step on the way needs the project's amount.</summary>
     public const string AmountRequired = "PROJECT_AMOUNT_REQUIRED";

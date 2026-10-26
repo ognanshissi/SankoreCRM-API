@@ -6,10 +6,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Customers.Features.Holdings.Designate;
 using Sankore.Modules.Customers.Features.Holdings.GetHolding;
+using Sankore.Modules.Customers.Features.Holdings.ListContracts;
 using Sankore.Modules.Customers.Features.Holdings.ListHoldings;
 using Sankore.Modules.Customers.Features.Holdings.ListStalledHoldings;
 using Sankore.Modules.Customers.Features.Holdings.Shared;
-using Sankore.Modules.Customers.Features.Holdings.Subscribe;
 using Sankore.Modules.Customers.Features.Holdings.Transitions;
 using Sankore.Modules.Customers.Features.Holdings.UpdateSpecifics;
 using Sankore.Shared.Infrastructure.Extensions;
@@ -44,20 +44,27 @@ public static class HoldingsEndpoints
             .WithOpenApi()
             .WithTenantHeader();
 
-        perClient.MapPost(string.Empty, Subscribe)
-            .WithName("SubscribeClientToProduct")
-            .WithSummary("Open a draft subscription")
+        app.MapGet("clients/{clientId:guid}/contracts", ListContracts)
+            .WithTags("Product Holdings")
+            .WithName("ListClientContracts")
+            .WithSummary("Everything a client holds, in one list")
             .WithDescription(
-                "Refuses with HOLDING_ALREADY_HELD when the product line forbids multiple "
-                + "holdings and the client already has a live one. Designations may be supplied "
-                + "with the subscription; an invalid clause refuses the whole request.")
-            .RequireAuthorization(Permissions.CanManageCustomerHolding.Code)
-            .Produces<SubscribeResponse>(StatusCodes.Status201Created)
+                "The contracts captured here, with the policy or the account that realises each "
+                + "one folded in, plus the policies and the core banking accounts and loans no "
+                + "contract here accounts for (source Insurer / CoreBanking, read-only). Each back "
+                + "office is read only when the caller may read it (Ins.Policy.View; "
+                + "CoreBanking.Balance.ViewLive or Integration.Command.View) and the tenant has its "
+                + "module; one that cannot be read is named in unavailableSources and the rest of "
+                + "the list stands.")
+            .RequireAuthorization(Permissions.CanReadCustomer.Code)
+            .Produces<ClientContractsDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
-            .Produces(StatusCodes.Status409Conflict)
-            .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi()
             .WithTenantHeader();
+
+        // No POST here: every contract is opened by a won project (product owner, 2026-10-26),
+        // which is where the questionnaires and the KYC the product requires are checked. A
+        // second way in would be a way round both.
 
         // Tenant-wide, so it cannot live under either group: an operations list of what is
         // stuck has no client and no holding in its route.
@@ -187,6 +194,12 @@ public static class HoldingsEndpoints
         return result.IsSuccess ? Results.Ok(result.Value) : HoldingHttp.ToProblem(result.Error);
     }
 
+    private static async Task<IResult> ListContracts(Guid clientId, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListClientContractsQuery(clientId), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : HoldingHttp.ToProblem(result.Error);
+    }
+
     private static async Task<IResult> ListStalled(
         int? minAgeHours, int? page, int? pageSize, ISender sender, CancellationToken ct)
     {
@@ -202,21 +215,6 @@ public static class HoldingsEndpoints
     {
         var result = await sender.Send(new GetHoldingQuery(holdingId), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : HoldingHttp.ToProblem(result.Error);
-    }
-
-    private static async Task<IResult> Subscribe(
-        Guid clientId, SubscribeRequest req, ISender sender, CancellationToken ct)
-    {
-        // SourceLeadId is deliberately not taken from the body — see SubscribeToProductCommand.
-        var result = await sender.Send(new SubscribeToProductCommand(
-            ClientId:      clientId,
-            ProductLineId: req.ProductLineId,
-            Specifics:     req.Specifics,
-            Designations:  req.Designations), ct);
-
-        return result.IsSuccess
-            ? Results.Created($"/api/v1/holdings/{result.Value}", new SubscribeResponse(result.Value))
-            : HoldingHttp.ToProblem(result.Error);
     }
 
     private static async Task<IResult> UpdateSpecifics(
@@ -271,14 +269,6 @@ public static class HoldingsEndpoints
         return result.IsSuccess ? Results.NoContent() : HoldingHttp.ToProblem(result.Error);
     }
 }
-
-public sealed record SubscribeRequest(
-    Guid ProductLineId,
-    HoldingSpecificsDto? Specifics = null,
-    /// <summary>Optional: the clause may be recorded with the subscription or afterwards.</summary>
-    IReadOnlyList<DesignationInput>? Designations = null);
-
-public sealed record SubscribeResponse(Guid HoldingId);
 
 /// <summary>
 /// An empty list is a valid clause and clears it — for a line that requires no role. Where a role

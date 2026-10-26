@@ -77,45 +77,26 @@ internal static class PolicyEndpoints
         if (!await customers.CanActorAccessClientAsync(user.TenantId, crmCustomerId, user.Id, ct))
             return Results.NotFound(new { error = ClientNotFound });
 
-        var rows = await db.Policies
-            .Where(p => p.CrmCustomerId == crmCustomerId)
-            .Join(db.Connections, p => p.ConnectionId, c => c.Id, (p, c) => new { Policy = p, Insurer = c.Name })
-            .OrderByDescending(x => x.Policy.EffectiveDate)
-            .ToListAsync(ct);
+        var policies = await RecordedPolicyReader.ReadAsync(db, crmCustomerId, ct);
 
-        var productIds = rows.Select(r => r.Policy.ProductId).OfType<Guid>().Distinct().ToList();
-        var products = await db.InsuranceProducts
-            .Where(p => productIds.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
-
-        // In memory: IsPremiumOutstanding is computed on the saga, and a client has a handful.
-        var subscriptions = (await db.InsuranceSubscriptions
-                .Where(s => s.CrmCustomerId == crmCustomerId && s.PolicyId != null)
-                .ToListAsync(ct))
-            .ToDictionary(s => s.PolicyId!.Value);
-
-        return Results.Ok(rows.Select(r => new InsurancePolicyDto(
-            Id: r.Policy.Id,
-            PolicyNumber: r.Policy.PolicyNumber,
-            Insurer: r.Insurer,
-            ProductId: r.Policy.ProductId,
-            ProductName: r.Policy.ProductId is { } id && products.TryGetValue(id, out var name)
-                ? name
-                : r.Policy.InsurerProductCode,
-            Status: r.Policy.Status.ToString(),
-            StatusDetail: r.Policy.StatusDetail,
-            EffectiveDate: r.Policy.EffectiveDate,
-            ExpiryDate: r.Policy.ExpiryDate,
-            NextDueDate: r.Policy.NextDueDate,
-            PremiumAmount: r.Policy.PremiumAmount,
-            Currency: r.Policy.Currency,
-            Periodicity: r.Policy.Periodicity.ToString(),
-            InsuredAmount: r.Policy.InsuredAmount,
-            HoldingId: subscriptions.TryGetValue(r.Policy.Id, out var subscription) ? subscription.CrmHoldingId : null,
-            LastSyncedAt: r.Policy.LastSyncedAt,
-            // Issued is not in force: the contract starts once the premium is paid, and the
-            // insurer's own status says nothing about that until its next synchronisation.
-            PremiumOutstanding: subscription?.IsPremiumOutstanding ?? false)).ToList());
+        return Results.Ok(policies.Select(p => new InsurancePolicyDto(
+            Id: p.PolicyId,
+            PolicyNumber: p.PolicyNumber,
+            Insurer: p.Insurer,
+            ProductId: p.ProductId,
+            ProductName: p.ProductName,
+            Status: p.Status.ToString(),
+            StatusDetail: p.StatusDetail,
+            EffectiveDate: p.EffectiveDate,
+            ExpiryDate: p.ExpiryDate,
+            NextDueDate: p.NextDueDate,
+            PremiumAmount: p.PremiumAmount,
+            Currency: p.Currency,
+            Periodicity: p.Periodicity.ToString(),
+            InsuredAmount: p.InsuredAmount,
+            HoldingId: p.HoldingId,
+            LastSyncedAt: p.LastSyncedAt,
+            PremiumOutstanding: p.PremiumOutstanding)).ToList());
     }
 
     private static async Task<IResult> Certificate(

@@ -2269,6 +2269,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("CustomFieldsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("custom_fields");
+
                     b.Property<Guid?>("CustomerEntityId")
                         .HasColumnType("uuid")
                         .HasColumnName("customer_entity_id");
@@ -2432,6 +2436,79 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("pipeline_stage_configs", "leads");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("FieldKey")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("field_key");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("opportunity_id");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("StorageRef")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("storage_ref");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_attachments");
+
+                    b.HasIndex("OpportunityId", "FieldKey")
+                        .HasDatabaseName("ix_project_attachments_opportunity_id_field_key");
+
+                    b.ToTable("project_attachments", "leads");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2457,6 +2534,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<bool>("CriticalCloseDate")
                         .HasColumnType("boolean")
                         .HasColumnName("critical_close_date");
+
+                    b.Property<string>("Fields")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("fields")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -4575,6 +4659,16 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Navigation("EstimatedAmount");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectAttachment", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.Opportunity", null)
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_attachments_opportunities_opportunity_id");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplate", b =>
                 {
                     b.OwnsMany("Sankore.Modules.Leads.Domain.ProjectTemplateStep", "Steps", b1 =>
@@ -4621,6 +4715,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                             b1.Property<int>("Probability")
                                 .HasColumnType("integer")
                                 .HasColumnName("probability");
+
+                            b1.Property<string>("RequiredFieldKeys")
+                                .IsRequired()
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("jsonb")
+                                .HasColumnName("required_field_keys")
+                                .HasDefaultValueSql("'[]'::jsonb");
 
                             b1.Property<bool>("RequiresAmount")
                                 .HasColumnType("boolean")
