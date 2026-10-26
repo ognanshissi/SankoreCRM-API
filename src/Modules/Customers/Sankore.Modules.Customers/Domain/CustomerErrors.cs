@@ -65,6 +65,13 @@ public static class CustomerErrors
     public const string HoldingInvalidTransition = "HOLDING_INVALID_TRANSITION";
     public const string HoldingSyncInProgress = "HOLDING_SYNC_IN_PROGRESS";
     public const string HoldingAlreadyHeld = "HOLDING_ALREADY_HELD";
+
+    /// <summary>
+    /// An insurance contract opened straight from the client file. An insurance subscription
+    /// starts from a project (product owner, 2026-10-26): the holding is what the won project
+    /// produces, so it carries the questionnaires and the KYC the project checked on its way.
+    /// </summary>
+    public const string InsuranceRequiresProject = "HOLDING_INSURANCE_REQUIRES_PROJECT";
     public const string SignatureRequired = "HOLDING_SIGNATURE_REQUIRED";
     public const string SignatureReferenceRequired = "SIGNATURE_REFERENCE_REQUIRED";
 

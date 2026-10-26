@@ -21,6 +21,15 @@ internal static class OpportunityErrors
     /// to say which one is right.
     /// </summary>
     internal const string CloseThroughCloseEndpoint = "OPPORTUNITY_CLOSE_THROUGH_CLOSE_ENDPOINT";
+
+    /// <summary>Only a WON project owes a contract.</summary>
+    internal const string NotWon = "OPPORTUNITY_NOT_WON";
+
+    /// <summary>The project names no client — neither its own nor its converted lead's.</summary>
+    internal const string NoClient = "OPPORTUNITY_NO_CLIENT";
+
+    /// <summary>The project's product matches no active catalogue line.</summary>
+    internal const string ProductNotInCatalogue = "OPPORTUNITY_PRODUCT_NOT_IN_CATALOGUE";
 }
 
 /// <summary>

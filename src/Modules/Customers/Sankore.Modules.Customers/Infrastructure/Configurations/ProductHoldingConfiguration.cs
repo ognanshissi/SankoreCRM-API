@@ -11,11 +11,17 @@ internal sealed class ProductHoldingConfiguration : IEntityTypeConfiguration<Pro
     /// holdings (BNF-B-22) — "une seule police santé par personne".
     ///
     /// <para>
-    /// The filter cannot express "when the line forbids it", because that lives in M12's catalogue
-    /// and a partial index can only see this table. So the index covers the live states and the
-    /// HANDLER decides whether the rule applies, reading <c>AllowMultipleHoldings</c>. Without the
-    /// index the handler's read could be overtaken between its query and its commit; without the
-    /// handler the index would forbid a second savings account, which is perfectly legitimate.
+    /// The rule lives in M12's catalogue and a partial index can only see this table, so the
+    /// holding carries it as a snapshot (<see cref="ProductHolding.SinglePerLine"/>) and the filter
+    /// reads that. The handler still checks first, for the error code an agent can act on; the
+    /// index covers the two requests arriving at the same instant. Without the snapshot the index
+    /// forbade EVERY second live contract — a won project on « Obsèques Sérénité », a line that
+    /// allows several, ended in a unique violation and no draft.
+    /// </para>
+    ///
+    /// <para>
+    /// Rows written before the column default to false: no migration reads another module's
+    /// schema, so they are not covered by the index, only by the handler's check.
     /// </para>
     /// </summary>
     internal const string OneLiveHoldingIndex = "ux_product_holdings_live_per_line";
@@ -93,7 +99,7 @@ internal sealed class ProductHoldingConfiguration : IEntityTypeConfiguration<Pro
                .HasDatabaseName(OneLiveHoldingIndex)
                .HasFilter(
                    "status IN ('Draft', 'PendingSignature', 'PendingSync', 'Active') "
-                   + "AND origin = 'CrmSubscription'");
+                   + "AND origin = 'CrmSubscription' AND single_per_line");
 
         builder.Ignore(h => h.IsReadOnly);
         builder.Ignore(h => h.IsEditable);

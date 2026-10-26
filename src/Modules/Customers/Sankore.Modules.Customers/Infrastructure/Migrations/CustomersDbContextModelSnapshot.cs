@@ -1976,6 +1976,10 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("signed_at");
 
+                    b.Property<bool>("SinglePerLine")
+                        .HasColumnType("boolean")
+                        .HasColumnName("single_per_line");
+
                     b.Property<Guid?>("SourceLeadId")
                         .HasColumnType("uuid")
                         .HasColumnName("source_lead_id");
@@ -2035,7 +2039,7 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClientId", "ProductLineId")
                         .IsUnique()
                         .HasDatabaseName("ux_product_holdings_live_per_line")
-                        .HasFilter("status IN ('Draft', 'PendingSignature', 'PendingSync', 'Active') AND origin = 'CrmSubscription'");
+                        .HasFilter("status IN ('Draft', 'PendingSignature', 'PendingSync', 'Active') AND origin = 'CrmSubscription' AND single_per_line");
 
                     b.HasIndex("TenantId", "ClientId", "Status")
                         .HasDatabaseName("ix_product_holdings_tenant_id_client_id_status");

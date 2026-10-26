@@ -130,6 +130,16 @@ public static class OpportunitiesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        // POST opportunities/{id}/holding — opens (or finds) the draft contract of a won project
+        group.MapPost("{id:guid}/holding", OpenHolding)
+            .WithName("OpenProjectHolding")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces<CloseOpportunityResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         // PUT opportunities/{id}
         group.MapPut("{id:guid}", Update)
             .WithName("UpdateOpportunity")
@@ -218,6 +228,21 @@ public static class OpportunitiesEndpoints
                 _ => Results.Problem(
                         title: "Close failed", detail: result.Error, statusCode: 422),
             };
+    }
+
+    /// <summary>
+    /// The won project's contract, in the closing's response shape. The error travels under
+    /// <c>error</c>: M01's codes (HOLDING_ALREADY_HELD…) are the agent's answer, not a fault.
+    /// </summary>
+    private static async Task<IResult> OpenHolding(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new OpenHolding.OpenProjectHoldingCommand(id), ct);
+
+        return result.IsSuccess
+            ? Results.Ok(new CloseOpportunityResponse(result.Value))
+            : result.Error == OpportunityErrors.NotFound
+                ? Results.NotFound(new { error = result.Error })
+                : Results.UnprocessableEntity(new { error = result.Error });
     }
 
     private static async Task<IResult> Update(

@@ -361,6 +361,15 @@ public sealed class InsuranceSagaSucceededConsumer(
             return;
         }
 
+        // The product's periodicity until ASS-07's synchronisation brings the insurer's own
+        // answer. It used to be Single, « one premium collected, no schedule known » — false
+        // since a contract can be issued with its premium still to pay (insurance lot 2), and
+        // a monthly contract read « Prime unique » to the agent.
+        var periodicity = await db.InsuranceProducts
+            .Where(p => p.Id == saga.ProductId)
+            .Select(p => (PremiumPeriodicity?)p.Periodicity)
+            .FirstOrDefaultAsync(ct) ?? PremiumPeriodicity.Single;
+
         var policy = PolicyRecord.Create(
             tenantId: saga.TenantId,
             connectionId: saga.ConnectionId,
@@ -374,14 +383,8 @@ public sealed class InsuranceSagaSucceededConsumer(
             effectiveDate: saga.EffectiveDate,
             premiumAmount: saga.PremiumAmount,
             currency: saga.Currency,
-            // The product's periodicity until ASS-07's synchronisation brings the insurer's own
-            // answer. It used to be Single, « one premium collected, no schedule known » — false
-            // since a contract can be issued with its premium still to pay (insurance lot 2), and
-            // a monthly contract read « Prime unique » to the agent.
-            periodicity: await db.InsuranceProducts
-                .Where(p => p.Id == saga.ProductId)
-                .Select(p => (PremiumPeriodicity?)p.Periodicity)
-                .FirstOrDefaultAsync(ct) ?? PremiumPeriodicity.Single,
+            periodicity: periodicity,
+            nextDueDate: PolicyRecord.FirstDueDate(saga.EffectiveDate, periodicity, firstPremiumPaid: !saga.IsPremiumOutstanding),
             clock: clock,
             productId: saga.ProductId,
             subscriptionId: saga.Id);

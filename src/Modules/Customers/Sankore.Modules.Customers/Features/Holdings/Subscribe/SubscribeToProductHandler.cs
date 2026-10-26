@@ -25,6 +25,12 @@ internal sealed class SubscribeToProductHandler(
         if (line.IsFailure)
             return Result.Fail<Guid>(line.Error!);
 
+        // An insurance cover is subscribed through a project, never from here: the won project
+        // opens the holding (CreateHoldingFromOpportunity), after its questionnaires and the KYC
+        // the product requires. This route skipped both.
+        if (ProductCategories.IsInsurance(line.Value.Category))
+            return Result.Fail<Guid>(CustomerErrors.InsuranceRequiresProject);
+
         // ── One live holding per line, when the line says so (BNF-B-22) ──────
         //
         // The check is HERE and not in the index, because whether the rule applies lives in M12's

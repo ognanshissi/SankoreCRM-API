@@ -99,8 +99,9 @@ internal sealed class CloseOpportunityHandler(
     /// attached to a CLIENT — one that only carries a lead has no file to open a contract on, and
     /// that is the conversion's job. And its product must RESOLVE onto a catalogue line: the
     /// product is free text (<c>Opportunity.Product</c>), so "Assurance santé" written by hand
-    /// resolves to nothing, and the screen then offers the agent the subscription by hand. Refusing
-    /// the closing instead would make a commercial decision depend on the spelling of a label.
+    /// resolves to nothing. Refusing the closing instead would make a commercial decision depend on
+    /// the spelling of a label; the project page offers « Ouvrir le contrat » instead
+    /// (<c>OpenProjectHolding</c>), which retries the same opening and says why it failed.
     /// </para>
     /// </summary>
     private async Task<Guid?> TryOpenHoldingAsync(Opportunity opportunity, CancellationToken ct)
@@ -110,43 +111,15 @@ internal sealed class CloseOpportunityHandler(
 
         try
         {
-            // Suppress, twice: both modules read through their own DbContext, and a second
-            // connection enlisting in the ambient scope promotes it to a distributed transaction,
-            // which Npgsql does not support and which fails at run time.
-            using var suppressed = new TransactionScope(
-                TransactionScopeOption.Suppress,
-                TransactionScopeAsyncFlowOption.Enabled);
-
-            var lineId = opportunity.ProductLineId
-                ?? await administration.ResolveProductLineAsync(opportunity.TenantId, opportunity.Product, ct);
-
-            if (lineId is null)
-            {
-                logger.LogInformation(
-                    "Request {OpportunityId} was won but opened no draft holding: the product "
-                    + "{Product} matches no active catalogue line.",
-                    opportunity.Id, opportunity.Product);
-
-                suppressed.Complete();
-                return null;
-            }
-
-            var result = await customers.CreateHoldingFromOpportunityAsync(
-                new CreateHoldingFromOpportunityRequest(
-                    TenantId:            opportunity.TenantId,
-                    ClientId:            clientId,
-                    ProductLineId:       lineId.Value,
-                    SourceOpportunityId: opportunity.Id,
-                    ClosedByUserId:      currentUser.Id),
-                ct);
-
-            suppressed.Complete();
+            var result = await WonProjectHoldingOpener.OpenAsync(
+                opportunity, clientId, customers, administration, currentUser.Id, ct);
 
             if (result.IsSuccess)
                 return result.Value;
 
             // HOLDING_ALREADY_HELD lands here and is not an incident: the client already holds a
-            // live contract on a line that forbids a second. The request is won either way.
+            // live contract on a line that forbids a second. The request is won either way, and
+            // POST opportunities/{id}/holding retries the opening once the cause is fixed.
             logger.LogInformation(
                 "Request {OpportunityId} was won but opened no draft holding: {Error}",
                 opportunity.Id, result.Error);

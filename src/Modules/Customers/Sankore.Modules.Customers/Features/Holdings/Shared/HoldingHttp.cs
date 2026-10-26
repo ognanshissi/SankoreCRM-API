@@ -43,6 +43,7 @@ internal static class HoldingHttp
         or CustomerErrors.DesignationSubjectNotInHousehold
         or CustomerErrors.DesignationSubjectNotFound
         or CustomerErrors.SignatureRequired
+        or CustomerErrors.InsuranceRequiresProject
             => Results.UnprocessableEntity(new { error }),
 
         _ => Results.Problem(error, statusCode: StatusCodes.Status400BadRequest),

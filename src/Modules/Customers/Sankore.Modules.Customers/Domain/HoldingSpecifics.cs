@@ -26,7 +26,7 @@ using Sankore.Shared.Kernel;
 /// </summary>
 /// <param name="InsuredCapital">Amount covered. Insurance lines.</param>
 /// <param name="Premium">What the holder pays per <paramref name="Periodicity"/>.</param>
-/// <param name="Periodicity">"Monthly" | "Quarterly" | "Annual" | "Single", or null.</param>
+/// <param name="Periodicity">One of <see cref="Periodicities"/>, or null.</param>
 /// <param name="DurationMonths">Term of the contract. Null = open-ended.</param>
 /// <param name="AnnualRatePercent">Interest or yield rate. Savings, tontine and loan lines.</param>
 /// <param name="InitialDeposit">Opening amount. Savings and tontine lines.</param>
@@ -50,7 +50,10 @@ public sealed record HoldingSpecifics(
     /// <summary>
     /// Validates and normalises what a caller submitted.
     /// </summary>
-    /// <returns><c>HOLDING_SPECIFICS_INVALID_AMOUNT</c> or <c>HOLDING_SPECIFICS_INVALID_RATE</c>.</returns>
+    /// <returns>
+    /// <c>HOLDING_SPECIFICS_INVALID_AMOUNT</c>, <c>HOLDING_SPECIFICS_INVALID_RATE</c> or
+    /// <c>HOLDING_SPECIFICS_INVALID_PERIODICITY</c>.
+    /// </returns>
     public static Result<HoldingSpecifics> Create(
         decimal? insuredCapital,
         decimal? premium,
@@ -70,10 +73,21 @@ public sealed record HoldingSpecifics(
         if (annualRatePercent is < 0 or > 100)
             return Result.Fail<HoldingSpecifics>("HOLDING_SPECIFICS_INVALID_RATE");
 
+        // A closed list, stored in its canonical spelling. The field was free text: « Mensuelle »
+        // was saved as typed, shown back raw, and meant nothing to the insurer that reads it.
+        var periodicityValue = Blank(periodicity);
+        if (periodicityValue is not null)
+        {
+            var known = Periodicities.FirstOrDefault(p => string.Equals(p, periodicityValue, StringComparison.OrdinalIgnoreCase));
+            if (known is null)
+                return Result.Fail<HoldingSpecifics>("HOLDING_SPECIFICS_INVALID_PERIODICITY");
+            periodicityValue = known;
+        }
+
         return Result.Ok(new HoldingSpecifics(
             InsuredCapital:    insuredCapital,
             Premium:           premium,
-            Periodicity:       Blank(periodicity),
+            Periodicity:       periodicityValue,
             DurationMonths:    durationMonths,
             AnnualRatePercent: annualRatePercent,
             InitialDeposit:    initialDeposit,
@@ -81,6 +95,12 @@ public sealed record HoldingSpecifics(
             EffectiveFrom:     effectiveFrom,
             Notes:             Blank(notes)));
     }
+
+    /// <summary>
+    /// The premium periodicities, spelled as Integration's <c>PremiumPeriodicity</c> — the insurer
+    /// side reads this value, and this module cannot reference that contract.
+    /// </summary>
+    public static readonly IReadOnlyList<string> Periodicities = ["Single", "Monthly", "Quarterly", "SemiAnnual", "Annual"];
 
     private static string? Blank(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

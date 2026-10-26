@@ -388,6 +388,22 @@ public sealed class ProductHoldingLifecycleTests
             .Error.Should().Be("HOLDING_SPECIFICS_INVALID_RATE");
     }
 
+    [Theory]
+    [InlineData("monthly", "Monthly")]
+    [InlineData(" SemiAnnual ", "SemiAnnual")]
+    [InlineData("SINGLE", "Single")]
+    public void A_known_periodicity_is_stored_in_its_canonical_spelling(string typed, string stored)
+        => HoldingSpecifics.Create(null, 25_000m, typed, null, null, null, null, null, null)
+            .Value.Periodicity.Should().Be(stored);
+
+    [Fact]
+    public void A_periodicity_outside_the_list_is_refused()
+    {
+        // The field used to be free text: « Mensuelle » was saved as typed and read by nobody.
+        HoldingSpecifics.Create(null, 25_000m, "Mensuelle", null, null, null, null, null, null)
+            .Error.Should().Be("HOLDING_SPECIFICS_INVALID_PERIODICITY");
+    }
+
     [Fact]
     public void A_negative_amount_is_refused_and_a_currency_is_normalised()
     {

@@ -43,6 +43,14 @@ public sealed class ProductHolding : AggregateRoot
 
     public string ProductCategory { get; private set; } = default!;
 
+    /// <summary>
+    /// The line forbade a second live contract at subscription (BNF-B-22, <c>AllowMultipleHoldings</c>
+    /// false). A snapshot like the code, and for the same reason the unique index needs it: the
+    /// index can only see this table, so without it « une seule police santé par personne » also
+    /// forbade a second funeral cover on a line that allows several.
+    /// </summary>
+    public bool SinglePerLine { get; private set; }
+
     public HoldingStatus Status { get; private set; }
     public HoldingOrigin Origin { get; private set; }
 
@@ -200,6 +208,7 @@ public sealed class ProductHolding : AggregateRoot
             ProductLineId = line.ProductLineId,
             ProductCode = line.ProductCode,
             ProductCategory = line.Category,
+            SinglePerLine = !line.AllowMultipleHoldings,
             Status = HoldingStatus.Draft,
             Origin = HoldingOrigin.CrmSubscription,
             Specifics = specifics ?? HoldingSpecifics.None,

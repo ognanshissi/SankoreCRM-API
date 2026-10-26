@@ -132,6 +132,36 @@ public sealed class ProjectLeadConversionTests : IDisposable
         (await LeadAsync(leadId)).Status.Should().Be(LeadStatus.Lost);
     }
 
+    [Fact]
+    public async Task A_new_project_starts_on_the_first_step_of_its_template()
+    {
+        // It used to start on the legacy « Prospection » at 10 % with no step, whatever the
+        // template said — filed under the wrong column, with a probability its step contradicts.
+        var steps = new List<ProjectStepInput>
+        {
+            new(null, "Recueil du besoin", OpportunityStage.Qualification, 20),
+            new(null, "Devis", OpportunityStage.Proposal, 50),
+        };
+        var template = ProjectTemplate.Create(_tenant, "Standard", ProductCategory.Standard, null, steps, Now).Value;
+        await using (var seed = _factory.CreateContext())
+        {
+            seed.ProjectTemplates.Add(template);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var db = _factory.CreateContext();
+        var result = await new Sankore.Modules.Leads.Features.Opportunities.CreateOpportunityForCustomer.CreateOpportunityForCustomerHandler(
+                db, TimeProvider.System, Substitute.For<Sankore.Modules.Leads.Features.FindDuplicates.IPhoneBlindIndexer>(),
+                _admin, Resolver(db))
+            .Handle(new Sankore.Modules.Leads.Features.Opportunities.CreateOpportunityForCustomer.CreateOpportunityForCustomerCommand(
+                _tenant, _client, "Projet", Product), CancellationToken.None);
+
+        var project = await db.Opportunities.SingleAsync(o => o.Id == result.Value.OpportunityId);
+        project.StepId.Should().Be(template.Steps.First().Id);
+        project.Stage.Should().Be(OpportunityStage.Qualification);
+        project.Probability.Should().Be(0.2);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private async Task<List<Guid>> SeedTemplateAsync(bool withApproval, int approvalIndex = 1)

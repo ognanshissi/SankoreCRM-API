@@ -75,8 +75,32 @@ public sealed class PolicyRecord : AggregateRoot
 
     public DateOnly? ExpiryDate { get; private set; }
 
-    /// <summary>The next premium due date as the insurer reports it (ASS-07, criterion 1).</summary>
+    /// <summary>
+    /// The next premium due date as the insurer reports it (ASS-07, criterion 1) — or, until a
+    /// synchronisation brings it, as <see cref="FirstDueDate"/> estimates it at issuance.
+    /// </summary>
     public DateOnly? NextDueDate { get; private set; }
+
+    /// <summary>
+    /// The due date a freshly issued policy shows before the insurer's own schedule arrives. A
+    /// single premium has none; a premium still owed is due at the effective date; a first premium
+    /// already collected covers one period. Without it a monthly policy read « — » until the
+    /// nightly synchronisation, which the simulator and a silent insurer never run.
+    /// </summary>
+    public static DateOnly? FirstDueDate(DateOnly effectiveDate, PremiumPeriodicity periodicity, bool firstPremiumPaid)
+    {
+        var months = periodicity switch
+        {
+            PremiumPeriodicity.Monthly    => 1,
+            PremiumPeriodicity.Quarterly  => 3,
+            PremiumPeriodicity.SemiAnnual => 6,
+            PremiumPeriodicity.Annual     => 12,
+            _                             => 0,
+        };
+
+        if (months == 0) return null;
+        return firstPremiumPaid ? effectiveDate.AddMonths(months) : effectiveDate;
+    }
 
     public decimal PremiumAmount { get; private set; }
 

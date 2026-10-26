@@ -50,12 +50,16 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
     // ── fixtures ────────────────────────────────────────────────────────────
 
+    // A savings line with a death beneficiary: an insurance line cannot be subscribed through
+    // this handler any more — it comes from a won project.
     private void Line(
         bool allowMultipleHoldings = true,
-        IReadOnlyList<DesignationRoleDto>? roles = null)
+        IReadOnlyList<DesignationRoleDto>? roles = null,
+        string category = nameof(ProductCategory.Savings))
         => _admin.GetBeneficiaryPolicyAsync(_tenant, _lineId, Arg.Any<CancellationToken>())
                  .Returns(TestHoldingFactory.Line(
                      productLineId: _lineId,
+                     category: category,
                      allowMultipleHoldings: allowMultipleHoldings,
                      roles: roles));
 
@@ -115,9 +119,38 @@ public sealed class ProductHoldingHandlerTests : IDisposable
         holding.Status.Should().Be(HoldingStatus.Draft);
         holding.ProductLineId.Should().Be(_lineId);
         holding.ProductCode.Should().Be("VIE-01", "a snapshot, so a renamed product does not rewrite a contract");
-        holding.ProductCategory.Should().Be(nameof(ProductCategory.Insurance));
+        holding.ProductCategory.Should().Be(nameof(ProductCategory.Savings));
         holding.Specifics.InsuredCapital.Should().Be(5_000_000m);
         holding.Specifics.Currency.Should().Be("XOF");
+    }
+
+    [Theory]
+    [InlineData(nameof(ProductCategory.Insurance))]
+    [InlineData(nameof(ProductCategory.HealthInsurance))]
+    [InlineData(nameof(ProductCategory.ForecastInsurance))]
+    public async Task An_insurance_line_is_subscribed_through_a_project_not_from_the_client_file(string category)
+    {
+        Line(category: category);
+
+        (await SubscribeAsync()).Error.Should().Be(CustomerErrors.InsuranceRequiresProject);
+
+        await using var db = _factory.CreateContext();
+        (await db.ProductHoldings.AnyAsync(CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task The_holding_remembers_whether_its_line_forbids_a_second(bool allowMultiple, bool singlePerLine)
+    {
+        // The unique index reads this snapshot: without it, it refused every second live contract,
+        // including on a line that allows several (a won « Obsèques » project opened no draft).
+        Line(allowMultipleHoldings: allowMultiple);
+
+        (await SubscribeAsync()).IsSuccess.Should().BeTrue();
+
+        await using var db = _factory.CreateContext();
+        (await db.ProductHoldings.SingleAsync(CancellationToken.None)).SinglePerLine.Should().Be(singlePerLine);
     }
 
     [Fact]
@@ -482,7 +515,7 @@ public sealed class ProductHoldingHandlerTests : IDisposable
             CancellationToken.None);
 
         var byCategory = await handler.Handle(
-            new ListHoldingsQuery(_clientId, nameof(ProductCategory.Savings), null, 1, 20),
+            new ListHoldingsQuery(_clientId, nameof(ProductCategory.Loan), null, 1, 20),
             CancellationToken.None);
 
         var firstPage = await handler.Handle(
@@ -490,7 +523,7 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
         all.Value.TotalCount.Should().Be(2);
         byStatus.Value.TotalCount.Should().Be(0, "both are drafts");
-        byCategory.Value.TotalCount.Should().Be(0, "both are insurance");
+        byCategory.Value.TotalCount.Should().Be(0, "both are savings");
         firstPage.Value.Items.Should().HaveCount(1);
         firstPage.Value.TotalCount.Should().Be(2);
     }

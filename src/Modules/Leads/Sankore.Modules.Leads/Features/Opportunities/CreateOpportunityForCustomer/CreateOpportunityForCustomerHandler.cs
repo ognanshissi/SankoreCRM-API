@@ -87,6 +87,8 @@ internal sealed class CreateOpportunityForCustomerHandler(
         if (administration is not null)
             opp.SetProductLine(await ProductLines.ProductLineLookup.ResolveAsync(administration, opp.TenantId, opp.Product, ct));
 
+        await ProjectTemplates.ProjectFirstStep.PlaceAsync(templates, opp, clock.GetUtcNow(), ct);
+
         db.Opportunities.Add(opp);
         await db.SaveChangesAsync(ct);
 
