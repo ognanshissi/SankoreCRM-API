@@ -106,7 +106,8 @@ public sealed class ClientWelcomeEmailConsumer(
                 // One welcome per client, for good: not keyed on the message, so even a
                 // re-created inbox table cannot produce a second one.
                 IdempotencyKey: $"{TemplateKey}-{evt.ClientId}",
-                TenantId: evt.TenantId), ct);
+                TenantId: evt.TenantId,
+                ClientId: evt.ClientId), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

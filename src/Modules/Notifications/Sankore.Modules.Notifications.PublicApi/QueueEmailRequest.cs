@@ -11,6 +11,10 @@ namespace Sankore.Modules.Notifications.PublicApi;
 /// <param name="TemplateData">Key-value pairs injected into the template at render time.</param>
 /// <param name="IdempotencyKey">Caller-supplied unique key; duplicate keys are silently ignored.</param>
 /// <param name="TenantId">Tenant that owns this email — used for provider resolution and quota tracking.</param>
+/// <param name="ClientId">
+/// The client it is addressed to, when it is one: what lets the client record list the messages a
+/// client was sent (2026-10-26). M01's notifier sets it; nothing else needs to.
+/// </param>
 public sealed record QueueEmailRequest(
     string TemplateKey,
     string RecipientEmail,
@@ -19,4 +23,5 @@ public sealed record QueueEmailRequest(
     string Locale,
     Dictionary<string, object> TemplateData,
     string IdempotencyKey,
-    Guid TenantId);
+    Guid TenantId,
+    Guid? ClientId = null);

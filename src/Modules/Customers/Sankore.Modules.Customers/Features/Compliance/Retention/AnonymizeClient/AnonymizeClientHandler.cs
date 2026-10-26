@@ -26,7 +26,8 @@ internal sealed class AnonymizeClientHandler(
     IKycModule kyc,
     [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
     TimeProvider clock,
-    ILogger<AnonymizeClientHandler> logger
+    ILogger<AnonymizeClientHandler> logger,
+    Infrastructure.Documents.IClientDocumentStore? documentStore = null
 ) : IRequestHandler<AnonymizeClientCommand, Result>
 {
     public async Task<Result> Handle(AnonymizeClientCommand command, CancellationToken ct)
@@ -89,11 +90,36 @@ internal sealed class AnonymizeClientHandler(
             .Where(p => p.TenantId == tenantId && p.ClientId == client.Id)
             .ToListAsync(ct));
 
+        // The documents filed on the record go too, rows and files: they are the client's personal
+        // data, kept for as long as the client was, and this is the end of that term.
+        var documents = await db.ClientDocuments
+            .IgnoreQueryFilters()
+            .Where(d => d.TenantId == tenantId && d.ClientId == client.Id)
+            .ToListAsync(ct);
+        db.ClientDocuments.RemoveRange(documents);
+
         // Publish inside the same transaction as the erasure (the outbox writer does not save):
         // either both land or neither does, so no consumer can ever see an event for data that
         // is in fact still there.
         await publisher.PublishAsync(new ClientAnonymizedEvent(tenantId, client.Id, now), ct);
         await db.SaveChangesAsync(ct);
+
+        // After the save: a file deleted for a row that then stayed would be a document nobody can
+        // open. A file that fails to go is logged — encrypted, and with no row left to reach it.
+        if (documentStore is not null)
+        {
+            foreach (var document in documents)
+            {
+                try
+                {
+                    await documentStore.DeleteAsync(tenantId, document.StorageRef, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Client document {DocumentId} could not be deleted from the store", document.Id);
+                }
+            }
+        }
 
         logger.LogWarning(
             "Client {ClientId} ({ClientNumber}) of tenant {TenantId} anonymized by {ActorId} " +

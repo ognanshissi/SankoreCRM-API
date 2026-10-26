@@ -170,7 +170,9 @@ public sealed class ClientEmailNotifier(
                 Locale: locale,
                 TemplateData: data,
                 IdempotencyKey: request.IdempotencyKey,
-                TenantId: request.TenantId), ct);
+                TenantId: request.TenantId,
+                // So the client record can list what this client was sent (2026-10-26).
+                ClientId: request.ClientId), ct);
 
             if (queued.IsFailure)
             {

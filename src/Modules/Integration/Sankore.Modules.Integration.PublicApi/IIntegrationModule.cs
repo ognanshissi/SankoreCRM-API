@@ -254,6 +254,13 @@ public interface IInsuranceGateway
     /// </summary>
     Task<IReadOnlyList<RecordedPolicy>> ListRecordedPoliciesAsync(Guid crmCustomerId, CancellationToken ct);
 
+    /// <summary>
+    /// What the client gave or received through the insurance family, for the client record's
+    /// « Documents » tab: information sheets handed over, the insurer's policy documents, claim
+    /// pieces, consent proofs. Current tenant; metadata only.
+    /// </summary>
+    Task<IReadOnlyList<CustomerDocumentEntry>> ListCustomerDocumentsAsync(Guid crmCustomerId, CancellationToken ct);
+
     Task<IntegrationCommandId> RequestClaimDeclarationAsync(
         InsuranceClaimPayload payload, CancellationToken ct);
 

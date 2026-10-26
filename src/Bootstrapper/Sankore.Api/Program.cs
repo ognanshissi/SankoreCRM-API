@@ -469,6 +469,8 @@ builder.Services.AddMassTransit(x =>
     // Drops M08's SMS provider cache when a tenant reconfigures its channel. Its own consumer
     // beside the email one so an email change does not invalidate the SMS entry and the reverse.
     x.AddConsumer<Sankore.Modules.Notifications.Infrastructure.Consumers.TenantSmsSettingsChangedConsumer>();
+    // A client anonymised: the messages it was sent go too (2026-10-26).
+    x.AddConsumer<Sankore.Modules.Notifications.Features.ClientMessages.ClientAnonymizedNotificationsConsumer>();
 
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer,
         Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumerDefinition>();

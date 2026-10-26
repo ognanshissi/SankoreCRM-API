@@ -10,6 +10,16 @@ public static class CustomerErrors
     // ── Client lookup & state ───────────────────────────────────────────────
     public const string ClientNotFound = "CLIENT_NOT_FOUND";
     public const string ClientReadOnly = "CLIENT_READ_ONLY";
+
+    // ── Documents filed on the client record (2026-10-26) ─────────────────────
+    /// <summary>No encryption key configured: the store is not registered and uploads are refused.</summary>
+    public const string ClientDocumentsUnavailable = "CLIENT_DOCUMENTS_UNAVAILABLE";
+    public const string ClientDocumentEmpty = "CLIENT_DOCUMENT_EMPTY";
+    public const string ClientDocumentTooLarge = "CLIENT_DOCUMENT_TOO_LARGE";
+    public const string ClientDocumentTypeNotAllowed = "CLIENT_DOCUMENT_TYPE_NOT_ALLOWED";
+    public const string ClientDocumentTitleRequired = "CLIENT_DOCUMENT_TITLE_REQUIRED";
+    public const string ClientDocumentNotFound = "CLIENT_DOCUMENT_NOT_FOUND";
+    public const string ClientDocumentRemovalReasonRequired = "CLIENT_DOCUMENT_REMOVAL_REASON_REQUIRED";
     public const string ClientUnderMinimumAge = "CLIENT_UNDER_MINIMUM_AGE";
     public const string ClientAlreadyMerged = "CLIENT_ALREADY_MERGED";
     public const string InvalidStatusTransition = "INVALID_STATUS_TRANSITION";

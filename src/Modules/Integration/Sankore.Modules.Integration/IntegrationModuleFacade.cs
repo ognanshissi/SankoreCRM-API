@@ -770,6 +770,10 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             Guid crmCustomerId, CancellationToken ct)
             => Features.Insurance.Policies.RecordedPolicyReader.ReadAsync(facade._db, crmCustomerId, ct);
 
+        public Task<IReadOnlyList<CustomerDocumentEntry>> ListCustomerDocumentsAsync(
+            Guid crmCustomerId, CancellationToken ct)
+            => Features.Insurance.CustomerDocuments.CustomerInsuranceDocumentReader.ReadAsync(facade._db, crmCustomerId, ct);
+
         /// <summary>
         /// Every policy the customer holds, across every insurer the tenant distributes for.
         ///

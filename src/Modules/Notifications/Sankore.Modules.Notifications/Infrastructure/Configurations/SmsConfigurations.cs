@@ -37,6 +37,8 @@ internal sealed class SmsOutboxMessageConfiguration : IEntityTypeConfiguration<S
         // What the processor polls on, mirroring the email outbox.
         b.HasIndex(m => new { m.Status, m.CreatedAt });
         b.HasIndex(m => new { m.TenantId, m.Status });
+        // The client record's list of messages a client was sent (2026-10-26).
+        b.HasIndex(m => new { m.TenantId, m.ClientId });
 
         // What a delivery callback looks a message up by. Filtered, because it is null on every
         // row until the provider answers and a full index would be mostly empty — and NOT unique:

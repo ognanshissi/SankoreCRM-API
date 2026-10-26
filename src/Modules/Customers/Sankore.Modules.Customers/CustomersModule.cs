@@ -16,6 +16,7 @@ using Sankore.Modules.Customers.Features.Groups;
 using Sankore.Modules.Customers.Features.LeadConversion;
 using Sankore.Modules.Customers.Features.LegalEntities;
 using Sankore.Modules.Customers.Features.Lifecycle;
+using Sankore.Modules.Customers.Features.Documents;
 using Sankore.Modules.Customers.Features.Holdings;
 using Sankore.Modules.Customers.Features.Household;
 using Sankore.Modules.Customers.Features.Relationships;
@@ -27,6 +28,7 @@ using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Infrastructure.FileStore;
 using Sankore.Shared.Kernel;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Sankore.Modules.Customers.Features.Import;
 
 /// <summary>
@@ -72,6 +74,32 @@ public static class CustomersModule
 
         // Backing store for client exports (US-M01-BE-29).
         services.AddLocalFileStore();
+
+        // Documents filed on the client record (2026-10-26): their own encrypted store and key,
+        // Customers:Documents:EncryptionKey. No key = no store registered, and an upload answers
+        // CLIENT_DOCUMENTS_UNAVAILABLE rather than writing a file nobody could ever read.
+        services.Configure<Infrastructure.Documents.ClientDocumentStorageOptions>(
+            config.GetSection(Infrastructure.Documents.ClientDocumentStorageOptions.SectionName));
+
+        services.TryAddKeyedSingleton<Sankore.Shared.ObjectStorage.IObjectBackend>(
+            Infrastructure.Documents.ClientDocumentStorage.Concern, (sp, _) =>
+            {
+                var options = sp.GetRequiredService<IOptions<Infrastructure.Documents.ClientDocumentStorageOptions>>().Value;
+                var root = string.IsNullOrWhiteSpace(options.BasePath)
+                    ? Path.Combine(AppContext.BaseDirectory, Infrastructure.Documents.ClientDocumentStorage.Concern)
+                    : Path.GetFullPath(options.BasePath);
+                return new Sankore.Shared.ObjectStorage.LocalObjectBackend(
+                    root, sp.GetRequiredService<ILogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>>());
+            });
+
+        if (!string.IsNullOrWhiteSpace(config[$"{Infrastructure.Documents.ClientDocumentStorageOptions.SectionName}:EncryptionKey"]))
+        {
+            services.TryAddSingleton<Infrastructure.Documents.IClientDocumentStore>(sp =>
+                new Infrastructure.Documents.EncryptedClientDocumentStore(
+                    sp.GetRequiredKeyedService<Sankore.Shared.ObjectStorage.IObjectBackend>(Infrastructure.Documents.ClientDocumentStorage.Concern),
+                    sp.GetRequiredService<IOptions<Infrastructure.Documents.ClientDocumentStorageOptions>>(),
+                    sp.GetRequiredService<ILogger<Infrastructure.Documents.EncryptedClientDocumentStore>>()));
+        }
 
         // Nothing registers TimeProvider by default — not ASP.NET Core, not this repo — yet
         // 13 handlers and jobs in this module take it so their clock can be frozen in tests.
@@ -152,6 +180,8 @@ public static class CustomersModule
         // (BNF-B-13/14/15)
         app.MapHouseholdEndpoints();
         app.MapHoldingsEndpoints();
+        // Everything the client gave or received, from every module (2026-10-26)
+        app.MapDocumentsEndpoints();
         app.MapDuplicatesEndpoints();
         app.MapTimelineEndpoints();
         app.MapComplianceEndpoints();

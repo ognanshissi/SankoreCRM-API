@@ -82,6 +82,14 @@ namespace Sankore.Modules.Notifications.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("attempt_count");
 
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset?>("ContentPurgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("content_purged_at");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -158,6 +166,9 @@ namespace Sankore.Modules.Notifications.Infrastructure.Migrations
 
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_email_outbox_messages_status_created_at");
+
+                    b.HasIndex("TenantId", "ClientId")
+                        .HasDatabaseName("ix_email_outbox_messages_tenant_id_client_id");
 
                     b.HasIndex("TenantId", "Status")
                         .HasDatabaseName("ix_email_outbox_messages_tenant_id_status");
@@ -298,6 +309,14 @@ namespace Sankore.Modules.Notifications.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("attempt_count");
 
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset?>("ContentPurgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("content_purged_at");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -387,6 +406,9 @@ namespace Sankore.Modules.Notifications.Infrastructure.Migrations
 
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_sms_outbox_messages_status_created_at");
+
+                    b.HasIndex("TenantId", "ClientId")
+                        .HasDatabaseName("ix_sms_outbox_messages_tenant_id_client_id");
 
                     b.HasIndex("TenantId", "Status")
                         .HasDatabaseName("ix_sms_outbox_messages_tenant_id_status");

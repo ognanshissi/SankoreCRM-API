@@ -183,6 +183,14 @@ public interface ILeadsModule
         Guid tenantId, Guid customerId, CancellationToken ct);
 
     /// <summary>
+    /// The files this module holds about a client, for the client record's « Documents » tab:
+    /// attachments of their projects and of the tasks about them, WhatsApp media of their leads'
+    /// conversations. Metadata only; explicit tenant.
+    /// </summary>
+    Task<IReadOnlyList<CustomerDocumentEntry>> ListCustomerDocumentsAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct);
+
+    /// <summary>
     /// Records what a WhatsApp number received — customers' messages and the delivery statuses of
     /// ours (WA-BE-07 → WA-BE-10). Called by the integration module's webhook job, under the SYSTEM
     /// identity, once the delivery has been verified at the door.

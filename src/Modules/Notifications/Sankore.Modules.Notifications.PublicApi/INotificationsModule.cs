@@ -52,6 +52,14 @@ public interface INotificationsModule
     /// Never throws for a delivery problem — the push is best-effort, the row is the record.
     /// </summary>
     Task<Result<Guid>> NotifyInAppAsync(InAppNotificationRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// The e-mails and SMS queued for a client, newest first — for the client record's « Documents »
+    /// tab (2026-10-26). Past the technical retention the recipient and the content are gone and the
+    /// trace stays (channel, template, dates, status), until the client is anonymised.
+    /// </summary>
+    Task<IReadOnlyList<ClientMessageSummary>> ListClientMessagesAsync(
+        Guid tenantId, Guid clientId, CancellationToken ct = default);
 }
 
 /// <param name="Category">Dotted and stable, e.g. <c>whatsapp.escalation</c>.</param>
@@ -66,3 +74,16 @@ public sealed record InAppNotificationRequest(
     string? Body,
     string? Link,
     string IdempotencyKey);
+
+/// <summary>One message a client was sent.</summary>
+/// <param name="Channel"><c>Email</c> or <c>Sms</c>.</param>
+/// <param name="Status">The outbox status: Pending, Sending, Sent, Failed, DeadLettered.</param>
+/// <param name="Recipient">Masked; null once the content has been purged.</param>
+public sealed record ClientMessageSummary(
+    Guid MessageId,
+    string Channel,
+    string TemplateKey,
+    string Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? SentAt,
+    string? Recipient);

@@ -40,6 +40,7 @@
          holding to Active or Rejected. The PublicApi contract only, as always. -->
     <ProjectReference Include="..\..\Integration\Sankore.Modules.Integration.PublicApi\Sankore.Modules.Integration.PublicApi.csproj" />
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Spreadsheets\Sankore.Shared.Spreadsheets.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Sankore.Shared.ObjectStorage\Sankore.Shared.ObjectStorage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

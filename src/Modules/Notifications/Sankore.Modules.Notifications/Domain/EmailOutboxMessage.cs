@@ -31,6 +31,15 @@ public sealed class EmailOutboxMessage
     public int AttemptCount { get; private set; }
     public DateTimeOffset? LastAttemptAt { get; private set; }
     public string? LastError { get; private set; }
+    /// <summary>The client it is addressed to, when it is one (2026-10-26).</summary>
+    public Guid? ClientId { get; private set; }
+
+    /// <summary>
+    /// When the technical purge removed the recipient and the content of a CLIENT's message, keeping
+    /// its trace for the client record. Null while the content is there.
+    /// </summary>
+    public DateTimeOffset? ContentPurgedAt { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset? SentAt { get; private set; }
 
@@ -44,7 +53,8 @@ public sealed class EmailOutboxMessage
         string recipientEmail,
         string? recipientName,
         string templateDataJson,
-        string idempotencyKey) => new()
+        string idempotencyKey,
+        Guid? clientId = null) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = tenantId,
@@ -55,6 +65,7 @@ public sealed class EmailOutboxMessage
         RecipientName = recipientName,
         TemplateDataJson = templateDataJson,
         IdempotencyKey = idempotencyKey,
+        ClientId = clientId,
         Status = EmailOutboxStatus.Pending,
         AttemptCount = 0,
         CreatedAt = DateTimeOffset.UtcNow

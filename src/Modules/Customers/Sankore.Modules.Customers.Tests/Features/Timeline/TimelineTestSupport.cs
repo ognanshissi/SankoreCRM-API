@@ -79,6 +79,10 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
         Guid tenantId, Guid customerId, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<CustomerOpenLead>>([]);
 
+    public Task<IReadOnlyList<CustomerDocumentEntry>> ListCustomerDocumentsAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<CustomerDocumentEntry>>([]);
+
     public int HistoryCalls { get; private set; }
 
     public Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)

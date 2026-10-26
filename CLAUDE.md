@@ -87,6 +87,13 @@ dotnet user-secrets set "Telephony:Recordings:EncryptionKey" "$(openssl rand -ba
 # no store registered: media are fetched from 360dialog when opened, as before lot 4.
 dotnet user-secrets set "Leads:WhatsApp:Media:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 
+# Documents filed on a client record (2026-10-26) — master key of their ENVELOPE-encrypted store,
+# its own key like every store here. A dev value sits in appsettings.Development.json. Unset = no
+# store registered: an upload answers 503 CLIENT_DOCUMENTS_UNAVAILABLE. Point
+# Customers:Documents:BasePath at a mounted volume — the default lands under the content root,
+# which a redeploy destroys.
+dotnet user-secrets set "Customers:Documents:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+
 # Antivirus for claim pieces — host:port of a clamd. UNSET by default and that is the fail-closed
 # default: with no scanner, every piece is recorded ScanFailed and NOTHING is transmitted to an
 # insurer. A deployment that distributes insurance must set it.
@@ -2465,6 +2472,61 @@ system says so ». Two consequences on the server:
   the product code is not done: a client may hold two savings accounts.
 - `RecordedPolicyReader` is the one body behind `GET integration/insurance/policies` and the gateway
   method, so « which contract is this policy » has one answer.
+
+### A client's documents are one list too (2026-10-26)
+
+Product owner, 2026-10-26: the client record lists every document the client GAVE or RECEIVED,
+whatever module keeps it. `GET clients/{clientId}/documents` (`ListClientDocuments`,
+`customers:read`) asks each module through its public API and folds the answers:
+
+| Module | Method | What |
+|---|---|---|
+| M02 | `IKycModule.ListCustomerDocumentsAsync` | the images of every KYC file of the customer |
+| Integration | `IInsuranceGateway.ListCustomerDocumentsAsync` | information sheets handed over, the insurer's policy documents, claim pieces, consent proofs |
+| M13 | `ILeadsModule.ListCustomerDocumentsAsync` | attachments of the client's projects and of tasks about them, WhatsApp media |
+
+- **One shape, in the Kernel**: `CustomerDocumentEntry` (direction `Collected`/`Delivered`, a `Kind`
+  code a screen translates, the origin it hangs off, the source's own `ContentPath` and the
+  `OpenPermissions` it accepts — any one of them). M01 knows no module's tables.
+- **Every line is listed whatever the caller's permissions** (owner's choice — unlike the contracts
+  list, which hides what the caller may not read). Without one of `OpenPermissions`, the line
+  comes without `FileName` and `ContentPath`: a file name often carries a name or an identity
+  number. Opening still goes through the source's endpoint, which keeps its permission, perimeter
+  and access log.
+- **Whose is it, in M13**: a lead is the client's when attached (`CustomerId`) or converted
+  (`ConvertedToCustomerId`); projects on the client or on those leads; tasks about the client or
+  those leads; WhatsApp conversations of those leads or matched to the client (`ClientId`). A
+  WhatsApp media is a message of a media kind not purged — `MediaId` is null both before an
+  outbound upload completes and after a purge. Media open through the CONVERSATION route, which
+  serves conversations with or without a lead.
+- **Insurance**: a claim piece the antivirus has not passed has no `ContentPath` (its endpoint
+  answers 409); a consent proof has none at all (it is read in the contract's evidence journal);
+  a policy document's date is its handing over, else its receipt. Read only when the tenant has
+  the module (readable).
+- A module that fails is named in `UnavailableSources`; the others stand.
+- Not listed: questionnaire answers (answers, not documents; the health ones have their own door).
+- **Files filed straight on the record** (lot 2): `client_documents` + `EncryptedClientDocumentStore`
+  (marker `CDO1`, refs `c1.…`, its own key `Customers:Documents:EncryptionKey`, copied from the
+  task-attachment store as every store here is). `POST clients/{id}/documents` (multipart: file,
+  kind Correspondence|Proof|Other, title, direction, documentDate; `customers:update`; type read
+  from the bytes; not an `ICommand` — the audit would serialise the file),
+  `GET …/{documentId}/content` (`customers:read`, `no-store`), `POST …/{documentId}/removal` with a
+  reason (`ICommand`, audited). Removal is LOGICAL: the row and the file stay, the list hides them.
+  An archived or merged client takes none (`CLIENT_READ_ONLY`). Listed as source `Client`, dated by
+  the document's own date, `CanRemove` when the caller may update the client. Anonymisation removes
+  them, rows then files (after the save); a test-tenant wipe deletes their files too.
+- **E-mails and SMS the client was sent** (lot 3): `QueueEmailRequest` / `QueueSmsRequest.ClientId`
+  (optional) → `client_id` on both outboxes, set by M01's `ClientEmailNotifier`,
+  `ClientSmsNotifier` and `ClientWelcomeEmailConsumer` — the paths to a client. A new caller that
+  writes to a client must set it, or the client record never shows that message.
+  `INotificationsModule.ListClientMessagesAsync` feeds a `Message` line (Delivered, no file,
+  recipient masked). Messages sent before the column existed have no client and are not listed —
+  matching on the address would attribute a shared mailbox's messages to the wrong client.
+- **A client's message outlives the 180-day technical retention, as a trace** (product owner,
+  2026-10-26): `MessageDeliveryPurge` still deletes a message to nobody in particular, but on a
+  client's it blanks recipient, template data and last error and stamps `ContentPurgedAt` —
+  channel, template, dates and status stay. `ClientAnonymizedNotificationsConsumer`
+  (`ClientAnonymizedEvent`, which both retention and on-demand erasure publish) deletes the trace.
 
 ### Insurance lot 2: the blocking rules of the distribution process (2026-10-25)
 

@@ -8,6 +8,7 @@ using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.PublicApi;
+using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.Authorization;
 
 /// <summary>
@@ -34,6 +35,36 @@ public sealed class KycModuleFacade(
             .Where(f => f.TenantId == tenantId && f.Id == kycFileId)
             .Select(f => new KycFileSummary(f.Id, f.CustomerId, f.AgencyId, f.Status.ToString()))
             .FirstOrDefaultAsync(ct);
+
+    public async Task<IReadOnlyList<CustomerDocumentEntry>> ListCustomerDocumentsAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct)
+    {
+        var rows = await db.KycDocuments
+            .IgnoreQueryFilters()
+            .Where(d => d.TenantId == tenantId)
+            .Join(db.KycFiles.IgnoreQueryFilters().Where(f => f.TenantId == tenantId && f.CustomerId == customerId),
+                d => d.KycFileId, f => f.Id, (d, f) => d)
+            .OrderByDescending(d => d.UploadedAt)
+            .ToListAsync(ct);
+
+        return [.. rows.Select(d => new CustomerDocumentEntry(
+            Key: $"kyc:{d.Id}",
+            Source: "Kyc",
+            Direction: CustomerDocumentDirection.Collected,
+            Kind: d.Kind.ToString(),
+            // No file name is kept for a capture: the kind says what it is.
+            FileName: null,
+            ContentType: d.ContentType,
+            SizeBytes: d.SizeBytes,
+            At: d.UploadedAt,
+            Status: d.ReviewDecision.ToString(),
+            Detail: d.DeclaredDocumentType?.ToString(),
+            OriginType: "KycFile",
+            OriginId: d.KycFileId,
+            OriginLabel: "Dossier KYC",
+            ContentPath: $"kyc-files/{d.KycFileId}/documents/{Uri.EscapeDataString(d.StorageRef)}",
+            OpenPermissions: [Permissions.CanRevealKycDocumentNumber.Code]))];
+    }
 
     public async Task<bool> CanActorAccessKycFileAsync(Guid tenantId, Guid kycFileId, Guid actorUserId, CancellationToken ct)
     {

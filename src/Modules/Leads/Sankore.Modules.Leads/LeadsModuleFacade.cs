@@ -105,6 +105,10 @@ public sealed class LeadsModuleFacade(
     /// <c>CtiCallReference</c> and every field of the lead itself
     /// (phone, e-mail, national id, date of birth).
     /// </remarks>
+    public Task<IReadOnlyList<CustomerDocumentEntry>> ListCustomerDocumentsAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct)
+        => Features.CustomerDocuments.LeadCustomerDocumentReader.ReadAsync(db, tenantId, customerId, ct);
+
     public async Task<IReadOnlyList<CustomerOpenLead>> GetOpenLeadsForCustomerAsync(
         Guid tenantId, Guid customerId, CancellationToken ct)
     {

@@ -28,5 +28,7 @@ internal sealed class EmailOutboxMessageConfiguration
         b.HasIndex(m => m.IdempotencyKey).IsUnique();
         b.HasIndex(m => new { m.Status, m.CreatedAt });
         b.HasIndex(m => new { m.TenantId, m.Status });
+        // The client record's list of messages a client was sent (2026-10-26).
+        b.HasIndex(m => new { m.TenantId, m.ClientId });
     }
 }

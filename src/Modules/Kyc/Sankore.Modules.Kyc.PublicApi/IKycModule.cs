@@ -78,6 +78,14 @@ public interface IKycModule
     /// answers are the same to a caller, so a file's existence does not leak.
     /// </summary>
     Task<bool> CanActorAccessKycFileAsync(Guid tenantId, Guid kycFileId, Guid actorUserId, CancellationToken ct);
+
+    /// <summary>
+    /// The images collected in every KYC file of this customer, newest first, for the client
+    /// record's « Documents » tab. Metadata only — opening one goes through the KYC read endpoint,
+    /// which keeps its permission and its access log.
+    /// </summary>
+    Task<IReadOnlyList<CustomerDocumentEntry>> ListCustomerDocumentsAsync(
+        Guid tenantId, Guid customerId, CancellationToken ct);
 }
 
 /// <param name="Status">Internal status (Collecting, Verifying, Validating…), as in <see cref="KycJourneySummary.Stage"/>.</param>

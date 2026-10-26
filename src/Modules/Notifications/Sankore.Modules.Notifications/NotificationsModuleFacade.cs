@@ -24,6 +24,32 @@ internal sealed class NotificationsModuleFacade(
     /// <summary>The realtime event a bell listens to. A contract with the browser.</summary>
     public const string InAppCreatedEvent = "notification.created";
 
+    public async Task<IReadOnlyList<ClientMessageSummary>> ListClientMessagesAsync(
+        Guid tenantId, Guid clientId, CancellationToken ct = default)
+    {
+        var emails = await db.EmailOutboxMessages
+            .IgnoreQueryFilters()
+            .Where(m => m.TenantId == tenantId && m.ClientId == clientId)
+            .Select(m => new { m.Id, m.TemplateKey, m.Status, m.CreatedAt, m.SentAt, m.RecipientEmail, m.ContentPurgedAt })
+            .ToListAsync(ct);
+
+        var sms = await db.SmsOutboxMessages
+            .IgnoreQueryFilters()
+            .Where(m => m.TenantId == tenantId && m.ClientId == clientId)
+            .Select(m => new { m.Id, m.TemplateKey, m.Status, m.CreatedAt, m.SentAt, m.RecipientPhone, m.ContentPurgedAt })
+            .ToListAsync(ct);
+
+        return
+        [
+            .. emails.Select(m => new ClientMessageSummary(
+                m.Id, "Email", m.TemplateKey, m.Status.ToString(), m.CreatedAt, m.SentAt,
+                m.ContentPurgedAt is null ? ClientMessageMasking.Email(m.RecipientEmail) : null)),
+            .. sms.Select(m => new ClientMessageSummary(
+                m.Id, "Sms", m.TemplateKey, m.Status.ToString(), m.CreatedAt, m.SentAt,
+                m.ContentPurgedAt is null ? ClientMessageMasking.Phone(m.RecipientPhone) : null)),
+        ];
+    }
+
     public async Task<Result<Guid>> NotifyInAppAsync(InAppNotificationRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -102,7 +128,8 @@ internal sealed class NotificationsModuleFacade(
             recipientEmail: request.RecipientEmail,
             recipientName: request.RecipientName,
             templateDataJson: templateDataJson,
-            idempotencyKey: request.IdempotencyKey);
+            idempotencyKey: request.IdempotencyKey,
+            clientId: request.ClientId);
 
         db.EmailOutboxMessages.Add(message);
         await db.SaveChangesAsync(ct);
@@ -138,11 +165,34 @@ internal sealed class NotificationsModuleFacade(
             locale: request.Locale,
             recipientPhone: request.RecipientPhone.Trim(),
             templateDataJson: JsonSerializer.Serialize(request.TemplateData),
-            idempotencyKey: request.IdempotencyKey);
+            idempotencyKey: request.IdempotencyKey,
+            clientId: request.ClientId);
 
         db.SmsOutboxMessages.Add(message);
         await db.SaveChangesAsync(ct);
 
         return Result<Guid>.Ok(message.Id);
+    }
+}
+
+/// <summary>
+/// How a recipient is shown on the client record: enough to tell two addresses apart, not enough to
+/// read one off a screen. An SMS destination already redacted by the processor passes through.
+/// </summary>
+internal static class ClientMessageMasking
+{
+    public static string? Email(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return null;
+        var at = email.IndexOf('@');
+        return at <= 0 ? "•••" : $"{email[0]}•••{email[at..]}";
+    }
+
+    public static string? Phone(string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return null;
+        if (phone.Contains('•') || phone.Contains('*')) return phone;
+        var digits = phone.Trim();
+        return digits.Length <= 4 ? "••••" : $"{digits[..4]}••••{digits[^2..]}";
     }
 }

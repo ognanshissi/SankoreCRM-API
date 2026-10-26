@@ -22,6 +22,7 @@ namespace Sankore.Modules.Notifications.PublicApi;
 /// text message and two — and between one charge and two.
 /// </param>
 /// <param name="TenantId">Owns the message: resolves the provider and counts the allowance.</param>
+/// <param name="ClientId">The client it is addressed to, when it is one — see <see cref="QueueEmailRequest"/>.</param>
 public sealed record QueueSmsRequest(
     string TemplateKey,
     string RecipientPhone,
@@ -29,4 +30,5 @@ public sealed record QueueSmsRequest(
     string Locale,
     Dictionary<string, object> TemplateData,
     string IdempotencyKey,
-    Guid TenantId);
+    Guid TenantId,
+    Guid? ClientId = null);
