@@ -505,6 +505,8 @@ builder.Services.AddMassTransit(x =>
     // Purge de données, lot 2 : un client anonymisé emporte ses leads, fils WhatsApp et rendez-vous
     // (Leads) ; un lead effacé à la demande emporte ses appels et enregistrements (Intégrations).
     x.AddConsumer<Sankore.Modules.Leads.Features.Retention.ClientAnonymizedLeadsConsumer>();
+    // Client complaints (2026-10-26): the task of a complaint recorded or late, in M13.
+    x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.ClientComplaintTaskConsumer>();
     x.AddConsumer<Sankore.Modules.Kyc.Features.Retention.ClientAnonymizedKycConsumer>();
     x.AddConsumer<Sankore.Modules.Integration.Features.Telephony.Recordings.LeadErasedRecordingConsumer>();
 
@@ -567,6 +569,8 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Customers.Features.Timeline.Consumers.ClientCreatedTimelineConsumer>();
     // Welcomes a prospect who just became a client (lead conversions only).
     x.AddConsumer<Sankore.Modules.Customers.Features.LeadConversion.Consumers.ClientWelcomeEmailConsumer>();
+    // Client complaints (2026-10-26): the e-mail and the bell of a complaint recorded or late.
+    x.AddConsumer<Sankore.Modules.Customers.Features.Complaints.ClientComplaintNotificationsConsumer>();
 
     // A departing household member leaves designations in ToReview, so the rank no longer totals
     // 100% — the one state BNF-B-13 requires an agent be shown, and nothing else surfaces it.
@@ -950,6 +954,13 @@ if (emitOpenApiTo is null) {
             $"insurance-evidence-retention-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "30 2 * * 0");
+
+        // The general client complaints register (2026-10-26): the late acknowledgements and answers,
+        // reported once each to the agency manager. Same working-hours slot as the CIMA register's.
+        AddOrUpdate<Sankore.Modules.Customers.Features.Complaints.ClientComplaintDeadlineJob>(
+            $"client-complaint-deadlines-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "0 7 * * *");
 
         // The règlement 01/CIMA/2024's complaints mechanism, chased before it is breached. Daily
         // at 07:00, deliberately in working hours and not with the nightly sweeps: it produces a

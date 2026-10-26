@@ -33,6 +33,7 @@ public sealed class LeadsDbContext(
     public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
     public DbSet<WhatsAppBotProfile> WhatsAppBotProfiles => Set<WhatsAppBotProfile>();
     public DbSet<WhatsAppBotTurn> WhatsAppBotTurns => Set<WhatsAppBotTurn>();
+    public DbSet<WhatsAppComplaintIntake> WhatsAppComplaintIntakes => Set<WhatsAppComplaintIntake>();
     public DbSet<WhatsAppHandover> WhatsAppHandovers => Set<WhatsAppHandover>();
     public DbSet<LeadTag> LeadTags => Set<LeadTag>();
     public DbSet<DuplicateDismissal> DuplicateDismissals => Set<DuplicateDismissal>();
@@ -98,12 +99,14 @@ public sealed class LeadsDbContext(
         modelBuilder.ApplyConfiguration(new Configurations.WhatsAppConversationConfiguration(encryptor));
         modelBuilder.ApplyConfiguration(new Configurations.WhatsAppMessageConfiguration(encryptor));
         modelBuilder.ApplyConfiguration(new Configurations.WhatsAppBotTurnConfiguration(encryptor));
+        modelBuilder.ApplyConfiguration(new Configurations.WhatsAppComplaintIntakeConfiguration(encryptor));
         modelBuilder.ApplyConfigurationsFromAssembly(
             typeof(LeadsDbContext).Assembly,
             type => type != typeof(Configurations.LeadConfiguration)
                  && type != typeof(Configurations.WhatsAppConversationConfiguration)
                  && type != typeof(Configurations.WhatsAppMessageConfiguration)
                  && type != typeof(Configurations.WhatsAppBotTurnConfiguration)
+                 && type != typeof(Configurations.WhatsAppComplaintIntakeConfiguration)
                  && type != typeof(Configurations.LeadHouseholdMemberConfiguration)
                  && type != typeof(Configurations.QualificationResponseConfiguration)
                  && type != typeof(Configurations.FatcaDeclarationConfiguration));
@@ -147,6 +150,9 @@ public sealed class LeadsDbContext(
 
         modelBuilder.Entity<WhatsAppBotTurn>()
             .HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
+
+        modelBuilder.Entity<WhatsAppComplaintIntake>()
+            .HasQueryFilter(i => i.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<WhatsAppHandover>()
             .HasQueryFilter(h => h.TenantId == tenant.CurrentTenantId);

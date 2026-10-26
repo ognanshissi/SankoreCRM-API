@@ -113,6 +113,15 @@ internal static class CustomerSettingValueValidation
                    "(regulatory archive-retention floor).";
         }
 
+        // A deadline of 0 days would make every complaint late the second it is recorded; past a
+        // year it is not a deadline any more.
+        if ((string.Equals(key, CustomerSettingKeys.ComplaintAcknowledgementDays, StringComparison.OrdinalIgnoreCase)
+             || string.Equals(key, CustomerSettingKeys.ComplaintResolutionDays, StringComparison.OrdinalIgnoreCase))
+            && value is < 1 or > 365)
+        {
+            return $"'{key}' must be between 1 and 365 days.";
+        }
+
         return value < 0 ? $"'{key}' cannot be negative." : null;
     }
 }

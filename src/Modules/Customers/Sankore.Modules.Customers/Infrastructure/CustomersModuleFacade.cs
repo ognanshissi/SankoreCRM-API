@@ -34,7 +34,8 @@ internal sealed class CustomersModuleFacade(
     Sankore.Shared.Infrastructure.Crypto.IFieldEncryptor? encryptor = null,
     Sankore.Shared.Kernel.Authorization.IAgencyScopeProvider? agencyScope = null,
     Microsoft.Extensions.Logging.ILogger<CustomersModuleFacade>? logger = null,
-    Features.Clients.Shared.ClientVisibility? visibility = null)
+    Features.Clients.Shared.ClientVisibility? visibility = null,
+    Features.Complaints.ClientComplaintFiling? complaintFiling = null)
     : ICustomersModule
 {
     /// <summary>
@@ -561,6 +562,32 @@ internal sealed class CustomersModuleFacade(
     public Task<bool> NotifyClientAsync(NotifyClientRequest request, CancellationToken ct)
         => clientEmails.NotifyAsync(request, ct);
 
+    // Recorded as SYSTEM through the same filing as an agent's complaint, so the deadlines, the
+    // assignee and the alert cannot differ. An unknown category is Other: the client's complaint
+    // must not be lost to a classification.
+    public async Task<Result<FiledClientComplaint>> FileComplaintAsync(FileClientComplaintRequest request, CancellationToken ct)
+    {
+        if (complaintFiling is null) throw new InvalidOperationException("The complaints register is not registered.");
+
+        var client = await db.Clients
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.TenantId == request.TenantId && c.Id == request.ClientId, ct);
+        if (client is null) return Result.Fail<FiledClientComplaint>(CustomerErrors.ClientNotFound);
+
+        var category = Enum.TryParse<ClientComplaintCategory>(request.Category, ignoreCase: true, out var parsed)
+                       && Enum.IsDefined(parsed)
+            ? parsed
+            : ClientComplaintCategory.Other;
+
+        var filed = await complaintFiling.FileAsync(new Features.Complaints.ClientComplaintFilingInput(
+            client, ClientComplaintChannel.WhatsApp, category, request.Subject, request.Description,
+            request.HoldingId, ReceivedBy: Guid.Empty, request.SourceConversationId), ct);
+
+        return filed.IsSuccess
+            ? Result.Ok(new FiledClientComplaint(filed.Value!.Id, filed.Value.Reference, filed.Value.ResolutionDueAt))
+            : Result.Fail<FiledClientComplaint>(filed.Error!);
+    }
+
     // The SMS twin. Straight through for the same reason, and the service does the one piece of
     // real work this channel needs: turning a number stored as it was dialled into E.164 with the
     // tenant's calling code.
@@ -580,6 +607,9 @@ internal sealed class CustomersModuleFacade(
     public Task<bool> VerifyRemoteIdentityAsync(
         Guid tenantId, Guid clientId, string? clientNumber, DateOnly? birthDate, CancellationToken ct)
         => remoteIdentity.VerifyAsync(tenantId, clientId, clientNumber, birthDate, ct);
+
+    public Task<Guid?> IdentifyClientAsync(Guid tenantId, string clientNumber, DateOnly birthDate, CancellationToken ct)
+        => remoteIdentity.IdentifyAsync(tenantId, clientNumber, birthDate, ct);
 
     // KRM-B-08, and the same shape for the same reason: the caller sends what it read, this module
     // compares it against the record it holds, and a boolean comes back. The normalisation rule

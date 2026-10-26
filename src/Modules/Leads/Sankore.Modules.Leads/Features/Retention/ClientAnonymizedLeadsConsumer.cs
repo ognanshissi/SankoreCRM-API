@@ -72,6 +72,8 @@ public sealed class ClientAnonymizedLeadsConsumer(
                 .Where(t => t.TenantId == evt.TenantId && conversationIds.Contains(t.ConversationId))
                 .ToListAsync(ct);
             foreach (var turn in turns) turn.Anonymize();
+
+            await WhatsApp.Complaints.WhatsAppComplaintIntakes.AnonymizeAsync(db, evt.TenantId, conversationIds, now, ct);
         }
 
         var appointments = await db.Appointments

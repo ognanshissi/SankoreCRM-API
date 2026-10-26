@@ -575,6 +575,18 @@ public static class Permissions
     public static readonly PermissionItem CanManageDesignations =
         new("customers:designation_manage", "Record Beneficiary Designations on a Holding", ApplicationModules.Customers, "designation_manage");
 
+    /// <summary>
+    /// Read a client's complaints register (2026-10-26) — every product, distinct from the CIMA
+    /// insurance register. Separate from <c>customers:read</c> because a grievance is free text
+    /// about a named person's money, and the institution decides who reads it.
+    /// </summary>
+    public static readonly PermissionItem CanReadClientComplaints =
+        new("customers:complaints:read", "Read a Customer's Complaints", ApplicationModules.Customers, "complaints:read");
+
+    /// <summary>Record a complaint, acknowledge it, answer it, close it.</summary>
+    public static readonly PermissionItem CanManageClientComplaints =
+        new("customers:complaints:manage", "Record and Handle a Customer's Complaints", ApplicationModules.Customers, "complaints:manage");
+
     // ── KYC module (M02) ───────────────────────────────────────────────────
     // Read and the two write verbs are separate because a KYC file is evidence: an agent
     // collects and corrects, a manager decides, and only compliance lifts a duplicate flag.
@@ -1088,6 +1100,8 @@ public static class Permissions
         CanReadCustomerPep,
         CanManageCustomerHolding,
         CanManageDesignations,
+        CanReadClientComplaints,
+        CanManageClientComplaints,
 
         // Integration module (INT-11)
         CanViewIntegrationConnection,

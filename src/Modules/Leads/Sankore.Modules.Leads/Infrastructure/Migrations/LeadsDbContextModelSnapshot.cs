@@ -3538,6 +3538,87 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("whatsapp_bot_turns", "leads");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.WhatsAppComplaintIntake", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("category");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid?>("ComplaintId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("complaint_id");
+
+                    b.Property<string>("ComplaintReference")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("complaint_reference");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description_enc");
+
+                    b.Property<string>("EndReason")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("end_reason");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<int>("FailedIdentifications")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_identifications");
+
+                    b.Property<DateTimeOffset>("LastActivityAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_activity_at");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("PendingClientNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_client_number_enc");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Step")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("step");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_whatsapp_complaint_intakes");
+
+                    b.HasIndex("TenantId", "ConversationId", "LastActivityAt")
+                        .HasDatabaseName("ix_whatsapp_complaint_intakes_tenant_id_conversation_id_last_a");
+
+                    b.ToTable("whatsapp_complaint_intakes", "leads");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.WhatsAppConversation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3840,6 +3921,12 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
                         .HasColumnName("error_detail");
+
+                    b.Property<bool>("ExcludedFromModel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("excluded_from_model");
 
                     b.Property<DateTimeOffset?>("FailedAt")
                         .HasColumnType("timestamp with time zone")

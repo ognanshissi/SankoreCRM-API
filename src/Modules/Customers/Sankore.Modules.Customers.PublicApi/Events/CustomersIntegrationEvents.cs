@@ -251,3 +251,46 @@ public sealed record HouseholdMemberRemovedEvent(
     int DesignationsToReview,
     IReadOnlyList<Guid> AffectedHoldingIds,
     Guid RemovedBy) : IntegrationEventBase;
+
+/// <summary>
+/// A client complaint needs somebody (2026-10-26): it was just recorded, or one of its deadlines
+/// has passed. Consumed for the task (M13), the bell and the e-mail (M01). Carries the subject —
+/// an operator-facing line — and never what the client wrote.
+/// </summary>
+/// <param name="RecipientUserId">Who must act: the assignee on a recording, the agency manager on a late deadline.</param>
+/// <param name="Reason">One of <see cref="ClientComplaintActionReasons"/>.</param>
+/// <param name="DueAt">The deadline the recipient is working against.</param>
+public sealed record ClientComplaintActionRequiredEvent(
+    Guid TenantId,
+    Guid ClientId,
+    Guid ComplaintId,
+    string Reference,
+    string Subject,
+    Guid RecipientUserId,
+    string Reason,
+    DateTimeOffset DueAt) : IntegrationEventBase;
+
+public static class ClientComplaintActionReasons
+{
+    public const string Filed = "Filed";
+    public const string AcknowledgementOverdue = "AcknowledgementOverdue";
+    public const string ResolutionOverdue = "ResolutionOverdue";
+}
+
+/// <summary>
+/// A client complaint moved forward (2026-10-26): acknowledged, answered or closed. Lets M13 close
+/// the tasks it opened for it — an answered complaint must not keep sitting in « Ma journée ».
+/// </summary>
+/// <param name="Stage">One of <see cref="ClientComplaintStages"/>.</param>
+public sealed record ClientComplaintProgressedEvent(
+    Guid TenantId,
+    Guid ClientId,
+    Guid ComplaintId,
+    string Stage) : IntegrationEventBase;
+
+public static class ClientComplaintStages
+{
+    public const string Acknowledged = "Acknowledged";
+    public const string Resolved = "Resolved";
+    public const string Closed = "Closed";
+}

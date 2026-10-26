@@ -98,6 +98,7 @@ internal static class LeadErasure
         foreach (var conversation in conversations) conversation.Anonymize(now);
         foreach (var message in messages) message.Anonymize();
         foreach (var turn in botTurns) turn.Anonymize();
+        await WhatsApp.Complaints.WhatsAppComplaintIntakes.AnonymizeAsync(db, tenantId, conversationIds, now, ct);
 
         foreach (var lead in leads)
         {

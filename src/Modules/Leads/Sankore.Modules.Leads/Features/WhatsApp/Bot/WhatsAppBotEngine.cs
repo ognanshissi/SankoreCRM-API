@@ -98,7 +98,8 @@ internal sealed class WhatsAppBotEngine(
     IOptions<WhatsAppBotOptions> options,
     ISender sender,
     TimeProvider clock,
-    ILogger<WhatsAppBotEngine> logger)
+    ILogger<WhatsAppBotEngine> logger,
+    Complaints.WhatsAppComplaintDesk? complaintDesk = null)
 {
     /// <summary>Model calls in one turn: the decision, and one correction if it was malformed or not a call to respond.</summary>
     internal const int MaxModelCalls = 2;
@@ -194,6 +195,15 @@ internal sealed class WhatsAppBotEngine(
                     ? "Le bot n’a pas répondu à temps ; le client attend un conseiller."
                     : "Le bot n’a pas pu répondre ; le client attend un conseiller.",
                 now, profile, tellCustomer: true, ct);
+        }
+        else if (run.Escalation is { Reason: Complaints.WhatsAppComplaintDesk.EscalationReason }
+                 && complaintDesk is not null
+                 && await complaintDesk.TryStartFromBotAsync(tenantId, conversation, trigger, now, ct))
+        {
+            // A complaint the keywords missed: the intake takes it down rather than a person
+            // being called for a form the customer can fill in here (2026-10-26).
+            outcome = WhatsAppBotTurnOutcome.Replied;
+            reason = Complaints.WhatsAppComplaintDesk.EscalationReason;
         }
         else if (run.Escalation is { } handover)
         {
@@ -612,6 +622,10 @@ internal sealed class WhatsAppBotEngine(
         foreach (var m in recent)
         {
             if (m.Direction == WhatsAppDirection.Outbound && m.Status == WhatsAppMessageStatus.Failed) continue;
+
+            // The complaint intake's answers (a client number, a date of birth, the complaint) stay
+            // between the customer and the institution: no model reads them, now or later.
+            if (m.ExcludedFromModel) continue;
 
             var role = m.Direction == WhatsAppDirection.Inbound ? "user" : "assistant";
             var text = m.Kind switch

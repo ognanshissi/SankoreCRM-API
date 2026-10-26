@@ -20,6 +20,16 @@ public static class CustomerErrors
     public const string ClientDocumentTitleRequired = "CLIENT_DOCUMENT_TITLE_REQUIRED";
     public const string ClientDocumentNotFound = "CLIENT_DOCUMENT_NOT_FOUND";
     public const string ClientDocumentRemovalReasonRequired = "CLIENT_DOCUMENT_REMOVAL_REASON_REQUIRED";
+
+    // ── Client complaints register (2026-10-26) ───────────────────────────────
+    public const string ComplaintNotFound = "COMPLAINT_NOT_FOUND";
+    public const string ComplaintSubjectRequired = "COMPLAINT_SUBJECT_REQUIRED";
+    public const string ComplaintDescriptionRequired = "COMPLAINT_DESCRIPTION_REQUIRED";
+    public const string ComplaintResponseRequired = "COMPLAINT_RESPONSE_REQUIRED";
+    public const string ComplaintInvalidTransition = "COMPLAINT_INVALID_TRANSITION";
+    /// <summary>The contract named does not belong to this client.</summary>
+    public const string ComplaintHoldingNotOfClient = "COMPLAINT_HOLDING_NOT_OF_CLIENT";
+
     public const string ClientUnderMinimumAge = "CLIENT_UNDER_MINIMUM_AGE";
     public const string ClientAlreadyMerged = "CLIENT_ALREADY_MERGED";
     public const string InvalidStatusTransition = "INVALID_STATUS_TRANSITION";

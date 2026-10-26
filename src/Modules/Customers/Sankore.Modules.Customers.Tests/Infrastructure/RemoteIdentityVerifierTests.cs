@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Tests.Infrastructure;
 
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Tests.TestSupport;
 using Xunit;
@@ -200,5 +201,47 @@ public sealed class RemoteIdentityVerifierTests : IDisposable
                 .VerifyRemoteIdentityAsync));
 
         method!.ReturnType.Should().Be(typeof(Task<bool>));
+    }
+
+    // ── Identifying from the number (WhatsApp complaint intake, 2026-10-26) ──────
+
+    private async Task<Guid?> IdentifyAsync(string number, DateOnly birthDate)
+    {
+        await using var db = _factory.CreateContext();
+        return await TestDoubles.RemoteIdentity(db).IdentifyAsync(Tenant, number, birthDate, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task The_number_and_the_date_together_designate_the_client_whatever_the_casing()
+    {
+        var client = await SeedAsync();
+
+        (await IdentifyAsync(ClientNumber, BirthDate)).Should().Be(client.Id);
+        (await IdentifyAsync(" abj-plt-2026-000042 ", BirthDate)).Should().Be(client.Id);
+    }
+
+    [Fact]
+    public async Task A_wrong_date_or_an_unknown_number_designates_nobody_and_says_nothing_more()
+    {
+        await SeedAsync();
+
+        (await IdentifyAsync(ClientNumber, BirthDate.AddDays(1))).Should().BeNull();
+        (await IdentifyAsync("ABJ-PLT-2026-999999", BirthDate)).Should().BeNull();
+        (await IdentifyAsync("", BirthDate)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_merged_record_is_nobody_to_answer()
+    {
+        await SeedAsync();
+
+        await using (var db = _factory.CreateContext())
+        {
+            var tracked = await db.Clients.AsTracking().SingleAsync();
+            tracked.MarkMerged(Guid.NewGuid(), Guid.NewGuid()).IsSuccess.Should().BeTrue();
+            await db.SaveChangesAsync();
+        }
+
+        (await IdentifyAsync(ClientNumber, BirthDate)).Should().BeNull();
     }
 }

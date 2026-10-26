@@ -51,6 +51,9 @@ internal sealed class ErasureExecutor(
                     .Where(p => p.TenantId == request.TenantId && p.ClientId == client.Id)
                     .ToListAsync(ct));
 
+                // Its complaints stay counted in the register, emptied of what was said.
+                await Complaints.ClientComplaintErasure.AnonymizeAsync(db, request.TenantId, client.Id, now, ct);
+
                 await publisher.PublishAsync(new ClientAnonymizedEvent(request.TenantId, client.Id, now), ct);
             }
         }

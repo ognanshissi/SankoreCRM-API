@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Sankore.Modules.Customers.Domain;
 using Sankore.Shared.Infrastructure.Crypto;
 
 /// <summary>
@@ -97,6 +98,40 @@ public sealed class RemoteIdentityVerifier(
     /// nothing guarantees its casing across the formats the generator has had.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The client a number AND a date of birth designate together, or null — for a channel that
+    /// starts from neither a link nor a known client: the WhatsApp complaint intake (2026-10-26).
+    ///
+    /// <para>
+    /// The number finds a candidate, then <see cref="VerifyAsync"/> decides, so the date is compared
+    /// the one fixed-time way. A number with no candidate still costs one HMAC, so « no such number »
+    /// does not answer faster than « wrong date ». A merged record is no candidate: its number now
+    /// belongs to the survivor's history, not to a person who can be answered.
+    /// </para>
+    /// </summary>
+    public async Task<Guid?> IdentifyAsync(Guid tenantId, string? clientNumber, DateOnly birthDate, CancellationToken ct)
+    {
+        var normalized = NormalizeClientNumber(clientNumber);
+
+        var candidate = normalized.Length == 0
+            ? null
+            : await db.Clients
+                .IgnoreQueryFilters()
+                .Where(c => c.TenantId == tenantId
+                         && c.Status != ClientStatus.Merged
+                         && c.ClientNumber.ToUpper().Replace(" ", "") == normalized)
+                .Select(c => (Guid?)c.Id)
+                .FirstOrDefaultAsync(ct);
+
+        if (candidate is not { } clientId)
+        {
+            _ = indexer.Compute(BlindIndexPurpose.DateOfBirth, SensitiveValueNormalizer.NormalizeDateOfBirth(birthDate));
+            return null;
+        }
+
+        return await VerifyAsync(tenantId, clientId, clientNumber, birthDate, ct) ? clientId : null;
+    }
+
     private static string NormalizeClientNumber(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;

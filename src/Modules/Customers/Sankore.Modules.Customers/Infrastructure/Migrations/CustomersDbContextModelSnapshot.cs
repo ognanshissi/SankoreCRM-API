@@ -623,6 +623,147 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     b.ToTable("clients", "customers");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientComplaint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledged_at");
+
+                    b.Property<Guid?>("AcknowledgedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("acknowledged_by");
+
+                    b.Property<DateTimeOffset>("AcknowledgementDueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledgement_due_at");
+
+                    b.Property<DateTimeOffset?>("AcknowledgementOverdueNotifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledgement_overdue_notified_at");
+
+                    b.Property<Guid>("AgencyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agency_id");
+
+                    b.Property<DateTimeOffset?>("AnonymizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("anonymized_at");
+
+                    b.Property<Guid?>("AssignedTo")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_to");
+
+                    b.Property<string>("BodyEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("body_encrypted");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<string>("ClosureReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("closure_reason");
+
+                    b.Property<Guid?>("HoldingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("holding_id");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<Guid>("ReceivedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("received_by");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("reference");
+
+                    b.Property<DateTimeOffset>("ResolutionDueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolution_due_at");
+
+                    b.Property<DateTimeOffset?>("ResolutionOverdueNotifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolution_overdue_notified_at");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<Guid?>("ResolvedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by");
+
+                    b.Property<string>("ResponseEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("response_encrypted");
+
+                    b.Property<Guid?>("SourceConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_conversation_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_client_complaints");
+
+                    b.HasIndex("TenantId", "ClientId")
+                        .HasDatabaseName("ix_client_complaints_tenant_id_client_id");
+
+                    b.HasIndex("TenantId", "Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_client_complaints_tenant_id_reference");
+
+                    b.HasIndex("TenantId", "Status", "ResolutionDueAt")
+                        .HasDatabaseName("ix_client_complaints_tenant_id_status_resolution_due_at");
+
+                    b.ToTable("client_complaints", "customers");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientContactPoint", b =>
                 {
                     b.Property<Guid>("Id")

@@ -492,6 +492,22 @@ public sealed class WhatsAppConversation : ITenant
     /// <summary>An agent opened the thread.</summary>
     public void MarkRead() => UnreadCount = 0;
 
+    /// <summary>
+    /// The complaint intake identified the person by client number and date of birth (2026-10-26):
+    /// a conversation filed on nobody is filed on that client. One on a lead stays on it — the lead
+    /// wins, as at the first message — and one already on a client is not moved by a stranger's
+    /// answers. A prospect being collected stops being one: the person is already a client.
+    /// </summary>
+    public void IdentifyClient(Guid clientId)
+    {
+        if (LeadId is not null || ClientId is not null) return;
+
+        ClientId = clientId;
+        AmbiguousMatch = false;
+        CollectingProspect = false;
+        PendingLeadFieldsJson = null;
+    }
+
     /// <summary>Files an unattached conversation on a lead (WA-BE-09's « non rattachés » queue).</summary>
     public void AttachToLead(Guid leadId)
     {

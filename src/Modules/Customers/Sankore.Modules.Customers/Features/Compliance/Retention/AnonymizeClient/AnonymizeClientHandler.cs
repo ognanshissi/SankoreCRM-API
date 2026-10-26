@@ -98,6 +98,9 @@ internal sealed class AnonymizeClientHandler(
             .ToListAsync(ct);
         db.ClientDocuments.RemoveRange(documents);
 
+        // Its complaints stay counted in the register, emptied of what was said.
+        await Features.Complaints.ClientComplaintErasure.AnonymizeAsync(db, tenantId, client.Id, now, ct);
+
         // Publish inside the same transaction as the erasure (the outbox writer does not save):
         // either both land or neither does, so no consumer can ever see an event for data that
         // is in fact still there.

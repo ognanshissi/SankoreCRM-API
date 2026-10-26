@@ -47,6 +47,12 @@ public static class CustomerSettingKeys
 
     public const string KycStubEnabled = "kyc-stub-enabled";
 
+    /// <summary>Days to acknowledge a client complaint (2026-10-26). Stored on each complaint at its recording.</summary>
+    public const string ComplaintAcknowledgementDays = "complaint-acknowledgement-days";
+
+    /// <summary>Days to answer a client complaint.</summary>
+    public const string ComplaintResolutionDays = "complaint-resolution-days";
+
     // ── Value types ─────────────────────────────────────────────────────────
     public const string TypeString = "string";
     public const string TypeInt = "int";
@@ -93,6 +99,10 @@ public static class CustomerSettingKeys
             + "(CIMA LBC/FT)."),
         new(KycStubEnabled, "false", TypeBool,
             "Auto-approve KYC locally instead of waiting for module M02 (non-production only)."),
+        new(ComplaintAcknowledgementDays, "2", TypeInt,
+            "Days to acknowledge a client complaint. Applies to complaints recorded after a change."),
+        new(ComplaintResolutionDays, "30", TypeInt,
+            "Days to answer a client complaint. Applies to complaints recorded after a change."),
     ];
 
     /// <summary>

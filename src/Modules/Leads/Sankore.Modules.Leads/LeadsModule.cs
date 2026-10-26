@@ -218,6 +218,8 @@ public static class LeadsModule
         services.AddScoped<Features.WhatsApp.WhatsAppConversationLoader>();
         services.AddScoped<Features.WhatsApp.WhatsAppTakeoverJob>();
         services.AddScoped<Features.WhatsApp.WhatsAppEscalation>();
+        // Complaints taken on WhatsApp, question by question, no model (2026-10-26).
+        services.AddScoped<Features.WhatsApp.Complaints.WhatsAppComplaintDesk>();
 
         // The WhatsApp bot (WA lot 3). The model is chosen per DEPLOYMENT: Anthropic with a key,
         // the scripted fake in Development, otherwise none — and « none » is a model that says

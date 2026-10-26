@@ -99,6 +99,9 @@ public sealed class WhatsAppRetentionJob(IServiceScopeFactory scopeFactory, ILog
         foreach (var message in messages) message.Anonymize();
         foreach (var turn in turns) turn.Anonymize();
 
+        // RunAsync carries the tenant through the scope; the intakes take it explicitly.
+        await Complaints.WhatsAppComplaintIntakes.AnonymizeAsync(db, due[0].TenantId, ids, now, ct);
+
         await db.SaveChangesAsync(ct);
         return due.Count;
     }

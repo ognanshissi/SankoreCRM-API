@@ -3372,6 +3372,94 @@ templates, settings, client number sequence stay. Each module's `TenantDataWipeP
 plan against its real model; with `TENANT_WIPE_SQL_OUT` set they dump the SQL — replayed on the dev
 database inside BEGIN…ROLLBACK on 2026-10-25: 102 statements, no constraint error.
 
+### Client complaints register (2026-10-26, lot 1 of « réclamation depuis le bot WhatsApp »)
+
+A general register on the client record, every product — `customers.client_complaints`
+(`ClientComplaint`, migration `AddClientComplaints`). **Not the CIMA register**:
+`InsuranceComplaint` (Integration) serves règlement 01/CIMA/2024 and refuses credit and savings
+grievances on purpose; an insurance complaint still goes there. References are **`RCL-AAAA-nnnnnn`**,
+not `REC-` — that prefix is the CIMA register's, and two « REC-2026-000042 » in one institution
+would be two complaints under one number.
+
+- **One way in, `ClientComplaintFiling`**, shared by `POST clients/{id}/complaints` (agent) and
+  `ICustomersModule.FileComplaintAsync` (the WhatsApp bot, lot 2 — recorded as SYSTEM, channel
+  WhatsApp, an unknown category becomes Other rather than losing the complaint). Deadlines come
+  from `complaint-acknowledgement-days` (2) and `complaint-resolution-days` (30), 1–365, and are
+  STORED on the row: changing a setting moves no complaint already recorded.
+- **Assignee** = advisor, else the client's creator, accepted by
+  `IAdministrationModule.ResolveAgencyRecipientAsync` (active, still in the client's agency), else
+  the agency manager. Read under a suppressed transaction; M12 down keeps the unchecked first choice.
+- **Alert** = `ClientComplaintActionRequiredEvent` through the outbox (reason Filed /
+  AcknowledgementOverdue / ResolutionOverdue): `ClientComplaintTaskConsumer` (M13) creates the task
+  (`AboutClient`, idempotent on trigger `ClientComplaint{Reason}` + complaint id) and
+  `ClientComplaintNotificationsConsumer` (M01) the e-mail `client-complaint.action-required` and the
+  bell (keys = complaint + reason). The event carries the operator's subject, never what the client
+  wrote. The tasks close with the complaint (`ClientComplaintProgressedEvent`, published in the
+  step's own save): an acknowledgement completes the manager's late-acknowledgement task only, an
+  answer completes every task, a closure without answer cancels them — silently, no
+  `TaskCompletedEvent`, like the « Dispatch manuel » task an assignment closes.
+- **`ClientComplaintDeadlineJob`** (per tenant, 07:00) reports each late deadline ONCE
+  (`*OverdueNotifiedAt`) to the agency manager, else the assignee; a late answer found before the late
+  acknowledgement was reported is one reminder, not two.
+- The description and the answer are encrypted with the M01 field key; the commands mark them
+  `[SensitiveData]` so `AuditBehavior` does not copy them. `GET …/complaints/{id}` decrypts, `no-store`.
+- Statuses Received → Acknowledged → Resolved | Closed (closed = withdrawn/out of scope, with a
+  reason). Answering an unacknowledged complaint acknowledges it too.
+- Permissions `customers:complaints:read` / `:manage` (front-line roles, sales/branch managers,
+  cashier, regulation manager). Reads go through the agency perimeter and the assigned-only rule
+  (`IClientReadRequest`).
+- **Erasure** (both paths, retention and on request) keeps the row counted and empties it
+  (`ClientComplaintErasure`): subject, description, answer and closure reason go.
+
+### WhatsApp complaint intake (2026-10-26, lot 2 of « réclamation depuis le bot WhatsApp »)
+
+`WhatsAppComplaintDesk` (M13) takes a complaint on WhatsApp **question by question, with no model**:
+client number → date of birth → the complaint → its category (numbered menu) → OUI/NON → recorded
+through `ICustomersModule.FileComplaintAsync` (lot 1's register, assigned and alerted like an
+agent's). Switch: `whatsapp-bot-complaints-enabled` (default **false**); off, « réclamation » still
+hands the conversation to a person as before.
+
+- **Where it runs.** `RecordMessagingEvents`, after STOP and before the bot: `DecideAsync` captures
+  a message when an intake is running in the conversation (idle < 30 min) or when it contains a
+  trigger phrase (`TriggerPhrases`). It runs on lead, client, prospect and unattached conversations
+  alike, and **with no bot profile and no model** — the conversation is put in `Bot` status for it.
+  A conversation a person holds or awaits is never captured. The bot's model reaching
+  `BOT_COMPLAINT` on a message the phrases missed starts an intake too (`TryStartFromBotAsync`)
+  instead of a handover.
+- **Identification** = `ICustomersModule.IdentifyClientAsync(number, date)`, M01's
+  `RemoteIdentityVerifier.IdentifyAsync`: the number finds a candidate (not Merged), then the
+  existing fixed-time check decides; one null for every failure. **At most 3 failed
+  identifications per conversation per 24 h, counted across intakes** (`FailuresInWindowAsync`) —
+  restarting does not buy fresh tries; the third hands over (`BOT_COMPLAINT`,
+  `EndReason = IDENTIFICATION_FAILED`). An unreadable date is asked again and costs nothing.
+  Identified, an unattached conversation is filed on the client (`IdentifyClient`; a lead
+  conversation stays on its lead).
+- **Nothing reaches a model.** Every message the intake consumes is `ExcludedFromModel` and
+  skipped by the bot's history; the intake row (`whatsapp_complaint_intakes`) holds the number
+  until the date and the description until the confirmation, encrypted with M13's key, both
+  cleared when it ends. The complaint's subject is « Réclamation WhatsApp — {catégorie} », never
+  the customer's words (it is in clear in lists and e-mails).
+- **A refusal or an outage hands over**, never drops: the register refusing (`CLIENT_READ_ONLY`…),
+  M01 unreachable, « conseiller »/« agent », and the attempt bound all escalate with
+  `BOT_COMPLAINT` and a summary; « annuler » cancels.
+- **Known limit:** M01 commits the complaint in its own transaction; if this module's save then
+  fails, a redelivered webhook re-runs the confirmation and could file it twice.
+- **Replies are stamped when they are queued** (`SendTime`), not with the delivery's start: each
+  WhatsApp delivery is its own Hangfire job and quick messages land in the same batch; stamped
+  with the handler's `now`, the waiting message of a handover went out before the previous
+  question (recette, 2026-10-26).
+- Intakes follow their conversation in the three erasures (client anonymised, lead erased,
+  WhatsApp retention) through `WhatsAppComplaintIntakes.AnonymizeAsync`.
+
+Front-end (lot 3): the « Réclamations » tab of the client record (`reclamations.ts`, route
+`reclamations` guarded by `customers:complaints:read` — the path the notifications link to), the
+record drawer (signal form, contract picker from the client's holdings) and the detail drawer
+(acknowledge / answer / close without answer, link to the WhatsApp conversation through
+`/leads/whatsapp?conversation=`). The switch and the two deadlines sit on Paramétrage › WhatsApp ›
+Chatbot (`complaint-settings-card.ts`): the switch needs `lead:settings:manage`, the deadlines
+`customers:update_sensitive` — each half freezes without its permission. The conversation drawer
+offers « Réclamations du client » on a conversation filed on a client.
+
 ### Adding a new module
 
 Use `Sankore.Modules.Administration` as the template: PublicApi project (interface only) + main project (DbContext + domain + Features/) + Tests project. Register in `Program.cs` with `builder.Services.Add{Module}Module(...)` and `appVersion1.Map{Module}ModuleEndpoints()`. Initialize in the startup scope if the module needs migration or seeding.

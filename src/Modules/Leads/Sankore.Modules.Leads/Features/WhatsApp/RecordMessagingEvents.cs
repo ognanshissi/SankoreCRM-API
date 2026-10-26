@@ -64,7 +64,8 @@ internal sealed class RecordMessagingEventsHandler(
     Bot.WhatsAppBotFieldValues fieldValues,
     WhatsAppAudit audit,
     TimeProvider clock,
-    ILogger<RecordMessagingEventsHandler> logger)
+    ILogger<RecordMessagingEventsHandler> logger,
+    Complaints.WhatsAppComplaintDesk? complaintDesk = null)
     : IRequestHandler<RecordMessagingEventsCommand, MessagingEventsOutcome>
 {
     public async Task<MessagingEventsOutcome> Handle(RecordMessagingEventsCommand cmd, CancellationToken ct)
@@ -160,7 +161,14 @@ internal sealed class RecordMessagingEventsHandler(
                 ? null
                 : await botProfiles.ResolveForConversationAsync(cmd.TenantId, conversation, lead, ct);
 
-            var routing = conversation.RecordInbound(inbound.SentAt, inbound.ProfileName, botAvailable: botProfile is not null);
+            // A complaint being taken, or asked for, is answered by the intake — with or without a
+            // bot profile, since it needs no model (2026-10-26).
+            var complaint = complaintDesk is null
+                ? null
+                : await complaintDesk.DecideAsync(cmd.TenantId, conversation, message, now, ct);
+
+            var routing = conversation.RecordInbound(
+                inbound.SentAt, inbound.ProfileName, botAvailable: botProfile is not null || complaint is not null);
 
             // A prospect the bot can no longer answer — switched off since — goes to a person, and a
             // person needs a record to work on: the lead is created now, with what was collected.
@@ -183,7 +191,11 @@ internal sealed class RecordMessagingEventsHandler(
                 lead.RecordContactEstablished();
             }
 
-            switch (routing)
+            if (complaint is not null && routing is WhatsAppInboundRouting.BotStarted or WhatsAppInboundRouting.BotContinues)
+            {
+                await complaintDesk!.HandleAsync(cmd.TenantId, conversation, lead, message, complaint, now, ct);
+            }
+            else switch (routing)
             {
                 case WhatsAppInboundRouting.Escalate:
                     await escalation.EscalateAsync(

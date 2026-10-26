@@ -96,6 +96,14 @@ public sealed class WhatsAppMessage : ITenant
     /// <summary>When the media was deleted for retention. The bubble then says so.</summary>
     public DateTimeOffset? MediaPurgedAt { get; private set; }
 
+    /// <summary>
+    /// Never part of the history sent to the bot's model: an answer given to the complaint intake
+    /// — a client number, a date of birth, the complaint itself (2026-10-26). The agents still read it.
+    /// </summary>
+    public bool ExcludedFromModel { get; private set; }
+
+    public void ExcludeFromModel() => ExcludedFromModel = true;
+
     private WhatsAppMessage() { } // EF Core
 
     public static WhatsAppMessage Inbound(

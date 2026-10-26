@@ -17,6 +17,7 @@ using Sankore.Modules.Customers.Features.LeadConversion;
 using Sankore.Modules.Customers.Features.LegalEntities;
 using Sankore.Modules.Customers.Features.Lifecycle;
 using Sankore.Modules.Customers.Features.Documents;
+using Sankore.Modules.Customers.Features.Complaints;
 using Sankore.Modules.Customers.Features.Holdings;
 using Sankore.Modules.Customers.Features.Household;
 using Sankore.Modules.Customers.Features.Relationships;
@@ -124,6 +125,10 @@ public static class CustomersModule
         services.AddScoped<Infrastructure.RemoteIdentity.ReadIdentityComparer>();
         services.AddScoped<Infrastructure.Notifications.ClientSmsNotifier>();
 
+        // The single path into the complaints register, shared by the agent's endpoint and the
+        // WhatsApp bot's contract (2026-10-26).
+        services.AddScoped<Features.Complaints.ClientComplaintFiling>();
+
         // ── Cross-module surface ────────────────────────────────────────────
         services.AddScoped<ICustomersModule, CustomersModuleFacade>();
 
@@ -182,6 +187,7 @@ public static class CustomersModule
         app.MapHoldingsEndpoints();
         // Everything the client gave or received, from every module (2026-10-26)
         app.MapDocumentsEndpoints();
+        app.MapClientComplaintsEndpoints();
         app.MapDuplicatesEndpoints();
         app.MapTimelineEndpoints();
         app.MapComplianceEndpoints();

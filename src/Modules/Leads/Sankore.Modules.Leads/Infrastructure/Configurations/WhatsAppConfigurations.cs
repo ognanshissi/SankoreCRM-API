@@ -98,6 +98,7 @@ internal sealed class WhatsAppMessageConfiguration(IFieldEncryptor encryptor)
         b.Property(m => m.MediaStorageRef).HasMaxLength(80);
         b.Property(m => m.MediaSha256).HasMaxLength(64);
         b.Ignore(m => m.HasMedia);
+        b.Property(m => m.ExcludedFromModel).HasDefaultValue(false);
 
         // The media purge: stored or provider-held media past their retention.
         b.HasIndex(m => new { m.TenantId, m.MediaStoredAt }).HasFilter("media_storage_ref IS NOT NULL");
@@ -255,5 +256,31 @@ internal sealed class WhatsAppHandoverConfiguration : IEntityTypeConfiguration<W
 
         b.HasIndex(h => new { h.TenantId, h.ConversationId }).HasFilter("ended_at IS NULL");
         b.HasIndex(h => new { h.TenantId, h.EscalatedAt });
+    }
+}
+
+/// <summary>
+/// Applied BY HAND, like the conversation's: the client number and the complaint wait here
+/// encrypted (M13's key) between two messages.
+/// </summary>
+internal sealed class WhatsAppComplaintIntakeConfiguration(IFieldEncryptor encryptor) : IEntityTypeConfiguration<WhatsAppComplaintIntake>
+{
+    public void Configure(EntityTypeBuilder<WhatsAppComplaintIntake> b)
+    {
+        b.ToTable("whatsapp_complaint_intakes");
+        b.HasKey(i => i.Id);
+        b.Property(i => i.Id).ValueGeneratedNever();
+
+        b.Property(i => i.PendingClientNumber).HasColumnName("pending_client_number_enc").HasConversion(EncryptedConverters.Text(encryptor));
+        b.Property(i => i.Description).HasColumnName("description_enc").HasConversion(EncryptedConverters.Text(encryptor));
+
+        b.Property(i => i.Step).HasConversion<string>().HasMaxLength(20).IsRequired();
+        b.Property(i => i.Outcome).HasConversion<string>().HasMaxLength(20);
+        b.Property(i => i.Category).HasMaxLength(30);
+        b.Property(i => i.EndReason).HasMaxLength(60);
+        b.Property(i => i.ComplaintReference).HasMaxLength(30);
+
+        // The running intake of a conversation, and its failed tries of the last day.
+        b.HasIndex(i => new { i.TenantId, i.ConversationId, i.LastActivityAt });
     }
 }

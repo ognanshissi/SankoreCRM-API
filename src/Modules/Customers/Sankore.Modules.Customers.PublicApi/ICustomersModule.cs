@@ -176,6 +176,14 @@ public interface ICustomersModule
         CancellationToken ct);
 
     /// <summary>
+    /// The client that a client number and a date of birth designate TOGETHER, or <c>null</c> —
+    /// for the WhatsApp complaint intake (2026-10-26), where the person writes from a number that
+    /// proves nothing. One answer for every failure (unknown number, wrong date, no recorded date),
+    /// so it cannot be used to learn that a number exists; the caller bounds the attempts.
+    /// </summary>
+    Task<Guid?> IdentifyClientAsync(Guid tenantId, string clientNumber, DateOnly birthDate, CancellationToken ct);
+
+    /// <summary>
     /// Whether the surname, given names and date of birth READ on a customer's identity document
     /// agree with the client record (KRM-B-08, section 3.2).
     ///
@@ -246,6 +254,17 @@ public interface ICustomersModule
     /// </para>
     /// </summary>
     Task<bool> NotifyClientAsync(NotifyClientRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// Records a complaint on the client's register from a channel with no agent behind it — the
+    /// WhatsApp bot (2026-10-26). Recorded as SYSTEM, assigned and notified exactly like one an
+    /// agent typed in. The caller must have identified the client first: this contract does not.
+    /// </summary>
+    /// <returns>
+    /// The reference and the answer's deadline, which the caller gives the client. Fails with
+    /// <c>CLIENT_NOT_FOUND</c>, <c>CLIENT_READ_ONLY</c> or a <c>COMPLAINT_*</c> code.
+    /// </returns>
+    Task<Result<FiledClientComplaint>> FileComplaintAsync(FileClientComplaintRequest request, CancellationToken ct);
 
     /// <summary>
     /// Whether the client has an active telephone number on file — a boolean, never the number.
@@ -830,3 +849,21 @@ public sealed record CustomerSummary(
     string? Email,
     string? PhoneNumber,
     Guid? AgencyId);
+
+/// <param name="Category">
+/// A category name — Other, Credit, Savings, FeesAndPricing, PaymentMeans, Service, DataProtection.
+/// An unknown name is recorded as Other rather than refused: the client's complaint must not be
+/// lost to a classification.
+/// </param>
+/// <param name="Description">What the client said. Stored encrypted.</param>
+/// <param name="SourceConversationId">The WhatsApp conversation, kept as an opaque reference.</param>
+public sealed record FileClientComplaintRequest(
+    Guid TenantId,
+    Guid ClientId,
+    string Category,
+    string Subject,
+    string Description,
+    Guid? HoldingId = null,
+    Guid? SourceConversationId = null);
+
+public sealed record FiledClientComplaint(Guid ComplaintId, string Reference, DateTimeOffset ResolutionDueAt);

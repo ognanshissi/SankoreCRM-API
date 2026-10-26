@@ -107,6 +107,16 @@ public static class LeadSettingKeys
     public const string WhatsAppBotEnabled = "whatsapp-bot-enabled";
 
     /// <summary>
+    /// Whether a customer can file a complaint on WhatsApp (2026-10-26): « réclamation » or
+    /// « plainte » starts a question-by-question intake — client number, date of birth, the
+    /// complaint, its category — that records it on the client's register. Rule-based, no model,
+    /// so it works with the conversational bot off. Default FALSE, like the bot: the institution
+    /// decides that a machine takes complaints in its name. Off, the keywords still hand the
+    /// conversation to a person.
+    /// </summary>
+    public const string WhatsAppBotComplaintsEnabled = "whatsapp-bot-complaints-enabled";
+
+    /// <summary>
     /// Months of silence after which a WhatsApp conversation filed on NO lead — a client's, an
     /// unattached number's — is anonymised (WA-BE-21). A lead's conversations follow the lead's
     /// own retention instead. Zero or negative skips the run.
@@ -171,6 +181,10 @@ public static class LeadSettingKeys
         new(WhatsAppBotEnabled, "false", TypeBool,
             "Let the WhatsApp bot answer customers, for the products whose bot profile is enabled. "
             + "Off, every message goes straight to an agent."),
+        new(WhatsAppBotComplaintsEnabled, "false", TypeBool,
+            "Let a client file a complaint on WhatsApp: identified by client number and date of birth, "
+            + "the complaint is recorded on their client record and their advisor is told. Off, a "
+            + "complaint goes straight to an agent."),
         new(WhatsAppRetentionMonths, "24", TypeInt,
             "Months of silence after which a WhatsApp conversation filed on no lead is anonymised. "
             + "A lead's conversations follow the lead's retention. 0 disables it."),

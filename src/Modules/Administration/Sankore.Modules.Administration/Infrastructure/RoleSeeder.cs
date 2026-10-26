@@ -158,6 +158,18 @@ internal static class RoleSeeder
         Permissions.CanReadSlaConfigs,
     ];
 
+    /// <summary>
+    /// The client complaints register (2026-10-26): whoever faces a client records what they
+    /// complain about and answers it — at the counter, on the phone, or from the WhatsApp bot.
+    /// Declared BEFORE <see cref="CustomerWork"/>, which spreads it: static fields initialise in
+    /// textual order, and declared after it would still be null there.
+    /// </summary>
+    private static readonly PermissionItem[] ComplaintWork =
+    [
+        Permissions.CanReadClientComplaints,
+        Permissions.CanManageClientComplaints,
+    ];
+
     /// <summary>The customer record as a front-line role keeps it.</summary>
     private static readonly PermissionItem[] CustomerWork =
     [
@@ -168,6 +180,7 @@ internal static class RoleSeeder
         Permissions.CanManageCustomerHousehold,
         Permissions.CanManageCustomerHolding,
         Permissions.CanManageDesignations,
+        .. ComplaintWork,
     ];
 
     /// <summary>
@@ -287,6 +300,7 @@ internal static class RoleSeeder
         Permissions.CanUpdateCustomer,
         Permissions.CanExportCustomers,
         Permissions.CanRequestErasure,
+        .. ComplaintWork,
         Permissions.CanReadKycFile,
         Permissions.CanViewIntegrationCommand,
         Permissions.CanViewLiveBalance,
@@ -346,6 +360,8 @@ internal static class RoleSeeder
         Permissions.CanCaptureLead,
         Permissions.CanReadLead,
         Permissions.CanReadCustomer,
+        // A till is where a client most often comes to complain.
+        .. ComplaintWork,
         Permissions.CanReadKycFile,
         Permissions.CanViewLiveBalance,
         Permissions.CanViewInsurancePolicy,
@@ -373,6 +389,7 @@ internal static class RoleSeeder
         Permissions.CanRevealCustomerSensitive,
         Permissions.CanReadCustomerPep,
         Permissions.CanExportCustomers,
+        .. ComplaintWork,
         // Data-purge lot 2: compliance decides erasure requests the business records.
         Permissions.CanRequestErasure,
         Permissions.CanApproveErasure,
