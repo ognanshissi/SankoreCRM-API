@@ -237,7 +237,34 @@ public interface ILeadsModule
     /// there was nothing to do (unknown, or already erased).
     /// </summary>
     Task<bool> EraseLeadAsync(Guid tenantId, Guid leadId, CancellationToken ct);
+
+    /// <summary>
+    /// The answers of a project's questionnaires as an insurance subscription carries them: every
+    /// expected questionnaire, per person, in a stable order, with a SHA-256 of that text. The
+    /// subscription keeps the copy the client signed; the fingerprint is compared again when it
+    /// leaves for the insurer. Null: no such project, or its product asks no questionnaire.
+    /// </summary>
+    Task<ProjectAnswersSnapshot?> GetProjectAnswersSnapshotAsync(
+        Guid tenantId, Guid opportunityId, CancellationToken ct);
+
+    /// <summary>
+    /// Marks the project's answers as sent to the insurer: they can no longer be edited, and their
+    /// retention period starts (BNF-B-09). Idempotent.
+    /// </summary>
+    Task MarkProjectAnswersTransmittedAsync(Guid tenantId, Guid opportunityId, CancellationToken ct);
 }
+
+/// <param name="IsComplete">Every expected questionnaire is answered.</param>
+/// <param name="AnswersJson">
+/// The answers, per person and questionnaire. Health data when <paramref name="ContainsHealthData"/>
+/// is true — the caller stores it encrypted.
+/// </param>
+public sealed record ProjectAnswersSnapshot(
+    bool IsComplete,
+    int MissingCount,
+    bool ContainsHealthData,
+    string AnswersJson,
+    string Sha256);
 
 /// <summary>
 /// One request a customer has in progress (BNF-B-22). Non-sensitive by construction.

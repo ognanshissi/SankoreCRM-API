@@ -207,7 +207,18 @@ internal sealed class CrmProductCatalogue(
     {
         if (_cache.TryGetValue(code, out var cached)) return cached;
 
-        var product = await administration.GetProductAsync(tenant.CurrentTenantId, code, ct);
+        // Outside the ambient transaction, like every cross-module read of a command. Read inside
+        // it, M12's connection is enlisted, and the next M12 read a handler makes in a SUPPRESSED
+        // scope fails (« This connection was used with an ambient transaction ») — which made every
+        // insurance subscription a 500 once the distributor-standing check was added after it.
+        ProductSummary? product;
+        using (var suppressed = new System.Transactions.TransactionScope(
+            System.Transactions.TransactionScopeOption.Suppress,
+            System.Transactions.TransactionScopeAsyncFlowOption.Enabled))
+        {
+            product = await administration.GetProductAsync(tenant.CurrentTenantId, code, ct);
+            suppressed.Complete();
+        }
 
         _cache[code] = product;
         return product;

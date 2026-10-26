@@ -83,6 +83,9 @@ internal static class ProductOfferability
     /// </summary>
     internal const string CrmProductUnknown = "CRM_PRODUCT_UNKNOWN";
 
+    /// <summary>No information sheet uploaded: it cannot be delivered, so nothing can be signed.</summary>
+    internal const string InformationSheetMissing = "INFORMATION_SHEET_MISSING";
+
     /// <summary>
     /// Every reason this product cannot be offered, or an empty list. All of them, not the first:
     /// an administrator fixing one and finding the next is how a configuration screen wastes an
@@ -97,7 +100,8 @@ internal static class ProductOfferability
         ProductPricingMode pricingMode,
         bool insurerPricingAvailable,
         CrmCatalogueStatus crmCatalogue,
-        DateOnly today)
+        DateOnly today,
+        bool hasInformationSheet = true)
     {
         var reasons = new List<string>(3);
 
@@ -114,6 +118,7 @@ internal static class ProductOfferability
         // unsellable, and every product configured before the column existed is in that state.
         if (crmCatalogue == CrmCatalogueStatus.Withdrawn) reasons.Add(CrmProductWithdrawn);
         if (crmCatalogue == CrmCatalogueStatus.Unknown) reasons.Add(CrmProductUnknown);
+        if (!hasInformationSheet) reasons.Add(InformationSheetMissing);
 
         return reasons;
     }

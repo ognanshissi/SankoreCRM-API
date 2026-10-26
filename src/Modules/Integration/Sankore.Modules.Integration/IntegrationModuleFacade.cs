@@ -647,6 +647,22 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     /// </summary>
     internal sealed class InsuranceGateway(IntegrationModuleFacade facade) : IInsuranceGateway
     {
+        public Task<bool> HasInformationSheetDeliveryAsync(Guid tenantId, Guid holdingId, CancellationToken ct)
+            => facade._db.InformationSheetDeliveries
+                .IgnoreQueryFilters()
+                .AnyAsync(d => d.TenantId == tenantId && d.HoldingId == holdingId, ct);
+
+        public async Task<bool> IsPremiumOutstandingAsync(Guid tenantId, Guid holdingId, CancellationToken ct)
+        {
+            var latest = await facade._db.InsuranceSubscriptions
+                .IgnoreQueryFilters()
+                .Where(s => s.TenantId == tenantId && s.CrmHoldingId == holdingId)
+                .OrderByDescending(s => s.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            return latest?.IsPremiumOutstanding == true;
+        }
+
         public async Task<IntegrationCommandId> RequestPolicySubscriptionAsync(
             InsurancePolicyPayload payload, CancellationToken ct)
         {

@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Integration.Adapters.Fake;
 
+using Microsoft.Extensions.DependencyInjection;
 using System.Globalization;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Ports;
@@ -421,6 +422,20 @@ public sealed partial class FakeAdapter :
     /// </summary>
     private int _sequence;
 
+    /// <summary>A test's double: its references start at « …-0001 ».</summary>
+    public FakeAdapter() { }
+
+    /// <summary>
+    /// The development host's double (see <c>AddFakeAdapter</c>): its references start in a range
+    /// of their own, so a second subscription is not a duplicate of the first.
+    /// </summary>
+    [ActivatorUtilitiesConstructor]
+    public FakeAdapter(FakeAdapterSequence sequence)
+    {
+        ArgumentNullException.ThrowIfNull(sequence);
+        _sequence = sequence.NextStart();
+    }
+
     // ── ICbsAdapter ─────────────────────────────────────────────────────────────────────────
 
     public Task<IntegrationHealth> CheckHealthAsync(IntegrationConnection connection, CancellationToken ct)
@@ -840,7 +855,10 @@ public sealed partial class FakeAdapter :
                     payload.PremiumAmount,
                     payload.Currency,
                     payload.Periodicity,
-                    NextDueDate: payload.EffectiveDate));
+                    NextDueDate: payload.EffectiveDate,
+                    // An insurer that collects the premium itself reports it paid once it has it;
+                    // this double has it at once, so the next sync brings the contract into force.
+                    FirstPremiumPaid: true));
 
                 return IntegrationResult.Ok(new ExternalId(id));
             },

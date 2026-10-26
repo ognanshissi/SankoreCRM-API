@@ -755,6 +755,56 @@ internal sealed class AdministrationModuleFacade(
     /// <summary>Public for the cache's serializer only; not part of any contract.</summary>
     internal sealed record CatalogueEntry(Guid Id, string NormalizedCode, string NormalizedName);
 
+    public async Task<IReadOnlyList<Guid>> ListUsersWithPermissionAsync(
+        Guid tenantId, string permissionCode, CancellationToken ct)
+        => await db.UserRoles
+            .IgnoreQueryFilters()
+            .Where(ur => ur.TenantId == tenantId)
+            .Join(db.RolePermissions, ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => new { ur.UserId, rp.PermissionId })
+            .Join(db.Permissions, x => x.PermissionId, p => p.Id, (x, p) => new { x.UserId, p.Code })
+            .Where(x => x.Code == permissionCode)
+            .Join(db.Users.IgnoreQueryFilters(), x => x.UserId, u => u.Id, (x, u) => new { u.Id, u.Status, u.TenantId })
+            .Where(u => u.TenantId == tenantId && u.Status == UserStatus.Active)
+            .Select(u => u.Id)
+            .Distinct()
+            .ToListAsync(ct);
+
+    public async Task<InsuranceDistributorStanding> GetInsuranceDistributorStandingAsync(
+        Guid tenantId, DateOnly today, CancellationToken ct)
+    {
+        // IgnoreQueryFilters + explicit tenant: Integration's consumers read this with no ambient tenant.
+        var profile = await db.InsuranceDistributorProfiles
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.TenantId == tenantId, ct);
+
+        if (profile is null)
+            return InsuranceDistributorStanding.NotConfigured;
+
+        var current = await db.DistributorDocuments
+            .IgnoreQueryFilters()
+            .Where(d => d.TenantId == tenantId && d.SupersededAt == null)
+            .ToListAsync(ct);
+
+        var missing = new List<string>();
+        var expired = new List<string>();
+
+        foreach (var kind in Domain.InsuranceDistributorProfile.RequiredKinds(profile.Status))
+        {
+            var pieces = current.Where(d => d.Kind == kind).ToList();
+            if (pieces.Count == 0) missing.Add(kind.ToString());
+            else if (!pieces.Any(d => d.IsValidOn(today))) expired.Add(kind.ToString());
+        }
+
+        return new InsuranceDistributorStanding(
+            IsConfigured: true,
+            Status: profile.Status.ToString(),
+            RegistrationNumber: profile.RegistrationNumber,
+            LegalMention: profile.LegalMention,
+            AnnualSmig: profile.AnnualSmig,
+            MissingDocuments: missing,
+            ExpiredDocuments: expired);
+    }
+
     public async Task<ComplianceSettingsDto> GetComplianceSettingsAsync(Guid tenantId, CancellationToken ct)
     {
         // IgnoreQueryFilters + explicit predicate: M02's vigilance scoring and M13's nightly jobs

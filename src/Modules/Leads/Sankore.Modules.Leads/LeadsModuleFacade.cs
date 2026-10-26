@@ -23,9 +23,21 @@ public sealed class LeadsModuleFacade(
     IPhoneBlindIndexer phoneBlindIndexer,
     ICurrentUser currentUser,
     Features.Household.LeadAccessGuard accessGuard,
-    MediatR.ISender? sender = null)
+    MediatR.ISender? sender = null,
+    Features.Questionnaires.IProjectAnswersSnapshots? projectAnswers = null,
+    TimeProvider? clock = null)
     : ILeadsModule
 {
+    public async Task<ProjectAnswersSnapshot?> GetProjectAnswersSnapshotAsync(
+        Guid tenantId, Guid opportunityId, CancellationToken ct)
+        => projectAnswers is null ? null : await projectAnswers.BuildAsync(tenantId, opportunityId, ct);
+
+    public Task MarkProjectAnswersTransmittedAsync(Guid tenantId, Guid opportunityId, CancellationToken ct)
+        => projectAnswers is null
+            ? Task.CompletedTask
+            : projectAnswers.MarkTransmittedAsync(
+                tenantId, opportunityId, (clock ?? TimeProvider.System).GetUtcNow(), ct);
+
     /// <summary>
     /// The code this module has used for a missing lead since its first handler. A literal in
     /// seven places and no <c>LeadErrors</c> class to put it in — named here rather than typed an

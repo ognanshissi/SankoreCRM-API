@@ -45,6 +45,8 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
 
     /// <summary>Professional cards and their indemnity cover (CIMA articles 503, 510, 732).</summary>
     public DbSet<DistributionCredential> DistributionCredentials => Set<DistributionCredential>();
+    public DbSet<InsuranceDistributorProfile> InsuranceDistributorProfiles => Set<InsuranceDistributorProfile>();
+    public DbSet<DistributorDocument> DistributorDocuments => Set<DistributorDocument>();
 
     /// <summary>The tenant's layout of the lead, client and product forms (dynamic forms, lot 1).</summary>
     public DbSet<Domain.Forms.EntityFormLayout> EntityFormLayouts => Set<Domain.Forms.EntityFormLayout>();
@@ -136,6 +138,8 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CompanyLogo>().HasQueryFilter(l => l.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<DistributionCredential>().HasQueryFilter(c => c.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<InsuranceDistributorProfile>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<DistributorDocument>().HasQueryFilter(d => d.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<Domain.Forms.EntityFormLayout>().HasQueryFilter(f => f.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<UserImportJob>(b =>

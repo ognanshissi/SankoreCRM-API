@@ -53,6 +53,7 @@ public static class ComplianceEndpoints
             .MapProfileNoticeEndpoints();
 
         app.MapErasureRequestsEndpoints();
+        app.MapClientComplianceEndpoints();
 
         return app;
     }

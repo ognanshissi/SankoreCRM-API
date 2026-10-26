@@ -272,7 +272,8 @@ public sealed class ProductHolding : AggregateRoot
         [HoldingStatus.PendingSignature] = [HoldingStatus.PendingSync, HoldingStatus.Draft, HoldingStatus.Closed],
         // No route back to PendingSignature: once it has been handed to a back office the request
         // is out of our hands, and re-signing it would produce a second subscription downstream.
-        [HoldingStatus.PendingSync]      = [HoldingStatus.Active, HoldingStatus.Rejected],
+        [HoldingStatus.PendingSync]      = [HoldingStatus.Active, HoldingStatus.AwaitingPayment, HoldingStatus.Rejected],
+        [HoldingStatus.AwaitingPayment]  = [HoldingStatus.Active, HoldingStatus.Closed],
         [HoldingStatus.Active]           = [HoldingStatus.Closed],
         // A rejection is fixable: back to Draft, corrected, signed again.
         [HoldingStatus.Rejected]         = [HoldingStatus.Draft, HoldingStatus.Closed],
@@ -301,6 +302,15 @@ public sealed class ProductHolding : AggregateRoot
             return Result.Fail(IsReadOnly
                 ? CustomerErrors.HoldingReadOnly
                 : CustomerErrors.HoldingNotEditable);
+
+        // Same rule as ReturnToDraft: a signature does not survive a change of terms. Editable in
+        // PendingSignature means editable AFTER the client signed, and keeping the signature let a
+        // contract leave with terms (a date of effect, a premium) the client never signed.
+        if (specifics != Specifics)
+        {
+            SignedAt = null;
+            SignatureReference = null;
+        }
 
         Specifics = specifics;
         UpdatedAt = now;
@@ -359,12 +369,12 @@ public sealed class ProductHolding : AggregateRoot
     }
 
     /// <summary>The back office accepted it.</summary>
-    public Result ConfirmSync(string externalSystem, string externalRef, DateTimeOffset now)
+    public Result ConfirmSync(string externalSystem, string externalRef, DateTimeOffset now, bool awaitingPayment = false)
     {
         if (string.IsNullOrWhiteSpace(externalRef))
             return Result.Fail(CustomerErrors.ExternalRefRequired);
 
-        var moved = MoveTo(HoldingStatus.Active, now);
+        var moved = MoveTo(awaitingPayment ? HoldingStatus.AwaitingPayment : HoldingStatus.Active, now);
         if (moved.IsFailure) return moved;
 
         ExternalSystem = string.IsNullOrWhiteSpace(externalSystem) ? null : externalSystem.Trim();
@@ -375,6 +385,13 @@ public sealed class ProductHolding : AggregateRoot
     }
 
     /// <summary>The back office refused it, with a reason the agent can act on.</summary>
+    /// <summary>The premium of a contract sent without it is confirmed: the contract is in force.</summary>
+    public Result ConfirmPayment(DateTimeOffset now)
+    {
+        if (Status == HoldingStatus.Active) return Result.Ok();
+        return MoveTo(HoldingStatus.Active, now);
+    }
+
     public Result RecordRejection(string reason, DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(reason))

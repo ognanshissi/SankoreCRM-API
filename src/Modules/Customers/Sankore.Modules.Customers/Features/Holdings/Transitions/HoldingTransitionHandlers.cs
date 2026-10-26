@@ -6,6 +6,7 @@ using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Features.Holdings.Shared;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.PublicApi.Events;
+using Sankore.Modules.Integration.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Infrastructure.Compliance;
 using Sankore.Shared.Kernel;
@@ -57,7 +58,8 @@ internal sealed class RequestSignatureHandler(HoldingWriteContext context)
 
 internal sealed class SignHoldingHandler(
     HoldingWriteContext context,
-    InsuranceDistributionGuard distributionGuard)
+    InsuranceDistributionGuard distributionGuard,
+    IIntegrationModule? integration = null)
     : IRequestHandler<SignHoldingCommand, Result>
 {
     public async Task<Result> Handle(SignHoldingCommand cmd, CancellationToken ct)
@@ -79,6 +81,24 @@ internal sealed class SignHoldingHandler(
 
         if (licensed.IsFailure)
             return licensed;
+
+        // Insurance lot 2: no signature of a proposal without the information sheet handed over.
+        // Read outside this command's transaction (another module's context), and fail-closed.
+        if (await distributionGuard.RequiresCredentialAsync(loaded.Value.TenantId, loaded.Value.ProductLineId, ct))
+        {
+            bool delivered;
+            using (var suppressed = new System.Transactions.TransactionScope(
+                       System.Transactions.TransactionScopeOption.Suppress,
+                       System.Transactions.TransactionScopeAsyncFlowOption.Enabled))
+            {
+                delivered = integration is not null
+                    && await integration.Insurance.HasInformationSheetDeliveryAsync(loaded.Value.TenantId, loaded.Value.Id, ct);
+                suppressed.Complete();
+            }
+
+            if (!delivered)
+                return Result.Fail(CustomerErrors.InformationSheetNotDelivered);
+        }
 
         var now = context.Clock.GetUtcNow();
 

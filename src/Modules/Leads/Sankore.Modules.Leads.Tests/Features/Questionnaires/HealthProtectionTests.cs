@@ -42,6 +42,24 @@ public sealed class HealthProtectionTests : IDisposable
         return response;
     }
 
+    // ── Sent to the insurer ───────────────────────────────────────────────
+
+    [Fact]
+    public void An_answer_sent_to_the_insurer_with_a_subscription_can_no_longer_be_edited()
+    {
+        // The insurer holds the declaration the client signed; a later edit here would make the
+        // CRM disagree with the contract.
+        var response = HealthResponse(Guid.NewGuid(), Guid.NewGuid());
+        response.MarkTransmitted(DateTimeOffset.UtcNow);
+
+        var edited = response.Answer(
+            [(Guid.NewGuid(), "Non")], Guid.NewGuid(), respondentId: null, computedScore: 0, DateTimeOffset.UtcNow);
+
+        edited.IsFailure.Should().BeTrue();
+        edited.Error.Should().Be("QUALIFICATION_RESPONSE_TRANSMITTED");
+        response.GetAnswers().Single().Value.Should().Be("Oui, depuis dix ans");
+    }
+
     // ── The consent gate ──────────────────────────────────────────────────
 
     [Fact]

@@ -43,8 +43,15 @@ internal sealed class LinkedCreditProductCheck(
 
         var code = linkedCreditProductCode.Trim();
 
-        var category = await administration.GetProductCategoryAsync(
-            tenant.CurrentTenantId, code, ct);
+        // Outside the ambient transaction, like CrmProductCatalogue's lookup and for the same reason.
+        string? category;
+        using (var suppressed = new System.Transactions.TransactionScope(
+            System.Transactions.TransactionScopeOption.Suppress,
+            System.Transactions.TransactionScopeAsyncFlowOption.Enabled))
+        {
+            category = await administration.GetProductCategoryAsync(tenant.CurrentTenantId, code, ct);
+            suppressed.Complete();
+        }
 
         if (category is null)
         {

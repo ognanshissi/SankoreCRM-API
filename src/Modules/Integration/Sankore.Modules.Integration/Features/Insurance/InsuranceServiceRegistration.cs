@@ -105,6 +105,7 @@ internal static class InsuranceServiceRegistration
         // lookup per product code for the lifetime of a request, and a singleton would carry a
         // verdict across requests while an administrator retires the entry behind it.
         services.AddScoped<CrmProductCatalogue>();
+        services.AddScoped<HoldingSubscription.HoldingSubscriptionChain>();
 
         return services;
     }

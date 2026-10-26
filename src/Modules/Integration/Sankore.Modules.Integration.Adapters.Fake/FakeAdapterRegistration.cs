@@ -54,8 +54,28 @@ public static class FakeAdapterRegistration
         // Scoped, like every real adapter: the double keeps the state a flow writes (the account
         // it just opened, the policy it just subscribed), and a singleton would carry one
         // developer's request into the next one's.
+        //
+        // Scoped means a fresh sequence per request, so every policy, customer or debit the double
+        // minted was « …-0001 » — and the second subscription of a tenant was refused as a
+        // duplicate of the first (INTEGRATION_DUPLICATE on POL-0001). The sequence's starting
+        // point therefore comes from a singleton, which gives each scope its own range. Still a
+        // TYPE registration: IntegrationAdapterCompositionTests requires one, a factory would
+        // empty its duplicate checks.
+        services.AddSingleton<FakeAdapterSequence>();
         services.AddKeyedScoped<ICbsAdapter, FakeAdapter>(IntegrationKind.Fake.ToString());
 
         return services;
     }
+}
+
+/// <summary>
+/// Where each development scope of <see cref="FakeAdapter"/> starts numbering. From the clock, so a
+/// restart does not reuse the references already in the database, and a step per scope, so two
+/// requests of one process never meet.
+/// </summary>
+public sealed class FakeAdapterSequence
+{
+    private int _next = (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() % 100_000_000) * 10;
+
+    public int NextStart() => Interlocked.Add(ref _next, 1_000) - 1_000;
 }

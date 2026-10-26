@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Integration.Domain;
+using Sankore.Modules.Integration.Features.Insurance.HoldingSubscription;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
@@ -80,7 +81,10 @@ public sealed class InsuranceSagaSucceededConsumer(
                 return;
             }
 
-            await AdvanceAsync(db, integration, clock, saga, evt, ct);
+            // Only a holding's subscription needs it: the holding is what the insurer is told about.
+            var chain = saga.CrmHoldingId is null ? null : sp.GetRequiredService<HoldingSubscriptionChain>();
+
+            await AdvanceAsync(db, integration, chain, clock, saga, evt, ct);
             await db.SaveChangesAsync(ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -117,6 +121,7 @@ public sealed class InsuranceSagaSucceededConsumer(
     private async Task AdvanceAsync(
         IntegrationDbContext db,
         IIntegrationModule integration,
+        HoldingSubscriptionChain? chain,
         TimeProvider clock,
         InsuranceSubscription saga,
         IntegrationCommandSucceededEvent evt,
@@ -128,13 +133,13 @@ public sealed class InsuranceSagaSucceededConsumer(
         // not be able to drive it.
         if (saga.DebitCommandId == evt.CommandId)
         {
-            await OnDebitedAsync(db, integration, clock, saga, evt, ct);
+            await OnDebitedAsync(db, integration, chain, clock, saga, evt, ct);
             return;
         }
 
         if (saga.SubscribeCommandId == evt.CommandId)
         {
-            OnIssued(db, clock, saga, evt);
+            await OnIssuedAsync(db, clock, saga, evt, ct);
             return;
         }
 
@@ -158,6 +163,7 @@ public sealed class InsuranceSagaSucceededConsumer(
     private async Task OnDebitedAsync(
         IntegrationDbContext db,
         IIntegrationModule integration,
+        HoldingSubscriptionChain? chain,
         TimeProvider clock,
         InsuranceSubscription saga,
         IntegrationCommandSucceededEvent evt,
@@ -180,6 +186,9 @@ public sealed class InsuranceSagaSucceededConsumer(
                 + "stopped because the premium could not be reversed",
                 saga.Id);
 
+            await RejectHoldingAfterSaveAsync(db, chain, saga,
+                "Le prélèvement de la prime a été accepté sans référence : la souscription est "
+                + "arrêtée, un opérateur doit vérifier le compte du client.", ct);
             return;
         }
 
@@ -209,6 +218,37 @@ public sealed class InsuranceSagaSucceededConsumer(
                 + "a reversal of {Amount} {Currency} was queued",
                 saga.Id, saga.ProductId, saga.PremiumAmount, saga.Currency);
 
+            await RejectHoldingAfterSaveAsync(db, chain, saga,
+                "Le produit d'assurance a été retiré après le prélèvement : la prime est remboursée.", ct);
+            return;
+        }
+
+        // A holding's subscription: the holding's terms and clause, the declarations as signed.
+        if (saga.CrmHoldingId is { } holdingId && chain is not null)
+        {
+            var holding = await chain.HoldingAsync(saga, ct);
+
+            if (holding is null)
+            {
+                await ReverseAfterDebitAsync(
+                    integration, clock, saga,
+                    "INSURANCE_HOLDING_NOT_FOUND",
+                    "The holding disappeared after the premium was debited, so the insurer could not be asked.",
+                    ct);
+                return;
+            }
+
+            var holdingCommand = await integration.Insurance.RequestPolicySubscriptionAsync(
+                await chain.PayloadAsync(holding, saga, product, ct), ct);
+
+            saga.AttachSubscribeCommand(holdingCommand.Value, clock);
+            await db.SaveChangesAsync(ct);
+            await chain.MarkAnswersTransmittedAsync(saga, ct);
+
+            logger.LogInformation(
+                "Subscription {SubscriptionId}: premium debited ({Reference}), insurer asked for "
+                + "holding {HoldingId} as command {CommandId}",
+                saga.Id, evt.ExternalRef, holdingId, holdingCommand.Value);
             return;
         }
 
@@ -248,6 +288,19 @@ public sealed class InsuranceSagaSucceededConsumer(
     /// needs the command id — the same order the debit step follows at creation.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The chain stopped before the insurer was asked, so no answer will ever reach the holding:
+    /// the subscription's state is saved first, then the holding is told why.
+    /// </summary>
+    private static async Task RejectHoldingAfterSaveAsync(
+        IntegrationDbContext db, HoldingSubscriptionChain? chain, InsuranceSubscription saga, string reason, CancellationToken ct)
+    {
+        await db.SaveChangesAsync(ct);
+
+        if (chain is not null)
+            await chain.RejectHoldingAsync(saga, reason, ct);
+    }
+
     private async Task ReverseAfterDebitAsync(
         IIntegrationModule integration,
         TimeProvider clock,
@@ -286,11 +339,12 @@ public sealed class InsuranceSagaSucceededConsumer(
     /// <see cref="PolicyRecord"/> is created so the policy appears on the customer's 360 view
     /// without waiting for ASS-07's nightly synchronisation.
     /// </summary>
-    private void OnIssued(
+    private async Task OnIssuedAsync(
         IntegrationDbContext db,
         TimeProvider clock,
         InsuranceSubscription saga,
-        IntegrationCommandSucceededEvent evt)
+        IntegrationCommandSucceededEvent evt,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(evt.ExternalRef))
         {
@@ -320,10 +374,14 @@ public sealed class InsuranceSagaSucceededConsumer(
             effectiveDate: saga.EffectiveDate,
             premiumAmount: saga.PremiumAmount,
             currency: saga.Currency,
-            // Not read from the product: the periodicity a contract was issued under is the
-            // insurer's answer, and ASS-07's synchronisation is what fills it. Single is the
-            // honest placeholder for "one premium has been collected and no schedule is known".
-            periodicity: PremiumPeriodicity.Single,
+            // The product's periodicity until ASS-07's synchronisation brings the insurer's own
+            // answer. It used to be Single, « one premium collected, no schedule known » — false
+            // since a contract can be issued with its premium still to pay (insurance lot 2), and
+            // a monthly contract read « Prime unique » to the agent.
+            periodicity: await db.InsuranceProducts
+                .Where(p => p.Id == saga.ProductId)
+                .Select(p => (PremiumPeriodicity?)p.Periodicity)
+                .FirstOrDefaultAsync(ct) ?? PremiumPeriodicity.Single,
             clock: clock,
             productId: saga.ProductId,
             subscriptionId: saga.Id);
@@ -406,6 +464,18 @@ public sealed class InsuranceSagaRejectedConsumer(
 
             await CompensateAsync(integration, clock, saga, evt, ct);
             await db.SaveChangesAsync(ct);
+
+            // A refused debit never reaches the insurer, so the holding hears nothing from that
+            // side: it is told here. An insurer refusal is not — that answer is addressed to the
+            // holding and HoldingSyncRejectedConsumer records it.
+            if (saga.Status == SubscriptionStatus.DebitFailed && saga.CrmHoldingId is not null)
+            {
+                await sp.GetRequiredService<HoldingSubscriptionChain>().RejectHoldingAsync(
+                    saga,
+                    $"Prélèvement de la prime refusé ({evt.ErrorCode}). La souscription n'a pas été "
+                    + "envoyée à l'assureur.",
+                    ct);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -438,6 +508,26 @@ public sealed class InsuranceSagaRejectedConsumer(
         // The one that matters: the money has moved and the insurer said no.
         if (saga.SubscribeCommandId == evt.CommandId)
         {
+            // Sent before its premium: nothing was collected, so nothing goes back.
+            if (saga.Status == SubscriptionStatus.AwaitingPremium)
+            {
+                saga.MarkRefused(evt.ErrorCode, evt.Detail, clock);
+                return;
+            }
+
+            // A premium the agent collected has no core banking debit to reverse: the institution
+            // owes it back from the moment the insurer says no.
+            if (saga.Status == SubscriptionStatus.PaymentRecorded)
+            {
+                saga.MarkRefundDue(evt.ErrorCode, evt.Detail, clock);
+
+                logger.LogWarning(
+                    "Subscription {SubscriptionId}: the insurer refused ({Family}/{Code}) a premium "
+                    + "recorded by the agent; {Amount} {Currency} is owed back to the client",
+                    saga.Id, evt.ErrorFamily, evt.ErrorCode, saga.PremiumAmount, saga.Currency);
+                return;
+            }
+
             await ReverseAsync(integration, clock, saga, evt, ct);
             return;
         }

@@ -13,6 +13,14 @@ namespace Sankore.Modules.Integration.PublicApi;
 /// </summary>
 public static class IntegrationErrors
 {
+    // ── An insurer's mandates (insurance lot 2) ──────────────────────────────
+
+    /// <summary>Mandates exist between a distributor and an INSURER only.</summary>
+    public const string MandateNotInsurance = "INTEGRATION_MANDATE_NOT_INSURANCE";
+
+    /// <summary>A mandate is recorded with the reference of the document that grants it.</summary>
+    public const string MandateReferenceRequired = "INTEGRATION_MANDATE_REFERENCE_REQUIRED";
+
     // ── Configuration (Technical) ────────────────────────────────────────────
 
     /// <summary>Technical. No active connection for the family — nothing to call.</summary>

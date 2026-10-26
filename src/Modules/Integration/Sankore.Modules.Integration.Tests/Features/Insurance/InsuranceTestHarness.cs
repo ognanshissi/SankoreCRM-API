@@ -182,7 +182,8 @@ internal static class InsuranceTestHarness
         bool requiresActiveLoan = false,
         string? linkedCreditProductCode = null,
         string? crmProductCode = null,
-        decimal commissionRate = 0.15m)
+        decimal commissionRate = 0.15m,
+        bool withInformationSheet = true)
     {
         var clock = Clock();
 
@@ -210,6 +211,16 @@ internal static class InsuranceTestHarness
             effectiveTo: effectiveTo);
 
         if (active) product.Activate(Actor, clock);
+
+        // Lot 2: a product with no information sheet is not offerable, so by default it has one.
+        if (withInformationSheet)
+        {
+            var sheet = ProductInformationSheet.Create(
+                tenantId, product.Id, 1, "0123456789abcdef0123456789abcdef.pdf", "fiche.pdf",
+                "application/pdf", 1024, new string('a', 64), Actor, clock);
+            db.InformationSheets.Add(sheet);
+            product.AttachInformationSheet(sheet.Id, sheet.Version, Actor, clock);
+        }
 
         db.InsuranceProducts.Add(product);
         db.SaveChanges();

@@ -83,6 +83,65 @@ public sealed class IntegrationConnection : AggregateRoot
     public DateTimeOffset UpdatedAt { get; private set; }
     public Guid? UpdatedBy { get; private set; }
 
+    // ── An insurer's mandates to the distributor (insurance lot 2) ──────────
+    //
+    // Without an express mandate the distributor may not collect premiums in the insurer's name,
+    // nor issue a cover note: both functions are refused for this insurer, and the premium is then
+    // collected by the insurer itself. Meaningful on an Insurance connection only.
+
+    public bool HasCollectionMandate { get; private set; }
+
+    /// <summary>The mandate's reference (letter, convention), as the evidence a controller asks for.</summary>
+    public string? CollectionMandateReference { get; private set; }
+
+    public bool HasCoverNoteMandate { get; private set; }
+
+    public string? CoverNoteMandateReference { get; private set; }
+
+    /// <summary>
+    /// The insurer's express agreement that the distributor deducts its commission from the premiums
+    /// it remits (lot 4). Without it, the gross premiums are remitted and the commission is paid on
+    /// the insurer's statement.
+    /// </summary>
+    public bool HasCommissionNettingAgreement { get; private set; }
+
+    public string? CommissionNettingReference { get; private set; }
+
+    public Result SetCommissionNetting(bool agreed, string? reference, Guid by, TimeProvider clock)
+    {
+        if (Family != IntegrationFamily.Insurance)
+            return Result.Fail(IntegrationErrors.MandateNotInsurance);
+        if (agreed && string.IsNullOrWhiteSpace(reference))
+            return Result.Fail(IntegrationErrors.MandateReferenceRequired);
+
+        HasCommissionNettingAgreement = agreed;
+        CommissionNettingReference = agreed ? reference!.Trim() : null;
+        UpdatedAt = clock.GetUtcNow();
+        UpdatedBy = by;
+        return Result.Ok();
+    }
+
+    public Result SetMandates(
+        bool collection, string? collectionReference, bool coverNote, string? coverNoteReference,
+        Guid by, TimeProvider clock)
+    {
+        if (Family != IntegrationFamily.Insurance)
+            return Result.Fail(IntegrationErrors.MandateNotInsurance);
+
+        // A mandate the platform cannot point to is a claim nobody can check.
+        if ((collection && string.IsNullOrWhiteSpace(collectionReference))
+            || (coverNote && string.IsNullOrWhiteSpace(coverNoteReference)))
+            return Result.Fail(IntegrationErrors.MandateReferenceRequired);
+
+        HasCollectionMandate = collection;
+        CollectionMandateReference = collection ? collectionReference!.Trim() : null;
+        HasCoverNoteMandate = coverNote;
+        CoverNoteMandateReference = coverNote ? coverNoteReference!.Trim() : null;
+        UpdatedAt = clock.GetUtcNow();
+        UpdatedBy = by;
+        return Result.Ok();
+    }
+
     /// <summary>PostgreSQL xmin — optimistic concurrency, as in every other module.</summary>
     public uint Version { get; private set; }
 

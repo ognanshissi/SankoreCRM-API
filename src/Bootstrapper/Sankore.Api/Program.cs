@@ -253,7 +253,7 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 Window = TimeSpan.FromMinutes(1),
-                PermitLimit = 20,
+                PermitLimit = 60,
                 QueueLimit = 0,
             }));
 
@@ -956,6 +956,26 @@ if (emitOpenApiTo is null) {
             $"insurance-complaint-deadlines-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "0 7 * * *");
+
+        // Insurance lot 2: the distributor's pieces (agrément, garantie financière, RC pro) at 60,
+        // 30 and 7 days from expiry and on the day — once expired, new subscriptions are refused.
+        AddOrUpdate<Sankore.Modules.Administration.Features.InsuranceDistribution.DistributorDocumentExpiryJob>(
+            $"insurance-distributor-documents-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "10 7 * * *");
+
+        // Insurance lot 2: premiums still owed on a contract sent without them (insurer collects,
+        // or the 60-day derogation) — chased before the deadline and on it.
+        // Insurance lots 3-4: the insurer's 15 days, renunciation refunds, 30-day remittances.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.AfterSale.InsuranceFollowUpJob>(
+            $"insurance-follow-up-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "30 7 * * *");
+
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.Premiums.PremiumPaymentDeadlineJob>(
+            $"insurance-premium-deadlines-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "20 7 * * *");
 
         // ASS-09's antivirus pass, then the transmission of the pieces the insurer asked for.
         // EVERY TEN MINUTES and not nightly: an agent at a counter deposits a complement and the

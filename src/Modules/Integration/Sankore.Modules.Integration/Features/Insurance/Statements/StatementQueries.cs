@@ -32,7 +32,14 @@ public sealed record StatementDto(
     Guid? FinalisedBy,
     DateTimeOffset? TransmittedAt,
     string? TransmitFailureDetail,
-    bool IsRebuildable)
+    bool IsRebuildable,
+    DateOnly? RemittanceDueBy = null,
+    DateOnly? RemittedOn = null,
+    string? RemittanceReference = null,
+    decimal? RemittedAmount = null,
+    decimal? InsurerDeclaredCommission = null,
+    string? InsurerCommissionReference = null,
+    decimal? CommissionGap = null)
 {
     internal static StatementDto From(InsurerStatement s) => new(
         Id: s.Id,
@@ -53,7 +60,14 @@ public sealed record StatementDto(
         TransmitFailureDetail: s.TransmitFailureDetail,
         // The aggregate's own definition, so a screen does not re-derive "can I still rebuild
         // this" from a status name and get it wrong on a TransmitFailed month.
-        IsRebuildable: s.IsRebuildable);
+        IsRebuildable: s.IsRebuildable,
+        RemittanceDueBy: s.RemittanceDueBy,
+        RemittedOn: s.RemittedOn,
+        RemittanceReference: s.RemittanceReference,
+        RemittedAmount: s.RemittedAmount,
+        InsurerDeclaredCommission: s.InsurerDeclaredCommission,
+        InsurerCommissionReference: s.InsurerCommissionReference,
+        CommissionGap: s.CommissionGap);
 }
 
 /// <summary>

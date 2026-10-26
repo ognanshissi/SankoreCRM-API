@@ -87,7 +87,12 @@ public sealed record InsuranceProductDto(
     bool IsOfferable,
     IReadOnlyList<string> NotOfferableReasons,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    string? Exclusions = null,
+    int InformationSheetVersion = 0,
+    Guid? InformationSheetId = null,
+    bool InsurerCollectionMandate = false,
+    bool IsLifeInsurance = false)
 {
     /// <param name="crmCatalogue">
     /// Where the product's <c>CrmProductCode</c> stands in M12's catalogue. A parameter and not a
@@ -112,7 +117,8 @@ public sealed record InsuranceProductDto(
             pricingMode: product.PricingMode,
             insurerPricingAvailable: insurerPricingAvailable,
             crmCatalogue: crmCatalogue,
-            today: today);
+            today: today,
+            hasInformationSheet: product.CurrentInformationSheetId is not null);
 
         return new InsuranceProductDto(
             Id: product.Id,
@@ -144,7 +150,14 @@ public sealed record InsuranceProductDto(
             IsOfferable: reasons.Count == 0,
             NotOfferableReasons: reasons,
             CreatedAt: product.CreatedAt,
-            UpdatedAt: product.UpdatedAt);
+            UpdatedAt: product.UpdatedAt,
+            Exclusions: product.Exclusions,
+            InformationSheetVersion: product.CurrentInformationSheetId is null ? 0 : product.CurrentInformationSheetVersion,
+            InformationSheetId: product.CurrentInformationSheetId,
+            // Whether the distributor may collect the premium for this insurer: without it the
+            // insurer collects, and the subscription screen offers no other way.
+            InsurerCollectionMandate: connection.HasCollectionMandate,
+            IsLifeInsurance: product.IsLifeInsurance);
     }
 }
 

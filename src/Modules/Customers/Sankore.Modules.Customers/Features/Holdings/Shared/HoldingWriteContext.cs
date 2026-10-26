@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Customers.Features.Holdings.Shared;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
@@ -23,7 +24,8 @@ internal sealed class HoldingWriteContext(
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
     IAdministrationModule administration,
-    TimeProvider clock)
+    TimeProvider clock,
+    ILogger<HoldingWriteContext>? logger = null)
 {
     internal TimeProvider Clock => clock;
     internal Guid Actor => currentUser.Id;
@@ -65,14 +67,31 @@ internal sealed class HoldingWriteContext(
     {
         var client = await db.Clients.FirstOrDefaultAsync(c => c.Id == clientId, ct);
 
-        if (client is null ||
-            !await agencyScope.CanAccessAgencyAsync(currentUser.TenantId, currentUser.Id, client.AgencyId, ct))
+        if (client is null || !await CanAccessAgencyAsync(client.AgencyId, ct))
             return Result.Fail<Client>(CustomerErrors.ClientNotFound);
 
         if (client.IsReadOnly)
             return Result.Fail<Client>(CustomerErrors.ClientReadOnly);
 
         return Result.Ok(client);
+    }
+
+    /// <remarks>
+    /// Outside the ambient transaction, like <see cref="ReadLineAsync"/>: the perimeter is read
+    /// through M12's DbContext, and a connection that served once inside the command's scope
+    /// cannot serve again in a suppressed one (« This connection was used with an ambient
+    /// transaction »). The policy read that follows then failed as PRODUCT_LINE_UNAVAILABLE —
+    /// hidden whenever the policy sat in the catalogue cache, so only after a product was edited.
+    /// </remarks>
+    private async Task<bool> CanAccessAgencyAsync(Guid agencyId, CancellationToken ct)
+    {
+        using var suppressed = new System.Transactions.TransactionScope(
+            System.Transactions.TransactionScopeOption.Suppress,
+            System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+
+        var allowed = await agencyScope.CanAccessAgencyAsync(currentUser.TenantId, currentUser.Id, agencyId, ct);
+        suppressed.Complete();
+        return allowed;
     }
 
     /// <summary>
@@ -116,6 +135,7 @@ internal sealed class HoldingWriteContext(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger?.LogWarning(ex, "Product line {ProductLineId} unreadable for a holding write", productLineId);
             return Result.Fail<BeneficiaryPolicyDto>(CustomerErrors.ProductLineUnavailable);
         }
     }

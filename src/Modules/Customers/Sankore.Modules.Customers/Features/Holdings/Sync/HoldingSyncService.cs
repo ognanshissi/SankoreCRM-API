@@ -98,6 +98,7 @@ public sealed class HoldingSyncService(
             Periodicity:        holding.Specifics.Periodicity,
             Currency:           holding.Specifics.Currency,
             EffectiveFrom:      holding.Specifics.EffectiveFrom,
+            SourceOpportunityId: holding.SourceOpportunityId,
             Designations:
             [
                 .. current
@@ -217,7 +218,8 @@ public sealed class HoldingSyncService(
     /// The far end accepted it. Idempotent on the same reference; a DIFFERENT one is refused.
     /// </summary>
     public async Task<Result> ConfirmAsync(
-        Guid tenantId, Guid holdingId, string externalSystem, string externalRef, CancellationToken ct)
+        Guid tenantId, Guid holdingId, string externalSystem, string externalRef, CancellationToken ct,
+        bool awaitingPayment = false)
     {
         if (string.IsNullOrWhiteSpace(externalRef))
             return Result.Fail(CustomerErrors.ExternalRefRequired);
@@ -229,14 +231,14 @@ public sealed class HoldingSyncService(
         // A redelivered success. Already Active with this reference is the outcome the caller
         // asked for, so it succeeds — and with a different one it must not, because two external
         // references for one contract means one of the two systems is wrong.
-        if (holding.Status == HoldingStatus.Active)
+        if (holding.Status is HoldingStatus.Active or HoldingStatus.AwaitingPayment)
         {
             return string.Equals(holding.ExternalRef, externalRef.Trim(), StringComparison.Ordinal)
                 ? Result.Ok()
                 : Result.Fail(CustomerErrors.HoldingExternalRefConflict);
         }
 
-        var confirmed = holding.ConfirmSync(externalSystem, externalRef, clock.GetUtcNow());
+        var confirmed = holding.ConfirmSync(externalSystem, externalRef, clock.GetUtcNow(), awaitingPayment);
         if (confirmed.IsFailure)
             return confirmed;
 
@@ -245,6 +247,42 @@ public sealed class HoldingSyncService(
     }
 
     /// <summary>The far end refused it, with a reason an agent can act on.</summary>
+    /// <summary>
+    /// The premium of a contract sent without it is confirmed (insurance lot 2). Only a holding
+    /// awaiting payment moves; one still PendingSync becomes Active when the insurer answers, the
+    /// premium being no longer outstanding by then.
+    /// </summary>
+    public async Task<Result> ConfirmPaymentAsync(Guid tenantId, Guid holdingId, CancellationToken ct)
+    {
+        var holding = await LoadAsync(tenantId, holdingId, ct);
+        if (holding is null)
+            return Result.Fail(CustomerErrors.HoldingNotFound);
+
+        if (holding.Status != HoldingStatus.AwaitingPayment)
+            return Result.Ok();
+
+        var paid = holding.ConfirmPayment(clock.GetUtcNow());
+        if (paid.IsFailure)
+            return paid;
+
+        await db.SaveChangesAsync(ct);
+        return Result.Ok();
+    }
+
+    public async Task<Result> CloseAsync(Guid tenantId, Guid holdingId, string reason, CancellationToken ct)
+    {
+        var holding = await LoadAsync(tenantId, holdingId, ct);
+        if (holding is null)
+            return Result.Fail(CustomerErrors.HoldingNotFound);
+
+        var closed = holding.Close(reason, clock.GetUtcNow());
+        if (closed.IsFailure)
+            return closed;
+
+        await db.SaveChangesAsync(ct);
+        return Result.Ok();
+    }
+
     public async Task<Result> RejectAsync(
         Guid tenantId, Guid holdingId, string reason, CancellationToken ct)
     {

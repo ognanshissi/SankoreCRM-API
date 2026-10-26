@@ -254,4 +254,73 @@ public sealed class InsuranceSubscriptionSagaTests
                 new DateOnly(2026, 6, 1), 7_500m, " ", InsuranceTestHarness.Actor, clock)))
             .Should().Throw<DomainException>();
     }
+
+    // ── lot 2: sent before the premium ──────────────────────────────────────
+
+    private static InsuranceSubscription PreparedPayLater(PremiumPaymentMode mode) => InsuranceSubscription.Prepare(
+        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 7, 1), 5_000_000m, "XOF",
+        Guid.NewGuid(), new LotTwoClock(new DateTimeOffset(2026, 6, 1, 9, 0, 0, TimeSpan.Zero)),
+        holdingId: Guid.NewGuid(), clauseVersion: 1, paymentMode: mode, cbsAccountRef: null,
+        paymentMethod: null, paymentReference: null, paidOn: null,
+        commitmentReference: mode == PremiumPaymentMode.DeferredByDerogation ? "ENG-1" : null,
+        commitmentSignedOn: mode == PremiumPaymentMode.DeferredByDerogation ? new DateOnly(2026, 5, 30) : null);
+
+    [Fact]
+    public void The_derogation_needs_the_written_commitment()
+    {
+        var act = () => InsuranceSubscription.Prepare(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 7, 1), 5_000_000m, "XOF",
+            Guid.NewGuid(), TimeProvider.System, holdingId: Guid.NewGuid(), clauseVersion: 1,
+            paymentMode: PremiumPaymentMode.DeferredByDerogation, cbsAccountRef: null,
+            paymentMethod: null, paymentReference: null, paidOn: null);
+
+        act.Should().Throw<DomainException>();
+    }
+
+    [Fact]
+    public void The_derogations_60_days_run_from_the_issue_of_the_policy()
+    {
+        var clock = new LotTwoClock(new DateTimeOffset(2026, 6, 1, 9, 0, 0, TimeSpan.Zero));
+        var saga = PreparedPayLater(PremiumPaymentMode.DeferredByDerogation);
+
+        saga.StartAwaitingPremium(clock);
+        saga.AttachSubscribeCommand(Guid.NewGuid(), clock);
+        saga.MarkIssued(Guid.NewGuid(), "POL-1", clock);
+
+        saga.PaymentDueBy.Should().Be(new DateOnly(2026, 7, 31));
+        saga.IsPremiumOutstanding.Should().BeTrue();
+
+        saga.RecordLatePayment(RecordedPaymentMethod.MobileMoney, "OM-1", new DateOnly(2026, 6, 20), clock);
+        saga.IsPremiumOutstanding.Should().BeFalse();
+    }
+
+    [Fact]
+    public void An_insurer_refusal_before_the_premium_owes_nothing_back()
+    {
+        var clock = new LotTwoClock(new DateTimeOffset(2026, 6, 1, 9, 0, 0, TimeSpan.Zero));
+        var saga = PreparedPayLater(PremiumPaymentMode.InsurerCollects);
+        saga.StartAwaitingPremium(clock);
+
+        saga.MarkRefused("RISK_REFUSED", null, clock);
+
+        saga.Status.Should().Be(SubscriptionStatus.Refused);
+        saga.OwesRefund.Should().BeFalse();
+        saga.IsPremiumOutstanding.Should().BeFalse();
+    }
+
+    [Fact]
+    public void The_insurer_reporting_the_premium_paid_is_taken_once()
+    {
+        var clock = new LotTwoClock(new DateTimeOffset(2026, 6, 1, 9, 0, 0, TimeSpan.Zero));
+        var saga = PreparedPayLater(PremiumPaymentMode.InsurerCollects);
+        saga.StartAwaitingPremium(clock);
+
+        saga.MarkPremiumPaidByInsurer(clock).Should().BeTrue();
+        saga.MarkPremiumPaidByInsurer(clock).Should().BeFalse();
+    }
+
+    private sealed class LotTwoClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 }

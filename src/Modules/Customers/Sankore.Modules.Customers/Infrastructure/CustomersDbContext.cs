@@ -53,6 +53,8 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
     public DbSet<SensitiveDataAccessLog> SensitiveDataAccessLogs => Set<SensitiveDataAccessLog>();
     public DbSet<ClientExportJob> ClientExportJobs => Set<ClientExportJob>();
     public DbSet<ErasureRequest> ErasureRequests => Set<ErasureRequest>();
+    public DbSet<ClientPaymentInstrument> PaymentInstruments => Set<ClientPaymentInstrument>();
+    public DbSet<SuspicionAlert> SuspicionAlerts => Set<SuspicionAlert>();
 
     // ── Tenant configuration ────────────────────────────────────────────────
     public DbSet<CustomerSetting> CustomerSettings => Set<CustomerSetting>();
@@ -142,6 +144,8 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
         modelBuilder.Entity<SensitiveDataAccessLog>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ClientExportJob>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ErasureRequest>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ClientPaymentInstrument>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<SuspicionAlert>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CustomerSetting>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<LegalForm>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         // The inbox is tenant-scoped too: a replayed event from tenant A must never

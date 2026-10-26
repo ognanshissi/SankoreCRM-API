@@ -813,6 +813,78 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("ins_consent_proof", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InformationSheetDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AcknowledgementReference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("acknowledgement_reference");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<DateTimeOffset>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delivered_at");
+
+                    b.Property<Guid>("DeliveredBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("delivered_by");
+
+                    b.Property<Guid>("HoldingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("holding_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<DateTimeOffset?>("RetainUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retain_until");
+
+                    b.Property<Guid>("SheetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sheet_id");
+
+                    b.Property<string>("SheetSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sheet_sha256");
+
+                    b.Property<int>("SheetVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("sheet_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_information_sheet_delivery");
+
+                    b.HasIndex("SheetId")
+                        .HasDatabaseName("ix_ins_information_sheet_delivery_sheet_id");
+
+                    b.HasIndex("TenantId", "HoldingId")
+                        .HasDatabaseName("ix_ins_information_sheet_delivery_holding");
+
+                    b.ToTable("ins_information_sheet_delivery", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceComplaint", b =>
                 {
                     b.Property<Guid>("Id")
@@ -988,6 +1060,14 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("character varying(3)")
                         .HasColumnName("currency");
 
+                    b.Property<Guid?>("CurrentInformationSheetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_information_sheet_id");
+
+                    b.Property<int>("CurrentInformationSheetVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_information_sheet_version");
+
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
@@ -1000,6 +1080,11 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.Property<DateOnly?>("EffectiveTo")
                         .HasColumnType("date")
                         .HasColumnName("effective_to");
+
+                    b.Property<string>("Exclusions")
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)")
+                        .HasColumnName("exclusions");
 
                     b.Property<decimal?>("FixedPremiumAmount")
                         .HasPrecision(18, 2)
@@ -1025,6 +1110,10 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<bool>("IsLifeInsurance")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_life_insurance");
 
                     b.Property<string>("LinkedCreditProductCode")
                         .HasMaxLength(100)
@@ -1127,6 +1216,11 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AnswersSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("answers_sha256");
+
                     b.Property<string>("BeneficiariesEncrypted")
                         .HasColumnType("text")
                         .HasColumnName("beneficiaries_encrypted");
@@ -1146,6 +1240,35 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("cbs_reversal_reference");
 
+                    b.Property<int>("ClauseVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("clause_version");
+
+                    b.Property<string>("ClientAnswer")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("client_answer");
+
+                    b.Property<string>("ClientAnswerReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("client_answer_reference");
+
+                    b.Property<DateTimeOffset?>("ClientAnsweredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("client_answered_at");
+
+                    b.Property<string>("CommitmentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("commitment_reference");
+
+                    b.Property<DateOnly?>("CommitmentSignedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("commitment_signed_on");
+
                     b.Property<Guid>("ConnectionId")
                         .HasColumnType("uuid")
                         .HasColumnName("connection_id");
@@ -1161,6 +1284,10 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.Property<Guid>("CrmCustomerId")
                         .HasColumnType("uuid")
                         .HasColumnName("crm_customer_id");
+
+                    b.Property<Guid?>("CrmHoldingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_holding_id");
 
                     b.Property<string>("Currency")
                         .IsRequired()
@@ -1190,10 +1317,35 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("failure_detail");
 
+                    b.Property<Guid?>("InformationSheetDeliveryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("information_sheet_delivery_id");
+
                     b.Property<string>("InsurerPolicyReference")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("insurer_policy_reference");
+
+                    b.Property<DateTimeOffset?>("IssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<string>("MedicalExamsRequested")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("medical_exams_requested");
+
+                    b.Property<DateOnly?>("PaymentDueBy")
+                        .HasColumnType("date")
+                        .HasColumnName("payment_due_by");
+
+                    b.Property<string>("PaymentMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("CoreBankingDebit")
+                        .HasColumnName("payment_mode");
 
                     b.Property<Guid?>("PolicyId")
                         .HasColumnType("uuid")
@@ -1204,9 +1356,31 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("premium_amount");
 
+                    b.Property<DateTimeOffset?>("PremiumPaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("premium_paid_at");
+
+                    b.Property<Guid?>("PremiumPayerClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("premium_payer_client_id");
+
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
+
+                    b.Property<DateOnly?>("RecordedPaidOn")
+                        .HasColumnType("date")
+                        .HasColumnName("recorded_paid_on");
+
+                    b.Property<string>("RecordedPaymentMethod")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("recorded_payment_method");
+
+                    b.Property<string>("RecordedPaymentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("recorded_payment_reference");
 
                     b.Property<int>("ReversalAttempts")
                         .HasColumnType("integer")
@@ -1220,6 +1394,14 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("reversed_at");
 
+                    b.Property<DateTimeOffset?>("SentToInsurerAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_to_insurer_at");
+
+                    b.Property<Guid?>("SourceOpportunityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_opportunity_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -1230,9 +1412,45 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("subscribe_command_id");
 
+                    b.Property<decimal?>("SurchargeAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("surcharge_amount");
+
+                    b.Property<DateTimeOffset?>("SurchargePaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("surcharge_paid_at");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
+
+                    b.Property<string>("Underwriting")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("underwriting");
+
+                    b.Property<string>("UnderwritingExclusions")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("underwriting_exclusions");
+
+                    b.Property<DateOnly?>("UnderwritingReceivedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("underwriting_received_on");
+
+                    b.Property<DateTimeOffset?>("UnderwritingRecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("underwriting_recorded_at");
+
+                    b.Property<Guid?>("UnderwritingRecordedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("underwriting_recorded_by");
+
+                    b.Property<string>("UnderwritingReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("underwriting_reference");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1274,9 +1492,15 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ConnectionId", "CreatedAt")
                         .HasDatabaseName("ix_ins_subscription_tenant_connection_created");
 
+                    b.HasIndex("TenantId", "CrmHoldingId", "ClauseVersion")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_subscription_holding")
+                        .HasFilter("crm_holding_id IS NOT NULL AND status NOT IN ('DebitFailed', 'Reversed', 'Cancelled', 'PremiumRefundDue', 'Refused')");
+
                     b.HasIndex("TenantId", "CrmCustomerId", "ProductId", "EffectiveDate")
                         .IsUnique()
-                        .HasDatabaseName("ux_ins_subscription_idempotency");
+                        .HasDatabaseName("ux_ins_subscription_idempotency")
+                        .HasFilter("status NOT IN ('DebitFailed', 'Reversed', 'Cancelled', 'PremiumRefundDue', 'Refused')");
 
                     b.ToTable("ins_subscription", "integration");
                 });
@@ -1323,6 +1547,20 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("generated_at");
 
+                    b.Property<DateOnly?>("InsurerCommissionReceivedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("insurer_commission_received_on");
+
+                    b.Property<string>("InsurerCommissionReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("insurer_commission_reference");
+
+                    b.Property<decimal?>("InsurerDeclaredCommission")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("insurer_declared_commission");
+
                     b.Property<string>("PdfStorageRef")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -1343,6 +1581,24 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("premium_reversed");
+
+                    b.Property<DateOnly?>("RemittanceDueBy")
+                        .HasColumnType("date")
+                        .HasColumnName("remittance_due_by");
+
+                    b.Property<string>("RemittanceReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("remittance_reference");
+
+                    b.Property<decimal?>("RemittedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("remitted_amount");
+
+                    b.Property<DateOnly?>("RemittedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("remitted_on");
 
                     b.Property<int>("ReversalCount")
                         .HasColumnType("integer")
@@ -1787,6 +2043,21 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("channel_address");
 
+                    b.Property<string>("CollectionMandateReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("collection_mandate_reference");
+
+                    b.Property<string>("CommissionNettingReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("commission_netting_reference");
+
+                    b.Property<string>("CoverNoteMandateReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cover_note_mandate_reference");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1800,6 +2071,18 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("family");
+
+                    b.Property<bool>("HasCollectionMandate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_collection_mandate");
+
+                    b.Property<bool>("HasCommissionNettingAgreement")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_commission_netting_agreement");
+
+                    b.Property<bool>("HasCoverNoteMandate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_cover_note_mandate");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
@@ -2549,6 +2832,183 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("ins_policy_certificate", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("FileReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("file_reference");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<Guid?>("SentBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sent_by");
+
+                    b.Property<string>("SentChannel")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("sent_channel");
+
+                    b.Property<DateTimeOffset?>("SentToClientAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_to_client_at");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_policy_document");
+
+                    b.HasIndex("PolicyId")
+                        .HasDatabaseName("ix_ins_policy_document_policy_id");
+
+                    b.HasIndex("TenantId", "PolicyId")
+                        .HasDatabaseName("ix_ins_policy_document_policy");
+
+                    b.ToTable("ins_policy_document", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid>("CrmCustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crm_customer_id");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("InsurerReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("insurer_reference");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateOnly?>("PaidOn")
+                        .HasColumnType("date")
+                        .HasColumnName("paid_on");
+
+                    b.Property<Guid?>("PayoutInstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payout_instrument_id");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateOnly?>("RefundDueBy")
+                        .HasColumnType("date")
+                        .HasColumnName("refund_due_by");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("StatusChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("status_changed_at");
+
+                    b.Property<Guid?>("StatusChangedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("status_changed_by");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_policy_operation");
+
+                    b.HasIndex("PolicyId")
+                        .HasDatabaseName("ix_ins_policy_operation_policy_id");
+
+                    b.HasIndex("TenantId", "PolicyId")
+                        .HasDatabaseName("ix_ins_policy_operation_policy");
+
+                    b.ToTable("ins_policy_operation", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2807,6 +3267,73 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasDatabaseName("ix_ins_premium_instalment_tenant_status");
 
                     b.ToTable("ins_premium_instalment", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ProductInformationSheet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("FileReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("file_reference");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ins_information_sheet");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_ins_information_sheet_product_id");
+
+                    b.HasIndex("TenantId", "ProductId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ins_information_sheet_version");
+
+                    b.ToTable("ins_information_sheet", "integration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelCall", b =>
@@ -3607,6 +4134,16 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasConstraintName("fk_ins_consent_proof_insurance_subscriptions_subscription_id");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.InformationSheetDelivery", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.ProductInformationSheet", null)
+                        .WithMany()
+                        .HasForeignKey("SheetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_information_sheet_delivery_information_sheets_sheet_id");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.InsuranceComplaint", b =>
                 {
                     b.HasOne("Sankore.Modules.Integration.Domain.IntegrationConnection", null)
@@ -3696,6 +4233,26 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasConstraintName("fk_ins_policy_certificate_policies_policy_id");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyDocument", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.PolicyRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_policy_document_policies_policy_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyOperation", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.PolicyRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_policy_operation_policies_policy_id");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.PolicyRecord", b =>
                 {
                     b.HasOne("Sankore.Modules.Integration.Domain.IntegrationConnection", null)
@@ -3720,6 +4277,16 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_ins_premium_instalment_ins_policy_policy_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ProductInformationSheet", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.InsuranceProduct", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ins_information_sheet_ins_product_product_id");
                 });
 #pragma warning restore 612, 618
         }

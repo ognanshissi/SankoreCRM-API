@@ -67,6 +67,12 @@ public static class CustomerErrors
     public const string HoldingAlreadyHeld = "HOLDING_ALREADY_HELD";
     public const string SignatureRequired = "HOLDING_SIGNATURE_REQUIRED";
     public const string SignatureReferenceRequired = "SIGNATURE_REFERENCE_REQUIRED";
+
+    /// <summary>
+    /// An insurance contract signed before the client received the product's information sheet
+    /// (insurance lot 2): the sheet comes first, then the signature.
+    /// </summary>
+    public const string InformationSheetNotDelivered = "HOLDING_INFORMATION_SHEET_NOT_DELIVERED";
     public const string ExternalRefRequired = "EXTERNAL_REF_REQUIRED";
     public const string ProductLineNotFound = "PRODUCT_LINE_NOT_FOUND";
     public const string ProductLineUnavailable = "PRODUCT_LINE_UNAVAILABLE";

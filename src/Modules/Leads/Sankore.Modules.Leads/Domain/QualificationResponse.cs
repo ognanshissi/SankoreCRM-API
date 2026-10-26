@@ -251,6 +251,11 @@ public sealed class QualificationResponse : ITenant
         if (IsPurged)
             return Result.Fail("QUALIFICATION_RESPONSE_PURGED");
 
+        // Sent to an insurer with a subscription: the declaration the client signed is the one the
+        // insurer holds, and a later edit here would make the CRM disagree with the contract.
+        if (TransmittedAt is not null)
+            return Result.Fail("QUALIFICATION_RESPONSE_TRANSMITTED");
+
         StoreAnswers(answers);
         AnsweredBy    = answeredBy;
         AnsweredAt    = now;

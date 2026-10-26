@@ -44,6 +44,7 @@ internal static class ConnectionsEndpoints
         group.MapGetConnection();
         group.MapCreateConnection();
         group.MapUpdateConnection();
+        SetMandates.SetConnectionMandatesEndpoint.MapSetConnectionMandates(group);
 
         // Credentials: one write route, one "is it configured" route, and no route that returns a
         // value.

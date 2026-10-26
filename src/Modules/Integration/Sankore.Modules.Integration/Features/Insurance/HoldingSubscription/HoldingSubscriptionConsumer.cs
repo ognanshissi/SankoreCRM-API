@@ -1,10 +1,13 @@
 namespace Sankore.Modules.Integration.Features.Insurance.HoldingSubscription;
 
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Customers.PublicApi.Events;
+using Sankore.Modules.Integration.Domain;
+using Sankore.Modules.Integration.Features.Insurance.SubscribePolicy;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
@@ -110,6 +113,46 @@ public sealed class HoldingSubscriptionConsumer(
                     + "UNSIGNED and was not queued. Nothing may be sent to a back office without "
                     + "a recorded signature.",
                     evt.HoldingId, evt.TenantId);
+                return;
+            }
+
+            // ── An insurance line: its subscription carries the payment ──────
+            //
+            // A holding whose line an insurer's product realises is sent through its prepared
+            // subscription — premium first, then the insurer — never straight to the insurer, which
+            // is how a policy used to become Active with no premium collected.
+            var prepared = await db.InsuranceSubscriptions
+                .AsTracking()
+                .FirstOrDefaultAsync(
+                    s => s.CrmHoldingId == holding.HoldingId
+                      && s.ClauseVersion == holding.ClauseVersion
+                      && s.Status == SubscriptionStatus.Prepared,
+                    ct);
+
+            if (prepared is not null)
+            {
+                await sp.GetRequiredService<HoldingSubscriptionChain>().StartAsync(prepared, holding, ct);
+
+                logger.LogInformation(
+                    "Holding {HoldingId} (tenant {TenantId}) started subscription {SubscriptionId} ({Status})",
+                    evt.HoldingId, evt.TenantId, prepared.Id, prepared.Status);
+                return;
+            }
+
+            var code = holding.ProductCode.Trim().ToUpperInvariant();
+
+            if (await db.InsuranceProducts.AnyAsync(p => p.CrmProductCode == code, ct))
+            {
+                var rejected = await customers.RejectHoldingSyncAsync(
+                    evt.TenantId, holding.HoldingId,
+                    $"{InsuranceErrors.NotPrepared}: le paiement de la prime et le consentement n'ont "
+                    + "pas été enregistrés. Finalisez la souscription depuis la page « Souscrire une assurance ».",
+                    ct);
+
+                logger.LogWarning(
+                    "Holding {HoldingId} (tenant {TenantId}) is on an insurance line and was sent with "
+                    + "no prepared subscription; rejected ({Outcome})",
+                    evt.HoldingId, evt.TenantId, rejected.IsSuccess ? "recorded" : rejected.Error);
                 return;
             }
 

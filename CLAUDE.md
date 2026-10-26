@@ -2395,6 +2395,125 @@ The signature is **re-checked in the consumer** even though the transition to `P
 required it. This is the last code that runs before a contract leaves the institution, and it must
 not take a second-hand word for the client's consent.
 
+### An insurance subscription is a holding, and its premium is collected first (2026-10-25)
+
+Product owner, 2026-10-25: **the holding is the contract**. There used to be two paths — a holding
+sent straight to the insurer (Active with no premium collected) and `POST integration/insurance/subscriptions`
+for a customer with no contract record. Now:
+
+1. The holding is created and signed in M01 (client record › Produits, or a won project).
+2. `POST integration/insurance/subscriptions` takes `holdingId` + the insurer's `productId` + how the
+   premium is paid (`paymentMode`: `CoreBankingDebit` with `accountRef`, or `RecordedByAgent` with
+   `paymentMethod`/`paymentReference`/`paidOn` — an institution with no core banking) + the consent
+   proof. It checks EVERYTHING in front of the agent: holding signed and in `PendingSignature`, the
+   product's `CrmProductCode` = the holding's `ProductCode`, offerability, **eligibility**
+   (`InsuranceEligibilityRules`: age from `ICustomersModule.GetInsuranceApplicantFactsAsync`, KYC
+   level = Approved + `GetLimitsAsync` capped → Simplified / uncapped → Full, account = debit mode,
+   loan = an Active `Loan` holding), a live CBS connection for a debit, and the won project's
+   questionnaires (`ILeadsModule.GetProjectAnswersSnapshotAsync`, all answered). It writes an
+   `InsuranceSubscription` in **`Prepared`** with the consent proof and the answers as signed
+   (encrypted `MedicalQuestionnaire`, code `PROJECT_QUESTIONNAIRES`, + `AnswersSha256`). Nothing is
+   debited. Preparing again before sending cancels the previous `Prepared` row (its proof stays).
+3. `POST holdings/{id}/submission` → `HoldingSubscriptionConsumer` finds the `Prepared` subscription
+   of (holding, clause version) and `HoldingSubscriptionChain.StartAsync` runs it: the answers'
+   fingerprint is compared again (edited since the signature → cancelled + holding rejected
+   `INSURANCE_ANSWERS_CHANGED_SINCE_SIGNATURE`), then either the CBS debit (→ `PendingDebit`, the
+   insurer is asked in `OnDebitedAsync` with the HOLDING's payload) or `PaymentRecorded` and the
+   insurer is asked at once. The answers travel in `InsurancePolicyPayload.DeclarationsJson` and are
+   then frozen in M13 (`QualificationResponse.Answer` refuses `QUALIFICATION_RESPONSE_TRANSMITTED`).
+4. The subscribe command carries `CrmHoldingId`, so the insurer's answer reaches the holding through
+   the existing `HoldingSyncConfirmed/RejectedConsumer`: **Active only at issuance**. A refused debit
+   (or a stop before the insurer) rejects the holding through `RejectHoldingSyncAsync`. An insurer
+   refusal of a `PaymentRecorded` premium goes straight to `PremiumRefundDue` (no CBS to reverse).
+- A holding on an insurance line (an `InsuranceProduct` whose `CrmProductCode` is its code) sent
+  with no `Prepared` subscription is **rejected** (`INSURANCE_SUBSCRIPTION_NOT_PREPARED`), never sent.
+- `ux_ins_subscription_idempotency` is now filtered on the live statuses (a failed attempt no longer
+  blocks a retry on the same date), plus `ux_ins_subscription_holding` (tenant, holding, clause).
+- `GET integration/insurance/policies?crmCustomerId=` (agency perimeter, 404 outside) lists
+  `PolicyRecord`s; `GET …/policies/{id}/certificate` asks the insurer's port (502 when it cannot).
+- Front: `/customers/:id/souscrire-assurance?holding=` is the last step (contract → insurer product
+  → payment + consent → send, then follows the subscription); the holding drawer shows « Finaliser
+  la souscription » instead of « Envoyer » on insurance categories. **ORASS still refuses every
+  insurance operation** — only the Fake adapter answers end to end.
+
+### Insurance lot 2: the blocking rules of the distribution process (2026-10-25)
+
+Product owner's choices: the information sheet is the INSURER's PDF; without a collection mandate
+the insurer collects; distributor pieces alert then block; the 60-day derogation is in.
+
+- **Distributor profile** (Administration, `insurance-distribution`, writes under
+  `admin:compliance:manage`): status (Broker / GeneralAgent / BancassurancePartner), registration
+  number, art. 540 legal mention (required for a broker), annual SMIG, and `DistributorDocument`s
+  (Approval, FinancialGuarantee, ProfessionalLiability; a renewal supersedes, the old row stays; scan
+  in `IFileStore`). `RequiredKinds`: a broker all three, the others Approval + RC. Standing =
+  `IAdministrationModule.GetInsuranceDistributorStandingAsync`; not configured, missing or expired →
+  `INSURANCE_DISTRIBUTOR_NOT_IN_GOOD_STANDING:<detail>` on every NEW subscription.
+  `DistributorDocumentExpiryJob` (07:10) mails the holders of `admin:compliance:manage` at 60/30/7
+  days and on the day (`insurance.distributor-document-expiring`).
+- **Information sheet** (Integration): `ProductInformationSheet` versions per product (PDF ≤ 15 MB,
+  SHA-256, `IFileStore`), `InsuranceProduct.CurrentInformationSheetId` + `Exclusions` (one per line).
+  **No sheet = not offerable** (`INFORMATION_SHEET_MISSING`). `InformationSheetDelivery` per holding
+  (version, fingerprint, channel, client acknowledgement, 10-year retention). **Signing an
+  insurance holding requires a delivery** (`SignHoldingHandler` → `HOLDING_INFORMATION_SHEET_NOT_DELIVERED`,
+  fail-closed), and the subscription requires a delivery of the chosen product dated before the
+  signature (`INSURANCE_INFORMATION_SHEET_NOT_DELIVERED`).
+- **Mandates** on an Insurance connection (`PUT integration/connections/{id}/mandates`): collection
+  and cover-note, each with its reference. Without the collection mandate, `CoreBankingDebit` and
+  `RecordedByAgent` are refused (`INSURANCE_NO_COLLECTION_MANDATE`); `InsurerCollects` is the mode.
+  The cover note itself is not built yet.
+- **Pay-later modes**: `InsurerCollects` and `DeferredByDerogation` (premium > 80 × annual SMIG +
+  written commitment). The saga goes `Prepared → AwaitingPremium` and the insurer is asked at once
+  (`PremiumCollection` on the payload); `IsPremiumOutstanding` while `PremiumPaidAt` is null. The
+  holding then becomes **`AwaitingPayment`** instead of Active (`HoldingSyncConfirmedConsumer` asks
+  `IInsuranceGateway.IsPremiumOutstandingAsync`), and Active on `ConfirmHoldingPaymentAsync` — from
+  `POST subscriptions/{id}/payment` (agent, under mandate) or the policy sync (`InsurancePolicy.FirstPremiumPaid`;
+  the Fake adapter reports it paid). Derogation deadline = issue + 60 days; `PremiumPaymentDeadlineJob`
+  (07:20) mails the subscribing agent at D-7 and D-day. Insurer refusal before payment → `Refused`.
+- The test-data wipe keeps `ProductInformationSheet` (configuration) and wipes deliveries.
+
+### Insurance lots 3-4: after the sale, and collection under mandate (2026-10-25)
+
+Product owner's choices: the insurer's decision is RECORDED BY THE AGENT (no insurer API sends it);
+day 15 without answer is an alert, the agent confirms « réputé accepté »; a third-party payer is an
+existing client with an approved KYC; any agent files an LBC alert, only the compliance officer reads it.
+
+- **Insurer's answer** (`POST integration/insurance/subscriptions/{id}/underwriting`):
+  `UnderwritingOutcome` Accepted / AcceptedWithSurcharge (amount) / AcceptedWithExclusions (wording) /
+  MedicalExamsRequired (list) / Refused / DeemedAcceptedBySilence (only ≥ 15 days after
+  `SentToInsurerAt`, set when the subscribe command is attached). Surcharge or exclusions →
+  `client-answer` (Accepted / Declined). A refusal or a declined answer → `EndWithoutCover`: Refused
+  when nothing was collected, PremiumRefundDue otherwise; the holding is rejected, or closed
+  (`ICustomersModule.CloseHoldingAsync`) when already in force. An accepted surcharge the distributor
+  collects is « outstanding » until `POST …/payment` records it.
+- **Requests on a policy** (`PolicyOperation`: Renunciation / Surrender / Advance, Requested →
+  SentToInsurer → Accepted/Refused → Paid, or Cancelled): renunciation only on a product flagged
+  `IsLifeInsurance` (`PUT products/{id}/life-insurance`) and within 30 days of the first premium;
+  refund due 30 days after the request; **recording it Paid is refused while the client's KYC is not
+  Approved** (`INSURANCE_REFUND_BLOCKED_KYC`, LBC/FT).
+- **Policy documents** (`PolicyDocument`, PDF in `IFileStore`): CG, CP, attestation, avenant,
+  annual information (art. 75, produced by the insurer, relayed here) — with the record of their
+  handing to the client.
+- **Evidence journal** `GET holdings/{id}/evidence`: assembled from the records (sheet deliveries,
+  signature, consent, payment, sending, answers, issue, documents handed over, requests), not stored.
+- `InsuranceFollowUpJob` (07:30): insurer reminder at D+10 and silence alert at D+15 (to the
+  subscribing agent), renunciation refund at D-5/D-day, remittance at D-5/D-day (to the holders of
+  `Ins.Statement.Finalise`, via `IAdministrationModule.ListUsersWithPermissionAsync`). Template
+  `insurance.follow-up` (title, message).
+- **Remittance** (`InsurerStatement`): the first premiums collected in the insurer's name (debit,
+  agent, late payment) are now statement lines; `RemittanceDueBy` = oldest collection + 30 days;
+  `POST statements/{id}/transmission`, `/remittance` (without the connection's
+  `HasCommissionNettingAgreement` the FULL premiums are remitted — a lower amount is refused),
+  `/insurer-commission` (declared amount → `CommissionGap`).
+- **Third-party payer**: `premiumPayerClientId` on the subscription — an existing client, KYC
+  Approved (`INSURANCE_PAYER_NOT_FOUND` / `INSURANCE_PAYER_KYC_NOT_APPROVED`); sent as `PremiumPayerCrmId`.
+- **Payment instruments** (M01 `ClientPaymentInstrument`, encrypted with M01's key, masked to the
+  last 4): Mobile Money or bank account. Deleted with the client's anonymisation/erasure.
+- **LBC/FT suspicion alert** (M01 `SuspicionAlert`, facts and notes encrypted): `compliance:suspicion:raise`
+  for every business role (answer 202, nothing to read back), `compliance:suspicion:manage` for the
+  RegulationManager only — **RoleSeeder does NOT give it to the Administrator** (non-disclosure).
+  Thin endpoints on purpose (no MediatR → no payload in the audit trail). Not on the record, timeline
+  or exports; blocks nothing; survives the client's erasure (LBC/FT evidence).
+
 ### Lead anonymisation is five tables in one transaction (BNF-B-19)
 
 `AnonymizeClosedLeadsJob` — per tenant, SYSTEM identity, 03:45 (after the 03:30 health purge, which

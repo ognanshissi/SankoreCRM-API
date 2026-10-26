@@ -41,6 +41,8 @@ public sealed class HoldingSubscriptionConsumerTests : IDisposable
 
     private readonly string _databaseName = $"holding-subscription-{Guid.NewGuid()}";
     private readonly ICustomersModule _customers = Substitute.For<ICustomersModule>();
+    private readonly Sankore.Modules.Leads.PublicApi.ILeadsModule _leads =
+        Substitute.For<Sankore.Modules.Leads.PublicApi.ILeadsModule>();
     private readonly OnboardingTestContext.RecordingInboxGuard _inbox = new();
     private readonly CommandsTestHarness.FixedClock _clock = new(CommandsTestHarness.Now);
     private readonly ServiceProvider _provider;
@@ -329,6 +331,148 @@ public sealed class HoldingSubscriptionConsumerTests : IDisposable
         db.SaveChanges();
     }
 
+    // ── an insurance line: the holding leaves through its prepared subscription ─
+
+    private InsuranceSubscription SeedPrepared(
+        PremiumPaymentMode mode, Guid? opportunity = null, string? answersSha256 = null)
+    {
+        using var db = NewDb();
+
+        var product = InsuranceTestHarness.SeedProduct(
+            db, _tenant, _connectionId, insurerProductCode: "ORASS-OBS-01", crmProductCode: "VIE-01");
+
+        var saga = InsuranceSubscription.Prepare(
+            tenantId: _tenant,
+            connectionId: _connectionId,
+            crmCustomerId: _clientId,
+            productId: product.Id,
+            effectiveDate: new DateOnly(2026, 11, 1),
+            premiumAmount: 25_000m,
+            currency: "XOF",
+            createdBy: _agent,
+            clock: _clock,
+            holdingId: _holdingId,
+            clauseVersion: 1,
+            paymentMode: mode,
+            cbsAccountRef: mode == PremiumPaymentMode.CoreBankingDebit ? "CI-00042" : null,
+            paymentMethod: mode == PremiumPaymentMode.RecordedByAgent ? RecordedPaymentMethod.Cash : null,
+            paymentReference: mode == PremiumPaymentMode.RecordedByAgent ? "REC-0001" : null,
+            paidOn: mode == PremiumPaymentMode.RecordedByAgent ? new DateOnly(2026, 10, 1) : null,
+            sourceOpportunityId: opportunity,
+            answersSha256: answersSha256);
+
+        db.InsuranceSubscriptions.Add(saga);
+        db.SaveChanges();
+        return saga;
+    }
+
+    private async Task<InsuranceSubscription> SagaAsync(Guid id)
+    {
+        await using var db = NewDb();
+        return await db.InsuranceSubscriptions.IgnoreQueryFilters().SingleAsync(s => s.Id == id);
+    }
+
+    [Fact]
+    public async Task A_premium_recorded_by_the_agent_sends_the_holding_to_the_insurer_at_once()
+    {
+        var saga = SeedPrepared(PremiumPaymentMode.RecordedByAgent);
+
+        await ConsumeAsync();
+
+        var commands = await CommandsAsync();
+        commands.Should().ContainSingle(c => c.CommandType == CommandType.SubscribePolicy)
+            .Which.CrmId.Should().Be(_holdingId, "the insurer's answer is addressed to the holding");
+
+        var reloaded = await SagaAsync(saga.Id);
+        reloaded.Status.Should().Be(SubscriptionStatus.PaymentRecorded);
+        reloaded.SubscribeCommandId.Should().Be(commands.Single().Id);
+    }
+
+    [Fact]
+    public async Task When_the_insurer_collects_the_holding_is_sent_at_once_and_the_premium_stays_owed()
+    {
+        var saga = SeedPrepared(PremiumPaymentMode.InsurerCollects);
+
+        await ConsumeAsync();
+
+        (await CommandsAsync()).Should().ContainSingle(c => c.CommandType == CommandType.SubscribePolicy);
+        var reloaded = await SagaAsync(saga.Id);
+        reloaded.Status.Should().Be(SubscriptionStatus.AwaitingPremium);
+        reloaded.IsPremiumOutstanding.Should().BeTrue("the holding waits « en attente de paiement »");
+    }
+
+    [Fact]
+    public async Task A_debit_with_no_core_banking_left_abandons_the_subscription_and_rejects_the_holding()
+    {
+        // Prepared while the institution had a core banking connection; none is active now.
+        var saga = SeedPrepared(PremiumPaymentMode.CoreBankingDebit);
+        _customers.RejectHoldingSyncAsync(_tenant, _holdingId, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Ok());
+
+        await ConsumeAsync();
+
+        (await CommandsAsync()).Should().BeEmpty("nothing may reach the insurer before the premium");
+        (await SagaAsync(saga.Id)).Status.Should().Be(SubscriptionStatus.Cancelled);
+        await _customers.Received(1).RejectHoldingSyncAsync(
+            _tenant, _holdingId, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task An_insurance_line_sent_with_no_prepared_subscription_is_rejected_not_sent()
+    {
+        // The generic « Envoyer » on an insurance holding: no premium, no consent — it used to
+        // reach the insurer and become Active with nothing collected.
+        await using (var db = NewDb())
+            InsuranceTestHarness.SeedProduct(db, _tenant, _connectionId, crmProductCode: "VIE-01");
+
+        _customers.RejectHoldingSyncAsync(_tenant, _holdingId, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Ok());
+
+        await ConsumeAsync();
+
+        (await CommandsAsync()).Should().BeEmpty();
+        await _customers.Received(1).RejectHoldingSyncAsync(
+            _tenant, _holdingId,
+            Arg.Is<string>(r => r.StartsWith(Sankore.Modules.Integration.Features.Insurance.SubscribePolicy.InsuranceErrors.NotPrepared)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Answers_edited_after_the_signature_stop_the_subscription()
+    {
+        var opportunity = Guid.NewGuid();
+        var saga = SeedPrepared(PremiumPaymentMode.RecordedByAgent, opportunity, answersSha256: "signed");
+
+        _leads.GetProjectAnswersSnapshotAsync(_tenant, opportunity, Arg.Any<CancellationToken>())
+            .Returns(new Sankore.Modules.Leads.PublicApi.ProjectAnswersSnapshot(true, 0, true, "[]", "edited"));
+        _customers.RejectHoldingSyncAsync(_tenant, _holdingId, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Ok());
+
+        await ConsumeAsync();
+
+        (await CommandsAsync()).Should().BeEmpty("the insurer would hold a declaration nobody signed");
+        (await SagaAsync(saga.Id)).Status.Should().Be(SubscriptionStatus.Cancelled);
+        await _customers.Received(1).RejectHoldingSyncAsync(
+            _tenant, _holdingId, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _leads.DidNotReceive().MarkProjectAnswersTransmittedAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Unchanged_answers_leave_with_the_holding_and_are_then_frozen()
+    {
+        var opportunity = Guid.NewGuid();
+        SeedPrepared(PremiumPaymentMode.RecordedByAgent, opportunity, answersSha256: "signed");
+
+        _leads.GetProjectAnswersSnapshotAsync(_tenant, opportunity, Arg.Any<CancellationToken>())
+            .Returns(new Sankore.Modules.Leads.PublicApi.ProjectAnswersSnapshot(true, 0, true, "[]", "signed"));
+
+        await ConsumeAsync();
+
+        (await CommandsAsync()).Should().ContainSingle(c => c.CommandType == CommandType.SubscribePolicy);
+        await _leads.Received(1).MarkProjectAnswersTransmittedAsync(_tenant, opportunity, Arg.Any<CancellationToken>());
+    }
+
     private void SeedInsuranceConnection()
     {
         using var db = NewDb();
@@ -394,6 +538,9 @@ public sealed class HoldingSubscriptionConsumerTests : IDisposable
         services.AddSingleton(Substitute.For<Sankore.Modules.Kyc.PublicApi.IKycModule>());
         services.AddScoped<IIntegrationModule, IntegrationModuleFacade>();
         services.AddKeyedSingleton<IInsurancePolicyPort>(IntegrationKind.Fake.ToString(), new FakeAdapter());
+        services.AddSingleton(CommandsTestHarness.Encryptor());
+        services.AddSingleton(_leads);
+        services.AddScoped<HoldingSubscriptionChain>();
 
         return services.BuildServiceProvider();
     }

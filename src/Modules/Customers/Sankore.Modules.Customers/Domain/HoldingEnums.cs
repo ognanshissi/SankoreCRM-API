@@ -53,7 +53,14 @@ public enum HoldingStatus
     Rejected,
 
     /// <summary>Ended — surrendered, matured, cancelled before signature.</summary>
-    Closed
+    Closed,
+
+    /// <summary>
+    /// Accepted by the insurer, premium not yet paid (insurance lot 2): the insurer collects it, or
+    /// the 60-day derogation applies. <c>ExternalRef</c> is set; the holding becomes Active once the
+    /// premium is confirmed — never before.
+    /// </summary>
+    AwaitingPayment
 }
 
 /// <summary>

@@ -1,6 +1,8 @@
 namespace Sankore.Modules.Integration.Features.Insurance.Statements;
 
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Integration.Infrastructure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -100,7 +102,84 @@ internal static class StatementEndpoints
             .WithOpenApi()
             .WithTenantHeader();
 
+        // ── Lot 4: handing the bordereau and the money to the insurer ──────
+
+        group.MapPost("{statementId:guid}/transmission", Transmit)
+            .WithName("RecordInsurerStatementTransmission")
+            .WithSummary("Record that the finalised bordereau was sent to the insurer")
+            .RequireAuthorization(Permissions.CanFinaliseInsuranceStatement.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .WithOpenApi()
+            .WithTenantHeader();
+
+        group.MapPost("{statementId:guid}/remittance", Remit)
+            .WithName("RecordInsurerStatementRemittance")
+            .WithSummary("Record the premiums handed over to the insurer")
+            .WithDescription(
+                "Due within 30 days of the oldest premium collected in the insurer's name (alert at "
+                + "D-5). Without the insurer's commission-netting agreement, the full premiums are "
+                + "remitted — no commission may be deducted. Requires permission: Ins.Statement.Finalise.")
+            .RequireAuthorization(Permissions.CanFinaliseInsuranceStatement.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi()
+            .WithTenantHeader();
+
+        group.MapPost("{statementId:guid}/insurer-commission", InsurerCommission)
+            .WithName("RecordInsurerDeclaredCommission")
+            .WithSummary("Record the commission the insurer's own statement reports, to compare with ours")
+            .RequireAuthorization(Permissions.CanFinaliseInsuranceStatement.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi()
+            .WithTenantHeader();
+
         return app;
+    }
+
+    private static async Task<IResult> Transmit(
+        Guid statementId, IntegrationDbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        var statement = await db.InsurerStatements.AsTracking().FirstOrDefaultAsync(s => s.Id == statementId, ct);
+        if (statement is null) return Results.NotFound(new { error = StatementErrors.NotFound });
+
+        try { statement.MarkTransmitted(null, clock); }
+        catch (DomainException ex) { return Results.Conflict(new { error = $"INSURANCE_STATEMENT_NOT_TRANSMITTABLE: {ex.Message}" }); }
+
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> Remit(
+        Guid statementId, RecordRemittanceRequest body, IntegrationDbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        var statement = await db.InsurerStatements.AsTracking().FirstOrDefaultAsync(s => s.Id == statementId, ct);
+        if (statement is null) return Results.NotFound(new { error = StatementErrors.NotFound });
+
+        var netting = await db.Connections.AnyAsync(c => c.Id == statement.ConnectionId && c.HasCommissionNettingAgreement, ct);
+
+        try { statement.RecordRemittance(body.RemittedOn, body.Reference, body.Amount, netting, clock); }
+        catch (DomainException ex) { return Results.BadRequest(new { error = $"INSURANCE_REMITTANCE_INVALID: {ex.Message}" }); }
+
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> InsurerCommission(
+        Guid statementId, RecordInsurerCommissionRequest body, IntegrationDbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        var statement = await db.InsurerStatements.AsTracking().FirstOrDefaultAsync(s => s.Id == statementId, ct);
+        if (statement is null) return Results.NotFound(new { error = StatementErrors.NotFound });
+
+        try { statement.RecordInsurerCommission(body.DeclaredCommission, body.Reference, body.ReceivedOn, clock); }
+        catch (DomainException ex) { return Results.BadRequest(new { error = $"INSURANCE_INSURER_COMMISSION_INVALID: {ex.Message}" }); }
+
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> List(
@@ -155,3 +234,7 @@ internal static class StatementEndpoints
         return Results.BadRequest(new { error });
     }
 }
+
+public sealed record RecordRemittanceRequest(DateOnly RemittedOn, string Reference, decimal Amount);
+
+public sealed record RecordInsurerCommissionRequest(decimal DeclaredCommission, string Reference, DateOnly ReceivedOn);

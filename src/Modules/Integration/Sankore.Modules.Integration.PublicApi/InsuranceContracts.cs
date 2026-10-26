@@ -69,7 +69,10 @@ public sealed record InsurancePolicyPayload(
     string? LinkedLoanReference,
     string? ConsentEvidenceRef,
     Guid? CrmHoldingId = null,
-    int ClauseVersion = 1);
+    int ClauseVersion = 1,
+    string? DeclarationsJson = null,
+    string? PremiumCollection = null,
+    Guid? PremiumPayerCrmId = null);
 
 public sealed record InsurancePolicy(
     ExternalId PolicyId,
@@ -82,7 +85,8 @@ public sealed record InsurancePolicy(
     decimal PremiumAmount,
     string Currency,
     PremiumPeriodicity Periodicity,
-    DateOnly? NextDueDate);
+    DateOnly? NextDueDate,
+    bool? FirstPremiumPaid = null);
 
 public sealed record InsuranceClaimPayload(
     ExternalId PolicyId,

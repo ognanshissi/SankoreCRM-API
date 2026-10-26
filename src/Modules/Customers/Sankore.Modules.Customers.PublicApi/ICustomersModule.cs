@@ -501,6 +501,14 @@ public interface ICustomersModule
         Guid tenantId, Guid holdingId, CancellationToken ct);
 
     /// <summary>
+    /// What an insurance product's eligibility reads about a client: the date of birth (decrypted
+    /// here, never handed out as a field) and whether an active loan holding exists. Null when the
+    /// client does not exist in that tenant.
+    /// </summary>
+    Task<InsuranceApplicantFacts?> GetInsuranceApplicantFactsAsync(
+        Guid tenantId, Guid clientId, CancellationToken ct);
+
+    /// <summary>
     /// The back office accepted the subscription (BNF-B-16): the holding becomes <c>Active</c> and
     /// records the reference it answered with.
     /// </summary>
@@ -519,6 +527,24 @@ public interface ICustomersModule
     /// </summary>
     Task<Result> RejectHoldingSyncAsync(
         Guid tenantId, Guid holdingId, string reason, CancellationToken ct);
+
+    /// <summary>
+    /// The premium of an insurance contract sent without it is confirmed (insurance lot 2): a
+    /// holding « en attente de paiement » becomes Active. A no-op on any other status.
+    /// </summary>
+    Task<Result> ConfirmHoldingPaymentAsync(Guid tenantId, Guid holdingId, CancellationToken ct);
+
+    /// <summary>
+    /// Ends a contract the insurer refused, or whose conditions the client declined, after it was in
+    /// force or awaiting payment (insurance lot 3). Requires the reason.
+    /// </summary>
+    Task<Result> CloseHoldingAsync(Guid tenantId, Guid holdingId, string reason, CancellationToken ct);
+
+    /// <summary>
+    /// True when <paramref name="instrumentId"/> is an ACTIVE payment instrument of
+    /// <paramref name="clientId"/> (insurance lot 4) — what a refund may be paid to.
+    /// </summary>
+    Task<bool> IsActivePaymentInstrumentOfAsync(Guid tenantId, Guid instrumentId, Guid clientId, CancellationToken ct);
 
     /// <summary>
     /// The sync state of several holdings at once (BNF-B-17) — what a reconciliation run compares
@@ -599,7 +625,8 @@ public sealed record HoldingForSync(
     string? Periodicity,
     string? Currency,
     DateOnly? EffectiveFrom,
-    IReadOnlyList<HoldingDesignationForSync> Designations);
+    IReadOnlyList<HoldingDesignationForSync> Designations,
+    Guid? SourceOpportunityId = null);
 
 /// <summary>
 /// One designated person as a back office receives them (BNF-B-16).
@@ -728,6 +755,9 @@ public sealed record NotifyClientRequest(
     string TemplateKey,
     string IdempotencyKey,
     IReadOnlyDictionary<string, object>? TemplateData = null);
+
+/// <param name="BirthDate">Null when none is recorded or it cannot be read.</param>
+public sealed record InsuranceApplicantFacts(DateOnly? BirthDate, bool HasActiveLoan);
 
 public sealed record ClientSummary(
     Guid Id,

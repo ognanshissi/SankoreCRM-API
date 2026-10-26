@@ -57,32 +57,30 @@ public sealed record InsuranceSubscriptionDto(
     bool HasConsentProof,
     bool HasMedicalQuestionnaire,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
-
-internal sealed class GetInsuranceSubscriptionHandler(IntegrationDbContext db)
-    : IRequestHandler<GetInsuranceSubscriptionQuery, Result<InsuranceSubscriptionDto>>
+    DateTimeOffset UpdatedAt)
 {
-    public async Task<Result<InsuranceSubscriptionDto>> Handle(
-        GetInsuranceSubscriptionQuery query, CancellationToken ct)
-    {
-        // The tenant query filter does the isolation: a subscription of another tenant is simply
-        // absent, and the endpoint answers NOT_FOUND rather than FORBIDDEN.
-        var saga = await db.InsuranceSubscriptions
-            .FirstOrDefaultAsync(s => s.Id == query.SubscriptionId, ct);
+    // ── Lots 2-4 ────────────────────────────────────────────────────────────
+    public Guid? HoldingId { get; init; }
+    public string? PaymentMode { get; init; }
+    public DateTimeOffset? PremiumPaidAt { get; init; }
+    public bool PremiumOutstanding { get; init; }
+    public DateOnly? PaymentDueBy { get; init; }
+    public DateTimeOffset? SentToInsurerAt { get; init; }
+    public DateTimeOffset? IssuedAt { get; init; }
+    public string? Underwriting { get; init; }
+    public decimal? SurchargeAmount { get; init; }
+    public string? UnderwritingExclusions { get; init; }
+    public string? MedicalExamsRequested { get; init; }
+    public string? UnderwritingReference { get; init; }
+    public bool AwaitsClientAnswer { get; init; }
+    public string? ClientAnswer { get; init; }
+    public bool SurchargeOutstanding { get; init; }
+    public bool SilenceMayBeConfirmed { get; init; }
+    public Guid? PremiumPayerClientId { get; init; }
 
-        if (saga is null)
-            return Result.Fail<InsuranceSubscriptionDto>(InsuranceErrors.SubscriptionNotFound);
-
-        // Whether the evidence EXISTS, never its content: the consent payload and the medical
-        // answers are encrypted, and a compliance screen needs to know they are on file — not to
-        // read them. Two counts rather than two joins, so neither row is materialised.
-        var hasConsent = await db.ConsentProofs
-            .AnyAsync(p => p.SubscriptionId == saga.Id, ct);
-
-        var hasMedical = await db.MedicalQuestionnaires
-            .AnyAsync(q => q.SubscriptionId == saga.Id, ct);
-
-        return Result.Ok(new InsuranceSubscriptionDto(
+    internal static InsuranceSubscriptionDto Build(
+        Sankore.Modules.Integration.Domain.InsuranceSubscription saga, bool hasConsent, bool hasMedical, DateTimeOffset clockNow)
+        => new InsuranceSubscriptionDto(
             Id: saga.Id,
             ConnectionId: saga.ConnectionId,
             CrmCustomerId: saga.CrmCustomerId,
@@ -109,6 +107,53 @@ internal sealed class GetInsuranceSubscriptionHandler(IntegrationDbContext db)
             HasConsentProof: hasConsent,
             HasMedicalQuestionnaire: hasMedical,
             CreatedAt: saga.CreatedAt,
-            UpdatedAt: saga.UpdatedAt));
+            UpdatedAt: saga.UpdatedAt)
+        {
+            HoldingId = saga.CrmHoldingId,
+            PaymentMode = saga.PaymentMode.ToString(),
+            PremiumPaidAt = saga.PremiumPaidAt,
+            PremiumOutstanding = saga.IsPremiumOutstanding,
+            PaymentDueBy = saga.PaymentDueBy,
+            SentToInsurerAt = saga.SentToInsurerAt,
+            IssuedAt = saga.IssuedAt,
+            Underwriting = saga.Underwriting?.ToString(),
+            SurchargeAmount = saga.SurchargeAmount,
+            UnderwritingExclusions = saga.UnderwritingExclusions,
+            MedicalExamsRequested = saga.MedicalExamsRequested,
+            UnderwritingReference = saga.UnderwritingReference,
+            AwaitsClientAnswer = saga.AwaitsClientAnswer,
+            ClientAnswer = saga.ClientAnswer?.ToString(),
+            SurchargeOutstanding = saga.IsSurchargeOutstanding,
+            // The insurer's 15 days run out: its silence may now be confirmed as acceptance.
+            SilenceMayBeConfirmed = saga.SentToInsurerAt is { } sent && saga.IssuedAt is null && saga.Underwriting is null
+                && !saga.IsEnded && clockNow >= sent.AddDays(15),
+            PremiumPayerClientId = saga.PremiumPayerClientId,
+        };
+}
+
+internal sealed class GetInsuranceSubscriptionHandler(IntegrationDbContext db, TimeProvider clock)
+    : IRequestHandler<GetInsuranceSubscriptionQuery, Result<InsuranceSubscriptionDto>>
+{
+    public async Task<Result<InsuranceSubscriptionDto>> Handle(
+        GetInsuranceSubscriptionQuery query, CancellationToken ct)
+    {
+        // The tenant query filter does the isolation: a subscription of another tenant is simply
+        // absent, and the endpoint answers NOT_FOUND rather than FORBIDDEN.
+        var saga = await db.InsuranceSubscriptions
+            .FirstOrDefaultAsync(s => s.Id == query.SubscriptionId, ct);
+
+        if (saga is null)
+            return Result.Fail<InsuranceSubscriptionDto>(InsuranceErrors.SubscriptionNotFound);
+
+        // Whether the evidence EXISTS, never its content: the consent payload and the medical
+        // answers are encrypted, and a compliance screen needs to know they are on file — not to
+        // read them. Two counts rather than two joins, so neither row is materialised.
+        var hasConsent = await db.ConsentProofs
+            .AnyAsync(p => p.SubscriptionId == saga.Id, ct);
+
+        var hasMedical = await db.MedicalQuestionnaires
+            .AnyAsync(q => q.SubscriptionId == saga.Id, ct);
+
+        return Result.Ok(InsuranceSubscriptionDto.Build(saga, hasConsent, hasMedical, clock.GetUtcNow()));
     }
 }

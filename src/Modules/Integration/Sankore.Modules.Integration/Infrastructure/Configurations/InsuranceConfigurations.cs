@@ -53,6 +53,8 @@ internal sealed class InsuranceProductConfiguration : IEntityTypeConfiguration<I
         b.ToTable("ins_product");
         b.HasKey(p => p.Id);
 
+        b.Property(p => p.Exclusions).HasMaxLength(8000);
+
         b.Property(p => p.InsurerProductCode).HasMaxLength(100).IsRequired();
         b.Property(p => p.Name).HasMaxLength(200).IsRequired();
         b.Property(p => p.Description).HasMaxLength(2000);
@@ -143,6 +145,25 @@ internal sealed class InsuranceSubscriptionConfiguration : IEntityTypeConfigurat
         b.Property(s => s.FailureCode).HasMaxLength(80);
         b.Property(s => s.FailureDetail).HasMaxLength(1000);
 
+        b.Property(s => s.ClauseVersion).HasDefaultValue(1);
+        b.Property(s => s.AnswersSha256).HasMaxLength(64);
+        b.Property(s => s.PaymentMode).HasConversion<string>().HasMaxLength(30)
+            .HasDefaultValue(PremiumPaymentMode.CoreBankingDebit).IsRequired();
+        b.Property(s => s.RecordedPaymentMethod).HasConversion<string>().HasMaxLength(30);
+        b.Property(s => s.RecordedPaymentReference).HasMaxLength(200);
+        b.Property(s => s.CommitmentReference).HasMaxLength(200);
+        b.Property(s => s.Underwriting).HasConversion<string>().HasMaxLength(40);
+        b.Property(s => s.SurchargeAmount).HasPrecision(18, 2);
+        b.Property(s => s.UnderwritingExclusions).HasMaxLength(4000);
+        b.Property(s => s.MedicalExamsRequested).HasMaxLength(2000);
+        b.Property(s => s.UnderwritingReference).HasMaxLength(200);
+        b.Property(s => s.ClientAnswer).HasConversion<string>().HasMaxLength(20);
+        b.Property(s => s.ClientAnswerReference).HasMaxLength(200);
+        b.Ignore(s => s.AwaitsClientAnswer);
+        b.Ignore(s => s.IsSurchargeOutstanding);
+        b.Ignore(s => s.IsEnded);
+        b.Ignore(s => s.IsPremiumOutstanding);
+
         // Beneficiaries: names, relationships and dates of birth of third parties. Encrypted.
         b.Property(s => s.BeneficiariesEncrypted).HasColumnType("text");
 
@@ -179,9 +200,21 @@ internal sealed class InsuranceSubscriptionConfiguration : IEntityTypeConfigurat
         // NULLS NOT DISTINCT — the trap that had to be repaired on
         // ux_integration_reconciliation_gap_open, where two of four gap types leave a column null
         // by contract and PostgreSQL therefore accepted identical rows.
+        //
+        // Filtered on the LIVE statuses: a subscription that ended without a policy (the debit
+        // refused, refunded, abandoned, or owed back) must not stop the same client from trying
+        // again on the same date once the holding is corrected and signed afresh.
         b.HasIndex(s => new { s.TenantId, s.CrmCustomerId, s.ProductId, s.EffectiveDate })
             .IsUnique()
+            .HasFilter("status NOT IN ('DebitFailed', 'Reversed', 'Cancelled', 'PremiumRefundDue', 'Refused')")
             .HasDatabaseName("ux_ins_subscription_idempotency");
+
+        // The holding's own subscription: what the holding consumer looks up when the holding is
+        // sent, and at most one live one per signed clause.
+        b.HasIndex(s => new { s.TenantId, s.CrmHoldingId, s.ClauseVersion })
+            .IsUnique()
+            .HasFilter("crm_holding_id IS NOT NULL AND status NOT IN ('DebitFailed', 'Reversed', 'Cancelled', 'PremiumRefundDue', 'Refused')")
+            .HasDatabaseName("ux_ins_subscription_holding");
 
         // The one query that must never be an approximation: every subscription whose premium the
         // institution owes back (status = 'PremiumRefundDue'). See SubscriptionStatus for why that
@@ -561,6 +594,11 @@ internal sealed class InsurerStatementConfiguration : IEntityTypeConfiguration<I
         b.Property(s => s.Currency).HasMaxLength(3).IsRequired();
         b.Property(s => s.PremiumCollected).HasPrecision(18, 2);
         b.Property(s => s.PremiumReversed).HasPrecision(18, 2);
+        b.Property(s => s.RemittedAmount).HasPrecision(18, 2);
+        b.Property(s => s.RemittanceReference).HasMaxLength(200);
+        b.Property(s => s.InsurerDeclaredCommission).HasPrecision(18, 2);
+        b.Property(s => s.InsurerCommissionReference).HasMaxLength(200);
+        b.Ignore(s => s.CommissionGap);
         b.Property(s => s.CommissionAmount).HasPrecision(18, 2);
         b.Property(s => s.CsvStorageRef).HasMaxLength(500);
         b.Property(s => s.PdfStorageRef).HasMaxLength(500);
@@ -689,5 +727,83 @@ internal sealed class InsuranceComplaintConfiguration : IEntityTypeConfiguration
             .HasDatabaseName("ix_ins_complaint_open_due");
 
         b.Ignore(c => c.DomainEvents);
+    }
+}
+
+internal sealed class ProductInformationSheetConfiguration : IEntityTypeConfiguration<ProductInformationSheet>
+{
+    public void Configure(EntityTypeBuilder<ProductInformationSheet> b)
+    {
+        b.ToTable("ins_information_sheet");
+        b.HasKey(x => x.Id);
+
+        b.Property(x => x.FileReference).HasMaxLength(100).IsRequired();
+        b.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+        b.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+        b.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+
+        b.HasOne<InsuranceProduct>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+
+        b.HasIndex(x => new { x.TenantId, x.ProductId, x.Version }).IsUnique()
+            .HasDatabaseName("ux_ins_information_sheet_version");
+
+        b.Ignore(x => x.DomainEvents);
+    }
+}
+
+internal sealed class InformationSheetDeliveryConfiguration : IEntityTypeConfiguration<InformationSheetDelivery>
+{
+    public void Configure(EntityTypeBuilder<InformationSheetDelivery> b)
+    {
+        b.ToTable("ins_information_sheet_delivery");
+        b.HasKey(x => x.Id);
+
+        b.Property(x => x.Channel).HasConversion<string>().HasMaxLength(30).IsRequired();
+        b.Property(x => x.SheetSha256).HasMaxLength(64).IsRequired();
+        b.Property(x => x.AcknowledgementReference).HasMaxLength(200).IsRequired();
+
+        b.HasOne<ProductInformationSheet>().WithMany().HasForeignKey(x => x.SheetId).OnDelete(DeleteBehavior.Restrict);
+
+        b.HasIndex(x => new { x.TenantId, x.HoldingId }).HasDatabaseName("ix_ins_information_sheet_delivery_holding");
+
+        b.Ignore(x => x.DomainEvents);
+    }
+}
+
+internal sealed class PolicyOperationConfiguration : IEntityTypeConfiguration<PolicyOperation>
+{
+    public void Configure(EntityTypeBuilder<PolicyOperation> b)
+    {
+        b.ToTable("ins_policy_operation");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30).IsRequired();
+        b.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+        b.Property(x => x.Reason).HasMaxLength(1000);
+        b.Property(x => x.Amount).HasPrecision(18, 2);
+        b.Property(x => x.Currency).HasMaxLength(3);
+        b.Property(x => x.InsurerReference).HasMaxLength(200);
+        b.HasOne<PolicyRecord>().WithMany().HasForeignKey(x => x.PolicyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => new { x.TenantId, x.PolicyId }).HasDatabaseName("ix_ins_policy_operation_policy");
+        b.Ignore(x => x.IsOpen);
+        b.Ignore(x => x.DomainEvents);
+    }
+}
+
+internal sealed class PolicyDocumentConfiguration : IEntityTypeConfiguration<PolicyDocument>
+{
+    public void Configure(EntityTypeBuilder<PolicyDocument> b)
+    {
+        b.ToTable("ins_policy_document");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30).IsRequired();
+        b.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        b.Property(x => x.FileReference).HasMaxLength(100).IsRequired();
+        b.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+        b.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+        b.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+        b.Property(x => x.SentChannel).HasConversion<string>().HasMaxLength(30);
+        b.HasOne<PolicyRecord>().WithMany().HasForeignKey(x => x.PolicyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => new { x.TenantId, x.PolicyId }).HasDatabaseName("ix_ins_policy_document_policy");
+        b.Ignore(x => x.DomainEvents);
     }
 }

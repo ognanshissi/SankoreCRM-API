@@ -47,6 +47,9 @@ public sealed class SyncPoliciesJob(
     /// </summary>
     private const int CustomerPageSize = 200;
 
+    /// <summary>Holdings whose premium the insurer reported paid during this run (insurance lot 2).</summary>
+    private readonly List<Guid> _paidHoldings = [];
+
     public async Task RunAsync(Guid tenantId, CancellationToken ct = default)
     {
         if (tenantId == Guid.Empty) return;
@@ -111,6 +114,21 @@ public sealed class SyncPoliciesJob(
 
             seen += outcome.Seen;
             moved += outcome.Moved;
+        }
+
+        // After every save: the holding comes into force only once the subscription no longer owes.
+        if (_paidHoldings.Count > 0)
+        {
+            var customers = sp.GetRequiredService<Sankore.Modules.Customers.PublicApi.ICustomersModule>();
+
+            foreach (var holdingId in _paidHoldings.Distinct())
+            {
+                var paid = await customers.ConfirmHoldingPaymentAsync(tenantId, holdingId, ct);
+                if (paid.IsFailure)
+                    logger.LogWarning("Holding {HoldingId} could not be brought into force: {Error}", holdingId, paid.Error);
+            }
+
+            _paidHoldings.Clear();
         }
 
         if (seen > 0)
@@ -239,6 +257,19 @@ public sealed class SyncPoliciesJob(
                 nextDueDate: incoming.NextDueDate));
 
             return false;
+        }
+
+        // Insurance lot 2: the insurer reports the first premium paid on a contract sent without
+        // it — the subscription stops owing it, and its holding comes into force after the save.
+        if (incoming.FirstPremiumPaid == true)
+        {
+            var owing = await db.InsuranceSubscriptions
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.PolicyId == existing.Id, ct);
+
+            if (owing is not null && owing.MarkPremiumPaidByInsurer(clock) && owing.CrmHoldingId is { } holdingId)
+                _paidHoldings.Add(holdingId);
         }
 
         var previous = existing.Status;

@@ -185,6 +185,7 @@ public static class LeadsModule
         services.AddScoped<Features.Questionnaires.ExpectedResponsePlanner>();
         services.AddScoped<Features.Questionnaires.HealthConsentGuard>();
         services.AddScoped<Features.Questionnaires.QuestionnaireCompletenessChecker>();
+        services.AddScoped<Features.Questionnaires.IProjectAnswersSnapshots, Features.Questionnaires.ProjectAnswersSnapshotBuilder>();
 
         // FATCA (BNF-B-11).
         services.AddScoped<Features.Fatca.FatcaSubjectPlanner>();

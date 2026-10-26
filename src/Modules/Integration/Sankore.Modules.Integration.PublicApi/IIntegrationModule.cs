@@ -228,6 +228,20 @@ public interface ICoreBankingGateway
 /// </summary>
 public interface IInsuranceGateway
 {
+    /// <summary>
+    /// True when the client received an information sheet for this holding (insurance lot 2). A
+    /// holding on an insurance line cannot be signed before. Explicit tenant: M01 calls it from a
+    /// command whose ambient transaction it must not join.
+    /// </summary>
+    Task<bool> HasInformationSheetDeliveryAsync(Guid tenantId, Guid holdingId, CancellationToken ct);
+
+    /// <summary>
+    /// True when the holding's subscription was sent without its premium (the insurer collects it,
+    /// or the 60-day derogation) and the premium is not yet confirmed: the holding is then « en
+    /// attente de paiement » rather than Active when the insurer answers.
+    /// </summary>
+    Task<bool> IsPremiumOutstandingAsync(Guid tenantId, Guid holdingId, CancellationToken ct);
+
     Task<IntegrationCommandId> RequestPolicySubscriptionAsync(
         InsurancePolicyPayload payload, CancellationToken ct);
 

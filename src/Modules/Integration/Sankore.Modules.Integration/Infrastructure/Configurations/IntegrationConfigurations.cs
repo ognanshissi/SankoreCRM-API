@@ -8,6 +8,10 @@ internal sealed class IntegrationConnectionConfiguration : IEntityTypeConfigurat
 {
     public void Configure(EntityTypeBuilder<IntegrationConnection> b)
     {
+        b.Property(c => c.CollectionMandateReference).HasMaxLength(200);
+        b.Property(c => c.CommissionNettingReference).HasMaxLength(200);
+        b.Property(c => c.CoverNoteMandateReference).HasMaxLength(200);
+
         b.ToTable("integration_connection");
         b.HasKey(c => c.Id);
 

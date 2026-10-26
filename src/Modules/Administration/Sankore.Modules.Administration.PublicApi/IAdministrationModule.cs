@@ -346,6 +346,22 @@ public interface IAdministrationModule
     Task<ComplianceSettingsDto> GetComplianceSettingsAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
+    /// The institution's standing as an insurance distributor on <paramref name="today"/>
+    /// (insurance lot 2): its status and legal mention, the annual SMIG, and which required pieces
+    /// are missing or expired. A new subscription is refused unless <c>InGoodStanding</c>.
+    /// Never null: a tenant that never filled the profile is reported as not configured.
+    /// </summary>
+    Task<InsuranceDistributorStanding> GetInsuranceDistributorStandingAsync(
+        Guid tenantId, DateOnly today, CancellationToken ct);
+
+    /// <summary>
+    /// The active users whose roles carry <paramref name="permissionCode"/> — who to tell when a
+    /// deadline concerns a function rather than a person (a remittance, a compliance alert).
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListUsersWithPermissionAsync(
+        Guid tenantId, string permissionCode, CancellationToken ct);
+
+    /// <summary>
     /// The beneficiary policy of a product line (BNF-B-06) — what it asks of the household and of
     /// the people designated on it. Read by M13 (a lead's completeness and the household gate) and
     /// by M01 (designations).
@@ -717,3 +733,20 @@ public sealed record NotifyUserRequest(
     string TemplateKey,
     string IdempotencyKey,
     IReadOnlyDictionary<string, object>? TemplateData = null);
+
+/// <param name="Status">Broker, GeneralAgent or BancassurancePartner; null when not configured.</param>
+/// <param name="MissingDocuments">Required kinds with no current piece (Approval, FinancialGuarantee, ProfessionalLiability).</param>
+/// <param name="ExpiredDocuments">Required kinds whose current piece has expired.</param>
+public sealed record InsuranceDistributorStanding(
+    bool IsConfigured,
+    string? Status,
+    string? RegistrationNumber,
+    string? LegalMention,
+    decimal? AnnualSmig,
+    IReadOnlyList<string> MissingDocuments,
+    IReadOnlyList<string> ExpiredDocuments)
+{
+    public bool InGoodStanding => IsConfigured && MissingDocuments.Count == 0 && ExpiredDocuments.Count == 0;
+
+    public static InsuranceDistributorStanding NotConfigured { get; } = new(false, null, null, null, null, [], []);
+}

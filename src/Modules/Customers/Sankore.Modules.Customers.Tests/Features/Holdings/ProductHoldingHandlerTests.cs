@@ -328,6 +328,41 @@ public sealed class ProductHoldingHandlerTests : IDisposable
         }
     }
 
+    private static Sankore.Modules.Integration.PublicApi.IIntegrationModule SheetDelivered(bool delivered)
+    {
+        var integration = Substitute.For<Sankore.Modules.Integration.PublicApi.IIntegrationModule>();
+        integration.Insurance.HasInformationSheetDeliveryAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(delivered);
+        return integration;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_insurance_contract_is_signed_only_after_the_information_sheet(bool delivered)
+    {
+        // Insurance lot 2: no signature of a proposal without the sheet handed to the client.
+        var holdingId = (await SubscribeAsync([Beneficiary(100m)])).Value;
+
+        await using (var db = _factory.CreateContext())
+        {
+            await new RequestSignatureHandler(Context(db))
+                .Handle(new RequestSignatureCommand(holdingId), CancellationToken.None);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var result = await new SignHoldingHandler(
+                    Context(db), TestDistributionGuard.InsuranceWithLicence(), SheetDelivered(delivered))
+                .Handle(new SignHoldingCommand(holdingId, "doc://signature/1"), CancellationToken.None);
+
+            if (delivered)
+                result.IsSuccess.Should().BeTrue(result.Error);
+            else
+                result.Error.Should().Be(CustomerErrors.InformationSheetNotDelivered);
+        }
+    }
+
     [Fact]
     public async Task A_card_withdrawn_between_the_signature_and_the_submission_stops_the_send()
     {
@@ -344,9 +379,10 @@ public sealed class ProductHoldingHandlerTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            // Licensed at the time of signing.
-            await new SignHoldingHandler(Context(db), TestDistributionGuard.InsuranceWithLicence())
+            // Licensed at the time of signing, the information sheet handed over.
+            var signed = await new SignHoldingHandler(Context(db), TestDistributionGuard.InsuranceWithLicence(), SheetDelivered(true))
                 .Handle(new SignHoldingCommand(holdingId, "doc://signature/1"), CancellationToken.None);
+            signed.IsSuccess.Should().BeTrue(signed.Error);
         }
 
         _publisher.ClearReceivedCalls();

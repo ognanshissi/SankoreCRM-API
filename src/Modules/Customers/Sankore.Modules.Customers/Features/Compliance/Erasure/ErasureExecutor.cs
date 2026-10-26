@@ -44,6 +44,13 @@ internal sealed class ErasureExecutor(
             if (!client.IsAnonymized)
             {
                 client.Anonymize(actor, now);
+
+                // Its payment instruments go too; its suspicion alerts stay (LBC/FT evidence).
+                db.PaymentInstruments.RemoveRange(await db.PaymentInstruments
+                    .IgnoreQueryFilters()
+                    .Where(p => p.TenantId == request.TenantId && p.ClientId == client.Id)
+                    .ToListAsync(ct));
+
                 await publisher.PublishAsync(new ClientAnonymizedEvent(request.TenantId, client.Id, now), ct);
             }
         }

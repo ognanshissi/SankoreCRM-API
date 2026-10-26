@@ -57,6 +57,21 @@ public sealed class ProductHoldingLifecycleTests
         holding.SyncedAt.Should().Be(Now);
     }
 
+    // ── insurance lot 2: accepted, not yet paid ─────────────────────────────
+
+    [Fact]
+    public void A_contract_sent_before_its_premium_waits_for_it_before_coming_into_force()
+    {
+        var holding = Submitted();
+
+        holding.ConfirmSync("Orass", "POL-7", Now, awaitingPayment: true).IsSuccess.Should().BeTrue();
+        holding.Status.Should().Be(HoldingStatus.AwaitingPayment);
+        holding.ExternalRef.Should().Be("POL-7");
+
+        holding.ConfirmPayment(Now).IsSuccess.Should().BeTrue();
+        holding.Status.Should().Be(HoldingStatus.Active);
+    }
+
     // ── the signature is the gate (BNF-B-16) ────────────────────────────────
 
     [Fact]
@@ -133,6 +148,36 @@ public sealed class ProductHoldingLifecycleTests
         var holding = Submitted();
 
         holding.ReturnToDraft(Now).Error.Should().Be(CustomerErrors.HoldingInvalidTransition);
+    }
+
+    [Fact]
+    public void Changing_the_terms_after_the_signature_clears_it()
+    {
+        // Found in acceptance: the date of effect was moved after the client signed, and the
+        // contract could still be sent on the old signature.
+        var holding = Draft();
+        holding.RequestSignature([], Now).IsSuccess.Should().BeTrue();
+        holding.Sign("doc://signature/1", Now, Now).IsSuccess.Should().BeTrue();
+
+        holding.UpdateSpecifics(
+            HoldingSpecifics.Create(1_000_000m, null, null, null, null, null, "XOF", new DateOnly(2026, 11, 1), null).Value,
+            Now).IsSuccess.Should().BeTrue();
+
+        holding.SignedAt.Should().BeNull();
+        holding.SignatureReference.Should().BeNull();
+        holding.SubmitForSync(Now).Error.Should().Be(CustomerErrors.SignatureRequired);
+    }
+
+    [Fact]
+    public void Saving_the_same_terms_keeps_the_signature()
+    {
+        var holding = Draft();
+        holding.RequestSignature([], Now).IsSuccess.Should().BeTrue();
+        holding.Sign("doc://signature/1", Now, Now).IsSuccess.Should().BeTrue();
+
+        holding.UpdateSpecifics(holding.Specifics, Now).IsSuccess.Should().BeTrue();
+
+        holding.SignedAt.Should().NotBeNull();
     }
 
     [Fact]

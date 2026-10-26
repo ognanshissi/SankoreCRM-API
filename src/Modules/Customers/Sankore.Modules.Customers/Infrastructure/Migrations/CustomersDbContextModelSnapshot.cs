@@ -1085,6 +1085,70 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                     b.ToTable("client_number_sequences", "customers");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientPaymentInstrument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeactivatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deactivated_at");
+
+                    b.Property<string>("EncryptedIdentifier")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("encrypted_identifier");
+
+                    b.Property<string>("HolderName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("holder_name");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("MaskedIdentifier")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("masked_identifier");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("provider");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_client_payment_instruments");
+
+                    b.HasIndex("TenantId", "ClientId")
+                        .HasDatabaseName("ix_client_payment_instruments_tenant_id_client_id");
+
+                    b.ToTable("client_payment_instruments", "customers");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Customers.Domain.ClientProfileChangeNotice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2022,6 +2086,69 @@ namespace Sankore.Modules.Customers.Infrastructure.Migrations
                         .HasDatabaseName("ix_sensitive_data_access_logs_tenant_id_actor_user_id_accessed");
 
                     b.ToTable("sensitive_data_access_logs", "customers");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Customers.Domain.SuspicionAlert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("DeclarationReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("declaration_reference");
+
+                    b.Property<DateOnly?>("DeclaredOn")
+                        .HasColumnType("date")
+                        .HasColumnName("declared_on");
+
+                    b.Property<string>("EncryptedFacts")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_facts");
+
+                    b.Property<string>("EncryptedNotes")
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_notes");
+
+                    b.Property<DateTimeOffset?>("HandledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handled_at");
+
+                    b.Property<Guid?>("HandledBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("handled_by");
+
+                    b.Property<DateTimeOffset>("RaisedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("raised_at");
+
+                    b.Property<Guid>("RaisedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("raised_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_suspicion_alerts");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_suspicion_alerts_tenant_id_status");
+
+                    b.ToTable("suspicion_alerts", "customers");
                 });
 
             modelBuilder.Entity("Sankore.Shared.Infrastructure.Outbox.OutboxMessage", b =>

@@ -58,6 +58,10 @@ public sealed class IntegrationDbContext(
     public DbSet<InsuranceProduct> InsuranceProducts => Set<InsuranceProduct>();
     public DbSet<InsuranceSubscription> InsuranceSubscriptions => Set<InsuranceSubscription>();
     public DbSet<ConsentProof> ConsentProofs => Set<ConsentProof>();
+    public DbSet<ProductInformationSheet> InformationSheets => Set<ProductInformationSheet>();
+    public DbSet<InformationSheetDelivery> InformationSheetDeliveries => Set<InformationSheetDelivery>();
+    public DbSet<PolicyOperation> PolicyOperations => Set<PolicyOperation>();
+    public DbSet<PolicyDocument> PolicyDocuments => Set<PolicyDocument>();
     public DbSet<MedicalQuestionnaire> MedicalQuestionnaires => Set<MedicalQuestionnaire>();
     public DbSet<PolicyRecord> Policies => Set<PolicyRecord>();
     public DbSet<PolicyCertificate> PolicyCertificates => Set<PolicyCertificate>();
@@ -152,6 +156,10 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<InsuranceProduct>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<InsuranceSubscription>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ConsentProof>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ProductInformationSheet>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<InformationSheetDelivery>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<PolicyOperation>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<PolicyDocument>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<MedicalQuestionnaire>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<PolicyRecord>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<PolicyCertificate>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);

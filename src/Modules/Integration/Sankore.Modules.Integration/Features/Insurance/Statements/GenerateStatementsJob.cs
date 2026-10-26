@@ -208,6 +208,12 @@ public sealed class GenerateStatementsJob(
                     l => Math.Round(l.Amount * l.CommissionRate, 2, MidpointRounding.ToEven)),
                 clock: clock);
 
+            // Lot 4: 30 days from the oldest premium collected in the insurer's name.
+            statement.SetRemittanceDueBy(lines
+                .Where(l => l.LineType == StatementLineType.PremiumPaid)
+                .Select(l => (DateOnly?)l.OccurredOn)
+                .Min());
+
             generated++;
         }
 
@@ -333,6 +339,39 @@ public sealed class GenerateStatementsJob(
                     i.Amount, i.Currency, policy.CommissionRate,
                     policy.PolicyNumber, policy.InsurerProductCode, i.Id, policy.SubscriptionId,
                     i.CbsDebitReference);
+            }));
+
+        // ── premières primes encaissées par le distributeur (lot 4) ──────────
+        //
+        // The first premium of a subscription collected in the insurer's name — debited, recorded
+        // by the agent, or collected after the contract was sent — is a collection like an
+        // instalment, and has to be remitted. A premium the insurer collected itself is not ours.
+        var firstPremiums = await db.InsuranceSubscriptions
+            .IgnoreQueryFilters()
+            .Where(s => s.TenantId == tenantId
+                     && s.ConnectionId == connectionId
+                     && s.PolicyId != null
+                     && s.PremiumPaidAt != null
+                     && (s.PaymentMode == PremiumPaymentMode.CoreBankingDebit
+                      || s.PaymentMode == PremiumPaymentMode.RecordedByAgent
+                      || s.RecordedPaymentReference != null))
+            .Select(s => new { s.Id, s.PolicyId, s.PremiumAmount, s.Currency, s.PremiumPaidAt, s.CbsDebitReference, s.RecordedPaymentReference })
+            .ToListAsync(ct);
+
+        movements.AddRange(firstPremiums
+            .Where(s => DateOnly.FromDateTime(s.PremiumPaidAt!.Value.UtcDateTime) >= first
+                     && DateOnly.FromDateTime(s.PremiumPaidAt.Value.UtcDateTime) <= last
+                     && byId.ContainsKey(s.PolicyId!.Value))
+            .Select(s =>
+            {
+                var policy = byId[s.PolicyId!.Value];
+
+                return new Movement(
+                    StatementLineType.PremiumPaid, policy.Id, policy.CrmCustomerId,
+                    DateOnly.FromDateTime(s.PremiumPaidAt!.Value.UtcDateTime),
+                    s.PremiumAmount, s.Currency, policy.CommissionRate,
+                    policy.PolicyNumber, policy.InsurerProductCode, null, s.Id,
+                    s.CbsDebitReference ?? s.RecordedPaymentReference);
             }));
 
         // ── contre-passations ───────────────────────────────────────────────

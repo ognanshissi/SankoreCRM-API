@@ -514,6 +514,21 @@ public static class Permissions
     public static readonly PermissionItem CanApproveErasure =
         new("privacy:erasure:approve", "Approve or Reject a Request to Erase a Person's Data", ApplicationModules.Customers, "erasure_approve");
 
+    /// <summary>
+    /// File a confidential LBC/FT suspicion alert on a client (insurance lot 4). Every business role:
+    /// whoever notices files it, and afterwards sees only « transmis ».
+    /// </summary>
+    public static readonly PermissionItem CanRaiseSuspicionAlert =
+        new("compliance:suspicion:raise", "File a Confidential Suspicion Alert on a Client", ApplicationModules.Customers, "suspicion_raise");
+
+    /// <summary>
+    /// Read and handle suspicion alerts, record the CENTIF declaration. The compliance officer's
+    /// ALONE — not granted to the Administrator: the duty not to tip off the client starts with not
+    /// spreading the alert inside the institution.
+    /// </summary>
+    public static readonly PermissionItem CanManageSuspicionAlerts =
+        new("compliance:suspicion:manage", "Read and Handle Suspicion Alerts (Compliance Officer)", ApplicationModules.Customers, "suspicion_manage");
+
     public static readonly PermissionItem CanMergeCustomers =
         new("customers:merge", "Request or Approve a Customer Merge", ApplicationModules.Customers, "merge");
 
@@ -1063,6 +1078,8 @@ public static class Permissions
         CanRevealCustomerSensitive,
         CanArchiveCustomer,
         CanRequestErasure,
+        CanRaiseSuspicionAlert,
+        CanManageSuspicionAlerts,
         CanApproveErasure,
         CanMergeCustomers,
         CanManageCustomerGroups,

@@ -31,7 +31,8 @@ using Sankore.Shared.Infrastructure.Messaging;
 public sealed class HoldingSyncConfirmedConsumer(
     HoldingSyncService sync,
     IInboxGuard inbox,
-    ILogger<HoldingSyncConfirmedConsumer> logger)
+    ILogger<HoldingSyncConfirmedConsumer> logger,
+    IIntegrationModule? integration = null)
     : IConsumer<IntegrationCommandSucceededEvent>
 {
     public async Task Consume(ConsumeContext<IntegrationCommandSucceededEvent> context)
@@ -72,8 +73,14 @@ public sealed class HoldingSyncConfirmedConsumer(
             return;
         }
 
+        // An insurance contract sent before its premium (the insurer collects it, or the 60-day
+        // derogation) is accepted but not in force: it waits « en attente de paiement » until the
+        // premium is confirmed (insurance lot 2).
+        var awaitingPayment = integration is not null
+            && await integration.Insurance.IsPremiumOutstandingAsync(evt.TenantId, evt.CrmId, ct);
+
         var result = await sync.ConfirmAsync(
-            evt.TenantId, evt.CrmId, evt.CommandType, evt.ExternalRef, ct);
+            evt.TenantId, evt.CrmId, evt.CommandType, evt.ExternalRef, ct, awaitingPayment);
 
         if (result.IsSuccess)
         {

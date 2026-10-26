@@ -44,6 +44,7 @@ internal static partial class NotificationsSeeder
         await SeedWhatsAppTemplatesAsync(db, logger, ct);
         await SeedTenantModuleTemplatesAsync(db, logger, ct);
         await SeedSupportTemplatesAsync(db, logger, ct);
+        await SeedInsuranceDistributionTemplatesAsync(db, logger, ct);
         await db.SaveChangesAsync(ct);
     }
 

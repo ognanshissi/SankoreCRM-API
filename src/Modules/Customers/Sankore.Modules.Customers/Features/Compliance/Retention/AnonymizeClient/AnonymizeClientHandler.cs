@@ -82,6 +82,13 @@ internal sealed class AnonymizeClientHandler(
 
         client.Anonymize(currentUser.Id, now);
 
+        // Its Mobile Money numbers and bank accounts go with it. Its suspicion alerts do NOT:
+        // they are LBC/FT evidence kept for their own legal period, and never part of an erasure.
+        db.PaymentInstruments.RemoveRange(await db.PaymentInstruments
+            .IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId && p.ClientId == client.Id)
+            .ToListAsync(ct));
+
         // Publish inside the same transaction as the erasure (the outbox writer does not save):
         // either both land or neither does, so no consumer can ever see an event for data that
         // is in fact still there.

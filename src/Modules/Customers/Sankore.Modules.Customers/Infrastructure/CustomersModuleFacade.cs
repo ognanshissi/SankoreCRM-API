@@ -61,6 +61,51 @@ internal sealed class CustomersModuleFacade(
         Guid tenantId, Guid holdingId, CancellationToken ct)
         => holdingSync.GetForSyncAsync(tenantId, holdingId, ct);
 
+    public async Task<InsuranceApplicantFacts?> GetInsuranceApplicantFactsAsync(
+        Guid tenantId, Guid clientId, CancellationToken ct)
+    {
+        var client = await db.Clients
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId && c.Id == clientId)
+            .Select(c => new { c.EncryptedDateOfBirth })
+            .FirstOrDefaultAsync(ct);
+
+        if (client is null)
+            return null;
+
+        // A loan the client holds here, or one imported from the core banking system: both are
+        // Active holdings of the Loan category.
+        var hasActiveLoan = await db.ProductHoldings
+            .IgnoreQueryFilters()
+            .AnyAsync(h => h.TenantId == tenantId
+                        && h.ClientId == clientId
+                        && h.Status == HoldingStatus.Active
+                        && h.ProductCategory == "Loan", ct);
+
+        DateOnly? birthDate = null;
+
+        if (encryptor is not null && !string.IsNullOrWhiteSpace(client.EncryptedDateOfBirth))
+        {
+            try
+            {
+                if (DateOnly.TryParse(
+                        encryptor.Decrypt(client.EncryptedDateOfBirth),
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out var parsed))
+                    birthDate = parsed;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Unreadable is reported as unknown: the eligibility rule then refuses an age-bound
+                // product rather than guessing the age.
+                logger?.LogWarning(ex, "Date of birth of client {ClientId} could not be read", clientId);
+            }
+        }
+
+        return new InsuranceApplicantFacts(birthDate, hasActiveLoan);
+    }
+
     public Task<Result> ConfirmHoldingSyncAsync(
         Guid tenantId, Guid holdingId, string externalSystem, string externalRef, CancellationToken ct)
         => holdingSync.ConfirmAsync(tenantId, holdingId, externalSystem, externalRef, ct);
@@ -68,6 +113,18 @@ internal sealed class CustomersModuleFacade(
     public Task<Result> RejectHoldingSyncAsync(
         Guid tenantId, Guid holdingId, string reason, CancellationToken ct)
         => holdingSync.RejectAsync(tenantId, holdingId, reason, ct);
+
+    public Task<Result> ConfirmHoldingPaymentAsync(Guid tenantId, Guid holdingId, CancellationToken ct)
+        => holdingSync.ConfirmPaymentAsync(tenantId, holdingId, ct);
+
+    public Task<Result> CloseHoldingAsync(Guid tenantId, Guid holdingId, string reason, CancellationToken ct)
+        => holdingSync.CloseAsync(tenantId, holdingId, reason, ct);
+
+    public Task<bool> IsActivePaymentInstrumentOfAsync(Guid tenantId, Guid instrumentId, Guid clientId, CancellationToken ct)
+        => db.PaymentInstruments
+            .IgnoreQueryFilters()
+            .AnyAsync(p => p.TenantId == tenantId && p.Id == instrumentId && p.ClientId == clientId
+                        && p.DeactivatedAt == null, ct);
 
     public Task<IReadOnlyDictionary<Guid, HoldingSyncState>> GetHoldingSyncStatesAsync(
         Guid tenantId, IReadOnlyCollection<Guid> holdingIds, CancellationToken ct)

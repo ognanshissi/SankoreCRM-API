@@ -45,7 +45,8 @@ internal sealed class QuoteInsuranceProductHandler(
             // A product whose CRM catalogue entry has been retired is NOT quotable: the price an
             // agent would read out belongs to something the institution has stopped selling.
             crmCatalogue: await crmProducts.StatusAsync(product.CrmProductCode, ct),
-            today: DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime));
+            today: DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime),
+            hasInformationSheet: product.CurrentInformationSheetId is not null);
 
         if (blockers.Count > 0)
             return Result.Fail<InsuranceQuoteDto>(

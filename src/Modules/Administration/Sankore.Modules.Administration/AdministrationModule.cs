@@ -239,6 +239,7 @@ public static class AdministrationModule
         app.MapNotificationSettingsEndpoints();
         app.MapSmsSettingsEndpoints();
         app.MapComplianceSettingsEndpoints();
+        Features.InsuranceDistribution.InsuranceDistributionEndpoints.MapInsuranceDistributionEndpoints(app);
         app.MapTenantModulesEndpoints();
         app.MapSupportEndpoints();
 

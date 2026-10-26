@@ -47,6 +47,12 @@ internal static class RoleSeeder
             var role = await db.Roles.FirstOrDefaultAsync(x => x.Name == roleCode);
             if (role is null) continue;
 
+            // The suspicion alerts are the compliance officer's alone (LBC/FT, no tipping off): the
+            // Administrator does not get them by default, only the role that holds the function.
+            var exclusions = roleCode == Roles.Administrator.Code
+                ? new HashSet<string> { Permissions.CanManageSuspicionAlerts.Code }
+                : [];
+
             var grantedIds = await db.RolePermissions
                 .Where(rp => rp.RoleId == role.Id)
                 .Select(rp => rp.PermissionId)
@@ -56,7 +62,7 @@ internal static class RoleSeeder
 
             foreach (var permission in allPermissions)
             {
-                if (grantedSet.Contains(permission.Id))
+                if (grantedSet.Contains(permission.Id) || exclusions.Contains(permission.Code))
                     continue;
 
                 db.RolePermissions.Add(RolePermission.Grant(role.Id, permission.Id));
@@ -108,6 +114,8 @@ internal static class RoleSeeder
         // Their own tickets to the platform team; support:read:all stays the administrator's.
         Permissions.CanReadSupportTickets,
         Permissions.CanCreateSupportTicket,
+        // Whoever notices files it (LBC/FT); only the compliance officer reads it.
+        Permissions.CanRaiseSuspicionAlert,
     ];
 
     /// <summary>Working one's own leads, from capture to conversion.</summary>
@@ -358,6 +366,7 @@ internal static class RoleSeeder
         Permissions.CanManageDistributionCredentials,
         Permissions.CanReadCompliance,
         Permissions.CanManageCompliance,
+        Permissions.CanManageSuspicionAlerts,
         Permissions.CanReadLead,
         Permissions.CanReadLeadPep,
         Permissions.CanReadCustomer,

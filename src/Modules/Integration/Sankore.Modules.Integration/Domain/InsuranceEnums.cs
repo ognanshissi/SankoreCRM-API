@@ -89,7 +89,87 @@ public enum SubscriptionStatus
     /// <see cref="DebitFailed"/> because nothing was refused — there is nothing to explain to the
     /// customer and nothing for an operator to act on.
     /// </summary>
-    Cancelled
+    Cancelled,
+
+    /// <summary>
+    /// Attached to a signed holding, with the client's consent and how the premium is paid, and
+    /// waiting for that holding to be sent. Nothing has been debited and nothing has reached the
+    /// insurer: the chain starts when the holding's submission arrives.
+    /// </summary>
+    Prepared,
+
+    /// <summary>
+    /// The agent recorded the premium as collected (an institution without core banking), and the
+    /// subscription is queued at the insurer. The twin of <see cref="Debited"/>: money has been
+    /// taken and no policy exists yet — but no core banking system can give it back, so an insurer
+    /// refusal leads straight to <see cref="PremiumRefundDue"/>.
+    /// </summary>
+    PaymentRecorded,
+
+    /// <summary>
+    /// The insurer is asked BEFORE the premium is paid: the insurer collects it itself (no collection
+    /// mandate), or the 60-day derogation applies. The holding waits « en attente de paiement »
+    /// until the premium is confirmed, even once the policy is issued.
+    /// </summary>
+    AwaitingPremium,
+
+    /// <summary>The insurer refused a subscription whose premium was not yet collected. Terminal; nothing to give back.</summary>
+    Refused
+}
+
+/// <summary>How the premium of a subscription is collected before the insurer is asked.</summary>
+public enum PremiumPaymentMode
+{
+    /// <summary>Debited from the client's account in the core banking system.</summary>
+    CoreBankingDebit,
+
+    /// <summary>Collected by the agent and recorded with its proof; nothing is debited.</summary>
+    RecordedByAgent,
+
+    /// <summary>
+    /// Collected by the insurer itself — the only mode for an insurer that gave no collection
+    /// mandate. The contract is Active once the insurer reports the premium paid.
+    /// </summary>
+    InsurerCollects,
+
+    /// <summary>
+    /// The 60-day derogation: a premium above 80 times the annual SMIG, with the subscriber's
+    /// written commitment, paid within 60 days of the policy's issue.
+    /// </summary>
+    DeferredByDerogation
+}
+
+/// <summary>
+/// The insurer's underwriting answer (insurance lot 3), recorded by the agent from the insurer's
+/// letter or portal — no insurer API sends these today. A surcharge or exclusions need the client's
+/// recorded acceptance.
+/// </summary>
+public enum UnderwritingOutcome
+{
+    Accepted,
+    AcceptedWithSurcharge,
+    AcceptedWithExclusions,
+    MedicalExamsRequired,
+    Refused,
+
+    /// <summary>No answer within 15 days: the insurer's silence counts as acceptance, confirmed by the agent.</summary>
+    DeemedAcceptedBySilence,
+}
+
+/// <summary>The client's answer to a surcharge or exclusions.</summary>
+public enum ClientUnderwritingAnswer
+{
+    Accepted,
+    Declined,
+}
+
+/// <summary>How a premium recorded by the agent was paid.</summary>
+public enum RecordedPaymentMethod
+{
+    Cash,
+    MobileMoney,
+    BankTransfer,
+    Cheque
 }
 
 /// <summary>

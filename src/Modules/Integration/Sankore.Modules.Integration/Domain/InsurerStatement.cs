@@ -173,6 +173,62 @@ public sealed class InsurerStatement : AggregateRoot
         UpdatedAt = FinalisedAt.Value;
     }
 
+    // ── Lot 4: the remittance of the premiums collected in the insurer's name ──
+    //
+    // Under a collection mandate the distributor holds the insurer's money and must hand it over
+    // within 30 days of collecting it. The counter runs from the oldest premium on this statement.
+
+    public DateOnly? RemittanceDueBy { get; private set; }
+    public DateOnly? RemittedOn { get; private set; }
+    public string? RemittanceReference { get; private set; }
+    public decimal? RemittedAmount { get; private set; }
+
+    /// <summary>The commission the insurer's own statement reports, to set against ours.</summary>
+    public decimal? InsurerDeclaredCommission { get; private set; }
+    public string? InsurerCommissionReference { get; private set; }
+    public DateOnly? InsurerCommissionReceivedOn { get; private set; }
+
+    /// <summary>Ours minus the insurer's: a non-zero gap is a dispute to settle.</summary>
+    public decimal? CommissionGap => InsurerDeclaredCommission is { } declared ? CommissionAmount - declared : null;
+
+    public void SetRemittanceDueBy(DateOnly? oldestCollection)
+        => RemittanceDueBy = oldestCollection?.AddDays(30);
+
+    /// <summary>
+    /// The premiums handed over to the insurer. Without the insurer's agreement to net commissions,
+    /// the full premiums collected are remitted — no commission is deducted.
+    /// </summary>
+    public void RecordRemittance(DateOnly remittedOn, string reference, decimal amount, bool nettingAgreed, TimeProvider clock)
+    {
+        if (Status == StatementStatus.Draft)
+            throw new DomainException("Finalise the statement before recording its remittance.");
+        if (string.IsNullOrWhiteSpace(reference))
+            throw new DomainException("A remittance is recorded with its transfer reference.");
+
+        var due = PremiumCollected - PremiumReversed;
+        var floor = nettingAgreed ? due - CommissionAmount : due;
+        if (amount < floor)
+            throw new DomainException(nettingAgreed
+                ? "The amount remitted is below the premiums net of the agreed commission."
+                : "Without the insurer's agreement, no commission may be deducted: the full premiums are remitted.");
+
+        RemittedOn = remittedOn;
+        RemittanceReference = reference.Trim();
+        RemittedAmount = amount;
+        UpdatedAt = clock.GetUtcNow();
+    }
+
+    public void RecordInsurerCommission(decimal declared, string reference, DateOnly receivedOn, TimeProvider clock)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            throw new DomainException("The insurer's statement is recorded with its reference.");
+
+        InsurerDeclaredCommission = declared;
+        InsurerCommissionReference = reference.Trim();
+        InsurerCommissionReceivedOn = receivedOn;
+        UpdatedAt = clock.GetUtcNow();
+    }
+
     public void MarkTransmitted(Guid? batchFileId, TimeProvider clock)
     {
         if (Status is not (StatementStatus.Finalised or StatementStatus.TransmitFailed))

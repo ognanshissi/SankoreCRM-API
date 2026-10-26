@@ -115,6 +115,48 @@ public sealed class InsuranceProduct : AggregateRoot
     /// </summary>
     public string? CrmProductCode { get; private set; }
 
+    // ── The information sheet (insurance lot 2) ─────────────────────────────
+    //
+    // The insurer is the holder of the obligation (art. 6): its sheet — price, guarantees,
+    // exclusions, and for life the surrender values and the art. 65-1 box — is uploaded here as the
+    // insurer's own PDF, versioned. A product with no sheet is not offerable: no sheet, no delivery,
+    // and no signature without a delivery.
+
+    /// <summary>The exclusions, one per line, for the on-screen summary. The PDF is authoritative.</summary>
+    public string? Exclusions { get; private set; }
+
+    /// <summary>
+    /// A life product (lot 3): its subscriber may renounce within 30 days, and the insurer then
+    /// refunds within 30 days — never while the client's KYC is incomplete.
+    /// </summary>
+    public bool IsLifeInsurance { get; private set; }
+
+    public void SetLifeInsurance(bool isLife, Guid actor, TimeProvider clock)
+    {
+        IsLifeInsurance = isLife;
+        UpdatedBy = actor;
+        UpdatedAt = clock.GetUtcNow();
+    }
+
+    public Guid? CurrentInformationSheetId { get; private set; }
+
+    public int CurrentInformationSheetVersion { get; private set; }
+
+    public void SetExclusions(string? exclusions, Guid actor, TimeProvider clock)
+    {
+        Exclusions = string.IsNullOrWhiteSpace(exclusions) ? null : exclusions.Trim();
+        UpdatedBy = actor;
+        UpdatedAt = clock.GetUtcNow();
+    }
+
+    public void AttachInformationSheet(Guid sheetId, int version, Guid actor, TimeProvider clock)
+    {
+        CurrentInformationSheetId = sheetId;
+        CurrentInformationSheetVersion = version;
+        UpdatedBy = actor;
+        UpdatedAt = clock.GetUtcNow();
+    }
+
     // ── Eligibility (ASS-03, criterion 1) ───────────────────────────────────
 
     /// <summary>Minimum age at the effective date, in whole years. Null means no floor.</summary>

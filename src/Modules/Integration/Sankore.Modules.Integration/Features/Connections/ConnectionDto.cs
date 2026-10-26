@@ -58,12 +58,20 @@ internal sealed record ConnectionDetailDto(
     Guid CreatedBy,
     DateTimeOffset UpdatedAt,
     Guid? UpdatedBy,
-    uint Version)
+    uint Version,
+    bool HasCollectionMandate,
+    string? CollectionMandateReference,
+    bool HasCoverNoteMandate,
+    string? CoverNoteMandateReference,
+    bool HasCommissionNettingAgreement = false,
+    string? CommissionNettingReference = null)
 {
     public static ConnectionDetailDto From(IntegrationConnection c) => new(
         c.Id, c.Family, c.Kind, c.Mode, c.Name, c.Settings, c.RelayAgentId, c.IsActive,
         c.HasPassedHealthCheck, c.LastHealthAt, c.LastHealthStatus, c.LastHealthDetail,
-        c.CreatedAt, c.CreatedBy, c.UpdatedAt, c.UpdatedBy, c.Version);
+        c.CreatedAt, c.CreatedBy, c.UpdatedAt, c.UpdatedBy, c.Version,
+        c.HasCollectionMandate, c.CollectionMandateReference, c.HasCoverNoteMandate, c.CoverNoteMandateReference,
+        c.HasCommissionNettingAgreement, c.CommissionNettingReference);
 }
 
 /// <summary>

@@ -1,26 +1,39 @@
 namespace Sankore.Modules.Integration.Features.Insurance.SubscribePolicy;
 
+using System.Transactions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Features.Insurance.Retention;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.PublicApi;
+using Sankore.Modules.Kyc.PublicApi;
+using Sankore.Modules.Leads.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Kernel;
+using KycStatus = Sankore.Modules.Kyc.PublicApi.KycStatus;
 
 /// <summary>
-/// Opens the saga and queues its first step. Everything written here lands in ONE transaction —
-/// the subscription, its consent proof, its medical questionnaire and the debit command row — for
-/// the reason the command's own remarks give: consent collected and not stored is worse than
-/// consent not taken.
+/// Attaches a <see cref="SubscriptionStatus.Prepared"/> subscription to a signed holding, with its
+/// consent proof and the questionnaire answers as signed — all in ONE transaction, for the reason
+/// the command's remarks give. Nothing is debited and nothing reaches the insurer here.
+///
+/// <para>
+/// Every condition is checked NOW, in front of the agent, rather than when the holding is sent: a
+/// refusal at sending time arrives minutes later as a rejected holding, and the client has left the
+/// counter by then.
+/// </para>
 /// </summary>
 internal sealed class SubscribeInsurancePolicyHandler(
     IntegrationDbContext db,
-    IIntegrationModule integration,
+    ICustomersModule customers,
+    IKycModule kyc,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule administration,
+    ILeadsModule leads,
     CrmProductCatalogue crmProducts,
     IFieldEncryptor encryptor,
     ICurrentUser currentUser,
@@ -29,6 +42,9 @@ internal sealed class SubscribeInsurancePolicyHandler(
     ILogger<SubscribeInsurancePolicyHandler> logger)
     : IRequestHandler<SubscribeInsurancePolicyCommand, Result<SubscribeInsurancePolicyResult>>
 {
+    /// <summary>The questionnaire row's code for the answers a won project carries.</summary>
+    internal const string ProjectQuestionnaireCode = "PROJECT_QUESTIONNAIRES";
+
     public async Task<Result<SubscribeInsurancePolicyResult>> Handle(
         SubscribeInsurancePolicyCommand cmd, CancellationToken ct)
     {
@@ -36,21 +52,40 @@ internal sealed class SubscribeInsurancePolicyHandler(
         var now = clock.GetUtcNow();
         var today = DateOnly.FromDateTime(now.UtcDateTime);
 
-        // The product and its connection together: offerability is half the product's and half the
-        // connection's, so a product loaded without its insurer cannot be judged.
+        // ── The holding: the client's, signed, and visible to this agent ─────
+        var holding = await Suppressed(() => customers.GetHoldingForSyncAsync(tenantId, cmd.HoldingId, ct));
+
+        if (holding is null
+            || !await Suppressed(() => customers.CanActorAccessClientAsync(tenantId, holding.ClientId, currentUser.Id, ct)))
+            return Fail(InsuranceErrors.HoldingNotFound);
+
+        // ── The product and its insurer ─────────────────────────────────────
         var row = await db.InsuranceProducts
             .Where(p => p.Id == cmd.ProductId)
             .Join(db.Connections, p => p.ConnectionId, c => c.Id, (p, c) => new { Product = p, Connection = c })
             .FirstOrDefaultAsync(ct);
 
         if (row is null)
-            return Result.Fail<SubscribeInsurancePolicyResult>(InsuranceErrors.ProductNotFound);
+            return Fail(InsuranceErrors.ProductNotFound);
+
+        // The insurer's product must realise the holding's catalogue line: subscribing a holding
+        // on « Assurance obsèques » to an insurer's loan cover would send one contract and record
+        // another.
+        if (!string.Equals(
+                row.Product.CrmProductCode?.Trim(), holding.ProductCode.Trim(), StringComparison.OrdinalIgnoreCase))
+            return Fail(InsuranceErrors.ProductNotForHolding);
+
+        // Re-checked by the consumer too; refused here so the agent learns it at the counter.
+        if (!holding.IsSigned || holding.Status != "PendingSignature")
+            return Fail(InsuranceErrors.HoldingNotSigned);
+
+        if (holding.EffectiveFrom is not { } effectiveDate)
+            return Fail(InsuranceErrors.EffectiveDateRequired);
 
         // ── May this product still be sold ──────────────────────────────────
         //
-        // Through the SAME helper the catalogue screen reports with, not a second set of
-        // conditions: a product the screen shows as unofferable must not be subscribable, and two
-        // implementations of "offerable" would eventually disagree about which.
+        // Through the SAME helper the catalogue screen reports with: a product the screen shows as
+        // unofferable must not be subscribable.
         var crmStatus = await crmProducts.StatusAsync(row.Product.CrmProductCode, ct);
 
         var reasons = ProductOfferability.Reasons(
@@ -60,100 +95,191 @@ internal sealed class SubscribeInsurancePolicyHandler(
             effectiveFrom: row.Product.EffectiveFrom,
             effectiveTo: row.Product.EffectiveTo,
             pricingMode: row.Product.PricingMode,
-            // Pricing by the insurer is irrelevant here: a caller who supplied a premium has
-            // already quoted, and one who did not falls back to the catalogue below. Passing true
-            // keeps this check about the product's SALEABILITY, which is what it is for.
             insurerPricingAvailable: true,
             crmCatalogue: crmStatus,
-            today: today);
+            today: today,
+            hasInformationSheet: row.Product.CurrentInformationSheetId is not null);
 
         if (reasons.Count > 0)
+            return Fail($"{InsuranceErrors.ProductNotOfferable}:{string.Join(',', reasons)}");
+
+        // ── May this client take it ─────────────────────────────────────────
+        //
+        // The product's own conditions, which the screen used to display and nobody enforced.
+        var eligibility = InsuranceEligibilityRules.Evaluate(
+            row.Product, await ApplicantFactsAsync(tenantId, holding.ClientId, effectiveDate, cmd.PaymentMode, ct));
+
+        if (!eligibility.IsEligible)
+            return Fail($"{InsuranceErrors.NotEligible}:{string.Join(',', eligibility.Reasons)}");
+
+        // ── May the institution distribute ──────────────────────────────────
+        //
+        // Its pieces (agrément, garantie financière, RC pro) in force on the day (product owner,
+        // 2026-10-25): an expired one refuses NEW subscriptions until renewed.
+        var standing = await Suppressed(() => administration.GetInsuranceDistributorStandingAsync(tenantId, today, ct));
+
+        if (!standing.InGoodStanding)
         {
-            return Result.Fail<SubscribeInsurancePolicyResult>(
-                $"{InsuranceErrors.ProductNotOfferable}:{string.Join(',', reasons)}");
+            var detail = !standing.IsConfigured
+                ? "NOT_CONFIGURED"
+                : string.Join(',', standing.MissingDocuments.Select(k => $"MISSING_{k}")
+                    .Concat(standing.ExpiredDocuments.Select(k => $"EXPIRED_{k}")));
+            return Fail($"{InsuranceErrors.DistributorNotInGoodStanding}:{detail}");
         }
 
-        // ── The premium ─────────────────────────────────────────────────────
+        // ── The information sheet, handed over before the signature ─────────
+        var delivery = await db.InformationSheetDeliveries
+            .Where(d => d.HoldingId == holding.HoldingId && d.ProductId == cmd.ProductId)
+            .OrderByDescending(d => d.DeliveredAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (delivery is null || (holding.SignedAt is { } signedAt && delivery.DeliveredAt > signedAt))
+            return Fail(InsuranceErrors.InformationSheetNotDelivered);
+
+        // ── How the premium is paid ─────────────────────────────────────────
         //
-        // A caller-supplied amount wins: it is the quote the customer was shown and agreed to, and
-        // re-deriving it here could debit a figure nobody signed. Falling back to the catalogue is
-        // what a fixed-price product needs.
+        // Collecting in the insurer's name — a debit or a payment the agent takes — needs its
+        // express mandate. Without one, the insurer collects and the contract waits for its word.
+        if (cmd.PaymentMode is PremiumPaymentMode.CoreBankingDebit or PremiumPaymentMode.RecordedByAgent
+            && !row.Connection.HasCollectionMandate)
+            return Fail(InsuranceErrors.NoCollectionMandate);
+
+        if (cmd.PaymentMode == PremiumPaymentMode.CoreBankingDebit
+            && !await db.Connections.AnyAsync(c => c.Family == IntegrationFamily.CoreBanking && c.IsActive, ct))
+            return Fail(InsuranceErrors.CoreBankingUnavailable);
+
+        if (cmd.PaymentMode == PremiumPaymentMode.RecordedByAgent && cmd.PaidOn > today)
+            return Fail(InsuranceErrors.PaymentDateInFuture);
+
+        // A caller-supplied amount wins: it is the quote the client was shown and agreed to.
         var premium = cmd.PremiumAmount ?? row.Product.FixedPremiumAmount;
 
         if (premium is not { } amount || amount <= 0m)
-        {
-            return Result.Fail<SubscribeInsurancePolicyResult>(InsuranceErrors.PremiumUnknown);
-        }
+            return Fail(InsuranceErrors.PremiumUnknown);
 
-        // The product's currency is NULLABLE — an insurer-priced entry may carry none until a
-        // quote names one — so the caller's wins and the absence of both is refused rather than
-        // defaulted. A platform guess here would debit a West-African account in the wrong unit.
-        var currency = string.IsNullOrWhiteSpace(cmd.Currency)
-            ? row.Product.Currency
-            : cmd.Currency;
+        var currency = string.IsNullOrWhiteSpace(cmd.Currency) ? row.Product.Currency : cmd.Currency;
 
         if (string.IsNullOrWhiteSpace(currency))
-            return Result.Fail<SubscribeInsurancePolicyResult>(InsuranceErrors.CurrencyUnknown);
+            return Fail(InsuranceErrors.CurrencyUnknown);
 
-        // ── Idempotence ─────────────────────────────────────────────────────
+        // The derogation is for large premiums only: above 80 times the annual SMIG.
+        if (cmd.PaymentMode == PremiumPaymentMode.DeferredByDerogation
+            && (standing.AnnualSmig is not { } smig || amount <= smig * 80m))
+            return Fail(InsuranceErrors.DerogationNotAllowed);
+
+        // ── Who pays, when it is not the subscriber (lot 4) ─────────────────
         //
-        // Read first so a retry gets the existing row instead of a 500 from
-        // ux_ins_subscription_idempotency. The index is still what makes the rule true under
-        // concurrency — EF InMemory honours no unique index, so this read is the only half the
-        // test suite can prove.
-        var existing = await db.InsuranceSubscriptions
-            .FirstOrDefaultAsync(
-                s => s.CrmCustomerId == cmd.CrmCustomerId
-                  && s.ProductId == cmd.ProductId
-                  && s.EffectiveDate == cmd.EffectiveDate,
-                ct);
-
-        if (existing is not null)
+        // An existing client of the institution only, with an approved KYC: the premium's origin is
+        // an LBC/FT question, and a payer identified on the spot would not be one.
+        if (cmd.PremiumPayerClientId is { } payerId && payerId != holding.ClientId)
         {
-            // Success, not a conflict: the caller asked for the customer to be subscribed and the
-            // customer is being subscribed. A second debit is precisely what the index exists to
-            // prevent.
-            logger.LogInformation(
-                "Subscription {SubscriptionId} already in flight for customer {CustomerId}, "
-                + "product {ProductId}, effective {EffectiveDate}",
-                existing.Id, cmd.CrmCustomerId, cmd.ProductId, cmd.EffectiveDate);
+            // Within the agent's perimeter, like every other client read: otherwise the answer
+            // (not found / KYC not approved) would tell whether a client of another branch exists.
+            var payer = await Suppressed(() => customers.GetClientSummaryAsync(tenantId, payerId, ct));
+            if (payer is null
+                || !await Suppressed(() => customers.CanActorAccessClientAsync(tenantId, payerId, currentUser.Id, ct)))
+                return Fail(InsuranceErrors.PayerNotFound);
 
-            return Result.Ok(new SubscribeInsurancePolicyResult(
-                existing.Id, existing.Status.ToString(), AlreadyExisted: true,
-                DebitCommandId: existing.DebitCommandId));
+            if (await Suppressed(() => kyc.GetStatusAsync(tenantId, payerId, ct)) != KycStatus.Approved)
+                return Fail(InsuranceErrors.PayerKycNotApproved);
         }
 
-        var subscription = InsuranceSubscription.Create(
-            tenantId: tenantId,
-            connectionId: row.Connection.Id,
-            crmCustomerId: cmd.CrmCustomerId,
-            productId: cmd.ProductId,
-            effectiveDate: cmd.EffectiveDate,
-            premiumAmount: amount,
-            currency: currency,
-            createdBy: currentUser.Id,
-            clock: clock,
-            cbsAccountRef: cmd.AccountRef,
-            beneficiariesEncrypted: Encrypt(cmd.Beneficiaries));
+        // ── The won project's questionnaires, as signed ─────────────────────
+        ProjectAnswersSnapshot? answers = null;
+
+        if (holding.SourceOpportunityId is { } opportunityId)
+        {
+            answers = await Suppressed(() => leads.GetProjectAnswersSnapshotAsync(tenantId, opportunityId, ct));
+
+            if (answers is { IsComplete: false })
+                return Fail($"{InsuranceErrors.QuestionnairesIncomplete}:{answers.MissingCount}");
+        }
+
+        // ── Idempotence ─────────────────────────────────────────────────────
+        var live = await db.InsuranceSubscriptions
+            .AsTracking()
+            .Where(s => s.CrmHoldingId == holding.HoldingId
+                     && s.ClauseVersion == holding.ClauseVersion
+                     && s.Status != SubscriptionStatus.DebitFailed
+                     && s.Status != SubscriptionStatus.Reversed
+                     && s.Status != SubscriptionStatus.Cancelled
+                     && s.Status != SubscriptionStatus.PremiumRefundDue
+                     && s.Status != SubscriptionStatus.Refused)
+            .FirstOrDefaultAsync(ct);
+
+        if (live is not null && live.Status != SubscriptionStatus.Prepared)
+        {
+            // Already left: the premium is collected or being collected. Success, not a conflict.
+            return Result.Ok(new SubscribeInsurancePolicyResult(
+                live.Id, live.Status.ToString(), AlreadyExisted: true, DebitCommandId: live.DebitCommandId));
+        }
+
+        if (live is not null)
+        {
+            // Prepared and not yet sent: the agent is preparing it again — a corrected payment, a
+            // consent re-collected. The old one is abandoned rather than edited, so its proof stays
+            // what it was.
+            live.Cancel("Remplacée par une nouvelle préparation.", clock);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var otherHolding = await db.InsuranceSubscriptions
+            .AnyAsync(s => s.CrmCustomerId == holding.ClientId
+                        && s.ProductId == cmd.ProductId
+                        && s.EffectiveDate == effectiveDate
+                        && s.CrmHoldingId != holding.HoldingId
+                        && s.Status != SubscriptionStatus.DebitFailed
+                        && s.Status != SubscriptionStatus.Reversed
+                        && s.Status != SubscriptionStatus.Cancelled
+                        && s.Status != SubscriptionStatus.PremiumRefundDue
+                        && s.Status != SubscriptionStatus.Refused, ct);
+
+        if (otherHolding)
+            return Fail(InsuranceErrors.SubscriptionInFlight);
+
+        // ── Write: the subscription, its proof and its answers, together ────
+        InsuranceSubscription subscription;
+
+        try
+        {
+            subscription = InsuranceSubscription.Prepare(
+                tenantId: tenantId,
+                connectionId: row.Connection.Id,
+                crmCustomerId: holding.ClientId,
+                productId: cmd.ProductId,
+                effectiveDate: effectiveDate,
+                premiumAmount: amount,
+                currency: currency,
+                createdBy: currentUser.Id,
+                clock: clock,
+                holdingId: holding.HoldingId,
+                clauseVersion: holding.ClauseVersion,
+                paymentMode: cmd.PaymentMode,
+                cbsAccountRef: cmd.AccountRef,
+                paymentMethod: cmd.PaymentMethod,
+                paymentReference: cmd.PaymentReference,
+                paidOn: cmd.PaidOn,
+                sourceOpportunityId: holding.SourceOpportunityId,
+                answersSha256: answers?.Sha256,
+                commitmentReference: cmd.CommitmentReference,
+                commitmentSignedOn: cmd.CommitmentSignedOn,
+                informationSheetDeliveryId: delivery.Id,
+                premiumPayerClientId: cmd.PremiumPayerClientId == holding.ClientId ? null : cmd.PremiumPayerClientId);
+        }
+        catch (DomainException ex)
+        {
+            return Fail($"{InsuranceErrors.PaymentInvalid}: {ex.Message}");
+        }
 
         db.InsuranceSubscriptions.Add(subscription);
 
-        // ── The evidence, in this same transaction ──────────────────────────
-        //
-        // The aggregate refuses a proof with no evidence at all, which is the guard that matters:
-        // a row claiming consent was collected with nothing to show a controller is worse than no
-        // row. The validator refuses it earlier so the caller gets a 400 naming the field.
-
-        // ASS-12's retention, decided at write time. The nightly job would stamp it anyway — it
-        // exists for the rows written before the period was configured — but a row born with its
-        // own deadline is one no job has to visit, and `RetainUntil` null means "nobody has
-        // decided", which is not a state a new row should be in.
-        var retainUntil = clock.GetUtcNow().AddYears(retention.Value.ResolvedYears);
+        // ASS-12's retention, decided at write time.
+        var retainUntil = now.AddYears(retention.Value.ResolvedYears);
 
         db.ConsentProofs.Add(ConsentProof.Create(
             tenantId: tenantId,
             subscriptionId: subscription.Id,
-            crmCustomerId: cmd.CrmCustomerId,
+            crmCustomerId: holding.ClientId,
             channel: cmd.ConsentChannel,
             consentTextVersion: cmd.ConsentTextVersion,
             consentedAt: cmd.ConsentedAt,
@@ -166,69 +292,78 @@ internal sealed class SubscribeInsurancePolicyHandler(
             contentType: cmd.ConsentEvidenceContentType,
             retainUntil: retainUntil));
 
-        if (cmd.MedicalQuestionnaireCode is { Length: > 0 } code && cmd.MedicalAnswers is { Length: > 0 })
+        if (answers is not null)
         {
+            // The copy the client signed, encrypted: it may hold health answers, and it is what the
+            // insurer is told when the holding leaves.
             db.MedicalQuestionnaires.Add(MedicalQuestionnaire.Create(
                 tenantId: tenantId,
                 subscriptionId: subscription.Id,
-                crmCustomerId: cmd.CrmCustomerId,
-                questionnaireCode: code,
-                answersEncrypted: encryptor.Encrypt(cmd.MedicalAnswers)!,
+                crmCustomerId: holding.ClientId,
+                questionnaireCode: ProjectQuestionnaireCode,
+                answersEncrypted: encryptor.Encrypt(answers.AnswersJson)!,
                 capturedBy: currentUser.Id,
                 clock: clock,
-                requiresMedicalUnderwriting: cmd.RequiresMedicalUnderwriting,
+                requiresMedicalUnderwriting: false,
                 retainUntil: retainUntil));
         }
-
-        // ── Step one of the chain ───────────────────────────────────────────
-        //
-        // The facade enlists in this unit of work and deliberately does not save, so the command
-        // row, the saga and the evidence commit together. A debit queued without its saga would be
-        // money moving with nothing to correlate the outcome to.
-        IntegrationCommandId debitCommandId;
-
-        try
-        {
-            debitCommandId = await integration.CoreBanking.RequestPremiumDebitAsync(
-                new PremiumDebitRequest(
-                    SubscriptionId: subscription.Id,
-                    AccountRef: cmd.AccountRef,
-                    Amount: amount,
-                    Currency: currency,
-                    // Operator-facing and free of personal data: it reaches a core banking system
-                    // this platform does not control, and it appears on the customer's statement.
-                    Label: $"Prime {row.Product.InsurerProductCode}"),
-                ct);
-        }
-        catch (DomainException ex)
-        {
-            // The tenant has no active core-banking connection, or the payload was refused.
-            // Nothing is saved, so no half-open saga is left behind.
-            logger.LogWarning(
-                "Subscription for customer {CustomerId} not opened: {Reason}",
-                cmd.CrmCustomerId, ex.Message);
-
-            return Result.Fail<SubscribeInsurancePolicyResult>(ex.Message);
-        }
-
-        subscription.AttachDebitCommand(debitCommandId.Value, clock);
 
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "Subscription {SubscriptionId} opened for customer {CustomerId} at insurer "
-            + "{ConnectionId}; premium debit queued as command {CommandId}",
-            subscription.Id, cmd.CrmCustomerId, row.Connection.Id, debitCommandId.Value);
+            "Subscription {SubscriptionId} prepared for holding {HoldingId} (client {ClientId}) at "
+            + "insurer {ConnectionId}, premium by {PaymentMode}",
+            subscription.Id, holding.HoldingId, holding.ClientId, row.Connection.Id, cmd.PaymentMode);
 
         return Result.Ok(new SubscribeInsurancePolicyResult(
-            subscription.Id, subscription.Status.ToString(), AlreadyExisted: false,
-            DebitCommandId: debitCommandId.Value));
+            subscription.Id, subscription.Status.ToString(), AlreadyExisted: false, DebitCommandId: null));
+    }
+
+    private async Task<ApplicantFacts> ApplicantFactsAsync(
+        Guid tenantId, Guid clientId, DateOnly onDate, PremiumPaymentMode paymentMode, CancellationToken ct)
+    {
+        var facts = await Suppressed(() => customers.GetInsuranceApplicantFactsAsync(tenantId, clientId, ct));
+        var status = await Suppressed(() => kyc.GetStatusAsync(tenantId, clientId, ct));
+
+        // Approved is the only status that grants a level; a capped file is the simplified tier.
+        var level = KycLevel.None;
+        if (status == KycStatus.Approved)
+        {
+            var limits = await Suppressed(() => kyc.GetLimitsAsync(tenantId, clientId, ct));
+            level = limits is { IsCapped: false } ? KycLevel.Full : KycLevel.Simplified;
+        }
+
+        return new ApplicantFacts(
+            AgeInYears: facts?.BirthDate is { } birth ? AgeOn(birth, onDate) : null,
+            KycLevel: level,
+            // Known only when the premium is debited from it; otherwise the product's account
+            // requirement cannot be confirmed and the rule refuses rather than assumes.
+            HasCbsAccount: paymentMode == PremiumPaymentMode.CoreBankingDebit ? true : null,
+            HasActiveLoan: facts?.HasActiveLoan);
+    }
+
+    private static Result<SubscribeInsurancePolicyResult> Fail(string error)
+        => Result.Fail<SubscribeInsurancePolicyResult>(error);
+
+    private static int AgeOn(DateOnly birth, DateOnly on)
+    {
+        var age = on.Year - birth.Year;
+        if (on < birth.AddYears(age)) age--;
+        return age;
     }
 
     /// <summary>
-    /// Null stays null — an absent value must not become a decryptable blank, the same rule M01's
-    /// AML narrative follows.
+    /// Another module's read, outside this command's transaction: a second connection enlisting
+    /// would promote it to a distributed transaction, which Npgsql does not support.
     /// </summary>
+    private static async Task<T> Suppressed<T>(Func<Task<T>> read)
+    {
+        using var scope = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
+        var value = await read();
+        scope.Complete();
+        return value;
+    }
+
     private string? Encrypt(string? clear)
         => string.IsNullOrWhiteSpace(clear) ? null : encryptor.Encrypt(clear);
 }
@@ -238,24 +373,66 @@ internal static class InsuranceErrors
 {
     public const string ProductNotFound = "INSURANCE_PRODUCT_NOT_FOUND";
 
-    /// <summary>
-    /// Suffixed with the reasons, comma-separated, so a caller is told WHY — the catalogue screen
-    /// reports the same list.
-    /// </summary>
+    /// <summary>Suffixed with the reasons, comma-separated, as the catalogue screen reports them.</summary>
     public const string ProductNotOfferable = "INSURANCE_PRODUCT_NOT_OFFERABLE";
 
-    /// <summary>
-    /// Neither the caller nor the catalogue supplied a premium. Refused rather than defaulted to
-    /// zero: a subscription with no premium to debit is a policy given away.
-    /// </summary>
+    /// <summary>Refused rather than defaulted to zero: a subscription with no premium is a policy given away.</summary>
     public const string PremiumUnknown = "INSURANCE_PREMIUM_UNKNOWN";
 
-    /// <summary>
-    /// Neither the caller nor the catalogue named a currency. Refused rather than defaulted: a
-    /// platform guess would debit a West-African account in the wrong unit, and no amount is a sum
-    /// of money without one.
-    /// </summary>
+    /// <summary>Refused rather than defaulted: no amount is a sum of money without its currency.</summary>
     public const string CurrencyUnknown = "INSURANCE_CURRENCY_UNKNOWN";
 
     public const string SubscriptionNotFound = "INSURANCE_SUBSCRIPTION_NOT_FOUND";
+
+    /// <summary>No such holding, or not in the caller's perimeter — the two are not told apart.</summary>
+    public const string HoldingNotFound = "INSURANCE_HOLDING_NOT_FOUND";
+
+    /// <summary>The holding is not awaiting submission with a recorded signature.</summary>
+    public const string HoldingNotSigned = "INSURANCE_HOLDING_NOT_SIGNED";
+
+    /// <summary>The insurer's product does not realise the holding's catalogue line.</summary>
+    public const string ProductNotForHolding = "INSURANCE_PRODUCT_NOT_FOR_HOLDING";
+
+    public const string EffectiveDateRequired = "INSURANCE_EFFECTIVE_DATE_REQUIRED";
+
+    /// <summary>Suffixed with the eligibility reasons (AGE_BELOW_MINIMUM, KYC_LEVEL_INSUFFICIENT…).</summary>
+    public const string NotEligible = "INSURANCE_NOT_ELIGIBLE";
+
+    /// <summary>Suffixed with the number of questionnaires still unanswered on the won project.</summary>
+    public const string QuestionnairesIncomplete = "INSURANCE_QUESTIONNAIRES_INCOMPLETE";
+
+    /// <summary>A debit was asked for and the tenant has no active core banking connection.</summary>
+    public const string CoreBankingUnavailable = "INSURANCE_PAYMENT_CBS_UNAVAILABLE";
+
+    public const string PaymentDateInFuture = "INSURANCE_PAYMENT_DATE_IN_FUTURE";
+
+    /// <summary>The payment half that the mode requires is missing.</summary>
+    public const string PaymentInvalid = "INSURANCE_PAYMENT_INVALID";
+
+    /// <summary>Another holding of this client already subscribes this product from that date.</summary>
+    public const string SubscriptionInFlight = "INSURANCE_SUBSCRIPTION_IN_FLIGHT";
+
+    /// <summary>The holding of an insurance line was sent with no subscription prepared.</summary>
+    public const string NotPrepared = "INSURANCE_SUBSCRIPTION_NOT_PREPARED";
+
+    /// <summary>Suffixed with NOT_CONFIGURED, or MISSING_/EXPIRED_ followed by the piece.</summary>
+    public const string DistributorNotInGoodStanding = "INSURANCE_DISTRIBUTOR_NOT_IN_GOOD_STANDING";
+
+    /// <summary>A debit or an agent collection for an insurer that gave no collection mandate.</summary>
+    public const string NoCollectionMandate = "INSURANCE_NO_COLLECTION_MANDATE";
+
+    /// <summary>No information sheet of this product was handed to the client before the signature.</summary>
+    public const string InformationSheetNotDelivered = "INSURANCE_INFORMATION_SHEET_NOT_DELIVERED";
+
+    /// <summary>The 60-day derogation for a premium at or below 80 times the annual SMIG, or with no SMIG set.</summary>
+    public const string DerogationNotAllowed = "INSURANCE_DEROGATION_NOT_ALLOWED";
+
+    /// <summary>The named payer is not a client of this institution.</summary>
+    public const string PayerNotFound = "INSURANCE_PAYER_NOT_FOUND";
+
+    /// <summary>The named payer's KYC is not approved.</summary>
+    public const string PayerKycNotApproved = "INSURANCE_PAYER_KYC_NOT_APPROVED";
+
+    /// <summary>A questionnaire answer was edited between the signature and the sending.</summary>
+    public const string AnswersChanged = "INSURANCE_ANSWERS_CHANGED_SINCE_SIGNATURE";
 }

@@ -275,6 +275,40 @@ public sealed class InsuranceSagaChainTests : IDisposable
     }
 
     [Fact]
+    public async Task An_insurer_refusal_of_a_premium_the_agent_collected_is_owed_back_at_once()
+    {
+        // No core banking debit to reverse: the institution holds the client's money from the
+        // moment the insurer says no, and that is a named state an operator works from.
+        Guid sagaId;
+        await using (var db = _factory.CreateContext())
+        {
+            var connection = InsuranceTestHarness.SeedConnection(db, Tenant, IntegrationKind.Fake, name: "ORASS Vie");
+            var product = InsuranceTestHarness.SeedProduct(db, Tenant, connection.Id);
+
+            var saga = InsuranceSubscription.Prepare(
+                Tenant, connection.Id, Customer, product.Id, new DateOnly(2026, 7, 1), 7_500m, "XOF",
+                Guid.NewGuid(), new FixedChainClock(Now),
+                holdingId: Guid.NewGuid(), clauseVersion: 1,
+                paymentMode: PremiumPaymentMode.RecordedByAgent, cbsAccountRef: null,
+                paymentMethod: RecordedPaymentMethod.Cash, paymentReference: "REC-1", paidOn: new DateOnly(2026, 6, 1));
+
+            saga.StartWithRecordedPayment(new FixedChainClock(Now));
+            saga.AttachSubscribeCommand(_subscribeCommandId, new FixedChainClock(Now));
+
+            db.InsuranceSubscriptions.Add(saga);
+            await db.SaveChangesAsync();
+            sagaId = saga.Id;
+        }
+
+        await RejectAsync(_subscribeCommandId, CommandType.SubscribePolicy);
+
+        _reversals.Should().BeEmpty("nothing was debited from a core banking account");
+        var reloaded = await ReloadAsync(sagaId);
+        reloaded.Status.Should().Be(SubscriptionStatus.PremiumRefundDue);
+        reloaded.OwesRefund.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task A_refused_debit_compensates_nothing_because_nothing_moved()
     {
         var debitCommandId = Guid.NewGuid();
