@@ -11,7 +11,13 @@ public sealed record QualificationTemplateDto(
     DateTimeOffset? PublishedAt,
     DateTimeOffset CreatedAt,
     IReadOnlyList<QualificationSectionDto> Sections,
-    IReadOnlyList<QualificationQuestionDto> Questions);
+    IReadOnlyList<QualificationQuestionDto> Questions,
+    /// <summary>Who it is answered about: Lead (the file), EachInsuredPerson, PrincipalOnly, SpouseOnly, ChildrenOnly.</summary>
+    string SubjectScope = "Lead",
+    /// <summary>Its answers are health data: encrypted, never scored, behind the health consent.</summary>
+    bool IsHealthQuestionnaire = false,
+    /// <summary>Its answers do not weigh in the score — always true for a health questionnaire.</summary>
+    bool ExcludeFromScoring = false);
 
 public sealed record QualificationSectionDto(
     Guid Id,

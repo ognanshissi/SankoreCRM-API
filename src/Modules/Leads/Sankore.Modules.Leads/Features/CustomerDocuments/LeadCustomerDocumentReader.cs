@@ -74,7 +74,8 @@ internal static class LeadCustomerDocumentReader
             .IgnoreQueryFilters()
             .Where(t => t.TenantId == tenantId
                      && ((t.EntityType == TaskEntityType.Client && t.EntityId == customerId)
-                         || (t.EntityType == TaskEntityType.Lead && t.EntityId != null && leadIds.Contains(t.EntityId.Value))))
+                         || (t.EntityType == TaskEntityType.Lead && t.EntityId != null && leadIds.Contains(t.EntityId.Value))
+                         || (t.EntityType == TaskEntityType.Project && t.EntityId != null && projectIds.Contains(t.EntityId.Value))))
             .Select(t => new { t.Id, t.Title })
             .ToListAsync(ct);
         var taskTitles = tasks.ToDictionary(t => t.Id, t => t.Title);

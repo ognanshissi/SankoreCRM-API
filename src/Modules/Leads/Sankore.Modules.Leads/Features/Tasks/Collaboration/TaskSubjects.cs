@@ -6,6 +6,7 @@ using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Household;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
@@ -28,7 +29,8 @@ internal sealed class TaskSubjects(
     ICurrentUser me,
     LeadAccessGuard leadAccess,
     ICustomersModule customers,
-    IKycModule kyc)
+    IKycModule kyc,
+    LeadVisibility visibility)
 {
     /// <summary>The id to store — a merged client resolves to its survivor — or the refusal.</summary>
     public async Task<Result<Guid>> ValidateAsync(TaskEntityType type, Guid id, CancellationToken ct)
@@ -58,6 +60,13 @@ internal sealed class TaskSubjects(
                 return await kyc.CanActorAccessKycFileAsync(me.TenantId, id, me.Id, ct)
                     ? Result.Ok(id)
                     : Result.Fail<Guid>("KYC_FILE_NOT_FOUND");
+            }
+
+            case TaskEntityType.Project:
+            {
+                // A closed project still takes tasks: a won sale has a contract to sign after it.
+                var visible = await visibility.Apply(db.Opportunities, db.Leads).AnyAsync(o => o.Id == id, ct);
+                return visible ? Result.Ok(id) : Result.Fail<Guid>("OPPORTUNITY_NOT_FOUND");
             }
 
             default:
@@ -92,6 +101,10 @@ internal sealed class TaskSubjects(
                     var client = file is null ? null : await customers.GetClientSummaryAsync(task.TenantId, file.CustomerId, ct);
                     return new TaskSubjectDto("KycFile", id, client is null ? "Dossier KYC" : $"Dossier KYC · {client.DisplayName}");
                 }
+
+                case TaskEntityType.Project:
+                    var title = await db.Opportunities.AsNoTracking().Where(o => o.Id == id).Select(o => o.Title).FirstOrDefaultAsync(ct);
+                    return new TaskSubjectDto("Project", id, string.IsNullOrWhiteSpace(title) ? "Projet" : title);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -103,6 +116,7 @@ internal sealed class TaskSubjects(
         {
             TaskEntityType.Lead => "Lead",
             TaskEntityType.Client => "Client",
+            TaskEntityType.Project => "Projet",
             _ => "Dossier KYC",
         });
     }

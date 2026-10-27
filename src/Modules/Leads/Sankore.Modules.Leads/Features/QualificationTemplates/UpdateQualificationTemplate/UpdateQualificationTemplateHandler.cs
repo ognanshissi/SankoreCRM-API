@@ -33,6 +33,17 @@ internal sealed class UpdateQualificationTemplateHandler(LeadsDbContext db, ITen
         if (detailsResult.IsFailure)
             return detailsResult;
 
+        // After the details: a health questionnaire is checked against the category it now has.
+        if (cmd.SubjectScope is not null || cmd.IsHealthQuestionnaire is not null || cmd.ExcludeFromScoring is not null)
+        {
+            var scope = template.SetSubjectScope(
+                cmd.SubjectScope ?? template.SubjectScope,
+                cmd.IsHealthQuestionnaire ?? template.IsHealthQuestionnaire,
+                cmd.ExcludeFromScoring ?? template.ExcludeFromScoring);
+            if (scope.IsFailure)
+                return scope;
+        }
+
         // Clear in-memory collections so domain order counters reset.
         template.ClearQuestionsAndSections();
 

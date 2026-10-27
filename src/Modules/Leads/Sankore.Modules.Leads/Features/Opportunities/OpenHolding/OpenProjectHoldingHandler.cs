@@ -13,7 +13,8 @@ internal sealed class OpenProjectHoldingHandler(
     LeadsDbContext db,
     ICustomersModule customers,
     IAdministrationModule administration,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    History.ProjectHistoryRecorder? history = null)
     : IRequestHandler<OpenProjectHoldingCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(OpenProjectHoldingCommand cmd, CancellationToken ct)
@@ -42,7 +43,10 @@ internal sealed class OpenProjectHoldingHandler(
         if (clientId is null)
             return Result.Fail<Guid>(OpportunityErrors.NoClient);
 
-        return await WonProjectHoldingOpener.OpenAsync(
+        var opened = await WonProjectHoldingOpener.OpenAsync(
             opportunity, clientId.Value, customers, administration, currentUser.Id, ct);
+        if (opened.IsSuccess && history is not null)
+            await history.HoldingOpenedAsync(opportunity, opened.Value, ct);
+        return opened;
     }
 }

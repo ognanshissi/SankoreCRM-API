@@ -2513,6 +2513,66 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("project_attachments", "leads");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectHistoryEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("detail");
+
+                    b.Property<string>("From")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("from");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("opportunity_id");
+
+                    b.Property<bool>("Reconstructed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("reconstructed");
+
+                    b.Property<Guid?>("RelatedId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("related_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("To")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("to");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_history");
+
+                    b.HasIndex("OpportunityId", "At")
+                        .HasDatabaseName("ix_project_history_opportunity_id_at");
+
+                    b.ToTable("project_history", "leads");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4805,6 +4865,16 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_project_attachments_opportunities_opportunity_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectHistoryEntry", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.Opportunity", null)
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_history_opportunities_opportunity_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplate", b =>

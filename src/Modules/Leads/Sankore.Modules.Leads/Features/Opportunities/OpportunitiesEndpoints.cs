@@ -113,6 +113,25 @@ public static class OpportunitiesEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        // GET opportunities/{id}/history — what happened to the project, who did it, most recent first
+        group.MapGet("{id:guid}/history", GetHistory)
+            .WithName("GetProjectHistory")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanReadOpportunities.Code)
+            .Produces<IReadOnlyList<History.ProjectHistoryDto>>()
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        // GET opportunities/{id}/tasks — the tasks attached to the project that the caller may open
+        group.MapGet("{id:guid}/tasks", GetTasks)
+            .WithName("ListProjectTasks")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanReadOpportunities.Code)
+            .RequireAuthorization(Permissions.CanReadCrmTasks.Code)
+            .Produces<IReadOnlyList<ProjectTasks.ProjectTaskDto>>()
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
         // POST opportunities/{id}/workflow/restart — after a refusal, runs the current step's circuit again
         group.MapPost("{id:guid}/workflow/restart", RestartWorkflow)
             .WithName("RestartProjectWorkflow")
@@ -391,6 +410,18 @@ public static class OpportunitiesEndpoints
     private static async Task<IResult> GetValidations(Guid id, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new StepConditions.GetProjectValidationsQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+    }
+
+    private static async Task<IResult> GetHistory(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new History.GetProjectHistoryQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+    }
+
+    private static async Task<IResult> GetTasks(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ProjectTasks.ListProjectTasksQuery(id), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
     }
 

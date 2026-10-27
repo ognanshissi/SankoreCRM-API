@@ -98,6 +98,32 @@ public sealed class LeadCustomerDocumentReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task Task_files_come_from_tasks_about_the_client_s_projects_too()
+    {
+        await using (var db = _factory.CreateContext())
+        {
+            var onClient = Opportunity.CreateForCustomer(_tenant, _client, "Projet client", "OBS", _agent, TimeProvider.System);
+            var foreign = Opportunity.CreateForCustomer(_tenant, Guid.NewGuid(), "Autre client", "OBS", _agent, TimeProvider.System);
+            db.Opportunities.AddRange(onClient, foreign);
+
+            var aboutProject = CrmTask.CreateManual(_tenant, _agent, CrmTaskType.Generic, CrmTaskPriority.Low, "Devis",
+                _now.AddDays(1), TaskEntityType.Project, onClient.Id, _agent, null, _now).Value!;
+            var aboutOther = CrmTask.CreateManual(_tenant, _agent, CrmTaskType.Generic, CrmTaskPriority.Low, "Ailleurs",
+                _now.AddDays(1), TaskEntityType.Project, foreign.Id, _agent, null, _now).Value!;
+            db.CrmTasks.AddRange(aboutProject, aboutOther);
+
+            db.CrmTaskAttachments.AddRange(
+                CrmTaskAttachment.Record(_tenant, aboutProject.Id, "devis.pdf", "application/pdf", 10, "s", "r", _agent, _now),
+                CrmTaskAttachment.Record(_tenant, aboutOther.Id, "autre.pdf", "application/pdf", 10, "s", "r", _agent, _now));
+            await db.SaveChangesAsync();
+        }
+
+        var files = await ReadAsync();
+
+        files.Where(f => f.Source == "Task").Select(f => f.FileName).Should().Equal("devis.pdf");
+    }
+
+    [Fact]
     public async Task WhatsApp_media_are_collected_or_delivered_by_direction_and_a_purged_one_is_left_out()
     {
         await using (var db = _factory.CreateContext())

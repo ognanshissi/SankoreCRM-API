@@ -33,5 +33,8 @@ internal static class QualificationTemplateMappings
                     q.Type.ToString(), q.GetOptions(), q.Weight, q.IsRequired, q.Order,
                     q.MinValue, q.MaxValue, rules);
             })
-            .ToList());
+            .ToList(),
+        t.SubjectScope.ToString(),
+        t.IsHealthQuestionnaire,
+        t.ExcludeFromScoring);
 }

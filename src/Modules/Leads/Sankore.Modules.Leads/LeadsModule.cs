@@ -134,6 +134,7 @@ public static class LeadsModule
         services.AddScoped<Features.ProjectTemplates.ProjectStepGate>();
         services.AddScoped<Features.ProjectTemplates.ProjectWorkflows>();
         services.AddScoped<Features.ProjectTemplates.ProjectStepTransition>();
+        services.AddScoped<Features.Opportunities.History.ProjectHistoryRecorder>();
         services.AddScoped<Features.ProjectTemplates.ProjectLeadConversion>();
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Visibility.LeadVisibilityBehavior<,>));
 

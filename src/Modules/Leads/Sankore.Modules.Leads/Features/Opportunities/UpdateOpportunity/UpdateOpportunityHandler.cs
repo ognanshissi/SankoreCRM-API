@@ -13,7 +13,8 @@ internal sealed class UpdateOpportunityHandler(
     TimeProvider clock,
     Administration.PublicApi.IAdministrationModule? administration = null,
     ProjectTemplates.ProjectTemplateResolver? templates = null,
-    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null)
+    Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null,
+    History.ProjectHistoryRecorder? history = null)
     : IRequestHandler<UpdateOpportunityCommand, Result>
 {
     public async Task<Result> Handle(UpdateOpportunityCommand cmd, CancellationToken ct)
@@ -41,6 +42,7 @@ internal sealed class UpdateOpportunityHandler(
         }
 
         var previousProduct = opportunity.Product;
+        var before = History.ProjectHistorySnapshot.Of(opportunity);
 
         // Only when the product changes: a patch cannot clear the date, and a project created
         // before its template made the date critical must stay editable — its screen asks for one.
@@ -73,6 +75,8 @@ internal sealed class UpdateOpportunityHandler(
         if (templates is not null && opportunity.Product != previousProduct)
             opportunity.FollowTemplateVersion(
                 (await templates.ResolveAsync(opportunity.Product, ct)).AttachableVersionId, clock.GetUtcNow());
+
+        history?.Changes(before, opportunity);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

@@ -13,7 +13,8 @@ internal sealed class ProjectStepTransition(
     TimeProvider clock,
     ProjectStepGate? gate = null,
     ProjectLeadConversion? conversion = null,
-    ProjectWorkflows? workflows = null)
+    ProjectWorkflows? workflows = null,
+    Opportunities.History.ProjectHistoryRecorder? history = null)
 {
     public async Task<Result> MoveAsync(
         Opportunity project, ResolvedProjectTemplate template, ProjectStepDto step, CancellationToken ct)
@@ -42,6 +43,8 @@ internal sealed class ProjectStepTransition(
         var moved = project.MoveToStep(step.Id, step.Phase, step.Probability, clock.GetUtcNow());
         if (moved.IsFailure)
             return moved;
+
+        history?.StepChanged(project, current?.Label, step.Label);
 
         // Reaching the approval step converts the lead (product owner, 2026-10-24).
         if (conversion is not null)

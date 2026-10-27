@@ -51,6 +51,7 @@ public sealed class LeadsDbContext(
     public DbSet<CrmTaskTag> CrmTaskTags => Set<CrmTaskTag>();
     public DbSet<CrmTaskAttachment> CrmTaskAttachments => Set<CrmTaskAttachment>();
     public DbSet<ProjectAttachment> ProjectAttachments => Set<ProjectAttachment>();
+    public DbSet<ProjectHistoryEntry> ProjectHistory => Set<ProjectHistoryEntry>();
     public DbSet<TaskDecline> TaskDeclines => Set<TaskDecline>();
     public DbSet<TaskGenerationRule> TaskGenerationRules => Set<TaskGenerationRule>();
     public DbSet<LeadImportJob> LeadImportJobs => Set<LeadImportJob>();
@@ -188,6 +189,7 @@ public sealed class LeadsDbContext(
         modelBuilder.Entity<CrmTaskTag>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CrmTaskAttachment>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ProjectAttachment>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ProjectHistoryEntry>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TaskReassignment>()
             .HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
 

@@ -53,7 +53,8 @@ internal sealed record RestartProjectWorkflowCommand(Guid OpportunityId)
 }
 
 internal sealed class RestartProjectWorkflowHandler(
-    LeadsDbContext db, ProjectTemplateResolver templates, ProjectWorkflows workflows)
+    LeadsDbContext db, ProjectTemplateResolver templates, ProjectWorkflows workflows,
+    History.ProjectHistoryRecorder? history = null)
     : IRequestHandler<RestartProjectWorkflowCommand, Result>
 {
     public async Task<Result> Handle(RestartProjectWorkflowCommand cmd, CancellationToken ct)
@@ -72,6 +73,8 @@ internal sealed class RestartProjectWorkflowHandler(
         var restarted = await workflows.RestartAsync(project, step, ct);
         if (restarted.IsFailure)
             return restarted;
+
+        history?.WorkflowRestarted(project, step.Label, step.WorkflowCircuit);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

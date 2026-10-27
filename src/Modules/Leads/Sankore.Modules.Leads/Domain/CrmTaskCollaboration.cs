@@ -8,6 +8,8 @@ public enum TaskEntityType
     Lead,
     Client,
     KycFile,
+    /// <summary>A project (<c>Opportunity</c>) — owner, 2026-10-27: its page lists its tasks.</summary>
+    Project,
 }
 
 /// <summary>

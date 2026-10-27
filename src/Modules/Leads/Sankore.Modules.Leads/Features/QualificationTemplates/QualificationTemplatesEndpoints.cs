@@ -183,6 +183,16 @@ public static class QualificationTemplatesEndpoints
         ISender sender,
         CancellationToken ct)
     {
+        // By name, like the DTO reads it: a number would tie the screen to the enum's order.
+        Domain.QualificationSubjectScope? subjectScope = null;
+        if (req.SubjectScope is not null)
+        {
+            if (!Enum.TryParse<Domain.QualificationSubjectScope>(req.SubjectScope, ignoreCase: true, out var parsed)
+                || !Enum.IsDefined(parsed))
+                return Results.Problem(title: "Update template failed", detail: "SUBJECT_SCOPE_INVALID", statusCode: 422);
+            subjectScope = parsed;
+        }
+
         var result = await sender.Send(new UpdateQualificationTemplateCommand(
             TemplateId:  templateId,
             Name:        req.Name,
@@ -190,7 +200,10 @@ public static class QualificationTemplatesEndpoints
             ProductCategory: req.ProductCategory,
             ProductCode: req.ProductCode,
             Questions:   req.Questions,
-            Sections:    req.Sections), ct);
+            Sections:    req.Sections,
+            SubjectScope: subjectScope,
+            IsHealthQuestionnaire: req.IsHealthQuestionnaire,
+            ExcludeFromScoring: req.ExcludeFromScoring), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -282,10 +295,16 @@ public sealed record CreateQualificationTemplateRequest(
     IReadOnlyList<QuestionInput>? Questions = null,
     IReadOnlyList<SectionInput>? Sections = null);
 
+/// <param name="SubjectScope">Lead, EachInsuredPerson, PrincipalOnly, SpouseOnly or ChildrenOnly; null keeps it.</param>
+/// <param name="IsHealthQuestionnaire">Insurance families only; null keeps it.</param>
+/// <param name="ExcludeFromScoring">Forced on for a health questionnaire; null keeps it.</param>
 public sealed record UpdateQualificationTemplateRequest(
     string Name,
     string? Description,
     ProductCategory? ProductCategory = null,
     string? ProductCode = null,
     IReadOnlyList<QuestionInput>? Questions = null,
-    IReadOnlyList<SectionInput>? Sections = null);
+    IReadOnlyList<SectionInput>? Sections = null,
+    string? SubjectScope = null,
+    bool? IsHealthQuestionnaire = null,
+    bool? ExcludeFromScoring = null);

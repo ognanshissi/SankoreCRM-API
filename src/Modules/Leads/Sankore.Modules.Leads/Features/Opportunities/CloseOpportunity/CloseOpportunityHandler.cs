@@ -32,7 +32,8 @@ internal sealed class CloseOpportunityHandler(
     ILogger<CloseOpportunityHandler> logger,
     ProjectTemplates.ProjectTemplateResolver? templates = null,
     ProjectTemplates.ProjectStepGate? gate = null,
-    ProjectTemplates.ProjectLeadConversion? conversion = null)
+    ProjectTemplates.ProjectLeadConversion? conversion = null,
+    History.ProjectHistoryRecorder? history = null)
     : IRequestHandler<CloseOpportunityCommand, Result<CloseOpportunityResult>>
 {
     public async Task<Result<CloseOpportunityResult>> Handle(
@@ -79,6 +80,7 @@ internal sealed class CloseOpportunityHandler(
         if (wonTemplate is not null)
             await conversion!.ConvertIfApprovedAsync(opportunity, wonTemplate, wonTemplate.Steps.Count, ct);
 
+        history?.Closed(opportunity);
         await db.SaveChangesAsync(ct);
 
         // AFTER the save and best-effort, exactly like the conversion: the agent's decision is
@@ -89,6 +91,23 @@ internal sealed class CloseOpportunityHandler(
             : null;
 
         return Result.Ok(new CloseOpportunityResult(holdingId));
+    }
+
+    /// <summary>
+    /// The history line of the contract just opened. Its own guard: a line that could not be
+    /// written must not make the caller report « no contract » for one that exists.
+    /// </summary>
+    private async Task RecordHoldingAsync(Opportunity opportunity, Guid holdingId, CancellationToken ct)
+    {
+        if (history is null) return;
+        try
+        {
+            await history.HoldingOpenedAsync(opportunity, holdingId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Request {OpportunityId}: the contract opened but its history line was not written.", opportunity.Id);
+        }
     }
 
     /// <summary>
@@ -115,7 +134,10 @@ internal sealed class CloseOpportunityHandler(
                 opportunity, clientId, customers, administration, currentUser.Id, ct);
 
             if (result.IsSuccess)
+            {
+                await RecordHoldingAsync(opportunity, result.Value, ct);
                 return result.Value;
+            }
 
             // HOLDING_ALREADY_HELD lands here and is not an incident: the client already holds a
             // live contract on a line that forbids a second. The request is won either way, and

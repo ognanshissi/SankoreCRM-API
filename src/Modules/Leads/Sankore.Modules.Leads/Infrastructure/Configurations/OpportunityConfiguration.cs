@@ -51,3 +51,19 @@ internal sealed class ProjectAttachmentConfiguration : IEntityTypeConfiguration<
         b.HasOne<Opportunity>().WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+internal sealed class ProjectHistoryEntryConfiguration : IEntityTypeConfiguration<ProjectHistoryEntry>
+{
+    public void Configure(EntityTypeBuilder<ProjectHistoryEntry> b)
+    {
+        b.ToTable("project_history");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Id).ValueGeneratedNever();
+        b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30);
+        b.Property(x => x.From).HasMaxLength(ProjectHistoryEntry.ValueMaxLength);
+        b.Property(x => x.To).HasMaxLength(ProjectHistoryEntry.ValueMaxLength);
+        b.Property(x => x.Detail).HasMaxLength(ProjectHistoryEntry.DetailMaxLength);
+        b.HasIndex(x => new { x.OpportunityId, x.At });
+        b.HasOne<Opportunity>().WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
+    }
+}

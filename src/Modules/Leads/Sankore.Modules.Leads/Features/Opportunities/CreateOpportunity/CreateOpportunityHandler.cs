@@ -14,7 +14,8 @@ internal sealed class CreateOpportunityHandler(
     Administration.PublicApi.IAdministrationModule? administration = null,
     ProjectTemplates.ProjectTemplateResolver? templates = null,
     Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null,
-    Customers.PublicApi.ICustomersModule? customers = null)
+    Customers.PublicApi.ICustomersModule? customers = null,
+    History.ProjectHistoryRecorder? history = null)
     : IRequestHandler<CreateOpportunityCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
@@ -63,6 +64,7 @@ internal sealed class CreateOpportunityHandler(
         await ProjectTemplates.ProjectFirstStep.PlaceAsync(templates, opp, clock.GetUtcNow(), ct);
 
         db.Opportunities.Add(opp);
+        history?.Created(opp);
         await db.SaveChangesAsync(ct);
 
         return Result.Ok(opp.Id);

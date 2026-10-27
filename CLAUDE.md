@@ -3300,6 +3300,48 @@ also gets the `task.assigned` e-mail.
 Front: « Nouvelle tâche » on Ma journée (`NewTaskDrawer`), the page `/tasks/:taskId`
 (`TaskPage`), « Ouvrir la fiche » from the work drawer.
 
+**A task may be about a project** (`TaskEntityType.Project`, owner 2026-10-27; stored as text, no
+migration). `TaskSubjects` accepts a project the creator can OPEN — `LeadVisibility.Apply` on
+`Opportunities`, the perimeter of its page — closed projects included (a won sale still has a
+contract to sign). `GET opportunities/{id}/tasks` (`ListProjectTasks`, project read + task read)
+lists them, open by due date then closed: the project in the caller's perimeter, and each task
+passed through `TaskAccess`, so the page never lists a row that then answers 404. A project task's
+files reach the client's Documents tab through `LeadCustomerDocumentReader`, like its other tasks.
+
+### A project's history (owner, 2026-10-27)
+
+`leads.project_history` (`ProjectHistoryEntry`): one line per change the project page shows —
+`Created`, `StepChanged`, `AmountChanged`, `ProductChanged`, `CloseDateChanged`,
+`TemplateVersionChanged`, `Won`, `Lost`, `HoldingOpened`, `WorkflowRestarted` — with `From`/`To`
+**as they read at the time** (a step's label, a product's name; an amount in invariant digits with
+its currency in `Detail`, a date as `yyyy-MM-dd`), never ids resolved later: a newer template
+version renaming a step must not rewrite what happened. Title, need, next action and checklist
+ticks are deliberately not in it.
+
+**Written explicitly, by `ProjectHistoryRecorder`, in the caller's save** — there is no EF
+interceptor here. Every path that changes a recorded value calls it: the two create handlers,
+`ProjectStepTransition` (the one move path of the step AND phase endpoints), `UpdateOpportunity`
+(snapshot before, `Changes` after), the closing, `FollowLatestTemplateVersion`, the circuit restart,
+and the contract opening (`HoldingOpenedAsync`, idempotent on the holding id because M01 answers
+the same contract when asked again, saved on its own because it happens after the project's save —
+the closing guards it so a failed line never reports « no contract » for one that exists). **A new
+path that moves, prices or closes a project must call it too.** Not recorded: the legacy
+`AdvanceStage` fallback (no template step for the phase), the baseline attachment of
+`ProjectTemplateVersioning` (an equivalent version, not a change). The author is the signed-in
+user, null for a job or a consumer.
+
+The migration `AddProjectHistory` reconstructs, for every existing project, its creation and — when
+closed — its outcome with its reason, marked `Reconstructed` (moment right, author unknown).
+`GET opportunities/{id}/history` (project read, project perimeter) returns them newest first with
+the author's name.
+
+Front (lot 4): the project page (two columns since the same day — work on the left, a summary
+that stays visible on the right) shows « Tâches » under the progress block (`ProjectTasks`; « Nouvelle tâche »
+opens `NewTaskDrawer` with the project as a locked subject — the drawer offers « Un projet » only
+then, there is no project search) and « Historique » at the bottom (`ProjectHistory`, reloaded
+when the project's `updatedAt` changes, and by the page after a contract opening, which does not
+touch the project).
+
 ### The institution's currency: one per tenant, set by its administrator
 
 `CompanyInfo.Currency` (migration `AddInstitutionCurrency`, default XOF), edited on Paramétrage ›

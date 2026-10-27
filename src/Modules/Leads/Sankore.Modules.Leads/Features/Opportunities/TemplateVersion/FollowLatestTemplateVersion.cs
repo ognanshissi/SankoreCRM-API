@@ -25,7 +25,7 @@ internal sealed record FollowLatestTemplateVersionCommand(Guid OpportunityId)
 }
 
 internal sealed class FollowLatestTemplateVersionHandler(
-    LeadsDbContext db, ProjectTemplateResolver templates, TimeProvider clock)
+    LeadsDbContext db, ProjectTemplateResolver templates, TimeProvider clock, History.ProjectHistoryRecorder? history = null)
     : IRequestHandler<FollowLatestTemplateVersionCommand, Result>
 {
     public const string AlreadyLatest = "PROJECT_TEMPLATE_VERSION_ALREADY_LATEST";
@@ -47,10 +47,15 @@ internal sealed class FollowLatestTemplateVersionHandler(
             return Result.Fail(AlreadyLatest);
 
         var now = clock.GetUtcNow();
+        var previousStep = current.CurrentStep(project.StepId, project.Stage);
         var step = latest.CurrentStep(project.StepId, project.Stage);
         project.FollowTemplateVersion(latest.AttachableVersionId, now);
         if (step is not null)
             project.MoveToStep(step.Id, step.Phase, step.Probability, now);
+
+        history?.TemplateVersionChanged(project, current.Version, latest.Version, latest.Name);
+        if (step is not null)
+            history?.StepChanged(project, previousStep?.Label, step.Label);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();
