@@ -2,7 +2,7 @@ namespace Sankore.Modules.Integration.Domain;
 
 using Sankore.Shared.Kernel;
 
-/// <summary>The providers a user may connect an account of (agendas and contacts).</summary>
+/// <summary>The providers a user may connect an account of (agendas, contacts, mailbox).</summary>
 public enum ConnectedAccountProvider
 {
     /// <summary>Microsoft 365, Outlook.com, Exchange — through Microsoft Graph.</summary>
@@ -10,6 +10,13 @@ public enum ConnectedAccountProvider
 
     /// <summary>Google Agenda and Contacts — Gmail and Google Workspace accounts.</summary>
     Google,
+
+    /// <summary>
+    /// Any other mailbox, through IMAP and SMTP with a password (connected mailbox, lot 1). A
+    /// mailbox only: no agenda, no contacts, no OAuth — its settings are a
+    /// <see cref="MailServerSettings"/> row and its password is in the vault.
+    /// </summary>
+    Imap,
 }
 
 public enum ConnectedAccountStatus
@@ -77,8 +84,27 @@ public sealed class ConnectedAccount : AggregateRoot
     /// <summary>A code, never the provider's text: <c>invalid_grant</c>, <c>consent_revoked</c>…</summary>
     public string? LastError { get; private set; }
 
+    /// <summary>
+    /// The CRM reads and sends this account's e-mail (connected mailbox, owner's decision
+    /// 2026-10-27). For Microsoft and Google it follows what the provider GRANTED — a user may
+    /// untick the mail permission on the consent screen — and the user may turn it off without
+    /// disconnecting the agendas. Always true for an <see cref="ConnectedAccountProvider.Imap"/> account.
+    /// </summary>
+    public bool IsMailEnabled { get; private set; }
+
+    public DateTimeOffset? MailEnabledAt { get; private set; }
+
+    /// <summary>The last mailbox sync that finished (lot 2) — distinct from <see cref="LastSyncAt"/>, the agendas'.</summary>
+    public DateTimeOffset? MailSyncedAt { get; private set; }
+
+    /// <summary>A code, never the provider's text.</summary>
+    public string? MailLastError { get; private set; }
+
     /// <summary>PostgreSQL xmin.</summary>
     public uint Version { get; private set; }
+
+    /// <summary>An IMAP mailbox has no agenda: the agenda sync and the rendez-vous copies skip it.</summary>
+    public bool HasCalendars => Provider != ConnectedAccountProvider.Imap;
 
     public static ConnectedAccount Connect(
         Guid tenantId,
@@ -119,6 +145,62 @@ public sealed class ConnectedAccount : AggregateRoot
         DisplayName = Clip(displayName, 200) ?? DisplayName;
         if (!string.IsNullOrWhiteSpace(label)) Label = DefaultLabel(label, email);
         GrantedScopes = grantedScopes ?? GrantedScopes;
+        Status = ConnectedAccountStatus.Active;
+        LastError = null;
+        ConnectedAt = now;
+    }
+
+    /// <summary>
+    /// A mailbox reached through IMAP/SMTP. Its stable id is the login on its server — the same
+    /// login on the same server connected again is the same account, updated.
+    /// </summary>
+    public static ConnectedAccount ConnectImap(
+        Guid tenantId, Guid userId, string email, string? displayName, string? label, string username, string imapHost, DateTimeOffset now)
+    {
+        var account = Connect(tenantId, userId, ConnectedAccountProvider.Imap, ImapExternalId(username, imapHost),
+            email, displayName, label, "imap smtp", now);
+        account.IsMailEnabled = true;
+        account.MailEnabledAt = now;
+        return account;
+    }
+
+    public static string ImapExternalId(string username, string imapHost) =>
+        $"{username.Trim()}@{imapHost.Trim().TrimEnd('.')}".ToLowerInvariant();
+
+    /// <summary>
+    /// What a consent says about the mailbox: granted turns it on (or keeps it on), refused turns
+    /// it off — the provider's word wins over what the account believed.
+    /// </summary>
+    public void ApplyMailGrant(bool granted, DateTimeOffset now)
+    {
+        if (granted && !IsMailEnabled) MailEnabledAt = now;
+        if (!granted) MailEnabledAt = null;
+        IsMailEnabled = granted;
+    }
+
+    /// <summary>Stops reading and sending its e-mail; the agendas stay. Not for an IMAP account, which is nothing else.</summary>
+    public Result DisableMail()
+    {
+        if (Provider == ConnectedAccountProvider.Imap) return Result.Fail("CONNECTED_MAILBOX_IMAP_REMOVE_INSTEAD");
+        IsMailEnabled = false;
+        MailEnabledAt = null;
+        return Result.Ok();
+    }
+
+    public void RecordMailSync(DateTimeOffset now)
+    {
+        MailSyncedAt = now;
+        MailLastError = null;
+    }
+
+    public void RecordMailFailure(string code) => MailLastError = Clip(code, 60);
+
+    /// <summary>The IMAP settings changed: the address or login may have too.</summary>
+    public void UpdateImapIdentity(string email, string? displayName, string username, string imapHost, DateTimeOffset now)
+    {
+        Email = email.Trim();
+        DisplayName = Clip(displayName, 200) ?? DisplayName;
+        ExternalAccountId = ImapExternalId(username, imapHost);
         Status = ConnectedAccountStatus.Active;
         LastError = null;
         ConnectedAt = now;
@@ -203,10 +285,14 @@ public sealed class ConnectedAccountOAuthState : AggregateRoot
 
     public DateTimeOffset? ConsumedAt { get; private set; }
 
+    /// <summary>The consent asked for the mailbox too — the token requests must name the same scopes.</summary>
+    public bool IncludeMail { get; private set; }
+
     public static ConnectedAccountOAuthState Start(
         Guid tenantId, Guid userId, ConnectedAccountProvider provider, string stateHash, string? label,
-        string returnOrigin, DateTimeOffset now, TimeSpan lifetime) => new()
+        string returnOrigin, DateTimeOffset now, TimeSpan lifetime, bool includeMail = false) => new()
     {
+        IncludeMail = includeMail,
         Id = Guid.NewGuid(),
         TenantId = tenantId,
         UserId = userId,

@@ -26,7 +26,8 @@ internal static class TestLeadsFacade
         IPhoneBlindIndexer? indexer = null,
         Guid? actorUserId = null,
         Guid? tenantId = null,
-        IReadOnlyList<string>? roles = null)
+        IReadOnlyList<string>? roles = null,
+        ILeadEmailIndexer? emailIndexer = null)
     {
         var currentUser = Substitute.For<ICurrentUser>();
         currentUser.Id.Returns(actorUserId ?? Guid.NewGuid());
@@ -47,6 +48,7 @@ internal static class TestLeadsFacade
             db,
             indexer ?? Substitute.For<IPhoneBlindIndexer>(),
             currentUser,
-            new LeadAccessGuard(currentUser, administration));
+            new LeadAccessGuard(currentUser, administration),
+            emailIndexer: emailIndexer);
     }
 }

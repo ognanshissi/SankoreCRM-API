@@ -43,6 +43,26 @@ internal static class ConnectedAccountsServiceRegistration
         services.AddScoped<AppointmentCalendarCopies>();
         services.AddScoped<ReconcileUserAppointmentCopiesJob>();
 
+        // Connected mailbox (lot 1): IMAP/SMTP connection test.
+        services.AddScoped<MailServerEgress>();
+        services.AddScoped<MailServerConnector>();
+        services.AddScoped<IMailServerProbe, MailKitMailServerProbe>();
+
+        // Connected mailbox (lot 2): reading, keeping what concerns a lead or a client.
+        services.AddHttpClient<GraphMailboxReader>(c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient<GmailMailboxReader>(c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddScoped<IMailboxReader>(sp => sp.GetRequiredService<GraphMailboxReader>());
+        services.AddScoped<IMailboxReader>(sp => sp.GetRequiredService<GmailMailboxReader>());
+        services.AddScoped<IMailboxReader, ImapMailboxReader>();
+        if (config.GetValue<bool>($"{ConnectedAccountOptions.Section}:UseFakeProviders"))
+            services.AddScoped<IMailboxReader, FakeMailboxReader>();
+
+        services.AddScoped<ConnectedMailboxSync>();
+        services.AddScoped<MailLinkNames>();
+        services.AddScoped<SyncConnectedMailboxesOrchestrator>();
+        services.AddScoped<SyncConnectedMailboxesJob>();
+        services.AddScoped<SyncConnectedMailboxJob>();
+
         return services;
     }
 }

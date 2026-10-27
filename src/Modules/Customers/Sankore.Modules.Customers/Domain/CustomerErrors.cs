@@ -157,6 +157,8 @@ public static class CustomerErrors
     /// prospection, no contact, no reading in clear (data-purge lot 3).
     /// </summary>
     public const string ProcessingRestricted = "CLIENT_PROCESSING_RESTRICTED";
+    /// <summary>The client has no active e-mail address to write to (connected mailbox).</summary>
+    public const string EmailMissing = "CLIENT_EMAIL_MISSING";
 
     // ── Tenant settings ─────────────────────────────────────────────────────
     public const string SettingUnknown = "SETTING_UNKNOWN";

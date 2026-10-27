@@ -12,6 +12,15 @@ using Sankore.Modules.Integration.Domain;
 /// <param name="RefreshToken">Null when the provider did not issue a new one — the old one stays valid.</param>
 internal sealed record ProviderTokens(string AccessToken, string? RefreshToken, DateTimeOffset ExpiresAt, string Scopes);
 
+/// <summary>
+/// What a consent asks for beyond the agendas: the mailbox (connected mailbox, lot 1), and the
+/// address to pre-fill on the provider's screen when an existing account is reconnected.
+/// </summary>
+internal sealed record ProviderConsent(bool IncludeMail = false, string? LoginHint = null)
+{
+    public static readonly ProviderConsent Default = new();
+}
+
 /// <summary>Who the account is, as the provider says.</summary>
 internal sealed record ProviderProfile(string ExternalId, string Email, string? DisplayName);
 
@@ -37,11 +46,19 @@ internal interface IConnectedAccountProvider
     /// <summary>A client id and secret are configured (or the provider is simulated).</summary>
     bool IsAvailable { get; }
 
-    Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri);
+    Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri, ProviderConsent consent);
 
-    Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, CancellationToken ct);
+    /// <param name="includeMail">The consent asked for the mailbox: Microsoft's token endpoint must be sent the same scopes.</param>
+    Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, bool includeMail, CancellationToken ct);
 
-    Task<ProviderTokens> RefreshAsync(string refreshToken, CancellationToken ct);
+    /// <param name="includeMail">
+    /// The account reads its mail. Asking Microsoft for a scope the user never granted fails the
+    /// refresh — which would mark the account « à reconnecter » — so this follows the account.
+    /// </param>
+    Task<ProviderTokens> RefreshAsync(string refreshToken, bool includeMail, CancellationToken ct);
+
+    /// <summary>The scopes a token endpoint answered include reading AND sending mail.</summary>
+    bool GrantsMail(string grantedScopes);
 
     Task<ProviderProfile> GetProfileAsync(string accessToken, CancellationToken ct);
 
@@ -95,29 +112,40 @@ internal abstract class OAuthProviderBase(HttpClient http)
 
     public bool IsAvailable => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret);
 
-    public Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, CancellationToken ct) =>
+    public Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, bool includeMail, CancellationToken ct) =>
         TokenAsync(new Dictionary<string, string>
         {
             ["grant_type"] = "authorization_code",
             ["code"] = code,
             ["code_verifier"] = codeVerifier,
             ["redirect_uri"] = redirectUri.ToString(),
-        }, ct);
+        }, includeMail, ct);
 
-    public Task<ProviderTokens> RefreshAsync(string refreshToken, CancellationToken ct) =>
+    public Task<ProviderTokens> RefreshAsync(string refreshToken, bool includeMail, CancellationToken ct) =>
         TokenAsync(new Dictionary<string, string>
         {
             ["grant_type"] = "refresh_token",
             ["refresh_token"] = refreshToken,
-        }, ct);
+        }, includeMail, ct);
 
-    protected virtual void AddTokenParameters(IDictionary<string, string> form) { }
+    protected virtual void AddTokenParameters(IDictionary<string, string> form, bool includeMail) { }
 
-    private async Task<ProviderTokens> TokenAsync(Dictionary<string, string> form, CancellationToken ct)
+    /// <summary>Every scope of <paramref name="required"/> is among <paramref name="granted"/>, compared on the last path segment.</summary>
+    protected static bool HasScopes(string granted, IEnumerable<string> required)
+    {
+        // Microsoft answers « https://graph.microsoft.com/Mail.Send », and we asked « Mail.Send ».
+        var names = granted.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s[(s.LastIndexOf('/') + 1)..])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return required.All(r => names.Contains(r[(r.LastIndexOf('/') + 1)..]));
+    }
+
+    private async Task<ProviderTokens> TokenAsync(Dictionary<string, string> form, bool includeMail, CancellationToken ct)
     {
         form["client_id"] = ClientId!;
         form["client_secret"] = ClientSecret!;
-        AddTokenParameters(form);
+        AddTokenParameters(form, includeMail);
 
         HttpResponseMessage response;
 
@@ -247,6 +275,16 @@ internal sealed partial class MicrosoftConnectedAccountProvider(HttpClient http,
     /// <summary>The scopes of every lot at once, so the user consents once (calendars read-write for lot 4, contacts for lot 5).</summary>
     public const string Scopes = "openid email profile offline_access User.Read Calendars.ReadWrite Contacts.Read";
 
+    /// <summary>
+    /// The mailbox (connected mailbox), asked only when the user turns it on: read and mark read,
+    /// and send as the user. Some organisations require an administrator to approve them.
+    /// </summary>
+    public const string MailScopes = "Mail.ReadWrite Mail.Send";
+
+    private static string ScopesFor(bool includeMail) => includeMail ? $"{Scopes} {MailScopes}" : Scopes;
+
+    public bool GrantsMail(string grantedScopes) => HasScopes(grantedScopes, MailScopes.Split(' '));
+
     private ConnectedAccountOptions.MicrosoftOptions Settings => options.Value.Microsoft;
 
     public override ConnectedAccountProvider Provider => ConnectedAccountProvider.Microsoft;
@@ -257,23 +295,28 @@ internal sealed partial class MicrosoftConnectedAccountProvider(HttpClient http,
 
     protected override string? ClientSecret => Settings.ClientSecret;
 
-    protected override void AddTokenParameters(IDictionary<string, string> form) => form["scope"] = Scopes;
+    protected override void AddTokenParameters(IDictionary<string, string> form, bool includeMail) => form["scope"] = ScopesFor(includeMail);
 
-    public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri) =>
-        new(QueryHelpers.AddQueryString($"https://login.microsoftonline.com/{Settings.Tenant}/oauth2/v2.0/authorize",
-            new Dictionary<string, string?>
-            {
-                ["client_id"] = Settings.ClientId,
-                ["response_type"] = "code",
-                ["redirect_uri"] = redirectUri.ToString(),
-                ["response_mode"] = "query",
-                ["scope"] = Scopes,
-                ["state"] = state,
-                ["code_challenge"] = codeChallenge,
-                ["code_challenge_method"] = "S256",
-                // Several Microsoft accounts per user is the point: always let them choose.
-                ["prompt"] = "select_account",
-            }));
+    public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri, ProviderConsent consent)
+    {
+        var query = new Dictionary<string, string?>
+        {
+            ["client_id"] = Settings.ClientId,
+            ["response_type"] = "code",
+            ["redirect_uri"] = redirectUri.ToString(),
+            ["response_mode"] = "query",
+            ["scope"] = ScopesFor(consent.IncludeMail),
+            ["state"] = state,
+            ["code_challenge"] = codeChallenge,
+            ["code_challenge_method"] = "S256",
+            // Several Microsoft accounts per user is the point: always let them choose.
+            ["prompt"] = "select_account",
+        };
+
+        if (!string.IsNullOrWhiteSpace(consent.LoginHint)) query["login_hint"] = consent.LoginHint;
+
+        return new(QueryHelpers.AddQueryString($"https://login.microsoftonline.com/{Settings.Tenant}/oauth2/v2.0/authorize", query));
+    }
 
     public async Task<ProviderProfile> GetProfileAsync(string accessToken, CancellationToken ct)
     {
@@ -299,6 +342,15 @@ internal sealed partial class GoogleConnectedAccountProvider(HttpClient http, IO
         + "https://www.googleapis.com/auth/calendar.events "
         + "https://www.googleapis.com/auth/contacts.readonly";
 
+    /// <summary>
+    /// The mailbox (connected mailbox), asked only when the user turns it on. <c>gmail.modify</c>
+    /// reads, marks read and sends; it is a RESTRICTED scope: past testing, Google requires the
+    /// application to pass a CASA security assessment before strangers may grant it.
+    /// </summary>
+    public const string MailScopes = "https://www.googleapis.com/auth/gmail.modify";
+
+    public bool GrantsMail(string grantedScopes) => HasScopes(grantedScopes, [MailScopes]);
+
     private ConnectedAccountOptions.GoogleOptions Settings => options.Value.Google;
 
     public override ConnectedAccountProvider Provider => ConnectedAccountProvider.Google;
@@ -309,22 +361,27 @@ internal sealed partial class GoogleConnectedAccountProvider(HttpClient http, IO
 
     protected override string? ClientSecret => Settings.ClientSecret;
 
-    public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri) =>
-        new(QueryHelpers.AddQueryString("https://accounts.google.com/o/oauth2/v2/auth",
-            new Dictionary<string, string?>
-            {
-                ["client_id"] = Settings.ClientId,
-                ["response_type"] = "code",
-                ["redirect_uri"] = redirectUri.ToString(),
-                ["scope"] = Scopes,
-                ["state"] = state,
-                ["code_challenge"] = codeChallenge,
-                ["code_challenge_method"] = "S256",
-                // offline + consent: Google only issues a refresh token on a consent screen.
-                ["access_type"] = "offline",
-                ["prompt"] = "consent select_account",
-                ["include_granted_scopes"] = "true",
-            }));
+    public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri, ProviderConsent consent)
+    {
+        var query = new Dictionary<string, string?>
+        {
+            ["client_id"] = Settings.ClientId,
+            ["response_type"] = "code",
+            ["redirect_uri"] = redirectUri.ToString(),
+            ["scope"] = consent.IncludeMail ? $"{Scopes} {MailScopes}" : Scopes,
+            ["state"] = state,
+            ["code_challenge"] = codeChallenge,
+            ["code_challenge_method"] = "S256",
+            // offline + consent: Google only issues a refresh token on a consent screen.
+            ["access_type"] = "offline",
+            ["prompt"] = "consent select_account",
+            ["include_granted_scopes"] = "true",
+        };
+
+        if (!string.IsNullOrWhiteSpace(consent.LoginHint)) query["login_hint"] = consent.LoginHint;
+
+        return new(QueryHelpers.AddQueryString("https://accounts.google.com/o/oauth2/v2/auth", query));
+    }
 
     public async Task<ProviderProfile> GetProfileAsync(string accessToken, CancellationToken ct)
     {
@@ -356,22 +413,31 @@ internal sealed partial class FakeConnectedAccountProvider(ConnectedAccountProvi
 {
     public ConnectedAccountProvider Provider { get; } = provider;
 
+    /// <summary>An account this simulation created — its external id is « fake-… » (see <see cref="GetProfileAsync"/>).</summary>
+    public static bool IsSimulated(ConnectedAccount account) =>
+        account.ExternalAccountId.StartsWith("fake-", StringComparison.Ordinal);
+
     /// <summary>Development only, whatever the configuration says: a simulated account in production would look real.</summary>
     public bool IsAvailable => environment.IsDevelopment();
 
-    public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri) =>
+    public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri, ProviderConsent consent) =>
         new(QueryHelpers.AddQueryString(redirectUri.ToString(), new Dictionary<string, string?>
         {
             ["code"] = $"fake-{codeChallenge[..12]}",
             ["state"] = state,
         }));
 
-    public Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, CancellationToken ct) =>
+    public Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, bool includeMail, CancellationToken ct) =>
         Task.FromResult(new ProviderTokens($"fake-access-{Guid.NewGuid():N}", $"fake-refresh-{Guid.NewGuid():N}",
-            DateTimeOffset.UtcNow.AddHours(1), "simulated"));
+            DateTimeOffset.UtcNow.AddHours(1), SimulatedScopes(includeMail)));
 
-    public Task<ProviderTokens> RefreshAsync(string refreshToken, CancellationToken ct) =>
-        Task.FromResult(new ProviderTokens($"fake-access-{Guid.NewGuid():N}", null, DateTimeOffset.UtcNow.AddHours(1), "simulated"));
+    public Task<ProviderTokens> RefreshAsync(string refreshToken, bool includeMail, CancellationToken ct) =>
+        Task.FromResult(new ProviderTokens($"fake-access-{Guid.NewGuid():N}", null, DateTimeOffset.UtcNow.AddHours(1), SimulatedScopes(includeMail)));
+
+    /// <summary>A simulated consent grants whatever was asked.</summary>
+    public bool GrantsMail(string grantedScopes) => grantedScopes.Split(' ').Contains("simulated-mail");
+
+    private static string SimulatedScopes(bool includeMail) => includeMail ? "simulated simulated-mail" : "simulated";
 
     public Task<ProviderProfile> GetProfileAsync(string accessToken, CancellationToken ct)
     {

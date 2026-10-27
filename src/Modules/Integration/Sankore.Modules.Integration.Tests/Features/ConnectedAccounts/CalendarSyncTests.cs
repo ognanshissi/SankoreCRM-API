@@ -83,9 +83,10 @@ public sealed class CalendarSyncTests : IDisposable
 
         public ConnectedAccountProvider Provider => ConnectedAccountProvider.Google;
         public bool IsAvailable => true;
-        public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri) => redirectUri;
-        public Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, CancellationToken ct) => throw new NotSupportedException();
-        public Task<ProviderTokens> RefreshAsync(string refreshToken, CancellationToken ct) =>
+        public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri, ProviderConsent consent) => redirectUri;
+        public Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, bool includeMail, CancellationToken ct) => throw new NotSupportedException();
+        public bool GrantsMail(string grantedScopes) => false;
+        public Task<ProviderTokens> RefreshAsync(string refreshToken, bool includeMail, CancellationToken ct) =>
             Task.FromResult(new ProviderTokens("access", null, DateTimeOffset.UtcNow.AddHours(1), ""));
         public Task<ProviderProfile> GetProfileAsync(string accessToken, CancellationToken ct) => throw new NotSupportedException();
         public Task RevokeAsync(string refreshToken, CancellationToken ct) => Task.CompletedTask;

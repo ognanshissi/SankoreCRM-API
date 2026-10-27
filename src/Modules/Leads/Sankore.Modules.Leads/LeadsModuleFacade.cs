@@ -25,7 +25,8 @@ public sealed class LeadsModuleFacade(
     Features.Household.LeadAccessGuard accessGuard,
     MediatR.ISender? sender = null,
     Features.Questionnaires.IProjectAnswersSnapshots? projectAnswers = null,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    Features.FindDuplicates.ILeadEmailIndexer? emailIndexer = null)
     : ILeadsModule
 {
     public async Task<ProjectAnswersSnapshot?> GetProjectAnswersSnapshotAsync(
@@ -172,6 +173,42 @@ public sealed class LeadsModuleFacade(
     /// file.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Never <c>l.Email == x</c>: the column is non-deterministic ciphertext (see CLAUDE.md « Lead
+    /// e-mail is encrypted »). The blind index, plus the transitional clear column for rows the
+    /// backfill has not reached.
+    /// </remarks>
+    public async Task<IReadOnlyList<LeadEmailMatch>> MatchLeadsByEmailsAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken ct)
+    {
+        if (tenantId == Guid.Empty || emailIndexer is null || emails.Count == 0) return [];
+
+        var byIndex = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var email in emails.Select(e => e.Trim().ToLowerInvariant()).Where(e => e.Length > 0).Distinct())
+        {
+            if (emailIndexer.Compute(email) is { } index) byIndex[index] = email;
+        }
+
+        if (byIndex.Count == 0) return [];
+
+        var indexes = byIndex.Keys.ToList();
+        var clears = byIndex.Values.ToList();
+
+        var rows = await db.Leads
+            .IgnoreQueryFilters()
+            .Where(l => l.TenantId == tenantId && !l.IsAnonymized
+                     && ((l.EmailBlindIndex != null && indexes.Contains(l.EmailBlindIndex))
+                      || (l.EmailBlindIndex == null && l.LegacyEmailClear != null && clears.Contains(l.LegacyEmailClear.ToLower()))))
+            .Select(l => new { l.Id, l.EmailBlindIndex, l.LegacyEmailClear })
+            .ToListAsync(ct);
+
+        return rows
+            .Select(r => new LeadEmailMatch(
+                r.EmailBlindIndex is { } i ? byIndex[i] : r.LegacyEmailClear!.Trim().ToLowerInvariant(), r.Id))
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<LeadPhoneMatch>> FindOpenLeadsByPhoneAsync(
         Guid tenantId, string phoneNumber, CancellationToken ct)
     {

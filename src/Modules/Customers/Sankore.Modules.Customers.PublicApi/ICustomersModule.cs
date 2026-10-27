@@ -387,6 +387,31 @@ public interface ICustomersModule
         CancellationToken ct);
 
     /// <summary>
+    /// Which live clients hold these e-mail addresses on a current contact point (connected
+    /// mailbox, lot 2) — a batch, indexed here under M01's key like <see cref="FindMatchesAsync"/>.
+    /// Answers the address as given (lower-cased) and a client id, never the client's data.
+    /// </summary>
+    Task<IReadOnlyList<ClientEmailMatch>> MatchClientsByEmailsAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken ct);
+
+    /// <summary>
+    /// The client's clear e-mail address, <b>to address a message an agent sends from their own
+    /// mailbox and for nothing else</b> (connected mailbox, « Envoyer un e-mail » on the client
+    /// record) — the e-mail twin of <see cref="ResolvePhoneForCallAsync"/>. The agent's screen shows
+    /// the address masked; the address goes straight into the outgoing message and is never
+    /// returned to the browser.
+    ///
+    /// <para>
+    /// Same gates as a reveal of the record: the actor's perimeter (agency and assigned-only, folded
+    /// into <c>CLIENT_NOT_FOUND</c>), then the data-purge restriction
+    /// (<c>CLIENT_PROCESSING_RESTRICTED</c>: nobody writes to a person who asked to be forgotten),
+    /// then an active address (<c>CLIENT_EMAIL_MISSING</c>).
+    /// </para>
+    /// </summary>
+    Task<Result<string>> ResolveEmailForMailAsync(
+        Guid tenantId, Guid clientId, Guid actorUserId, CancellationToken ct);
+
+    /// <summary>
     /// The clear telephone number of one of a client's phone slots, <b>for dialling and for
     /// nothing else</b> (TEL-B-06).
     ///
@@ -708,6 +733,9 @@ public enum PhoneSlot
     Primary,
     Secondary,
 }
+
+/// <param name="Email">The address as asked, trimmed and lower-cased.</param>
+public sealed record ClientEmailMatch(string Email, Guid ClientId);
 
 public sealed record CustomerMatch(
     Guid ClientId,

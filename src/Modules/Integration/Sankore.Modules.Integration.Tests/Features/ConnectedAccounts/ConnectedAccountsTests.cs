@@ -84,21 +84,39 @@ public sealed class ConnectedAccountsTests : IDisposable
         public ConnectedAccountProvider Provider { get; } = provider;
         public bool IsAvailable => true;
 
-        public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri) =>
-            new($"{redirectUri}?code=the-code&state={Uri.EscapeDataString(state)}&challenge={codeChallenge}");
+        public Uri BuildAuthorizationUrl(string state, string codeChallenge, Uri redirectUri, ProviderConsent consent)
+        {
+            LastConsent = consent;
+            return new($"{redirectUri}?code=the-code&state={Uri.EscapeDataString(state)}&challenge={codeChallenge}");
+        }
 
-        public Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, CancellationToken ct)
+        public ProviderConsent? LastConsent { get; private set; }
+
+        /// <summary>Whether the user leaves the mail permission ticked on the consent screen.</summary>
+        public bool UserGrantsMail { get; set; } = true;
+
+        public bool? LastRefreshIncludedMail { get; private set; }
+
+        public bool ReturnsEarlierGrants { get; set; }
+
+        public Task<ProviderTokens> ExchangeCodeAsync(string code, string codeVerifier, Uri redirectUri, bool includeMail, CancellationToken ct)
         {
             // The verifier must hash to the challenge sent with the authorization URL — PKCE's whole point.
             LastVerifier = codeVerifier;
-            return Task.FromResult(new ProviderTokens("access-1", "refresh-1", DateTimeOffset.UtcNow.AddHours(1), "openid Calendars.ReadWrite"));
+            // Google's include_granted_scopes: every scope ever granted comes back, asked or not.
+            var scopes = (includeMail || ReturnsEarlierGrants) && UserGrantsMail ? "openid Calendars.ReadWrite https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send" : "openid Calendars.ReadWrite";
+            return Task.FromResult(new ProviderTokens("access-1", "refresh-1", DateTimeOffset.UtcNow.AddHours(1), scopes));
         }
+
+        public bool GrantsMail(string grantedScopes) =>
+            grantedScopes.Contains("Mail.ReadWrite", StringComparison.Ordinal) && grantedScopes.Contains("Mail.Send", StringComparison.Ordinal);
 
         public string? LastVerifier { get; private set; }
 
-        public Task<ProviderTokens> RefreshAsync(string refreshToken, CancellationToken ct)
+        public Task<ProviderTokens> RefreshAsync(string refreshToken, bool includeMail, CancellationToken ct)
         {
             Refreshes++;
+            LastRefreshIncludedMail = includeMail;
             if (RefuseRefresh) throw new ProviderAuthException("invalid_grant", revoked: true);
             return Task.FromResult(new ProviderTokens("access-2", null, DateTimeOffset.UtcNow.AddHours(1), "openid"));
         }
@@ -298,6 +316,131 @@ public sealed class ConnectedAccountsTests : IDisposable
         new FakeConnectedAccountProvider(ConnectedAccountProvider.Google, production).IsAvailable.Should().BeFalse();
     }
 
+    // ── Mailbox (connected mailbox, lot 1) ─────────────────────────────────────
+
+    [Fact]
+    public async Task A_consent_asking_for_the_mailbox_turns_it_on_and_says_so_to_the_front()
+    {
+        var response = await CallbackAsync(await StartAsync("https://crm.example.com", includeMail: true));
+
+        _google.LastConsent!.IncludeMail.Should().BeTrue();
+        response.Location.Should().EndWith("&messagerie=ok");
+
+        await using var db = _factory.CreateContext();
+        var account = await db.ConnectedAccounts.SingleAsync();
+        account.IsMailEnabled.Should().BeTrue();
+        account.MailEnabledAt.Should().Be(_now);
+
+        var listed = await new ListMyConnectedAccountsHandler(db, _currentUser, Providers()).Handle(new ListMyConnectedAccountsQuery(), CancellationToken.None);
+        listed.Accounts.Single().MailEnabled.Should().BeTrue();
+        listed.Accounts.Single().MailServer.Should().BeNull("only an IMAP mailbox has servers of its own");
+    }
+
+    [Fact]
+    public async Task A_user_who_unticks_the_mail_permission_gets_the_agendas_without_the_mailbox()
+    {
+        _google.UserGrantsMail = false;
+
+        var response = await CallbackAsync(await StartAsync("https://crm.example.com", includeMail: true));
+
+        response.Location.Should().Contain("connexion=ok").And.EndWith("&messagerie=refusee");
+        await using var db = _factory.CreateContext();
+        (await db.ConnectedAccounts.SingleAsync()).IsMailEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reconnecting_an_account_keeps_asking_for_its_mailbox_and_its_refreshes_name_the_mail_scopes()
+    {
+        await CallbackAsync(await StartAsync("https://crm.example.com", includeMail: true));
+        Guid id;
+        await using (var db = _factory.CreateContext()) id = (await db.ConnectedAccounts.SingleAsync()).Id;
+
+        // « Reconnecter », without ticking anything: the mailbox that was on is asked for again.
+        await CallbackAsync(await StartAsync("https://crm.example.com", accountId: id));
+
+        _google.LastConsent.Should().Be(new ProviderConsent(IncludeMail: true, LoginHint: "awa@example.com"));
+
+        await using var read = _factory.CreateContext();
+        var account = await read.ConnectedAccounts.AsTracking().SingleAsync();
+        account.IsMailEnabled.Should().BeTrue();
+
+        _secrets.Entries[ConnectedAccountSecrets.AccessToken(_tenant, id)] = ("old", DateTimeOffset.UtcNow.AddSeconds(-1));
+        await Tokens(read).GetAccessTokenAsync(account, CancellationToken.None);
+        _google.LastRefreshIncludedMail.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_mailbox_turned_off_stays_off_when_the_agendas_are_reconnected()
+    {
+        await CallbackAsync(await StartAsync("https://crm.example.com", includeMail: true));
+        Guid id;
+        await using (var db = _factory.CreateContext())
+        {
+            id = (await db.ConnectedAccounts.SingleAsync()).Id;
+            (await new DisableMailboxHandler(db, _currentUser).Handle(new DisableMailboxCommand(id), CancellationToken.None)).IsSuccess.Should().BeTrue();
+        }
+
+        // Google hands every earlier grant back; the consent did not ask for the mailbox.
+        _google.ReturnsEarlierGrants = true;
+        var response = await CallbackAsync(await StartAsync("https://crm.example.com"));
+
+        response.Location.Should().NotContain("messagerie");
+        await using var read = _factory.CreateContext();
+        var account = await read.ConnectedAccounts.AsTracking().SingleAsync();
+        account.IsMailEnabled.Should().BeFalse();
+
+        _secrets.Entries[ConnectedAccountSecrets.AccessToken(_tenant, id)] = ("old", DateTimeOffset.UtcNow.AddSeconds(-1));
+        await Tokens(read).GetAccessTokenAsync(account, CancellationToken.None);
+        _google.LastRefreshIncludedMail.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reconnecting_a_colleague_s_account_is_refused()
+    {
+        await CallbackAsync(await StartAsync("https://crm.example.com"));
+        Guid id;
+        await using (var db = _factory.CreateContext()) id = (await db.ConnectedAccounts.SingleAsync()).Id;
+
+        var colleague = Substitute.For<ICurrentUser>();
+        colleague.Id.Returns(Guid.NewGuid());
+        colleague.TenantId.Returns(_tenant);
+
+        var env = Substitute.For<IHostEnvironment>();
+        var result = await new StartConnectedAccountHandler(
+                _factory.CreateContext(), colleague, Providers(), new ConnectedAccountOAuth(_config), new ConnectedAccountReturnOrigins(_config, env),
+                Options.Create(new ConnectedAccountOptions()), new FixedClock(_now))
+            .Handle(new StartConnectedAccountCommand("google", null, "https://crm.example.com", "https://api.example.com", true, id), CancellationToken.None);
+
+        result.Error.Should().Be(ConnectedAccountErrors.NotFound);
+    }
+
+    [Fact]
+    public void The_real_providers_ask_for_the_mailbox_only_when_told_and_read_what_was_granted()
+    {
+        var options = Options.Create(new ConnectedAccountOptions
+        {
+            Microsoft = { ClientId = "ms-id", ClientSecret = "x" },
+            Google = { ClientId = "g-id", ClientSecret = "x" },
+        });
+        var microsoft = new MicrosoftConnectedAccountProvider(new HttpClient(), options);
+        var google = new GoogleConnectedAccountProvider(new HttpClient(), options);
+        var redirect = new Uri("https://api.example.com/integration/oauth/x/callback");
+
+        Uri.UnescapeDataString(microsoft.BuildAuthorizationUrl("s", "c", redirect, ProviderConsent.Default).Query).Should().NotContain("Mail.");
+        var msMail = Uri.UnescapeDataString(microsoft.BuildAuthorizationUrl("s", "c", redirect, new ProviderConsent(true, "awa@example.com")).Query);
+        msMail.Should().Contain("Mail.ReadWrite Mail.Send").And.Contain("login_hint=awa@example.com");
+
+        Uri.UnescapeDataString(google.BuildAuthorizationUrl("s", "c", redirect, ProviderConsent.Default).Query).Should().NotContain("gmail");
+        Uri.UnescapeDataString(google.BuildAuthorizationUrl("s", "c", redirect, new ProviderConsent(true)).Query)
+            .Should().Contain(GoogleConnectedAccountProvider.MailScopes);
+
+        // Microsoft answers full resource URIs; reading AND sending are both needed.
+        microsoft.GrantsMail("openid https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send").Should().BeTrue();
+        microsoft.GrantsMail("openid https://graph.microsoft.com/Mail.ReadWrite").Should().BeFalse();
+        google.GrantsMail("openid https://www.googleapis.com/auth/gmail.modify").Should().BeTrue();
+        google.GrantsMail("openid https://www.googleapis.com/auth/calendar.readonly").Should().BeFalse();
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private ConnectedAccountProviders Providers() => new([_google]);
@@ -316,10 +459,10 @@ public sealed class ConnectedAccountsTests : IDisposable
             Options.Create(new ConnectedAccountOptions()), new FixedClock(_now));
     }
 
-    private async Task<string> StartAsync(string origin, string? label = null)
+    private async Task<string> StartAsync(string origin, string? label = null, bool includeMail = false, Guid? accountId = null)
     {
         var result = await Handler().Handle(
-            new StartConnectedAccountCommand("google", label, origin, "https://api.example.com"), CancellationToken.None);
+            new StartConnectedAccountCommand("google", label, origin, "https://api.example.com", includeMail, accountId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue(result.Error);
         return result.Value!.AuthorizationUrl;

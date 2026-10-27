@@ -69,6 +69,9 @@ internal sealed class ConnectedCalendarSync(
 
     public async Task<Result<CalendarSyncOutcome>> SyncAccountAsync(ConnectedAccount account, CancellationToken ct)
     {
+        // An IMAP mailbox has no agenda to read; its mail is synced elsewhere.
+        if (!account.HasCalendars) return Result.Ok(new CalendarSyncOutcome(0, 0, 0, []));
+
         var provider = providers.Find(account.Provider);
         if (provider is null) return Result.Fail<CalendarSyncOutcome>(ConnectedAccountErrors.ProviderUnavailable);
 
@@ -308,7 +311,7 @@ public sealed class SyncConnectedCalendarsJob(IServiceScopeFactory scopeFactory,
         var db = scope.ServiceProvider.GetRequiredService<IntegrationDbContext>();
 
         var ids = await db.ConnectedAccounts
-            .Where(a => a.Status == ConnectedAccountStatus.Active)
+            .Where(a => a.Status == ConnectedAccountStatus.Active && a.Provider != ConnectedAccountProvider.Imap)
             .Select(a => a.Id)
             .ToListAsync();
 

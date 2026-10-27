@@ -41,10 +41,11 @@ public sealed class IntegrationPermissionsTests
         "WhatsApp.Config",
     ];
 
-    /// <summary>Connected agendas: a user connecting their OWN Microsoft and Google accounts.</summary>
+    /// <summary>Connected agendas and mailbox: a user's OWN accounts, and the institution's e-mail templates.</summary>
     private static readonly string[] ConnectedAccountCodes =
     [
         "ConnectedAccounts.Use",
+        "MailTemplates.Manage",
     ];
 
     /// <summary>The seven codes of TEL-B-18's table, verbatim.</summary>

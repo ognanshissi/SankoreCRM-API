@@ -137,6 +137,10 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
         Guid tenantId, string phoneNumber, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<LeadPhoneMatch>>([]);
 
+    public Task<IReadOnlyList<LeadEmailMatch>> MatchLeadsByEmailsAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<LeadEmailMatch>>([]);
+
     /// <summary>
     /// WA-BE-07's inbound recording. Nothing in the timeline receives WhatsApp messages; it records
     /// nothing, which is the safe answer for a stub.

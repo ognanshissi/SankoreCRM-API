@@ -263,6 +263,55 @@ internal sealed class CustomersModuleFacade(
             : Result.Ok(clear.Trim());
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The perimeter is <see cref="CanActorAccessClientAsync"/> — the same answer the record's own
+    /// screen got — and the decryption is <c>ClientEmailNotifier.ResolveEmailAsync</c>, the single
+    /// path that opens this field. An address that will not decrypt reads as missing: the agent is
+    /// told there is nothing to write to, never handed bytes.
+    /// </remarks>
+    public async Task<Result<string>> ResolveEmailForMailAsync(
+        Guid tenantId, Guid clientId, Guid actorUserId, CancellationToken ct)
+    {
+        if (!await CanActorAccessClientAsync(tenantId, clientId, actorUserId, ct))
+            return Result.Fail<string>(CustomerErrors.ClientNotFound);
+
+        if (await IsProcessingRestrictedAsync(tenantId, clientId, ct))
+            return Result.Fail<string>(CustomerErrors.ProcessingRestricted);
+
+        var email = await clientEmails.ResolveEmailAsync(tenantId, clientId, ct);
+        return string.IsNullOrWhiteSpace(email)
+            ? Result.Fail<string>(CustomerErrors.EmailMissing)
+            : Result.Ok(email.Trim());
+    }
+
+    public async Task<IReadOnlyList<ClientEmailMatch>> MatchClientsByEmailsAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken ct)
+    {
+        var byIndex = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var email in emails.Select(e => e.Trim().ToLowerInvariant()).Where(e => e.Length > 0).Distinct())
+        {
+            if (Index(BlindIndexPurpose.Email, email) is { } index) byIndex[index] = email;
+        }
+
+        if (tenantId == Guid.Empty || byIndex.Count == 0) return [];
+
+        var indexes = byIndex.Keys.ToList();
+
+        var hits = await (
+                from cp in db.ClientContactPoints.IgnoreQueryFilters()
+                join c in db.Clients.IgnoreQueryFilters() on cp.ClientId equals c.Id
+                where cp.TenantId == tenantId && c.TenantId == tenantId
+                      && cp.ValidTo == null && cp.Type == ContactPointType.Email
+                      && indexes.Contains(cp.BlindIndex)
+                      && AttachableStatuses.Contains(c.Status)
+                select new { cp.ClientId, cp.BlindIndex })
+            .Distinct()
+            .ToListAsync(ct);
+
+        return hits.Select(h => new ClientEmailMatch(byIndex[h.BlindIndex], h.ClientId)).ToList();
+    }
+
     public async Task<IReadOnlyList<CustomerMatch>> FindMatchesAsync(
         Guid tenantId,
         string? phoneNumber,

@@ -436,6 +436,10 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("granted_scopes");
 
+                    b.Property<bool>("IsMailEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_mail_enabled");
+
                     b.Property<string>("Label")
                         .IsRequired()
                         .HasMaxLength(60)
@@ -450,6 +454,19 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("LastSyncAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_sync_at");
+
+                    b.Property<DateTimeOffset?>("MailEnabledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("mail_enabled_at");
+
+                    b.Property<string>("MailLastError")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("mail_last_error");
+
+                    b.Property<DateTimeOffset?>("MailSyncedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("mail_synced_at");
 
                     b.Property<string>("Provider")
                         .IsRequired()
@@ -504,6 +521,12 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
+
+                    b.Property<bool>("IncludeMail")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("include_mail");
 
                     b.Property<string>("Label")
                         .HasMaxLength(60)
@@ -710,6 +733,174 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasDatabaseName("ix_cal_event_tenant_id_user_id_start_at");
 
                     b.ToTable("cal_event", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConnectedMailLink", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("direction");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("MessageId", "EntityType", "EntityId")
+                        .HasName("pk_cal_mail_link");
+
+                    b.HasIndex("TenantId", "EntityType", "EntityId", "SentAt")
+                        .HasDatabaseName("ix_cal_mail_link_tenant_id_entity_type_entity_id_sent_at");
+
+                    b.ToTable("cal_mail_link", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConnectedMailMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("AttachmentsEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("attachments_enc");
+
+                    b.Property<string>("BodyEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("body_enc");
+
+                    b.Property<bool>("BodyIsHtml")
+                        .HasColumnType("boolean")
+                        .HasColumnName("body_is_html");
+
+                    b.Property<bool>("BodyTruncated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("body_truncated");
+
+                    b.Property<string>("CcEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("cc_enc");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("direction");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("external_id");
+
+                    b.Property<string>("Folder")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("folder");
+
+                    b.Property<string>("FromEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("from_enc");
+
+                    b.Property<bool>("HasAttachments")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_attachments");
+
+                    b.Property<string>("InternetMessageId")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("internet_message_id");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_read");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("SnippetEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("snippet_enc");
+
+                    b.Property<string>("SubjectEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("subject_enc");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("ThreadKey")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("thread_key");
+
+                    b.Property<string>("ToEnc")
+                        .HasColumnType("text")
+                        .HasColumnName("to_enc");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cal_mail_message");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_cal_mail_message_account_id");
+
+                    b.HasIndex("TenantId", "AccountId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_cal_mail_message_account_external");
+
+                    b.HasIndex("TenantId", "AccountId", "ThreadKey")
+                        .HasDatabaseName("ix_cal_mail_message_tenant_id_account_id_thread_key");
+
+                    b.HasIndex("TenantId", "UserId", "SentAt")
+                        .HasDatabaseName("ix_cal_mail_message_tenant_id_user_id_sent_at");
+
+                    b.ToTable("cal_mail_message", "integration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConsentProof", b =>
@@ -2644,6 +2835,163 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("integration_kyc_limit_alert", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.MailServerSettings", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("ImapHost")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("imap_host");
+
+                    b.Property<int>("ImapPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("imap_port");
+
+                    b.Property<string>("ImapSecurity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("imap_security");
+
+                    b.Property<string>("SmtpHost")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("smtp_host");
+
+                    b.Property<int>("SmtpPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("smtp_port");
+
+                    b.Property<string>("SmtpSecurity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("smtp_security");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("username");
+
+                    b.HasKey("AccountId")
+                        .HasName("pk_cal_mail_server");
+
+                    b.ToTable("cal_mail_server", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.MailTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cal_mail_template");
+
+                    b.HasIndex("TenantId", "IsArchived", "Name")
+                        .HasDatabaseName("ix_cal_mail_template_tenant_id_is_archived_name");
+
+                    b.ToTable("cal_mail_template", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.MailboxSyncState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("Cursor")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("cursor");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset?>("LastSyncAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sync_at");
+
+                    b.Property<string>("Stream")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("stream");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cal_mail_sync_state");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_cal_mail_sync_state_account_id");
+
+                    b.HasIndex("TenantId", "AccountId", "Stream")
+                        .IsUnique()
+                        .HasDatabaseName("ux_cal_mail_sync_state_stream");
+
+                    b.ToTable("cal_mail_sync_state", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.MedicalQuestionnaire", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4124,6 +4472,26 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasConstraintName("fk_ins_claim_policies_policy_id");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConnectedMailLink", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.ConnectedMailMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cal_mail_link_connected_mail_messages_message_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConnectedMailMessage", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.ConnectedAccount", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cal_mail_message_cal_connected_account_account_id");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConsentProof", b =>
                 {
                     b.HasOne("Sankore.Modules.Integration.Domain.InsuranceSubscription", null)
@@ -4211,6 +4579,26 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_ins_statement_line_ins_statement_statement_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.MailServerSettings", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.ConnectedAccount", null)
+                        .WithOne()
+                        .HasForeignKey("Sankore.Modules.Integration.Domain.MailServerSettings", "AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cal_mail_server_cal_connected_account_account_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.MailboxSyncState", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.ConnectedAccount", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cal_mail_sync_state_cal_connected_account_account_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.MedicalQuestionnaire", b =>

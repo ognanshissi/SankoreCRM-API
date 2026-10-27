@@ -19,7 +19,7 @@ internal sealed class IntegrationTenantDataWipe(
     [
         typeof(IntegrationConnection), typeof(IntegrationMapping), typeof(IntegrationRelayAgent),
         typeof(TelUserLink), typeof(TelCallOutcome), typeof(TelRecordingPolicy), typeof(InsuranceProduct), typeof(ProductInformationSheet),
-        typeof(ConnectedAccount), typeof(ConnectedCalendar),
+        typeof(ConnectedAccount), typeof(ConnectedCalendar), typeof(MailServerSettings), typeof(MailTemplate),
     ];
 
     public string Module => "Integration";

@@ -24,8 +24,11 @@ using Sankore.Shared.Kernel;
 /// <param name="Providers">Those the deployment can connect — a provider with no OAuth client configured is absent.</param>
 public sealed record ConnectedAccountsDto(IReadOnlyList<string> Providers, IReadOnlyList<ConnectedAccountDto> Accounts);
 
+/// <param name="Provider"><c>Microsoft</c>, <c>Google</c> or <c>Imap</c>.</param>
 /// <param name="Status"><c>Active</c> or <c>NeedsReconnect</c>.</param>
-/// <param name="Calendars">Its agendas, ticked or not (lot 2). Empty until its first sync.</param>
+/// <param name="Calendars">Its agendas, ticked or not (lot 2). Empty until its first sync, always empty for an IMAP mailbox.</param>
+/// <param name="MailEnabled">The CRM reads and sends this account's e-mail (connected mailbox).</param>
+/// <param name="MailServer">The servers of an IMAP mailbox — never its password. Null for Microsoft and Google.</param>
 public sealed record ConnectedAccountDto(
     Guid Id,
     string Provider,
@@ -36,7 +39,12 @@ public sealed record ConnectedAccountDto(
     DateTimeOffset ConnectedAt,
     DateTimeOffset? LastSyncAt,
     string? LastError,
-    IReadOnlyList<ConnectedCalendarDto>? Calendars = null);
+    IReadOnlyList<ConnectedCalendarDto>? Calendars = null,
+    bool MailEnabled = false,
+    DateTimeOffset? MailEnabledAt = null,
+    MailServerDto? MailServer = null,
+    DateTimeOffset? MailSyncedAt = null,
+    string? MailLastError = null);
 
 /// <param name="IsSubscription">A subscribed agenda (public holidays, someone else's) — shown « abonnement ».</param>
 /// <param name="EventCount">Events stored for the window (−30 days, +180 days).</param>
@@ -71,7 +79,12 @@ public sealed record MyCalendarEventDto(
     bool IsAllDay,
     string ShowAs);
 
-public sealed record StartConnectedAccountRequest(string Provider, string? Label);
+/// <param name="IncludeMail">Ask for the mailbox too (read and send).</param>
+/// <param name="AccountId">
+/// Reconnecting, or turning the mailbox on for, one of the caller's accounts: its address is
+/// pre-filled on the provider's screen, and a mailbox already on stays asked for.
+/// </param>
+public sealed record StartConnectedAccountRequest(string Provider, string? Label, bool IncludeMail = false, Guid? AccountId = null);
 
 public sealed record StartConnectedAccountResult(string AuthorizationUrl);
 
@@ -151,7 +164,7 @@ internal sealed class ConnectedAccountTokens(
 
         try
         {
-            var tokens = await provider.RefreshAsync(refresh, ct);
+            var tokens = await provider.RefreshAsync(refresh, account.IsMailEnabled, ct);
             await StoreAsync(account.TenantId, account.Id, tokens, ct);
             return Result.Ok(tokens.AccessToken);
         }
@@ -199,23 +212,33 @@ internal sealed class ListMyConnectedAccountsHandler(IntegrationDbContext db, IC
             .Where(c => c.UserId == me.Id)
             .ToListAsync(ct);
 
+        var servers = await db.MailServers
+            .Where(m => m.UserId == me.Id)
+            .ToDictionaryAsync(m => m.AccountId, ct);
+
         return new ConnectedAccountsDto(
             providers.Available().Select(p => p.ToString()).ToList(),
-            accounts.Select(a => ToDto(a, calendars.Where(c => c.AccountId == a.Id))).ToList());
+            accounts.Select(a => ToDto(a, calendars.Where(c => c.AccountId == a.Id), servers.GetValueOrDefault(a.Id))).ToList());
     }
 
-    internal static ConnectedAccountDto ToDto(ConnectedAccount a, IEnumerable<ConnectedCalendar> calendars) => new(
+    internal static ConnectedAccountDto ToDto(ConnectedAccount a, IEnumerable<ConnectedCalendar> calendars, MailServerSettings? server = null) => new(
         a.Id, a.Provider.ToString(), a.Label, a.Email, a.DisplayName, a.Status.ToString(), a.ConnectedAt, a.LastSyncAt, a.LastError,
         calendars
             .OrderByDescending(c => c.IsPrimary).ThenBy(c => c.IsSubscription).ThenBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase)
             .Select(c => new ConnectedCalendarDto(c.Id, c.Name, c.Color, c.IsPrimary, c.IsReadOnly, c.IsSubscription, c.IsSelected,
                 c.EventCount, c.LastSyncAt, c.LastError, c.IsAppointmentTarget))
-            .ToList());
+            .ToList(),
+        a.IsMailEnabled,
+        a.MailEnabledAt,
+        server is null ? null : MailServerDto.From(server),
+        a.MailSyncedAt,
+        a.MailLastError);
 }
 
 // ── Start a consent ──────────────────────────────────────────────────────────────────────────
 
-internal sealed record StartConnectedAccountCommand(string Provider, string? Label, string? Origin, string? RequestBaseUrl)
+internal sealed record StartConnectedAccountCommand(
+    string Provider, string? Label, string? Origin, string? RequestBaseUrl, bool IncludeMail = false, Guid? AccountId = null)
     : IRequest<Result<StartConnectedAccountResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "ConnectedAccount";
@@ -250,17 +273,28 @@ internal sealed class StartConnectedAccountHandler(
         var redirectUri = ConnectedAccountCallback.RedirectUri(options.Value, cmd.RequestBaseUrl, kind);
         if (redirectUri is null) return Result.Fail<StartConnectedAccountResult>(ConnectedAccountErrors.ProviderUnavailable);
 
+        var consent = new ProviderConsent(cmd.IncludeMail);
+
+        if (cmd.AccountId is { } accountId)
+        {
+            var existing = await db.ConnectedAccounts.FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == me.Id && a.Provider == kind, ct);
+            if (existing is null) return Result.Fail<StartConnectedAccountResult>(ConnectedAccountErrors.NotFound);
+
+            // A reconnection must not quietly drop a mailbox that was on: the consent asks for it again.
+            consent = new ProviderConsent(cmd.IncludeMail || existing.IsMailEnabled, existing.Email);
+        }
+
         var state = ConnectedAccountOAuth.NewState();
         var now = clock.GetUtcNow();
 
         db.ConnectedAccountOAuthStates.Add(ConnectedAccountOAuthState.Start(
             me.TenantId, me.Id, kind, ConnectedAccountOAuth.HashState(state), cmd.Label, origin, now,
-            TimeSpan.FromMinutes(Math.Clamp(options.Value.StateLifetimeMinutes, 2, 30))));
+            TimeSpan.FromMinutes(Math.Clamp(options.Value.StateLifetimeMinutes, 2, 30)), consent.IncludeMail));
 
         await db.SaveChangesAsync(ct);
 
         var challenge = ConnectedAccountOAuth.CodeChallenge(oauth.CodeVerifier(state));
-        return Result.Ok(new StartConnectedAccountResult(provider.BuildAuthorizationUrl(state, challenge, redirectUri).ToString()));
+        return Result.Ok(new StartConnectedAccountResult(provider.BuildAuthorizationUrl(state, challenge, redirectUri, consent).ToString()));
     }
 }
 
@@ -310,7 +344,8 @@ internal sealed class SyncConnectedAccountHandler(IntegrationDbContext db, ICurr
         if (result.IsFailure) return Result.Fail<ConnectedAccountDto>(result.Error!);
 
         var calendars = await db.ConnectedCalendars.Where(c => c.AccountId == account.Id).ToListAsync(ct);
-        return Result.Ok(ListMyConnectedAccountsHandler.ToDto(account, calendars));
+        var server = await db.MailServers.FirstOrDefaultAsync(m => m.AccountId == account.Id, ct);
+        return Result.Ok(ListMyConnectedAccountsHandler.ToDto(account, calendars, server));
     }
 }
 
@@ -434,6 +469,12 @@ internal sealed class RemoveConnectedAccountHandler(
             await db.ConnectedCalendarEvents.AsTracking().Where(e => calendarIds.Contains(e.CalendarId)).ToListAsync(ct));
         db.ConnectedCalendars.RemoveRange(calendars);
 
+        if (await db.MailServers.AsTracking().FirstOrDefaultAsync(m => m.AccountId == account.Id, ct) is { } server)
+            db.MailServers.Remove(server);
+
+        // The e-mails kept from it (connected mailbox, lot 2).
+        await ConnectedMailboxSync.ForgetMailboxAsync(db, account.Id, ct);
+
         db.ConnectedAccounts.Remove(account);
         await db.SaveChangesAsync(ct);
 
@@ -453,7 +494,8 @@ internal sealed class RemoveConnectedAccountHandler(
 ///
 /// <para>
 /// <b>Always a redirect back to the front</b>, never a page of its own: to
-/// <c>{origin}/settings/account/agendas?connexion=ok|refuse|expire|erreur</c>. A state nobody
+/// <c>{origin}/settings/account/agendas?connexion=ok|refuse|expire|erreur</c>, plus
+/// <c>&amp;messagerie=ok|refusee</c> when the consent asked for the mailbox. A state nobody
 /// knows gets a bare 400 — there is no origin to send that browser to, and inventing one would be
 /// the open redirect the recorded origin exists to prevent.
 /// </para>
@@ -498,8 +540,10 @@ internal static class ConnectedAccountCallback
         if (row is null) return Results.BadRequest("Lien de connexion invalide ou expiré.");
 
         var now = clock.GetUtcNow();
-        IResult Back(string outcome, Guid? accountId = null) =>
-            Results.Redirect($"{row.ReturnOrigin}{ReturnPath}?connexion={outcome}{(accountId is { } id ? $"&compte={id}" : string.Empty)}");
+        IResult Back(string outcome, Guid? accountId = null, bool? mailGranted = null) =>
+            Results.Redirect($"{row.ReturnOrigin}{ReturnPath}?connexion={outcome}"
+                + (accountId is { } id ? $"&compte={id}" : string.Empty)
+                + (mailGranted is { } mail ? $"&messagerie={(mail ? "ok" : "refusee")}" : string.Empty));
 
         // Consumed BEFORE anything is attempted: a state is good for one try, success or not.
         if (!row.TryConsume(now)) return Back("expire");
@@ -518,7 +562,7 @@ internal static class ConnectedAccountCallback
 
         try
         {
-            issued = await implementation.ExchangeCodeAsync(code, oauth.CodeVerifier(state), redirectUri, ct);
+            issued = await implementation.ExchangeCodeAsync(code, oauth.CodeVerifier(state), redirectUri, row.IncludeMail, ct);
             profile = await implementation.GetProfileAsync(issued.AccessToken, ct);
         }
         catch (ProviderAuthException ex)
@@ -554,6 +598,15 @@ internal static class ConnectedAccountCallback
             account.Reconnect(profile.Email, profile.DisplayName, row.Label, issued.Scopes, now);
         }
 
+        // Only a consent that ASKED for the mailbox decides it: Google returns every scope ever
+        // granted, so a mere reconnection would otherwise turn back on a mailbox the user turned off.
+        bool? mailGranted = null;
+        if (row.IncludeMail)
+        {
+            mailGranted = implementation.GrantsMail(issued.Scopes);
+            account.ApplyMailGrant(mailGranted.Value, now);
+        }
+
         account.MarkSynced(now);
         await db.SaveChangesAsync(ct);
         await tokens.StoreAsync(row.TenantId, account.Id, issued, ct);
@@ -562,6 +615,8 @@ internal static class ConnectedAccountCallback
         // the account straight away, and its agendas a few seconds later.
         var (tenantId, accountId) = (row.TenantId, account.Id);
         http.RequestServices.GetService<IBackgroundJobClient>()?.Enqueue<SyncConnectedAccountJob>(job => job.ExecuteAsync(tenantId, accountId));
+        if (account.IsMailEnabled)
+            http.RequestServices.GetService<IBackgroundJobClient>()?.Enqueue<SyncConnectedMailboxJob>(job => job.ExecuteAsync(tenantId, accountId));
 
         // An anonymous request, so no AuditBehavior: the row is written by hand, with the user the
         // state names. The address is the account's own, which its owner just typed in.
@@ -569,7 +624,7 @@ internal static class ConnectedAccountCallback
         {
             await audit.WriteAsync(new AuditEntry(
                 now, row.UserId, row.TenantId, isNew ? "ConnectedAccountConnected" : "ConnectedAccountReconnected",
-                JsonSerializer.Serialize(new { provider = kind.ToString(), account.Email }),
+                JsonSerializer.Serialize(new { provider = kind.ToString(), account.Email, mail = mailGranted }),
                 "SUCCESS", null, "ConnectedAccount", account.Id.ToString()), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -577,7 +632,7 @@ internal static class ConnectedAccountCallback
             logger.LogError(ex, "Audit of connected account {AccountId} could not be written.", account.Id);
         }
 
-        return Back("ok", account.Id);
+        return Back("ok", account.Id, mailGranted);
     }
 }
 
@@ -602,14 +657,15 @@ internal static class ConnectedAccountEndpoints
         group.MapPost("authorize", async (StartConnectedAccountRequest req, HttpContext http, ISender sender, CancellationToken ct) =>
                 Map(await sender.Send(new StartConnectedAccountCommand(
                     req.Provider, req.Label, http.Request.Headers.Origin.ToString(),
-                    $"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}"), ct)))
+                    $"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}", req.IncludeMail, req.AccountId), ct)))
             .WithName("StartConnectedAccount")
             .WithSummary("Starts connecting a Microsoft or Google account: answers the provider's consent URL to navigate to")
             .WithDescription(
                 "The browser navigates to `authorizationUrl`; the provider sends it back to "
                 + "`/integration/oauth/{provider}/callback`, which redirects to "
-                + "`{origin}/settings/account/agendas?connexion=ok|refuse|expire|erreur`. The origin is "
-                + "the calling page's, checked against the CORS allow-list. Requires permission: ConnectedAccounts.Use.")
+                + "`{origin}/settings/account/agendas?connexion=ok|refuse|expire|erreur` (plus `&messagerie=ok|refusee` "
+                + "when `includeMail`). `accountId` reconnects one of the caller's accounts, keeping its mailbox if it is on. "
+                + "The origin is the calling page's, checked against the CORS allow-list. Requires permission: ConnectedAccounts.Use.")
             .Produces<StartConnectedAccountResult>()
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi()
@@ -677,6 +733,10 @@ internal static class ConnectedAccountEndpoints
             .WithOpenApi()
             .WithTenantHeader();
 
+        group.MapConnectedMailboxEndpoints();
+        app.MapConnectedMailboxReadEndpoints();
+        app.MapConnectedMailboxSendEndpoints();
+
         return app;
     }
 
@@ -691,9 +751,9 @@ internal static class ConnectedAccountEndpoints
         return app;
     }
 
-    private static IResult Map<T>(Result<T> result) => result.IsSuccess ? Results.Ok(result.Value) : Problem(result.Error!);
+    internal static IResult Map<T>(Result<T> result) => result.IsSuccess ? Results.Ok(result.Value) : Problem(result.Error!);
 
-    private static IResult Map(Result result) => result.IsSuccess ? Results.NoContent() : Problem(result.Error!);
+    internal static IResult Map(Result result) => result.IsSuccess ? Results.NoContent() : Problem(result.Error!);
 
     private static IResult Problem(string code) => code switch
     {

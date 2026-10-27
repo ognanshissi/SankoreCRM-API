@@ -3267,6 +3267,108 @@ Removing an account deletes its copies at the provider first, while its token st
 read back by the lot-2 sync is hidden from `me/calendar-events` (matched on agenda + event id), or
 the calendar screen would show every rendez-vous twice and in conflict with itself.
 
+### Connected mailbox, lot 1: Microsoft/Google mail scopes and IMAP/SMTP mailboxes (owner, 2026-10-27)
+
+A user reads and sends their e-mail from the CRM. Owner's choices: Microsoft + Google + IMAP/SMTP;
+only mail exchanged with a known lead/client address is ever STORED (lot 2); content readable by the
+mailbox's owner alone, colleagues see that an exchange happened; three screens (Messagerie, a tab on
+the lead/client, « Envoyer un e-mail » everywhere). Lot 1 is the accounts.
+
+- **Microsoft/Google: the mailbox is a consent option, not a second account.** `authorize` takes
+  `includeMail` (scopes `Mail.ReadWrite Mail.Send` / `gmail.modify`) and `accountId` (reconnect one of
+  the caller's accounts: `login_hint`, and a mailbox already on is asked again). The state row keeps
+  `IncludeMail` because Microsoft's token endpoint must be sent the SAME scopes; every refresh asks
+  for the mail scopes iff `ConnectedAccount.IsMailEnabled` — asking for one never granted fails the
+  refresh and would mark the account « à reconnecter ». The callback decides the mailbox ONLY when the
+  consent asked for it (`GrantsMail` on the answered scopes → `ApplyMailGrant`, redirect
+  `&messagerie=ok|refusee`): Google returns every scope ever granted, so a plain reconnection would
+  otherwise turn back on a mailbox the user turned off (`DELETE …/{id}/mail`).
+- **`gmail.modify` is a RESTRICTED Google scope**: past testing users, the OAuth app needs a CASA
+  security assessment. Some Microsoft organisations require admin consent for Mail.*.
+- **IMAP accounts are `ConnectedAccountProvider.Imap`** — a mailbox only (`HasCalendars` false: the
+  agenda sync, its job and the copies skip it), `ExternalAccountId` = `login@imaphost` lower-cased
+  (same login on same server = same account, updated). Servers in `cal_mail_server` (PK = account,
+  cascade), password in the vault (`ConnectedAccountSecrets.MailPassword`, deleted with the account's
+  scope). Routes `POST imap/test` (saves nothing, not an ICommand), `POST imap`, `PUT {id}/imap`
+  (null password = keep), all probed first and limited by the `mail-server-probe` rate policy (10/min
+  per user — otherwise a password-guessing relay). Commands carry the password `[SensitiveData]`.
+- **Egress.** Ports are a closed list (IMAP 993/143, SMTP 465/587/25/2525), security `Ssl` or
+  `StartTls` REQUIRED (no clear text), and `MailServerEgress` refuses private/loopback/link-local/CGNAT
+  addresses with `SftpEgressGuard.IsBlockedAddress` under `Integration:Egress:AllowPrivateAddresses`.
+  The probe connects its own socket to the vetted ADDRESS and hands MailKit the host name only for
+  SNI and the certificate check (no rebinding). A refused host reads « unreachable ».
+- **Certificates (`MailServerCertificates`)**: chain and name enforced, a REVOKED certificate refused,
+  but `RevocationStatusUnknown`/`OfflineRevocation` accepted — MailKit's default refused a valid
+  imap.gmail.com certificate when the OCSP fetch could not get out (measured), turning every login into
+  « TLS échoué ». Probe codes: `MAIL_{IMAP|SMTP}_{UNREACHABLE|TLS_FAILED|AUTH_FAILED}`. Live-checked
+  once (2026-10-27): Gmail SSL and Outlook STARTTLS answer AUTH_FAILED on a wrong password, an IP in
+  place of the name answers TLS_FAILED.
+
+### Connected mailbox, lot 2: reading, and keeping only what concerns a lead or a client
+
+- **Readers** (`IMailboxReader`, `MailboxReaders.cs`) answer HEADERS for what changed and CONTENT only
+  when asked: Graph = one delta per folder (`inbox`, `sentitems`; first read `$filter=receivedDateTime
+  ge`, the only filter a message delta takes); Gmail = one stream, cursor `L|historyId|pageToken`
+  while listing the window (history id taken BEFORE listing) then `H|historyId|pageToken` from
+  `history.list` (spam/trash/drafts/chats never read, a message moved to the trash = removed); IMAP =
+  Inbox + Sent (SPECIAL-USE, else known names), cursor `uidvalidity:lastUid`, NEW messages only — no
+  deletions or flag changes in v1 (a CONDSTORE pass later). A simulated dev account reads as empty
+  (`FakeMailboxReader`, `FakeConnectedAccountProvider.IsSimulated`). Expired cursor
+  (`MailCursorExpiredException`: Graph 410, Gmail 404, UIDVALIDITY changed) → the window again.
+- **`ConnectedMailboxSync`**: per page, ONE batch match — `ILeadsModule.MatchLeadsByEmailsAsync`
+  (every non-anonymised lead, blind index + legacy clear column) and
+  `ICustomersModule.MatchClientsByEmailsAsync` (live clients, current e-mail contact points), each
+  module indexing under its own key — the mailbox's own address excluded. Only a matched message is
+  fetched, encrypted (`CalendarEventProtector`, Integration field key: addresses, subject, preview,
+  body ≤ 500 000 chars, attachment descriptions) and stored (`cal_mail_message`) with one
+  `cal_mail_link` per lead/client (no content: what a colleague will see, lot 6). Everything else is
+  forgotten. **The cursor moves only after its page is saved**, so a content fetch that fails fails the
+  page (`DropUnsaved`) — skipping would lose the message; the unique (account, external id) makes the
+  replay harmless. **Not retroactive**: mail exchanged before an address became a lead's is not kept.
+  Window 30 days (`MailboxSyncState.Window`), 20 pages per stream per run.
+- **Jobs**: `SyncConnectedMailboxesOrchestrator` every 5 min → per tenant → per mailbox
+  (`DisableConcurrentExecution`); `SyncConnectedMailboxJob` after an IMAP connect/update, an OAuth
+  consent with the mailbox on, and `POST connected-accounts/{id}/mail/sync` (202). A refused IMAP
+  password marks the account « à reconnecter ». Account DTO: `mailSyncedAt`, `mailLastError`.
+- **Forgetting**: turning the mailbox off and removing the account delete messages, links and cursors
+  (`ForgetMailboxAsync`); `LeadErasedEvent` / `ClientAnonymizedEvent` delete EVERY message linked to
+  that person, whole (`ConnectedMailErasure`).
+- **Reading** (owner only, `integration/me/mail`): `threads` (grouped in SQL on account + thread, then
+  only the page's messages decrypted; no text search — it would decrypt the mailbox) and
+  `messages/{id}/thread`. HTML bodies are returned UNSANITISED: the front must render them sandboxed.
+- Address headers go through MimeKit in LOOSE mode: strict refuses the whole header for one bad entry,
+  and an unreadable To is a message no lead matches (pinned by `MailboxReaderTests`).
+
+### Connected mailbox, lot 3: sending, read flags, attachments, templates
+
+- **`POST integration/me/mail/send`** (multipart, 202): new, reply (`replyToMessageId`, same mailbox,
+  threaded) or forward (`forwardMessageId` + `forwardAttachmentIds`, fetched from the provider at send
+  time). ≤ 50 bare addresses, ≤ 10 files / 20 MB, executables refused. The form is READ BY HAND:
+  `[FromForm] string[]` made the host fail to build its endpoints at start-up; `SendMailForm` only
+  documents it for OpenAPI. Rate policy `mail-send` (30/min per user). Nothing is stored: the sync
+  enqueued after the send reads the copy from « Envoyés » and keeps it under the usual rule.
+- **Outside the transaction**: send, read flag and attachment run under `TransactionScopeOption.Suppress`
+  — the ambient scope times out after a minute, and an abort after the provider accepted would report
+  a failure for a message that left (sent twice). Audit: recipients, subject, body and files are
+  `[SensitiveData]` — the row says who sent from which mailbox, not to whom or what.
+- **Per provider**: Graph always via a DRAFT (`createReply` for a reply — Graph refuses In-Reply-To as a
+  header), attachments ≤ 3 MB inline, larger through an upload session in 11×320 KiB chunks sent
+  WITHOUT the bearer token (pre-authorised URL refuses it); any failure deletes the draft. Gmail: the
+  MIME through the upload endpoint, `media` for new, `multipart/related` with `threadId` for a reply.
+  IMAP: SMTP via `MailServerConnector`, then APPEND to Sent unless the host files it itself
+  (gmail/googlemail/office365/outlook). MIME (`OutgoingMime`) carries In-Reply-To/References and a text
+  part. Errors are ours: `MAIL_SEND_REFUSED` / `MAIL_SEND_FAILED`; a refused password or token marks
+  the account « à reconnecter ». A simulated dev account refuses to send.
+- `PUT me/mail/messages/{id}/thread/read` marks a conversation at the provider first, then here; a
+  message the provider refused stays as it was. `GET me/mail/messages/{id}/attachments/{attId}` fetches
+  the bytes now (never stored), `no-store`.
+- **Templates** (`cal_mail_template`, archived never deleted): CRUD under `MailTemplates.Manage` (no
+  default role), listed for `ConnectedAccounts.Use`. `POST me/mail/templates/{id}/render` fills
+  `{{destinataire.nom}}`, `{{client.numero}}`, `{{agent.nom}}`, `{{agent.email}}`, `{{institution}}`,
+  `{{date}}` — escaped for HTML (the five markup characters only: `HtmlEncode` would show « Kon&#233; »
+  in the composer) — and names the blank ones in `missing`. No project variables yet (no contract
+  reads a project summary).
+
 ### Tasks people work on together: subject, people, criteria, comments, tags, files
 
 `CrmTask` (M13) is attached to its subject by **`EntityType` + `EntityId`** — Lead, Client, KycFile

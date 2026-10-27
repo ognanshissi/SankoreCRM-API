@@ -33,6 +33,11 @@ public sealed class IntegrationDbContext(
     public DbSet<MsgWebhookEvent> MsgWebhookEvents => Set<MsgWebhookEvent>();
     public DbSet<ConnectedAccount> ConnectedAccounts => Set<ConnectedAccount>();
     public DbSet<ConnectedAccountOAuthState> ConnectedAccountOAuthStates => Set<ConnectedAccountOAuthState>();
+    public DbSet<MailServerSettings> MailServers => Set<MailServerSettings>();
+    public DbSet<ConnectedMailMessage> ConnectedMailMessages => Set<ConnectedMailMessage>();
+    public DbSet<ConnectedMailLink> ConnectedMailLinks => Set<ConnectedMailLink>();
+    public DbSet<MailboxSyncState> MailboxSyncStates => Set<MailboxSyncState>();
+    public DbSet<MailTemplate> MailTemplates => Set<MailTemplate>();
     public DbSet<ConnectedCalendar> ConnectedCalendars => Set<ConnectedCalendar>();
     public DbSet<ConnectedCalendarEvent> ConnectedCalendarEvents => Set<ConnectedCalendarEvent>();
     public DbSet<AppointmentCalendarCopy> AppointmentCalendarCopies => Set<AppointmentCalendarCopy>();
@@ -145,6 +150,11 @@ public sealed class IntegrationDbContext(
         // it runs before any tenant is known — and every other read stays filtered.
         modelBuilder.Entity<ConnectedAccount>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ConnectedAccountOAuthState>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<MailServerSettings>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ConnectedMailMessage>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ConnectedMailLink>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<MailboxSyncState>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<MailTemplate>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ConnectedCalendar>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ConnectedCalendarEvent>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<AppointmentCalendarCopy>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);

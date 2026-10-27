@@ -110,9 +110,14 @@ internal static class ConnectedAccountSecrets
     public const string RefreshTokenName = "refresh-token";
     public const string AccessTokenName = "access-token";
 
+    /// <summary>The password of an IMAP/SMTP mailbox (connected mailbox) — usually an application password.</summary>
+    public const string MailPasswordName = "mail-password";
+
     public static SecretKey RefreshToken(Guid tenantId, Guid accountId) => new(tenantId, Scope, accountId, RefreshTokenName);
 
     public static SecretKey AccessToken(Guid tenantId, Guid accountId) => new(tenantId, Scope, accountId, AccessTokenName);
+
+    public static SecretKey MailPassword(Guid tenantId, Guid accountId) => new(tenantId, Scope, accountId, MailPasswordName);
 
     /// <summary>
     /// Runs a vault call OUTSIDE the ambient transaction. The vault has its own DbContext, so

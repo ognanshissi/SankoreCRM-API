@@ -836,8 +836,17 @@ public static class Permissions
     /// without it is an institution choosing to keep personal agendas out of the CRM.
     /// </summary>
     public static readonly PermissionItem CanUseConnectedAccounts =
-        new("ConnectedAccounts.Use", "Connect one's own Microsoft and Google accounts (agendas, contacts)",
+        new("ConnectedAccounts.Use", "Connect one's own Microsoft, Google and IMAP accounts (agendas, contacts, mailbox)",
             ApplicationModules.Integration, "ConnectedAccounts.Use");
+
+    /// <summary>
+    /// Writing the institution's e-mail templates — what every agent may start a message from
+    /// (connected mailbox, lot 3). Using a template needs only <see cref="CanUseConnectedAccounts"/>;
+    /// writing one is a communication decision, so no default role holds it — the administrator does.
+    /// </summary>
+    public static readonly PermissionItem CanManageMailTemplates =
+        new("MailTemplates.Manage", "Write the institution's e-mail templates",
+            ApplicationModules.Integration, "MailTemplates.Manage");
 
     public static readonly PermissionItem CanConfigureWhatsAppBot =
         new("WhatsApp.Bot.Config", "Configure the WhatsApp bot per product and switch it on",
@@ -1130,6 +1139,7 @@ public static class Permissions
         CanConfigureWhatsApp,
         CanConfigureWhatsAppBot,
         CanUseConnectedAccounts,
+        CanManageMailTemplates,
 
         // Insurance family (ASS-11), plus Ins.Product.View, Ins.Statement.Finalise and the
         // complaints pair — see their own remarks for why the specification's table of seven

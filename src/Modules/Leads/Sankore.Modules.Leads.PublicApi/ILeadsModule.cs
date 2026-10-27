@@ -157,6 +157,22 @@ public interface ILeadsModule
         Guid tenantId, string phoneNumber, CancellationToken ct);
 
     /// <summary>
+    /// Which leads carry these e-mail addresses (connected mailbox, lot 2) — so a synced e-mail is
+    /// kept only when it was exchanged with somebody the CRM knows.
+    ///
+    /// <para>
+    /// A BATCH, because one page of a mailbox names dozens of addresses and a call per address
+    /// would be a query per address. The index is computed here under M13's key, for the reason
+    /// <see cref="FindOpenLeadsByPhoneAsync"/> gives. EVERY non-anonymised lead, whatever its
+    /// status: an exchange with a lost or converted lead is still part of its history. What comes
+    /// back is the address as the caller gave it (lower-cased) and an id — nothing the caller did
+    /// not already hold.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<LeadEmailMatch>> MatchLeadsByEmailsAsync(
+        Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken ct);
+
+    /// <summary>
     /// The requests a known customer currently has in progress (BNF-B-22) — what the client record
     /// shows so an advisor opening it can see "this client is already asking for a loan" instead of
     /// starting a second one.
@@ -316,6 +332,9 @@ public enum PhoneSlot
 /// — which M13 documents as ordinary, and which the caller must treat as "outside every
 /// restricted perimeter" rather than as "inside all of them".
 /// </param>
+/// <param name="Email">The address as asked, trimmed and lower-cased.</param>
+public sealed record LeadEmailMatch(string Email, Guid LeadId);
+
 public sealed record LeadPhoneMatch(
     Guid LeadId,
     string FullName,

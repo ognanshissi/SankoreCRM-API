@@ -1,10 +1,12 @@
 namespace Sankore.Modules.Customers.Tests.Infrastructure;
 
 using FluentAssertions;
+using NSubstitute;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Crypto;
+using Sankore.Shared.Kernel.Authorization;
 using Xunit;
 
 /// <summary>
@@ -105,6 +107,53 @@ public sealed class FindMatchesTests : IDisposable
     }
 
     // ── Matching ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_batch_of_addresses_answers_the_live_clients_holding_them()
+    {
+        // Connected mailbox, lot 2: one question for a whole page of a mailbox.
+        var aya = WithContacts("CLI-0001", email: "aya@example.ci");
+        var archived = WithContacts("CLI-0002", email: "old@example.ci", status: ClientStatus.Archived);
+        var moved = WithContacts("CLI-0003", email: "moved@example.ci", closeContacts: true);
+        await SeedAsync(aya, archived, moved);
+
+        await using var db = _factory.CreateContext();
+        var matches = await Facade(db).MatchClientsByEmailsAsync(
+            _tenant, ["AYA@example.ci", "old@example.ci", "moved@example.ci", "nobody@example.ci"], CancellationToken.None);
+
+        matches.Should().ContainSingle();
+        matches[0].Should().Be(new PublicApi.ClientEmailMatch("aya@example.ci", aya.Id));
+
+        (await Facade(db).MatchClientsByEmailsAsync(Guid.NewGuid(), ["aya@example.ci"], CancellationToken.None))
+            .Should().BeEmpty("another tenant's client is never answered");
+    }
+
+    [Fact]
+    public async Task The_address_for_a_message_is_given_only_inside_the_perimeter_and_never_to_a_restricted_person()
+    {
+        // Connected mailbox: « Envoyer un e-mail » on the client record names the record, M01 addresses it.
+        var aya = WithContacts("CLI-0001", email: "aya@example.ci");
+        var restricted = WithContacts("CLI-0002", email: "koffi@example.ci");
+        restricted.RestrictProcessing(DateTimeOffset.UtcNow);
+        var silent = WithContacts("CLI-0003", phone: "+2250700000001");
+        await SeedAsync(aya, restricted, silent);
+
+        var scope = Substitute.For<IAgencyScopeProvider>();
+        scope.CanAccessAgencyAsync(_tenant, Actor, _agency, Arg.Any<CancellationToken>()).Returns(true);
+
+        await using var db = _factory.CreateContext();
+        var facade = new CustomersModuleFacade(
+            db, new UnusedLeadConversion(), Indexer, TestHoldingSync.For(db, _tenant), TestDoubles.ClientEmails(db),
+            TestDoubles.RemoteIdentity(db), TestDoubles.ReadIdentity(db), TestDoubles.ClientSms(db), Encryptor, scope);
+
+        (await facade.ResolveEmailForMailAsync(_tenant, aya.Id, Actor, CancellationToken.None)).Value.Should().Be("aya@example.ci");
+        (await facade.ResolveEmailForMailAsync(_tenant, aya.Id, Guid.NewGuid(), CancellationToken.None)).Error
+            .Should().Be(CustomerErrors.ClientNotFound, "another branch's agent learns nothing, not even that the client exists");
+        (await facade.ResolveEmailForMailAsync(_tenant, restricted.Id, Actor, CancellationToken.None)).Error
+            .Should().Be(CustomerErrors.ProcessingRestricted);
+        (await facade.ResolveEmailForMailAsync(_tenant, silent.Id, Actor, CancellationToken.None)).Error
+            .Should().Be(CustomerErrors.EmailMissing);
+    }
 
     [Fact]
     public async Task Matches_on_a_phone_number()

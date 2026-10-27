@@ -23,6 +23,8 @@
     <PackageReference Include="CsvHelper" />
     <!-- SFTP deposit of the batch files (INT-24). Version pinned centrally. -->
     <PackageReference Include="SSH.NET" />
+    <!-- IMAP/SMTP mailboxes of the connected mailbox. Same version as Notifications, pinned centrally. -->
+    <PackageReference Include="MailKit" />
   </ItemGroup>
 
   <ItemGroup>

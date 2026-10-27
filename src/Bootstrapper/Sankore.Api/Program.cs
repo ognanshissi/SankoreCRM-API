@@ -245,6 +245,37 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
             }));
 
+    // Connecting an IMAP/SMTP mailbox makes THIS server log into a host the user typed, with a
+    // password the user typed: without a ceiling it is a password-guessing relay against any mail
+    // server on the internet. Per user — the IP is a shared office NAT here — 10 tries a minute.
+    options.AddPolicy("mail-server-probe", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? ctx.User.FindFirst("sub")?.Value
+                          ?? ctx.Connection.RemoteIpAddress?.ToString()
+                          ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 10,
+                QueueLimit = 0,
+            }));
+
+    // Sending from a connected mailbox: the user's own address, but the CRM's server pressing the
+    // button — a ceiling keeps a stolen session from turning it into a spam relay. Per user.
+    options.AddPolicy("mail-send", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? ctx.User.FindFirst("sub")?.Value
+                          ?? ctx.Connection.RemoteIpAddress?.ToString()
+                          ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 30,
+                QueueLimit = 0,
+            }));
+
     // Strict limit for unauthenticated auth endpoints (login, forgot-password, etc.)
     // 20 requests per minute per IP address — mitigates brute-force and enumeration attacks.
     options.AddPolicy("auth", ctx =>
@@ -509,6 +540,9 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.ClientComplaintTaskConsumer>();
     x.AddConsumer<Sankore.Modules.Kyc.Features.Retention.ClientAnonymizedKycConsumer>();
     x.AddConsumer<Sankore.Modules.Integration.Features.Telephony.Recordings.LeadErasedRecordingConsumer>();
+    // Connected mailbox: the e-mails kept for an erased lead or client go with it.
+    x.AddConsumer<Sankore.Modules.Integration.Features.ConnectedAccounts.LeadErasedMailConsumer>();
+    x.AddConsumer<Sankore.Modules.Integration.Features.ConnectedAccounts.ClientAnonymizedMailConsumer>();
 
     // TEL-B-19 : la qualification d'un appel rafraîchit le jour de cet appel dans le modèle de
     // lecture des indicateurs. Ce n'est PAS un incrément — l'événement dit quel jour a changé, et
@@ -1194,6 +1228,11 @@ if (emitOpenApiTo is null) {
             Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator.RecurringJobId,
             job => job.ExecuteAsync(),
             Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedCalendarsOrchestrator.CronExpression);
+
+        AddOrUpdate<Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedMailboxesOrchestrator>(
+            Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedMailboxesOrchestrator.RecurringJobId,
+            job => job.ExecuteAsync(),
+            Sankore.Modules.Integration.Features.ConnectedAccounts.SyncConnectedMailboxesOrchestrator.CronExpression);
 
         AddOrUpdate<Sankore.Modules.Integration.Features.Sync.IntegrationSyncOrchestrator>(
             Sankore.Modules.Integration.Features.Sync.IntegrationSyncOrchestrator.RecurringJobId,
