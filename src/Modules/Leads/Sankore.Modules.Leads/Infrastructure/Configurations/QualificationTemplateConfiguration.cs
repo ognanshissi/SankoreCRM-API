@@ -45,10 +45,15 @@ internal sealed class QualificationTemplateConfiguration : IEntityTypeConfigurat
 
         builder.HasIndex(t => new { t.TenantId, t.Status });
 
-        // Enforces exactly one Published template per product type per tenant at the DB level.
-        builder.HasIndex(t => new { t.TenantId, t.ProductCategory })
+        // One Published template per (tenant, family, product) — owner, 2026-10-27. A family may
+        // carry several, one per product plus one for the family as a whole; NULLS NOT DISTINCT
+        // makes « no product » (and « no family », the generic one) a value of its own, so two
+        // family-level or two generic templates cannot both be live either.
+        builder.HasIndex(t => new { t.TenantId, t.ProductCategory, t.ProductCode })
                .IsUnique()
-               .HasFilter("product_category IS NOT NULL AND status = 'Published'");
+               .AreNullsDistinct(false)
+               .HasFilter("status = 'Published'")
+               .HasDatabaseName("ux_qualification_templates_published_scope");
     }
 }
 

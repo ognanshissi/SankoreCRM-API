@@ -5,8 +5,9 @@ using Sankore.Shared.Kernel;
 /// <summary>
 /// Tenant-configurable qualification questionnaire scoped to a financial product.
 /// Lifecycle: Draft → Published → Archived.
-/// Only one <see cref="TemplateStatus.Published"/> template can exist per
-/// <see cref="ProductCategory"/> per tenant at any time.
+/// Only one <see cref="TemplateStatus.Published"/> template can exist per tenant for a given
+/// (<see cref="ProductCategory"/>, <see cref="ProductCode"/>) at any time — several per family when
+/// their products differ (owner, 2026-10-27).
 /// </summary>
 public sealed class QualificationTemplate : AggregateRoot
 {

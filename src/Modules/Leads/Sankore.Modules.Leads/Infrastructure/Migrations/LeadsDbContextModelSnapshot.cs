@@ -2930,13 +2930,15 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_qualification_templates");
 
-                    b.HasIndex("TenantId", "ProductCategory")
-                        .IsUnique()
-                        .HasDatabaseName("ix_qualification_templates_tenant_id_product_category")
-                        .HasFilter("product_category IS NOT NULL AND status = 'Published'");
-
                     b.HasIndex("TenantId", "Status")
                         .HasDatabaseName("ix_qualification_templates_tenant_id_status");
+
+                    b.HasIndex("TenantId", "ProductCategory", "ProductCode")
+                        .IsUnique()
+                        .HasDatabaseName("ux_qualification_templates_published_scope")
+                        .HasFilter("status = 'Published'");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("TenantId", "ProductCategory", "ProductCode"), false);
 
                     b.ToTable("qualification_templates", "leads");
                 });

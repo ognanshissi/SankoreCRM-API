@@ -27,31 +27,30 @@ internal sealed class PublishQualificationTemplateHandler(LeadsDbContext db, Tim
         if (canPublish.IsFailure)
             return canPublish;
 
-        // Auto-archive the template currently live for this product category, so at most
-        // one is Published per (TenantId, ProductCategory).
+        // Auto-archive the template currently live for the same scope — same family AND same
+        // product (owner, 2026-10-27) — so at most one is Published per (tenant, family, product).
+        // A family's other products, and the family-level template, stay live.
         //
         // This is flushed BEFORE the new one is published. A single SaveChanges would let
         // EF order the two UPDATEs freely, and publishing first trips the filtered unique
-        // index on (tenant_id, product_category) WHERE status = 'Published'. Both writes
+        // index on (tenant_id, product_category, product_code) WHERE status = 'Published'. Both writes
         // still commit or roll back together under the ambient TransactionScope that
         // TransactionBehavior opens for every ICommand.
-        if (template.ProductCategory is not null)
+        var superseded = await db.QualificationTemplates
+            .AsTracking()
+            .Where(t => t.Id != cmd.TemplateId
+                        && t.TenantId == template.TenantId
+                        && t.ProductCategory == template.ProductCategory
+                        && t.ProductCode == template.ProductCode
+                        && t.Status == TemplateStatus.Published)
+            .ToListAsync(ct);
+
+        if (superseded.Count > 0)
         {
-            var superseded = await db.QualificationTemplates
-                .AsTracking()
-                .Where(t => t.Id != cmd.TemplateId
-                            && t.TenantId == template.TenantId
-                            && t.ProductCategory == template.ProductCategory
-                            && t.Status == TemplateStatus.Published)
-                .ToListAsync(ct);
+            foreach (var prev in superseded)
+                prev.Archive();
 
-            if (superseded.Count > 0)
-            {
-                foreach (var prev in superseded)
-                    prev.Archive();
-
-                await db.SaveChangesAsync(ct);
-            }
+            await db.SaveChangesAsync(ct);
         }
 
         var result = template.Publish(clock.GetUtcNow());

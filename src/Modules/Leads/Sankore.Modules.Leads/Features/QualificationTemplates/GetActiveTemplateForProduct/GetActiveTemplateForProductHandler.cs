@@ -16,7 +16,9 @@ internal sealed class GetActiveTemplateForProductHandler(LeadsDbContext db)
             .Include(t => t.Sections)
             .Include(t => t.Questions)
             .FirstOrDefaultAsync(
-                t => t.ProductCategory == query.ProductCategory && t.Status == TemplateStatus.Published, ct);
+                // The family's own template: a family now carries one per product besides it.
+                t => t.ProductCategory == query.ProductCategory && t.ProductCode == null
+                  && t.Status == TemplateStatus.Published, ct);
 
         if (template is null)
             return Result.Fail<QualificationTemplateDto>("NO_ACTIVE_TEMPLATE_FOR_PRODUCT");
