@@ -2336,6 +2336,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("step_id");
 
+                    b.Property<Guid?>("TemplateVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_version_id");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -2584,6 +2588,51 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasFilter("product_code IS NOT NULL");
 
                     b.ToTable("project_templates", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplateVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsBaseline")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_baseline");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<string>("Snapshot")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("snapshot");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_template_versions");
+
+                    b.HasIndex("TemplateId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_project_template_versions_template_id_number");
+
+                    b.ToTable("project_template_versions", "leads");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.QualificationQuestion", b =>
@@ -4843,6 +4892,16 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         });
 
                     b.Navigation("Steps");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplateVersion", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.ProjectTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_template_versions_project_templates_template_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.QualificationQuestion", b =>

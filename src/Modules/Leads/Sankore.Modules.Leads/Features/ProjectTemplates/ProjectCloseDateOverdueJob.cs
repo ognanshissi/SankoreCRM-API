@@ -72,7 +72,7 @@ public sealed class ProjectCloseDateOverdueJob(IServiceScopeFactory scopeFactory
         var created = 0;
         foreach (var project in late)
         {
-            var template = await templates.ResolveAsync(project.Product, ct);
+            var template = await templates.ForProjectAsync(project, ct);
             if (!template.CriticalCloseDate || !template.TracksForecast)
                 continue;
 

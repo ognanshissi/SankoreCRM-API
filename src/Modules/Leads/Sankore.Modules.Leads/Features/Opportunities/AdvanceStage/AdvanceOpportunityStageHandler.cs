@@ -33,7 +33,7 @@ internal sealed class AdvanceOpportunityStageHandler(
 
         if (templates is not null && transition is not null)
         {
-            var template = await templates.ResolveAsync(opportunity.Product, ct);
+            var template = await templates.ForProjectAsync(opportunity, ct);
             var step = template.Steps.FirstOrDefault(s => s.Phase == cmd.NewStage);
             if (step is not null)
             {

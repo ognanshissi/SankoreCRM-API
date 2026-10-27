@@ -40,7 +40,10 @@ internal sealed class ListOpportunitiesHandler(
                 o.Title, o.Description, o.Product, o.EstimatedAmount,
                 o.Stage, o.Probability, o.ExpectedCloseDate, o.OwnerId,
                 o.CreatedAt, o.UpdatedAt, o.ClosedAt, o.CloseReason,
-                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt, o.StepId))
+                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt, o.StepId)
+            {
+                TemplateVersionId = o.TemplateVersionId,
+            })
             .ToListAsync(ct);
 
         IReadOnlyList<OpportunityDto> enriched = templates is null ? items : await items.WithStepsAsync(templates, ct);

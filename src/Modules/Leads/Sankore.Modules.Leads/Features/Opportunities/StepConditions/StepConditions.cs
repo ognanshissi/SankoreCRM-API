@@ -29,7 +29,7 @@ internal sealed class SetProjectChecklistItemHandler(
             return Result.Fail(OpportunityErrors.NotFound);
 
         // A point of ANOTHER template is refused: it would sit in the list, ticked for nothing.
-        var template = await templates.ResolveAsync(project.Product, ct);
+        var template = await templates.ForProjectAsync(project, ct);
         if (!template.Steps.Any(s => (s.Checklist ?? []).Any(i => i.Id == cmd.ItemId)))
             return Result.Fail(ProjectTemplateErrors.ChecklistItemUnknown);
 
@@ -64,7 +64,7 @@ internal sealed class RestartProjectWorkflowHandler(
         if (project.Stage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
             return Result.Fail(OpportunityErrors.AlreadyClosed);
 
-        var template = await templates.ResolveAsync(project.Product, ct);
+        var template = await templates.ForProjectAsync(project, ct);
         var step = template.CurrentStep(project.StepId, project.Stage);
         if (step is null)
             return Result.Fail(ProjectTemplateErrors.WorkflowNotRestartable);

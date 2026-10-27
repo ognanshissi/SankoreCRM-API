@@ -62,7 +62,13 @@ public sealed record OpportunityDto(
     IReadOnlyList<ProjectFieldDefinition>? Fields = null,
     /// <param name="CustomFields">Their values, keyed by field key — files are in Attachments.</param>
     System.Text.Json.JsonElement? CustomFields = null,
-    IReadOnlyList<ProjectFields.ProjectAttachmentDto>? Attachments = null);
+    IReadOnlyList<ProjectFields.ProjectAttachmentDto>? Attachments = null,
+    /// <param name="TemplateVersionId">The version of its template it follows — see <c>Opportunity.TemplateVersionId</c>.</param>
+    Guid? TemplateVersionId = null,
+    /// <param name="TemplateVersion">That version's number; null on the built-in or a template never saved since versions.</param>
+    int? TemplateVersion = null,
+    /// <param name="LatestTemplateVersion">The template's latest number: above <see cref="TemplateVersion"/>, the page offers the move.</param>
+    int? LatestTemplateVersion = null);
 
 /// <param name="State">NotStarted, InProgress, Approved, Refused or Unknown — null when not read.</param>
 public sealed record ProjectWorkflowRunDto(
@@ -138,7 +144,7 @@ internal static class OpportunityStepEnrichment
         return result;
     }
 
-    /// <summary>Adds each project's template and current step. One resolution per distinct product.</summary>
+    /// <summary>Adds each project's template — the version it follows — and current step.</summary>
     public static async Task<IReadOnlyList<OpportunityDto>> WithStepsAsync(
         this IEnumerable<OpportunityDto> items,
         ProjectTemplates.ProjectTemplateResolver resolver,
@@ -147,9 +153,11 @@ internal static class OpportunityStepEnrichment
         var result = new List<OpportunityDto>();
         foreach (var item in items)
         {
-            var template = await resolver.ResolveAsync(item.Product, ct);
+            var template = await resolver.ForProjectAsync(item.TemplateVersionId, item.Product, ct);
             result.Add(item with
             {
+                TemplateVersion = template.Version,
+                LatestTemplateVersion = template.LatestVersion,
                 TemplateId    = template.Id,
                 TemplateName  = template.Name,
                 CurrentStepId = template.CurrentStep(item.StepId, item.Stage)?.Id,

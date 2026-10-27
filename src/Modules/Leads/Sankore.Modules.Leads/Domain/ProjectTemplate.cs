@@ -352,6 +352,13 @@ public sealed class ProjectTemplate : AggregateRoot
         new(new Guid("6f1c0a10-0000-4000-8000-000000000004"), "Proposition", OpportunityStage.Proposal, 60, "Présenter l'offre"),
         new(new Guid("6f1c0a10-0000-4000-8000-000000000005"), "Négociation", OpportunityStage.Negotiation, 80, "Fixer la date de signature"),
     ];
+
+    /// <summary>
+    /// The « version » of the built-in default a project created on it follows. The built-in is
+    /// code and never changes, but without a mark of its own such a project would move onto the
+    /// first template the tenant saves for its product.
+    /// </summary>
+    public static readonly Guid BuiltInVersionId = new("6f1c0a10-0000-4000-8000-0000000000f0");
 }
 
 /// <summary>One step of a <see cref="ProjectTemplate"/>. Keyed by (template, id): see the configuration.</summary>

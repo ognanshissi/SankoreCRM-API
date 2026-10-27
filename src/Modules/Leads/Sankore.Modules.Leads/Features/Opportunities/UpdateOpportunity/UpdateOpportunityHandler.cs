@@ -67,6 +67,13 @@ internal sealed class UpdateOpportunityHandler(
             opportunity.SetProductLine(
                 await ProductLines.ProductLineLookup.ResolveAsync(administration, opportunity.TenantId, opportunity.Product, ct));
 
+        // Another product is another template: the project follows its latest version. Its step
+        // is left as stored — CurrentStep reads it by phase when the new template lacks it, as
+        // a product change always did.
+        if (templates is not null && opportunity.Product != previousProduct)
+            opportunity.FollowTemplateVersion(
+                (await templates.ResolveAsync(opportunity.Product, ct)).AttachableVersionId, clock.GetUtcNow());
+
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

@@ -44,6 +44,16 @@ public sealed class Opportunity : AggregateRoot
     /// </summary>
     public Guid? StepId { get; private set; }
 
+    /// <summary>
+    /// The version of its template the project follows (product owner, 2026-10-26): set at
+    /// creation, on a product change, and when somebody moves it onto the latest version — never
+    /// by editing the template. Null for a project created before versions, or on a template never
+    /// saved since: it reads its template's version 1, see <see cref="ProjectTemplateVersion"/>.
+    /// <see cref="ProjectTemplate.BuiltInVersionId"/> for the built-in default, which is not stored.
+    /// Not a foreign key: a deleted template leaves the project to its product's next template.
+    /// </summary>
+    public Guid? TemplateVersionId { get; private set; }
+
     public double Probability { get; private set; }
     public DateTimeOffset? ExpectedCloseDate { get; private set; }
     public Guid? OwnerId { get; private set; }
@@ -274,6 +284,14 @@ public sealed class Opportunity : AggregateRoot
         UpdatedAt   = now;
 
         return Result.Ok();
+    }
+
+    /// <summary>Attaches the project to a version of its template — see <see cref="TemplateVersionId"/>.</summary>
+    public void FollowTemplateVersion(Guid? versionId, DateTimeOffset now)
+    {
+        if (TemplateVersionId == versionId) return;
+        TemplateVersionId = versionId;
+        UpdatedAt = now;
     }
 
     /// <summary>

@@ -82,7 +82,7 @@ internal sealed class GetProjectValidationsHandler(
         }
 
         var byInstance = decisions.ToDictionary(d => d.InstanceId);
-        var template = await templates.ResolveAsync(project.Product, ct);
+        var template = await templates.ForProjectAsync(project, ct);
 
         return Result.Ok<IReadOnlyList<ProjectValidationDto>>(project.WorkflowRuns
             .OrderByDescending(r => r.StartedAt)

@@ -24,7 +24,10 @@ internal sealed class GetOpportunityHandler(
                 o.Title, o.Description, o.Product, o.EstimatedAmount,
                 o.Stage, o.Probability, o.ExpectedCloseDate, o.OwnerId,
                 o.CreatedAt, o.UpdatedAt, o.ClosedAt, o.CloseReason,
-                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt, o.StepId))
+                o.NextStep, o.NextStepDueOn, o.SeparateNeedConfirmedAt, o.StepId)
+            {
+                TemplateVersionId = o.TemplateVersionId,
+            })
             .FirstOrDefaultAsync(ct);
 
         if (opp is null)

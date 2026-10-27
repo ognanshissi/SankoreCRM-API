@@ -42,7 +42,7 @@ internal sealed class MoveOpportunityToStepHandler(
         if (opportunity.IsStale(cmd.ExpectedUpdatedAt))
             return Result.Fail(LeadConcurrency.ConflictError);
 
-        var template = await templates.ResolveAsync(opportunity.Product, ct);
+        var template = await templates.ForProjectAsync(opportunity, ct);
         var step = template.Steps.FirstOrDefault(s => s.Id == cmd.StepId);
         if (step is null)
             return Result.Fail(ProjectTemplateErrors.StepNotInTemplate);

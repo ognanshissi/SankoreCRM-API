@@ -37,6 +37,16 @@ internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, Time
         IReadOnlyList<SectionInput>? sections,
         IReadOnlyList<QuestionInput>? questions)
     {
+        // Every question is created under a new id, the update included (it deletes and rebuilds),
+        // while a rule names its trigger by the id the editor read. Without this map a rule saved
+        // twice points at a question that no longer exists: a « Show » rule then hides its
+        // question for good, on every questionnaire published from the template.
+        var idMap = new Dictionary<Guid, Guid>();
+        void Remember(QuestionInput input)
+        {
+            if (input.Id is { } sentId) idMap[sentId] = template.Questions[^1].Id;
+        }
+
         if (sections is { Count: > 0 })
         {
             foreach (var sectionInput in sections)
@@ -57,6 +67,7 @@ internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, Time
                         rules: rules);
                     if (qResult.IsFailure)
                         return Result.Fail<QualificationTemplate>(qResult.Error!);
+                    Remember(q);
                 }
             }
         }
@@ -73,9 +84,12 @@ internal sealed class CreateQualificationTemplateHandler(LeadsDbContext db, Time
                     rules: rules);
                 if (qResult.IsFailure)
                     return Result.Fail<QualificationTemplate>(qResult.Error!);
-                
+                Remember(q);
             }
         }
+
+        foreach (var question in template.Questions)
+            question.RemapRuleTriggers(idMap);
 
         return Result.Ok(template);
     }

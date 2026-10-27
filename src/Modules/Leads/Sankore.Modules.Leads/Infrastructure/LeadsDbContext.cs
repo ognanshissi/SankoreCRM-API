@@ -63,6 +63,7 @@ public sealed class LeadsDbContext(
     public DbSet<SlaConfig> SlaConfigs => Set<SlaConfig>();
     public DbSet<Opportunity> Opportunities => Set<Opportunity>();
     public DbSet<ProjectTemplate> ProjectTemplates => Set<ProjectTemplate>();
+    public DbSet<ProjectTemplateVersion> ProjectTemplateVersions => Set<ProjectTemplateVersion>();
     public DbSet<NurturingSequence> NurturingSequences => Set<NurturingSequence>();
     public DbSet<NurturingStep> NurturingSteps => Set<NurturingStep>();
     public DbSet<NurturingEnrollment> NurturingEnrollments => Set<NurturingEnrollment>();
@@ -208,6 +209,7 @@ public sealed class LeadsDbContext(
         modelBuilder.Entity<NurturingEnrollment>().HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<Opportunity>().HasQueryFilter(o => o.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ProjectTemplate>().HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ProjectTemplateVersion>().HasQueryFilter(v => v.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<LeadSetting>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<LeadHouseholdMember>().HasQueryFilter(m => m.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<FatcaDeclaration>().HasQueryFilter(d => d.TenantId == tenant.CurrentTenantId);

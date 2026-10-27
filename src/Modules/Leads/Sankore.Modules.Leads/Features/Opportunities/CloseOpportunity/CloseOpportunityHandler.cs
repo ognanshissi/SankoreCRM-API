@@ -54,7 +54,7 @@ internal sealed class CloseOpportunityHandler(
         if (cmd.Outcome == OpportunityStage.ClosedWon && templates is not null && gate is not null
             && opportunity.Stage is not (OpportunityStage.ClosedWon or OpportunityStage.ClosedLost))
         {
-            var template = await templates.ResolveAsync(opportunity.Product, ct);
+            var template = await templates.ForProjectAsync(opportunity, ct);
             var current = template.CurrentStep(opportunity.StepId, opportunity.Stage);
             var allowed = await gate.CheckAsync(
                 opportunity, template,
@@ -69,7 +69,7 @@ internal sealed class CloseOpportunityHandler(
         // owner, 2026-10-24). Read BEFORE closing — a closed project stands on no step.
         var wonTemplate = cmd.Outcome == OpportunityStage.ClosedWon && conversion is not null && templates is not null
             && opportunity.Stage is not (OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
-            ? await templates.ResolveAsync(opportunity.Product, ct)
+            ? await templates.ForProjectAsync(opportunity, ct)
             : null;
 
         var closed = opportunity.Close(cmd.Outcome, clock.GetUtcNow(), cmd.Reason);

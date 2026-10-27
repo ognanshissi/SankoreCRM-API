@@ -30,7 +30,9 @@ public sealed record ProjectTemplateDto(
     /// <summary>The close date is a deadline: required, and an urgent task once it has passed.</summary>
     bool CriticalCloseDate = false,
     /// <summary>The fields its projects carry; a step names those needed to reach it.</summary>
-    IReadOnlyList<ProjectFieldDefinition>? Fields = null);
+    IReadOnlyList<ProjectFieldDefinition>? Fields = null,
+    /// <summary>The latest version, which new projects follow; null before the first save since versions.</summary>
+    int? Version = null);
 
 // ── List ────────────────────────────────────────────────────────────────────────
 
@@ -51,6 +53,10 @@ internal sealed class ListProjectTemplatesHandler(
         ListProjectTemplatesQuery query, CancellationToken ct)
     {
         var templates = await db.ProjectTemplates.AsNoTracking().ToListAsync(ct);
+        var latest = await db.ProjectTemplateVersions.AsNoTracking()
+            .GroupBy(v => v.TemplateId)
+            .Select(g => new { TemplateId = g.Key, Number = g.Max(v => v.Number) })
+            .ToDictionaryAsync(v => v.TemplateId, v => v.Number, ct);
 
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (templates.Any(t => t.ProductCode is not null))
@@ -70,28 +76,30 @@ internal sealed class ListProjectTemplatesHandler(
         }
         else
         {
-            result.Add(ToDto(stored, null));
+            result.Add(ToDto(stored, null, latest));
         }
 
         result.AddRange(templates
             .Where(t => t.ProductCode is null && t.Category is not null)
             .OrderBy(t => t.Category.ToString())
-            .Select(t => ToDto(t, null)));
+            .Select(t => ToDto(t, null, latest)));
 
         result.AddRange(templates
             .Where(t => t.ProductCode is not null)
             .OrderBy(t => t.ProductCode)
-            .Select(t => ToDto(t, names.GetValueOrDefault(t.ProductCode!))));
+            .Select(t => ToDto(t, names.GetValueOrDefault(t.ProductCode!), latest)));
 
         return Result.Ok<IReadOnlyList<ProjectTemplateDto>>(result);
     }
 
-    private static ProjectTemplateDto ToDto(ProjectTemplate t, string? productName)
+    private static ProjectTemplateDto ToDto(
+        ProjectTemplate t, string? productName, Dictionary<Guid, int> latest)
     {
         var resolved = ProjectTemplateResolver.From(t);
         return new ProjectTemplateDto(
             t.Id, t.Name, resolved.Scope, t.Category, t.ProductCode, productName, false, resolved.Steps, t.UpdatedAt,
-            t.TracksForecast, t.AmountKind, t.CriticalCloseDate, t.Fields);
+            t.TracksForecast, t.AmountKind, t.CriticalCloseDate, t.Fields,
+            latest.TryGetValue(t.Id, out var v) ? v : null);
     }
 }
 
@@ -155,6 +163,7 @@ internal sealed class CreateProjectTemplateHandler(
             return Result.Fail<Guid>(ProjectTemplateErrors.QuestionnaireFormMissing);
 
         db.ProjectTemplates.Add(created.Value!);
+        await ProjectTemplateVersioning.RecordAsync(db, created.Value!, clock.GetUtcNow(), ct);
         await db.SaveChangesAsync(ct);
         return Result.Ok(created.Value!.Id);
     }
@@ -182,7 +191,8 @@ internal sealed class UpdateProjectTemplateHandler(
     LeadsDbContext db,
     TimeProvider clock,
     IAdministrationModule? administration = null,
-    ITenantContext? tenant = null)
+    ITenantContext? tenant = null,
+    ProjectTemplateResolver? templates = null)
     : IRequestHandler<UpdateProjectTemplateCommand, Result>
 {
     public async Task<Result> Handle(UpdateProjectTemplateCommand cmd, CancellationToken ct)
@@ -194,7 +204,10 @@ internal sealed class UpdateProjectTemplateHandler(
         if (template is null)
             return Result.Fail(ProjectTemplateErrors.NotFound);
 
-        var updated = template.Update(cmd.Name, cmd.Steps, clock.GetUtcNow(), cmd.Forecast, cmd.Fields);
+        var now = clock.GetUtcNow();
+        await ProjectTemplateVersioning.KeepBaselineAsync(db, template, now, ct, templates);
+
+        var updated = template.Update(cmd.Name, cmd.Steps, now, cmd.Forecast, cmd.Fields);
         if (updated.IsFailure)
             return updated;
 
@@ -205,6 +218,7 @@ internal sealed class UpdateProjectTemplateHandler(
                 return Result.Fail(ProjectTemplateErrors.QuestionnaireFormMissing);
         }
 
+        await ProjectTemplateVersioning.RecordAsync(db, template, now, ct);
         await db.SaveChangesAsync(ct);
         return Result.Ok();
     }

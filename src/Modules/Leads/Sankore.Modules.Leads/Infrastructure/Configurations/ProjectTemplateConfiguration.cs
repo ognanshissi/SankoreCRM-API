@@ -52,3 +52,18 @@ internal sealed class ProjectTemplateConfiguration : IEntityTypeConfiguration<Pr
         builder.Ignore(t => t.DomainEvents);
     }
 }
+
+internal sealed class ProjectTemplateVersionConfiguration : IEntityTypeConfiguration<ProjectTemplateVersion>
+{
+    public void Configure(EntityTypeBuilder<ProjectTemplateVersion> builder)
+    {
+        builder.ToTable("project_template_versions");
+        builder.HasKey(v => v.Id);
+        builder.Property(v => v.Id).ValueGeneratedNever();
+        builder.Property(v => v.Snapshot).HasColumnType("jsonb").IsRequired();
+        builder.HasIndex(v => new { v.TemplateId, v.Number }).IsUnique();
+        // A deleted template takes its versions with it; its projects fall back to their product's
+        // next template, as they did before versions.
+        builder.HasOne<ProjectTemplate>().WithMany().HasForeignKey(v => v.TemplateId).OnDelete(DeleteBehavior.Cascade);
+    }
+}

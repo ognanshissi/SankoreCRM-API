@@ -108,7 +108,7 @@ internal sealed class SetProjectFieldsHandler(LeadsDbContext db, ProjectTemplate
         var project = await db.Opportunities.AsTracking().FirstOrDefaultAsync(o => o.Id == cmd.OpportunityId, ct);
         if (project is null) return Result.Fail(OpportunityErrors.NotFound);
 
-        var template = await templates.ResolveAsync(project.Product, ct);
+        var template = await templates.ForProjectAsync(project, ct);
         var form = ProjectFieldForms.FormOf(template.Fields ?? []);
 
         var merged = CustomFieldValues.Apply(form, project.CustomFieldsJson, cmd.Values, null, enforceRequired: false, isCreate: false);
@@ -163,7 +163,7 @@ internal sealed class ProjectAttachmentHandlers(
         if (project.Stage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
             return Result.Fail<ProjectAttachmentDto>(OpportunityErrors.AlreadyClosed);
 
-        var template = await templates.ResolveAsync(project.Product, ct);
+        var template = await templates.ForProjectAsync(project, ct);
         var field = (template.Fields ?? []).FirstOrDefault(f => f.Key == cmd.FieldKey);
         if (field is null || field.Type != ProjectFieldType.Attachment)
             return Result.Fail<ProjectAttachmentDto>(FieldNotAttachment);

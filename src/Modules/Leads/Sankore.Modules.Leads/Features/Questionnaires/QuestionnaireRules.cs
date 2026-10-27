@@ -10,10 +10,34 @@ using Sankore.Modules.Leads.Domain;
 /// </summary>
 internal static class QuestionnaireRules
 {
+    /// <summary>
+    /// A question is hidden when one of its « Hide » rules fires or one of its « Show » rules does
+    /// not — the reading the form renderer applies on screen. Ignoring « Show » here made a
+    /// required question shown only on some answer required whatever the answer, so the form the
+    /// agent saw could never be saved.
+    /// </summary>
     internal static HashSet<Guid> HiddenQuestionIds(
         IReadOnlyList<QualificationQuestion> questions,
         IReadOnlyDictionary<Guid, string> answerMap)
-        => Triggered(questions, answerMap, QuestionRuleAction.Hide);
+    {
+        var hidden = new HashSet<Guid>();
+        foreach (var q in questions)
+            foreach (var rule in q.GetRules())
+            {
+                var fires = Fires(rule.TriggerQuestionId, rule.TriggerValue, answerMap);
+                if ((rule.Action == QuestionRuleAction.Hide && fires)
+                    || (rule.Action == QuestionRuleAction.Show && !fires))
+                {
+                    hidden.Add(q.Id);
+                    break;
+                }
+            }
+        return hidden;
+    }
+
+    private static bool Fires(Guid triggerQuestionId, string triggerValue, IReadOnlyDictionary<Guid, string> answerMap)
+        => answerMap.TryGetValue(triggerQuestionId, out var v)
+           && v.Equals(triggerValue, StringComparison.OrdinalIgnoreCase);
 
     internal static HashSet<Guid> ExtraRequiredQuestionIds(
         IReadOnlyList<QualificationQuestion> questions,
@@ -44,8 +68,7 @@ internal static class QuestionnaireRules
             foreach (var rule in q.GetRules())
             {
                 if (rule.Action != action) continue;
-                if (answerMap.TryGetValue(rule.TriggerQuestionId, out var v) &&
-                    v.Equals(rule.TriggerValue, StringComparison.OrdinalIgnoreCase))
+                if (Fires(rule.TriggerQuestionId, rule.TriggerValue, answerMap))
                 {
                     triggered.Add(q.Id);
                     break;

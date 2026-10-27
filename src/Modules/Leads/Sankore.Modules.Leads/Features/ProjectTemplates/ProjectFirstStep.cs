@@ -3,7 +3,8 @@ namespace Sankore.Modules.Leads.Features.ProjectTemplates;
 using Sankore.Modules.Leads.Domain;
 
 /// <summary>
-/// Puts a new project on the FIRST step of its template. A project was created on the legacy
+/// Attaches a new project to the latest version of its template (product owner, 2026-10-26: later
+/// edits of the template leave it alone) and puts it on that version's FIRST step. A project was created on the legacy
 /// « Prospection » phase at 10 %, with no step: on a template starting at « Recueil du besoin »
 /// (Qualification, 20 %) the board filed it under Prospection and the page showed 10 % « fixée par
 /// l'étape » beside a step that says 20 %.
@@ -20,7 +21,10 @@ internal static class ProjectFirstStep
     {
         if (templates is null) return;
 
-        var first = (await templates.ResolveAsync(project.Product, ct)).Steps.FirstOrDefault();
+        var template = await templates.ResolveAsync(project.Product, ct);
+        project.FollowTemplateVersion(template.AttachableVersionId, now);
+
+        var first = template.Steps.FirstOrDefault();
         if (first is not null)
             project.MoveToStep(first.Id, first.Phase, first.Probability, now);
     }

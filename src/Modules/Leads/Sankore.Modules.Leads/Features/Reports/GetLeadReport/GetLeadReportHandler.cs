@@ -154,10 +154,10 @@ internal sealed class GetLeadReportHandler(
 
         var projectRows = new List<(OpportunityStage Stage, ProjectAmountKind Kind, decimal Amount)>();
         foreach (var r in await projectQuery
-                     .Select(o => new { o.Stage, o.Product, Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m })
+                     .Select(o => new { o.Stage, o.Product, o.TemplateVersionId, Amount = o.EstimatedAmount != null ? o.EstimatedAmount.Amount : 0m })
                      .ToListAsync(ct))
         {
-            var kind = templates is null ? ProjectAmountKind.Generic : (await templates.ResolveAsync(r.Product, ct)).AmountKind;
+            var kind = templates is null ? ProjectAmountKind.Generic : (await templates.ForProjectAsync(r.TemplateVersionId, r.Product, ct)).AmountKind;
             projectRows.Add((r.Stage, kind, r.Amount));
         }
 
@@ -278,6 +278,7 @@ internal sealed class GetLeadReportHandler(
             .Select(o => new
             {
                 o.Product,
+                o.TemplateVersionId,
                 o.Probability,
                 o.CustomerEntityId,
                 Close = o.ExpectedCloseDate!.Value,
@@ -292,7 +293,7 @@ internal sealed class GetLeadReportHandler(
         var tracked = new List<(ProjectAmountKind Kind, Guid? Agency, DateTimeOffset Close, decimal Amount, decimal Weighted)>();
         foreach (var r in rows)
         {
-            var template = templates is null ? null : await templates.ResolveAsync(r.Product, ct);
+            var template = templates is null ? null : await templates.ForProjectAsync(r.TemplateVersionId, r.Product, ct);
             if (template is { TracksForecast: false })
                 continue;
 

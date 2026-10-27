@@ -144,6 +144,17 @@ public static class OpportunitiesEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
 
+        // POST opportunities/{id}/template-version — follow the latest version of its template
+        group.MapPost("{id:guid}/template-version", async (Guid id, ISender sender, CancellationToken ct) =>
+                FieldResult(await sender.Send(new TemplateVersion.FollowLatestTemplateVersionCommand(id), ct)))
+            .WithName("FollowLatestProjectTemplateVersion")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
         // PUT opportunities/{id}/fields — the values of the template's fields (merge: null clears)
         group.MapPut("{id:guid}/fields", async (Guid id, SetProjectFieldsRequest req, ISender sender, CancellationToken ct) =>
                 FieldResult(await sender.Send(new ProjectFields.SetProjectFieldsCommand(id, req.Values ?? new()), ct)))

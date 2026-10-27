@@ -31,6 +31,12 @@ internal sealed record CreateQualificationTemplateCommand(
 /// <param name="MinValue">Minimum value for proportional Numeric scoring.</param>
 /// <param name="MaxValue">Maximum value for proportional Numeric scoring.</param>
 /// <param name="Rules">Conditional visibility / requirement rules.</param>
+/// <param name="Id">
+/// The id the editor knows this question by — the one the template returned on its last read.
+/// A save recreates every question under a new id, so rules naming a sibling by this id are
+/// rewired onto the sibling's new id; a rule naming an id no question of the request carries is
+/// dropped. Null for a question added since the last read.
+/// </param>
 public sealed record QuestionInput(
     string Label,
     QuestionType Type,
@@ -41,7 +47,8 @@ public sealed record QuestionInput(
     string? PlaceholderText = null,
     decimal? MinValue = null,
     decimal? MaxValue = null,
-    IReadOnlyList<RuleInput>? Rules = null);
+    IReadOnlyList<RuleInput>? Rules = null,
+    Guid? Id = null);
 
 /// <param name="Title">Section heading shown to the agent.</param>
 /// <param name="Description">Optional section sub-heading.</param>

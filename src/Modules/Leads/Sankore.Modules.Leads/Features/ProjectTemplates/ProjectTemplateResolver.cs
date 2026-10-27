@@ -33,6 +33,9 @@ public sealed record ProjectStepDto(
 /// <param name="TracksForecast">The projects show a probability and an expected close date — see <c>ProjectTemplate.TracksForecast</c>.</param>
 /// <param name="AmountKind">What the project's amount stands for — see <c>ProjectTemplate.AmountKind</c>.</param>
 /// <param name="CriticalCloseDate">The close date is a deadline — see <c>ProjectTemplate.CriticalCloseDate</c>.</param>
+/// <param name="VersionId">The version read: what a new project is attached to. Null for a template never saved since versions exist (its live state IS its version 1) and for the built-in.</param>
+/// <param name="Version">Its number; null as above.</param>
+/// <param name="LatestVersion">The template's latest number, to offer a project still on an older one the move.</param>
 public sealed record ResolvedProjectTemplate(
     Guid? Id,
     string Name,
@@ -41,8 +44,14 @@ public sealed record ResolvedProjectTemplate(
     bool TracksForecast = true,
     ProjectAmountKind AmountKind = ProjectAmountKind.Generic,
     bool CriticalCloseDate = false,
-    IReadOnlyList<ProjectFieldDefinition>? Fields = null)
+    IReadOnlyList<ProjectFieldDefinition>? Fields = null,
+    Guid? VersionId = null,
+    int? Version = null,
+    int? LatestVersion = null)
 {
+    /// <summary>What a project created or re-attached on this template stores.</summary>
+    public Guid? AttachableVersionId => Id is null ? ProjectTemplate.BuiltInVersionId : VersionId;
+
     /// <summary>
     /// The step a project stands on: its own when this template still has it, else the last step
     /// whose phase is not past the project's — so a project moved by phase only, or whose step was
@@ -73,6 +82,13 @@ public sealed record ResolvedProjectTemplate(
 /// <b>Scoped, and memoised per label</b>: a list of forty projects on six products costs six
 /// resolutions and one read of the templates, not forty of each.
 /// </para>
+/// <para>
+/// <b>Two questions, two methods.</b> <see cref="ResolveAsync"/> answers « which template would a
+/// project on this product follow TODAY » — the latest version, for a creation form or a new
+/// project. <see cref="ForProjectAsync"/> answers « what does THIS project follow » — the version
+/// it is attached to (product owner, 2026-10-26). Anything that gates, places or describes an
+/// existing project must ask the second one, or editing a template would reach it.
+/// </para>
 /// </summary>
 internal sealed class ProjectTemplateResolver(
     LeadsDbContext db,
@@ -82,6 +98,7 @@ internal sealed class ProjectTemplateResolver(
     private List<ProjectTemplate>? _templates;
     private IReadOnlyList<ProductSummary>? _catalogue;
     private readonly Dictionary<string, ResolvedProjectTemplate> _byLabel = new(StringComparer.Ordinal);
+    private List<ProjectTemplateVersion>? _versions;
 
     public async Task<ResolvedProjectTemplate> ResolveAsync(string? product, CancellationToken ct)
     {
@@ -97,23 +114,82 @@ internal sealed class ProjectTemplateResolver(
             ?? (category is null ? null : templates.FirstOrDefault(t => t.ProductCode is null && t.Category == category))
             ?? templates.FirstOrDefault(t => t.IsDefault);
 
-        var resolved = template is null ? BuiltIn() : From(template);
+        var resolved = template is null ? BuiltIn() : await LatestAsync(template, ct);
         _byLabel[key] = resolved;
         return resolved;
     }
 
-    public static ResolvedProjectTemplate From(ProjectTemplate template) => new(
-        template.Id,
-        template.Name,
-        template.ProductCode is not null ? "Product" : template.Category is not null ? "Category" : "Default",
-        template.Steps.Select(s => new ProjectStepDto(
+    /// <summary>
+    /// What a project follows: the version it is attached to; for a project attached to none, its
+    /// template's version 1 — the state its template was in before versions, see
+    /// <see cref="ProjectTemplateVersion"/>. A version whose template was deleted falls back to the
+    /// product's template today, as every project did before versions.
+    /// </summary>
+    public Task<ResolvedProjectTemplate> ForProjectAsync(Opportunity project, CancellationToken ct)
+        => ForProjectAsync(project.TemplateVersionId, project.Product, ct);
+
+    public async Task<ResolvedProjectTemplate> ForProjectAsync(Guid? versionId, string? product, CancellationToken ct)
+    {
+        if (versionId == ProjectTemplate.BuiltInVersionId)
+            return BuiltIn();
+
+        var templates = _templates ??= await db.ProjectTemplates.AsNoTracking().ToListAsync(ct);
+        var versions = await VersionsAsync(ct);
+
+        if (versionId is { } id && versions.FirstOrDefault(v => v.Id == id) is { } pinned
+            && templates.FirstOrDefault(t => t.Id == pinned.TemplateId) is { } owner)
+            return From(owner, pinned, LatestOf(versions, owner.Id));
+
+        var today = await ResolveAsync(product, ct);
+        if (versionId is not null || today.Id is not { } templateId)
+            return today;
+
+        var first = versions.FirstOrDefault(v => v.TemplateId == templateId && v.Number == 1);
+        var template = templates.First(t => t.Id == templateId);
+        return first is null ? today : From(template, first, LatestOf(versions, templateId));
+    }
+
+    private async Task<ResolvedProjectTemplate> LatestAsync(ProjectTemplate template, CancellationToken ct)
+    {
+        var versions = await VersionsAsync(ct);
+        var latest = versions.Where(v => v.TemplateId == template.Id).MaxBy(v => v.Number);
+        // The live template and its latest version say the same thing — every save writes both —
+        // so the live one is read and the version only names it.
+        return From(template) with { VersionId = latest?.Id, Version = latest?.Number, LatestVersion = latest?.Number };
+    }
+
+    private async Task<List<ProjectTemplateVersion>> VersionsAsync(CancellationToken ct)
+        => _versions ??= await db.ProjectTemplateVersions.AsNoTracking().ToListAsync(ct);
+
+    private static int? LatestOf(IEnumerable<ProjectTemplateVersion> versions, Guid templateId)
+        => versions.Where(v => v.TemplateId == templateId).Select(v => (int?)v.Number).Max();
+
+    private static string ScopeOf(ProjectTemplate template)
+        => template.ProductCode is not null ? "Product" : template.Category is not null ? "Category" : "Default";
+
+    public static ResolvedProjectTemplate From(ProjectTemplate template)
+        => From(template.Id, ScopeOf(template), ProjectTemplateSnapshot.Of(template));
+
+    private static ResolvedProjectTemplate From(ProjectTemplate template, ProjectTemplateVersion version, int? latest)
+        => From(template.Id, ScopeOf(template), version.Read()) with
+        {
+            VersionId = version.Id,
+            Version = version.Number,
+            LatestVersion = latest,
+        };
+
+    private static ResolvedProjectTemplate From(Guid id, string scope, ProjectTemplateSnapshot snapshot) => new(
+        id,
+        snapshot.Name,
+        scope,
+        snapshot.Steps.Select(s => new ProjectStepDto(
             s.Id, s.Label, s.Phase, s.Probability, s.Suggestion, s.OpensClientFile, s.IsApproval,
             s.RequiresQuestionnaires, s.RequiresAmount, s.RequiresCloseDate, s.Checklist, s.WorkflowCircuit,
             s.RequiredFieldKeys)).ToList(),
-        template.TracksForecast,
-        template.AmountKind,
-        template.CriticalCloseDate,
-        template.Fields);
+        snapshot.TracksForecast,
+        snapshot.AmountKind,
+        snapshot.CriticalCloseDate,
+        snapshot.Fields);
 
     public static ResolvedProjectTemplate BuiltIn() => new(
         null,

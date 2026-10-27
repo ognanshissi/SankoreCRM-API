@@ -1953,6 +1953,19 @@ catalogue, both under a suppressed `TransactionScope`.
     creation forms the template BEFORE the project exists — amount label, required deadline; the
     front reads it through `projectCreationRules` (`@sankore/crm/common`). « Projets par phase »
     reports amounts per kind too (`LeadReportProjectPhase.Amounts`).
+- **Template versions (owner, 2026-10-26).** A project follows the version of its template it was
+  created with (`Opportunity.TemplateVersionId`, no FK; `ProjectTemplate.BuiltInVersionId` for the
+  built-in). `project_template_versions` holds frozen `ProjectTemplateSnapshot`s (steps, conditions,
+  fields, forecast options; enums by name). `ProjectTemplateVersioning`: a save writes the next
+  number only when the latest is in use (a project attached, or the baseline), else rewrites it;
+  the FIRST save of a template without versions first freezes its pre-edit state as v1
+  `IsBaseline` — what projects created before versions (null `TemplateVersionId`) keep reading,
+  so no start-up backfill. **Two resolver questions**: `ResolveAsync(product)` = latest (creation
+  forms, new projects, a product change re-attaches); `ForProjectAsync(project)` = its version —
+  every gate, move, checklist, field, report and DTO of an EXISTING project must use the second.
+  `POST opportunities/{id}/template-version` moves an open project to the latest on demand (keeps
+  its step if still there, else its phase's; an entry, no gate). `OpportunityDto.TemplateVersion`
+  / `LatestTemplateVersion`, `ProjectTemplateDto.Version`.
 - `PipelineStageConfig` and its endpoints remain and are still read by nobody.
 
 **Marked steps (lot 3): the client file and the approval.** A step may carry `OpensClientFile`
