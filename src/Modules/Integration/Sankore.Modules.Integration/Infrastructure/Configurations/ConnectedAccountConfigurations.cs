@@ -25,6 +25,7 @@ internal sealed class ConnectedAccountConfiguration : IEntityTypeConfiguration<C
         b.Property(a => a.GrantedScopes).HasMaxLength(1000).IsRequired();
         b.Property(a => a.LastError).HasMaxLength(60);
         b.Property(a => a.MailLastError).HasMaxLength(60);
+        b.Property(a => a.MailSignature).HasMaxLength(MailSignatures.MaxLength);
         b.Property(a => a.Version).IsRowVersion();
         b.Ignore(a => a.HasCalendars);
 
@@ -118,6 +119,38 @@ internal sealed class MailTemplateConfiguration : IEntityTypeConfiguration<MailT
         b.Property(t => t.Body).IsRequired();
         b.HasIndex(t => new { t.TenantId, t.IsArchived, t.Name });
         b.Ignore(t => t.DomainEvents);
+    }
+}
+
+internal sealed class ScheduledMailConfiguration : IEntityTypeConfiguration<ScheduledMail>
+{
+    public void Configure(EntityTypeBuilder<ScheduledMail> b)
+    {
+        b.ToTable("cal_mail_scheduled");
+        b.HasKey(m => m.Id);
+        b.Property(m => m.Id).ValueGeneratedNever();
+        b.Property(m => m.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        b.Property(m => m.PayloadEnc).IsRequired();
+        b.Property(m => m.LastError).HasMaxLength(60);
+        b.HasIndex(m => new { m.TenantId, m.UserId, m.SendAt });
+        b.HasIndex(m => new { m.TenantId, m.AccountId });
+        b.Ignore(m => m.DomainEvents);
+    }
+}
+
+internal sealed class ScheduledMailAttachmentConfiguration : IEntityTypeConfiguration<ScheduledMailAttachment>
+{
+    public void Configure(EntityTypeBuilder<ScheduledMailAttachment> b)
+    {
+        b.ToTable("cal_mail_scheduled_attachment");
+        b.HasKey(a => a.Id);
+        b.Property(a => a.Id).ValueGeneratedNever();
+        b.Property(a => a.Name).HasMaxLength(255).IsRequired();
+        b.Property(a => a.ContentType).HasMaxLength(200).IsRequired();
+        b.Property(a => a.ContentEnc).IsRequired();
+        b.HasOne<ScheduledMail>().WithMany().HasForeignKey(a => a.ScheduledMailId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(a => a.ScheduledMailId);
+        b.Ignore(a => a.DomainEvents);
     }
 }
 

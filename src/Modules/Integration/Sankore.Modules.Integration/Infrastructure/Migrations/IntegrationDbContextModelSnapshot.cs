@@ -464,6 +464,11 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .HasColumnType("character varying(60)")
                         .HasColumnName("mail_last_error");
 
+                    b.Property<string>("MailSignature")
+                        .HasMaxLength(10000)
+                        .HasColumnType("character varying(10000)")
+                        .HasColumnName("mail_signature");
+
                     b.Property<DateTimeOffset?>("MailSyncedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("mail_synced_at");
@@ -3684,6 +3689,108 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("ins_information_sheet", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ScheduledMail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("failed_at");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("PayloadEnc")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload_enc");
+
+                    b.Property<DateTimeOffset>("SendAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("send_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cal_mail_scheduled");
+
+                    b.HasIndex("TenantId", "AccountId")
+                        .HasDatabaseName("ix_cal_mail_scheduled_tenant_id_account_id");
+
+                    b.HasIndex("TenantId", "UserId", "SendAt")
+                        .HasDatabaseName("ix_cal_mail_scheduled_tenant_id_user_id_send_at");
+
+                    b.ToTable("cal_mail_scheduled", "integration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ScheduledMailAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentEnc")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_enc");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("ScheduledMailId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scheduled_mail_id");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cal_mail_scheduled_attachment");
+
+                    b.HasIndex("ScheduledMailId")
+                        .HasDatabaseName("ix_cal_mail_scheduled_attachment_scheduled_mail_id");
+
+                    b.ToTable("cal_mail_scheduled_attachment", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.TelCall", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4675,6 +4782,16 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_ins_information_sheet_ins_product_product_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ScheduledMailAttachment", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.ScheduledMail", null)
+                        .WithMany()
+                        .HasForeignKey("ScheduledMailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cal_mail_scheduled_attachment_scheduled_mails_scheduled_mai");
                 });
 #pragma warning restore 612, 618
         }

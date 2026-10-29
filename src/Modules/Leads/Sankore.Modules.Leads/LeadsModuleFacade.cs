@@ -79,6 +79,13 @@ public sealed class LeadsModuleFacade(
         => (sender ?? throw new InvalidOperationException("Erasing a lead needs the mediator."))
             .Send(new Features.Retention.EraseLeadCommand(tenantId, leadId), ct);
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetLeadNamesAsync(IReadOnlyCollection<Guid> leadIds, CancellationToken ct)
+    {
+        if (leadIds.Count == 0) return new Dictionary<Guid, string>();
+        var ids = leadIds.Distinct().ToList();
+        return await db.Leads.Where(l => ids.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.FullName, ct);
+    }
+
     public async Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)
     {
         var lead = await db.Leads

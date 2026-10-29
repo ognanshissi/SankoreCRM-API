@@ -62,6 +62,7 @@ internal static class ConnectedAccountsServiceRegistration
         services.AddScoped<SyncConnectedMailboxesOrchestrator>();
         services.AddScoped<SyncConnectedMailboxesJob>();
         services.AddScoped<SyncConnectedMailboxJob>();
+        services.AddScoped<SendScheduledMailJob>();
 
         return services;
     }

@@ -80,6 +80,20 @@ public sealed class MatchLeadsByEmailsTests : IDisposable
             .Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task The_names_of_several_leads_come_back_in_one_read_and_an_unknown_id_is_left_out()
+    {
+        // Connected mailbox: the names of a page of conversations, or of a search over them.
+        var aya = Capture("aya@example.ci");
+        await SeedAsync(aya);
+
+        await using var db = _factory.CreateContext();
+        var names = await TestLeadsFacade.Build(db, emailIndexer: _indexer)
+            .GetLeadNamesAsync([aya.Id, Guid.NewGuid()], CancellationToken.None);
+
+        names.Should().Equal(new Dictionary<Guid, string> { [aya.Id] = "Aya Kouassi" });
+    }
+
     private Lead Capture(string? email)
     {
         var lead = Lead.Capture(

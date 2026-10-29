@@ -100,6 +100,12 @@ public sealed class ConnectedAccount : AggregateRoot
     /// <summary>A code, never the provider's text.</summary>
     public string? MailLastError { get; private set; }
 
+    /// <summary>
+    /// HTML that the composer puts under a new message or a reply from this mailbox — the user's
+    /// own, edited in Mon compte. Null: no signature.
+    /// </summary>
+    public string? MailSignature { get; private set; }
+
     /// <summary>PostgreSQL xmin.</summary>
     public uint Version { get; private set; }
 
@@ -194,6 +200,14 @@ public sealed class ConnectedAccount : AggregateRoot
     }
 
     public void RecordMailFailure(string code) => MailLastError = Clip(code, 60);
+
+    public Result SetMailSignature(string? html)
+    {
+        var clean = MailSignatures.Clean(html);
+        if (clean is { Length: > MailSignatures.MaxLength }) return Result.Fail("MAIL_SIGNATURE_TOO_LONG");
+        MailSignature = clean;
+        return Result.Ok();
+    }
 
     /// <summary>The IMAP settings changed: the address or login may have too.</summary>
     public void UpdateImapIdentity(string email, string? displayName, string username, string imapHost, DateTimeOffset now)

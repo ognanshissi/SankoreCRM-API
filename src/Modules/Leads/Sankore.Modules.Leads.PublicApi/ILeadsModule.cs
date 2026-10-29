@@ -21,6 +21,13 @@ public interface ILeadsModule
     Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct);
 
     /// <summary>
+    /// The names of several leads in one read (connected mailbox: a page of conversations, or a
+    /// search over them). Ambient tenant, like <see cref="GetLeadAsync"/>; an unknown id is simply
+    /// absent from the answer.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetLeadNamesAsync(IReadOnlyCollection<Guid> leadIds, CancellationToken ct);
+
+    /// <summary>
     /// Commercial history of a lead — activities, field visits, follow-up reminders and
     /// notes — projected as timeline-ready items (F13.29 / US-M01-BE-26).
     /// Consumed by module M01 when a converted lead's history is imported into the

@@ -88,6 +88,9 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
     public Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)
         => Task.FromResult<LeadSummary?>(null);
 
+    public Task<IReadOnlyDictionary<Guid, string>> GetLeadNamesAsync(IReadOnlyCollection<Guid> leadIds, CancellationToken ct)
+        => Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
+
     /// <summary>Data-purge lot 2. No lead here; erasing nothing, which is the safe answer for a stub.</summary>
     public Task<LeadErasureSubject?> GetErasureSubjectAsync(Guid tenantId, Guid leadId, CancellationToken ct)
         => Task.FromResult<LeadErasureSubject?>(null);

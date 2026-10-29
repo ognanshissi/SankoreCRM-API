@@ -385,3 +385,127 @@ public sealed class MailboxSyncState : AggregateRoot
 
     public void RecordFailure(string code) => LastError = code.Length <= 60 ? code : code[..60];
 }
+
+// ── Signature ────────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// A mailbox signature as stored: what the editor produced, minus anything that would run. It is
+/// only ever shown back to its owner (in the editor, which re-parses it) and sent in their mail,
+/// but a stored script is a script somebody can be made to paste in — so it never gets in.
+/// </summary>
+public static class MailSignatures
+{
+    public const int MaxLength = 10_000;
+
+    private static readonly System.Text.RegularExpressions.Regex Dangerous = new(
+        @"<\s*(script|style|iframe|object|embed|form|input|button|link|meta|base)\b[^>]*>(.*?<\s*/\s*\1\s*>)?",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+    private static readonly System.Text.RegularExpressions.Regex Handlers = new(
+        @"\s+on[a-z]+\s*=\s*(""[^""]*""|'[^']*'|[^\s>]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex ScriptUrls = new(
+        @"(href|src)\s*=\s*([""']?)\s*(javascript|vbscript):[^""'\s>]*\2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex Tags = new(@"<[^>]+>");
+
+    /// <summary>Null when nothing readable is left — an editor's empty « &lt;p&gt;&lt;br&gt;&lt;/p&gt; » is no signature.</summary>
+    public static string? Clean(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return null;
+        var clean = ScriptUrls.Replace(Handlers.Replace(Dangerous.Replace(html, string.Empty), string.Empty), "$1=$2#$2").Trim();
+        var text = System.Net.WebUtility.HtmlDecode(Tags.Replace(clean, string.Empty)).Trim();
+        return text.Length == 0 ? null : clean;
+    }
+}
+
+// ── Scheduled send ───────────────────────────────────────────────────────────────────────────
+
+public enum ScheduledMailStatus
+{
+    Pending,
+    /// <summary>Taken by the job: no longer cancellable, and never taken twice.</summary>
+    Sending,
+    /// <summary>Did not leave at its time — kept so the user sees why, retries or deletes it.</summary>
+    Failed,
+}
+
+/// <summary>
+/// A message the user asked to send later (« Programmer l'envoi »). Everything it carries is
+/// encrypted — recipients, subject, body, files — and the row disappears once the message has
+/// left: the copy that stays is the one in the mailbox's « Envoyés », read back by the sync.
+/// </summary>
+public sealed class ScheduledMail : AggregateRoot
+{
+    public static readonly TimeSpan MinDelay = TimeSpan.FromMinutes(1);
+    public static readonly TimeSpan MaxDelay = TimeSpan.FromDays(365);
+
+    private ScheduledMail() { }
+
+    public Guid Id { get; private set; }
+    public Guid UserId { get; private set; }
+    public Guid AccountId { get; private set; }
+    public DateTimeOffset SendAt { get; private set; }
+    public ScheduledMailStatus Status { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+
+    /// <summary>The message, encrypted JSON: recipients, subject, body, reply/forward references.</summary>
+    public string PayloadEnc { get; private set; } = default!;
+
+    public string? LastError { get; private set; }
+    public DateTimeOffset? FailedAt { get; private set; }
+
+    public static Result<ScheduledMail> Create(Guid tenantId, Guid userId, Guid accountId, DateTimeOffset sendAt, string payloadEnc, DateTimeOffset now)
+    {
+        if (sendAt < now + MinDelay || sendAt > now + MaxDelay) return Result.Fail<ScheduledMail>("MAIL_SCHEDULE_INVALID");
+        return Result.Ok(new ScheduledMail
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, UserId = userId, AccountId = accountId,
+            SendAt = sendAt, Status = ScheduledMailStatus.Pending, CreatedAt = now, PayloadEnc = payloadEnc,
+        });
+    }
+
+    /// <summary>Only a pending message is taken — a second run of the job, or one cancelled meanwhile, sends nothing.</summary>
+    public bool TryStartSending()
+    {
+        if (Status != ScheduledMailStatus.Pending) return false;
+        Status = ScheduledMailStatus.Sending;
+        return true;
+    }
+
+    public void Fail(string code, DateTimeOffset now)
+    {
+        Status = ScheduledMailStatus.Failed;
+        LastError = code.Length > 60 ? code[..60] : code;
+        FailedAt = now;
+    }
+
+    public Result Retry(DateTimeOffset now)
+    {
+        if (Status != ScheduledMailStatus.Failed) return Result.Fail("MAIL_SCHEDULE_NOT_FAILED");
+        Status = ScheduledMailStatus.Pending;
+        SendAt = now;
+        LastError = null;
+        FailedAt = null;
+        return Result.Ok();
+    }
+}
+
+/// <summary>A file of a scheduled message, kept encrypted until it leaves.</summary>
+public sealed class ScheduledMailAttachment : AggregateRoot
+{
+    private ScheduledMailAttachment() { }
+
+    public Guid Id { get; private set; }
+    public Guid ScheduledMailId { get; private set; }
+    public string Name { get; private set; } = default!;
+    public string ContentType { get; private set; } = default!;
+    public long Size { get; private set; }
+
+    /// <summary>The bytes, base64 then encrypted.</summary>
+    public string ContentEnc { get; private set; } = default!;
+
+    public static ScheduledMailAttachment Create(Guid tenantId, Guid scheduledMailId, string name, string contentType, long size, string contentEnc) => new()
+    {
+        Id = Guid.NewGuid(), TenantId = tenantId, ScheduledMailId = scheduledMailId,
+        Name = name.Length > 255 ? name[..255] : name, ContentType = contentType.Length > 200 ? contentType[..200] : contentType,
+        Size = size, ContentEnc = contentEnc,
+    };
+}

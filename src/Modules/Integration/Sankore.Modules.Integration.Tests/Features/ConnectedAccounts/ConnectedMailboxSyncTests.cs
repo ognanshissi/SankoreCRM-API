@@ -294,13 +294,20 @@ public sealed class ConnectedMailboxSyncTests : IDisposable
         first.Links.Should().ContainSingle().Which.Should().Be(new MailLinkDto("Lead", _lead));
 
         // With the names resolved (lot 5): the screen shows who, never an identifier.
-        _leads.GetLeadAsync(_lead, Arg.Any<CancellationToken>()).Returns(new LeadSummary(_lead, "Aya Kouassi", "Open", "Agency", null));
+        _leads.GetLeadNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, string> { [_lead] = "Aya Kouassi" });
         var named = await new ListMyMailThreadsHandler(db, _currentUser, Sync(db), new MailLinkNames(_currentUser, _leads, _customers))
             .Handle(new ListMyMailThreadsQuery(null, false, 1, 25), CancellationToken.None);
         named.Items[0].Links.Should().ContainSingle().Which.Name.Should().Be("Aya Kouassi");
 
         (await new ListMyMailThreadsHandler(db, _currentUser, Sync(db)).Handle(new ListMyMailThreadsQuery(null, true, 1, 25), CancellationToken.None))
             .TotalCount.Should().Be(1, "the shop's conversation is read");
+
+        // The tabs: their counts, and a tab narrows the page.
+        named.Counts.Should().Be(new MailThreadCountsDto(All: 2, Unread: 1, Leads: 1, Clients: 1));
+        var clients = await new ListMyMailThreadsHandler(db, _currentUser, Sync(db))
+            .Handle(new ListMyMailThreadsQuery(null, false, 1, 25, Entity: "Client"), CancellationToken.None);
+        clients.Items.Should().ContainSingle().Which.From!.Address.Should().Be("boutique@example.ci");
 
         var thread = await new GetMyMailThreadHandler(db, _currentUser, Sync(db)).Handle(new GetMyMailThreadQuery(first.LatestMessageId), CancellationToken.None);
         thread.Value!.Messages.Select(m => m.Subject).Should().Equal("Votre dossier", "RE: Votre dossier");
@@ -313,6 +320,43 @@ public sealed class ConnectedMailboxSyncTests : IDisposable
             .TotalCount.Should().Be(0);
         (await new GetMyMailThreadHandler(db, colleague, Sync(db)).Handle(new GetMyMailThreadQuery(first.LatestMessageId), CancellationToken.None))
             .Error.Should().Be(GetMyMailThreadHandler.NotFound);
+    }
+
+    [Fact]
+    public async Task A_search_finds_a_conversation_by_its_lead_its_subject_or_an_address_accents_aside()
+    {
+        var account = await AccountAsync();
+        _reader.Script("inbox", _ => new MailChangePage(
+        [
+            Header("m1", "aya@example.ci", "awa@cabinet.ci", subject: "Prêt équipement"),
+            Header("m2", "boutique@example.ci", "awa@cabinet.ci", thread: "t2", subject: "Relevé de compte"),
+        ], [], "d1", false));
+        await SyncAsync(account);
+
+        _leads.GetLeadNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, string> { [_lead] = "Aya Kouassi" });
+        _customers.GetClientSummariesAsync(_tenant, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, ClientSummary>
+            {
+                [_client] = new(_client, "CLI-0007", "Individual", "Boutique Koné", "Active", Guid.NewGuid(), null, "Approved", "Low", null),
+            });
+
+        await using var db = _factory.CreateContext();
+        async Task<IReadOnlyList<string?>> Search(string text, ICurrentUser? user = null) =>
+            (await new ListMyMailThreadsHandler(db, user ?? _currentUser, Sync(db), new MailLinkNames(_currentUser, _leads, _customers))
+                .Handle(new ListMyMailThreadsQuery(null, false, 1, 25, Search: text), CancellationToken.None))
+            .Items.Select(t => t.Subject).ToList();
+
+        (await Search("kouassi")).Should().Equal("Prêt équipement");
+        (await Search("KONE")).Should().Equal("Relevé de compte");
+        (await Search("pret equipement")).Should().Equal("Prêt équipement");
+        (await Search("boutique@")).Should().Equal("Relevé de compte");
+        (await Search("aya releve")).Should().BeEmpty("every word must be found in the same conversation");
+
+        var colleague = Substitute.For<ICurrentUser>();
+        colleague.Id.Returns(Guid.NewGuid());
+        colleague.TenantId.Returns(_tenant);
+        (await Search("kouassi", colleague)).Should().BeEmpty("a colleague's mailbox is never decrypted");
     }
 
     // ── Forgetting ─────────────────────────────────────────────────────────────

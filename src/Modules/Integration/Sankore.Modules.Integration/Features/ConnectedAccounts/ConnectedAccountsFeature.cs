@@ -44,7 +44,8 @@ public sealed record ConnectedAccountDto(
     DateTimeOffset? MailEnabledAt = null,
     MailServerDto? MailServer = null,
     DateTimeOffset? MailSyncedAt = null,
-    string? MailLastError = null);
+    string? MailLastError = null,
+    string? MailSignature = null);
 
 /// <param name="IsSubscription">A subscribed agenda (public holidays, someone else's) — shown « abonnement ».</param>
 /// <param name="EventCount">Events stored for the window (−30 days, +180 days).</param>
@@ -232,7 +233,8 @@ internal sealed class ListMyConnectedAccountsHandler(IntegrationDbContext db, IC
         a.MailEnabledAt,
         server is null ? null : MailServerDto.From(server),
         a.MailSyncedAt,
-        a.MailLastError);
+        a.MailLastError,
+        a.MailSignature);
 }
 
 // ── Start a consent ──────────────────────────────────────────────────────────────────────────
@@ -736,6 +738,7 @@ internal static class ConnectedAccountEndpoints
         group.MapConnectedMailboxEndpoints();
         app.MapConnectedMailboxReadEndpoints();
         app.MapConnectedMailboxSendEndpoints();
+        app.MapConnectedMailboxScheduledEndpoints();
 
         return app;
     }

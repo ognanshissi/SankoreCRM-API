@@ -38,6 +38,8 @@ public sealed class IntegrationDbContext(
     public DbSet<ConnectedMailLink> ConnectedMailLinks => Set<ConnectedMailLink>();
     public DbSet<MailboxSyncState> MailboxSyncStates => Set<MailboxSyncState>();
     public DbSet<MailTemplate> MailTemplates => Set<MailTemplate>();
+    public DbSet<ScheduledMail> ScheduledMails => Set<ScheduledMail>();
+    public DbSet<ScheduledMailAttachment> ScheduledMailAttachments => Set<ScheduledMailAttachment>();
     public DbSet<ConnectedCalendar> ConnectedCalendars => Set<ConnectedCalendar>();
     public DbSet<ConnectedCalendarEvent> ConnectedCalendarEvents => Set<ConnectedCalendarEvent>();
     public DbSet<AppointmentCalendarCopy> AppointmentCalendarCopies => Set<AppointmentCalendarCopy>();
@@ -155,6 +157,8 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<ConnectedMailLink>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<MailboxSyncState>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<MailTemplate>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ScheduledMail>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ScheduledMailAttachment>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ConnectedCalendar>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ConnectedCalendarEvent>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<AppointmentCalendarCopy>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);

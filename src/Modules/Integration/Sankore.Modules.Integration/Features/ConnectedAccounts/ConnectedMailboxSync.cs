@@ -299,6 +299,7 @@ internal sealed class ConnectedMailboxSync(
     {
         await ForgetAsync(db, accountId, null, ct);
         db.MailboxSyncStates.RemoveRange(await db.MailboxSyncStates.AsTracking().Where(s => s.AccountId == accountId).ToListAsync(ct));
+        await ScheduledMails.ForgetAccountAsync(db, accountId, ct);
     }
 }
 

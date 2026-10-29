@@ -3369,6 +3369,27 @@ the lead/client, « Envoyer un e-mail » everywhere). Lot 1 is the accounts.
   in the composer) — and names the blank ones in `missing`. No project variables yet (no contract
   reads a project summary).
 
+### Connected mailbox: search, scheduled send, signature (owner, 2026-10-28/29)
+
+- **Search** (`GET integration/me/mail/threads?search=`) decrypts the CALLER'S messages only — the
+  newest `ListMyMailThreadsHandler.SearchScanLimit` (5 000) — and matches every word, accents and
+  case aside, in the subject, the addresses and the lead/client names (`ILeadsModule.GetLeadNamesAsync`,
+  one batch). `entity=Lead|Client` and `MailThreadPageDto.Counts` drive the tabs.
+  `MailThreadsSqlTranslationTests` pins that the GROUP BY + EXISTS shape translates to PostgreSQL:
+  compose a filter only on a member-init projection (`ThreadGroup`), never on a constructor one.
+- **Scheduled send**: `SendMailCommand.SendAt` (form field `sendAt`). EVERY check runs at scheduling
+  time — the client's address is resolved THEN, with the agent's rights — and the message is kept
+  encrypted in `cal_mail_scheduled` (+ `cal_mail_scheduled_attachment`, base64 then encrypted).
+  `SendScheduledMailJob` is scheduled by Hangfire at the instant, runs the same command AS THE OWNER
+  (`BackgroundJobContext.SetScope(tenant, owner)`), is taken once (`TryStartSending`), deletes the
+  row when it left, and on failure keeps it `Failed` + one bell notification (`/tasks/mail?programmes=1`).
+  No automatic retry. Turning a mailbox off or removing it deletes what was waiting
+  (`ForgetMailboxAsync`). An API that predates this IGNORES `sendAt` and sends at once.
+- **Signature**: `ConnectedAccount.MailSignature` (≤ 10 000, scripts/handlers/`javascript:` stripped
+  by `MailSignatures.Clean`; empty text = null), `PUT integration/connected-accounts/{id}/mail/signature`.
+  Stored as editor HTML; the front inserts it and converts Quill classes to inline styles at send
+  (`toEmailHtml`) — recipients never have the editor's stylesheet.
+
 ### Tasks people work on together: subject, people, criteria, comments, tags, files
 
 `CrmTask` (M13) is attached to its subject by **`EntityType` + `EntityId`** — Lead, Client, KycFile

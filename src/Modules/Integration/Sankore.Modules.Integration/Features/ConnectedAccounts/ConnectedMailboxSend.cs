@@ -59,6 +59,8 @@ internal static class MailSendErrors
     public const string ClientNotReachable = "MAIL_CLIENT_NOT_REACHABLE";
     public const string ClientRestricted = "MAIL_CLIENT_RESTRICTED";
     public const string ClientEmailMissing = "MAIL_CLIENT_EMAIL_MISSING";
+    /// <summary>A scheduled time in less than a minute, or more than a year away.</summary>
+    public const string ScheduleInvalid = "MAIL_SCHEDULE_INVALID";
 }
 
 // ── Send ─────────────────────────────────────────────────────────────────────────────────────
@@ -78,12 +80,16 @@ internal sealed record SendMailCommand(
     Guid? ForwardMessageId,
     IReadOnlyList<string> ForwardAttachmentIds,
     [property: SensitiveData] IReadOnlyList<OutgoingAttachment> Attachments,
-    Guid? ToClientId = null)
-    : IRequest<Result>, ICommand, IResourceCommand
+    Guid? ToClientId = null,
+    DateTimeOffset? SendAt = null)
+    : IRequest<Result<SendMailOutcome>>, ICommand, IResourceCommand
 {
     public string ResourceType => "ConnectedAccount";
     public string? ResourceId => AccountId.ToString();
 }
+
+/// <summary>What a send did: left now (no id), or kept to leave at <paramref name="SendAt"/>.</summary>
+public sealed record SendMailOutcome(Guid? ScheduledId, DateTimeOffset? SendAt);
 
 /// <summary>
 /// Sends from one of the caller's mailboxes. A REPLY goes from the mailbox the answered message
@@ -107,10 +113,12 @@ internal sealed class SendMailHandler(
     ConnectedMailboxSync sync,
     ILogger<SendMailHandler> logger,
     IBackgroundJobClient? jobs = null,
-    ICustomersModule? customers = null)
-    : IRequestHandler<SendMailCommand, Result>
+    ICustomersModule? customers = null,
+    CalendarEventProtector? protector = null,
+    TimeProvider? clock = null)
+    : IRequestHandler<SendMailCommand, Result<SendMailOutcome>>
 {
-    public async Task<Result> Handle(SendMailCommand cmd, CancellationToken ct)
+    public async Task<Result<SendMailOutcome>> Handle(SendMailCommand cmd, CancellationToken ct)
     {
         using var suppressed = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
         var result = await SendAsync(cmd, ct);
@@ -118,41 +126,41 @@ internal sealed class SendMailHandler(
         return result;
     }
 
-    private async Task<Result> SendAsync(SendMailCommand cmd, CancellationToken ct)
+    private async Task<Result<SendMailOutcome>> SendAsync(SendMailCommand cmd, CancellationToken ct)
     {
         var to = Parse(cmd.To);
         var cc = Parse(cmd.Cc);
         var bcc = Parse(cmd.Bcc);
-        if (to is null || cc is null || bcc is null) return Result.Fail(MailSendErrors.RecipientInvalid);
+        if (to is null || cc is null || bcc is null) return Fail(MailSendErrors.RecipientInvalid);
 
         if (cmd.ToClientId is { } clientId)
         {
             var client = await ClientAddressAsync(clientId, ct);
-            if (client.IsFailure) return Result.Fail(client.Error!);
+            if (client.IsFailure) return Fail(client.Error!);
             if (!to.Any(p => string.Equals(p.Address, client.Value, StringComparison.OrdinalIgnoreCase)))
                 to.Insert(0, new MailParty(client.Value!, null));
         }
-        if (to.Count + cc.Count + bcc.Count == 0) return Result.Fail(MailSendErrors.RecipientsRequired);
-        if (to.Count + cc.Count + bcc.Count > MailSendLimits.MaxRecipients) return Result.Fail(MailSendErrors.TooManyRecipients);
+        if (to.Count + cc.Count + bcc.Count == 0) return Fail(MailSendErrors.RecipientsRequired);
+        if (to.Count + cc.Count + bcc.Count > MailSendLimits.MaxRecipients) return Fail(MailSendErrors.TooManyRecipients);
 
         var subject = cmd.Subject?.Trim() ?? string.Empty;
-        if (subject.Length > MailSendLimits.MaxSubject || subject.Contains('\n') || subject.Contains('\r')) return Result.Fail(MailSendErrors.SubjectInvalid);
-        if ((cmd.Body?.Length ?? 0) > MailSendLimits.MaxBody) return Result.Fail(MailSendErrors.BodyTooLarge);
+        if (subject.Length > MailSendLimits.MaxSubject || subject.Contains('\n') || subject.Contains('\r')) return Fail(MailSendErrors.SubjectInvalid);
+        if ((cmd.Body?.Length ?? 0) > MailSendLimits.MaxBody) return Fail(MailSendErrors.BodyTooLarge);
 
         var attachmentCheck = CheckAttachments(cmd.Attachments.Select(a => (a.Name, (long)a.Content.Length)), cmd.ForwardAttachmentIds.Count);
-        if (attachmentCheck.IsFailure) return attachmentCheck;
+        if (attachmentCheck.IsFailure) return Fail(attachmentCheck.Error!);
 
         var account = await db.ConnectedAccounts.AsTracking().FirstOrDefaultAsync(a => a.Id == cmd.AccountId && a.UserId == me.Id, ct);
-        if (account is null) return Result.Fail(ConnectedAccountErrors.NotFound);
-        if (!account.IsMailEnabled) return Result.Fail(MailSendErrors.MailboxDisabled);
-        if (account.Status == ConnectedAccountStatus.NeedsReconnect) return Result.Fail(ConnectedAccountErrors.NeedsReconnect);
+        if (account is null) return Fail(ConnectedAccountErrors.NotFound);
+        if (!account.IsMailEnabled) return Fail(MailSendErrors.MailboxDisabled);
+        if (account.Status == ConnectedAccountStatus.NeedsReconnect) return Fail(ConnectedAccountErrors.NeedsReconnect);
 
         OutgoingReplyTo? replyTo = null;
         if (cmd.ReplyToMessageId is { } replyId)
         {
             var answered = await OwnMessageAsync(replyId, ct);
-            if (answered is null) return Result.Fail(MailSendErrors.MessageNotFound);
-            if (answered.AccountId != account.Id) return Result.Fail(MailSendErrors.OtherMailbox);
+            if (answered is null) return Fail(MailSendErrors.MessageNotFound);
+            if (answered.AccountId != account.Id) return Fail(MailSendErrors.OtherMailbox);
             replyTo = new OutgoingReplyTo(answered.ExternalId, answered.InternetMessageId, answered.ThreadKey);
         }
 
@@ -161,40 +169,44 @@ internal sealed class SendMailHandler(
         if (cmd.ForwardMessageId is { } forwardId)
         {
             forwarded = await OwnMessageAsync(forwardId, ct);
-            if (forwarded is null) return Result.Fail(MailSendErrors.MessageNotFound);
-            if (forwarded.AccountId != account.Id && cmd.ForwardAttachmentIds.Count > 0) return Result.Fail(MailSendErrors.OtherMailbox);
+            if (forwarded is null) return Fail(MailSendErrors.MessageNotFound);
+            if (forwarded.AccountId != account.Id && cmd.ForwardAttachmentIds.Count > 0) return Fail(MailSendErrors.OtherMailbox);
 
             var known = sync.Reveal<List<MailAttachmentInfo>>(forwarded.AttachmentsEnc) ?? [];
             foreach (var id in cmd.ForwardAttachmentIds.Distinct())
             {
-                if (known.FirstOrDefault(a => a.Id == id) is not { } info) return Result.Fail(MailSendErrors.AttachmentNotFound);
+                if (known.FirstOrDefault(a => a.Id == id) is not { } info) return Fail(MailSendErrors.AttachmentNotFound);
                 forwardedAttachments.Add(info);
             }
 
             var all = CheckAttachments(
                 cmd.Attachments.Select(a => (a.Name, (long)a.Content.Length)).Concat(forwardedAttachments.Select(a => (a.Name, a.Size))), 0);
-            if (all.IsFailure) return all;
+            if (all.IsFailure) return Fail(all.Error!);
         }
 
+        // Programmé : tout ce qui précède a été vérifié comme pour un envoi immédiat — le client a été
+        // adressé ICI, avec les droits de l'agent, et c'est son adresse qui est gardée.
+        if (cmd.SendAt is { } sendAt) return await ScheduleAsync(cmd, account, to, cc, bcc, subject, sendAt, ct);
+
         var reader = readers.FirstOrDefault(r => r.CanRead(account));
-        if (reader is null) return Result.Fail(ConnectedAccountErrors.ProviderUnavailable);
+        if (reader is null) return Fail(ConnectedAccountErrors.ProviderUnavailable);
 
         try
         {
             var opened = await reader.OpenAsync(account, ct);
-            if (opened.IsFailure) return await RefusedAsync(account, opened.Error!, ct);
+            if (opened.IsFailure) return Fail((await RefusedAsync(account, opened.Error!, ct)).Error!);
             await using var session = opened.Value!;
 
             var attachments = cmd.Attachments.ToList();
             foreach (var info in forwardedAttachments)
             {
                 var bytes = await reader.ReadAttachmentAsync(session, forwarded!.ExternalId, info.Id, ct);
-                if (bytes is null) return Result.Fail(MailSendErrors.AttachmentNotFound);
+                if (bytes is null) return Fail(MailSendErrors.AttachmentNotFound);
                 attachments.Add(new OutgoingAttachment(info.Name, info.ContentType ?? "application/octet-stream", bytes));
             }
 
             if (attachments.Sum(a => (long)a.Content.Length) > MailSendLimits.MaxAttachmentBytes)
-                return Result.Fail(MailSendErrors.AttachmentsTooLarge);
+                return Fail(MailSendErrors.AttachmentsTooLarge);
 
             await reader.SendAsync(session, account, new OutgoingMail(
                 new MailParty(account.Email, account.DisplayName), to, cc, bcc, subject, cmd.Body ?? string.Empty, attachments, replyTo), ct);
@@ -202,21 +214,58 @@ internal sealed class SendMailHandler(
         catch (MailSendException ex)
         {
             logger.LogWarning("Mailbox {AccountId}: sending refused ({Code}).", account.Id, ex.Code);
-            return await RefusedAsync(account, ex.Code, ct);
+            return Fail((await RefusedAsync(account, ex.Code, ct)).Error!);
         }
         catch (ProviderAuthException ex)
         {
             logger.LogWarning("Mailbox {AccountId}: sending failed ({Code}).", account.Id, ex.Code);
-            if (!ex.Revoked) return Result.Fail(MailSendException.Failed);
+            if (!ex.Revoked) return Fail(MailSendException.Failed);
             account.MarkNeedsReconnect(ex.Code);
             await db.SaveChangesAsync(ct);
-            return Result.Fail(ConnectedAccountErrors.NeedsReconnect);
+            return Fail(ConnectedAccountErrors.NeedsReconnect);
         }
 
         // The sent copy is read back like any other message — and kept if it went to a lead or a client.
         var (tenantId, accountId) = (account.TenantId, account.Id);
         jobs?.Enqueue<SyncConnectedMailboxJob>(job => job.ExecuteAsync(tenantId, accountId));
-        return Result.Ok();
+        return Result.Ok(new SendMailOutcome(null, null));
+    }
+
+    private static Result<SendMailOutcome> Fail(string code) => Result.Fail<SendMailOutcome>(code);
+
+    /// <summary>
+    /// Keeps the message, encrypted, for <see cref="SendScheduledMailJob"/> — the files too, since
+    /// the browser that sent them will be long closed. Reply and forward keep their references: the
+    /// answered message, and the forwarded files, are read again when it leaves.
+    /// </summary>
+    private async Task<Result<SendMailOutcome>> ScheduleAsync(
+        SendMailCommand cmd, ConnectedAccount account, List<MailParty> to, List<MailParty> cc, List<MailParty> bcc,
+        string subject, DateTimeOffset sendAt, CancellationToken ct)
+    {
+        if (protector is null) return Fail(MailSendException.Failed);
+        var now = (clock ?? TimeProvider.System).GetUtcNow();
+
+        var payload = new ScheduledMailPayload(
+            to.Select(p => p.Address).ToList(), cc.Select(p => p.Address).ToList(), bcc.Select(p => p.Address).ToList(),
+            subject, cmd.Body ?? string.Empty, cmd.ReplyToMessageId, cmd.ForwardMessageId, cmd.ForwardAttachmentIds.ToList());
+
+        var created = ScheduledMail.Create(me.TenantId, me.Id, account.Id, sendAt.ToUniversalTime(),
+            protector.Protect(System.Text.Json.JsonSerializer.Serialize(payload))!, now);
+        if (created.IsFailure) return Fail(MailSendErrors.ScheduleInvalid);
+
+        var mail = created.Value!;
+        db.ScheduledMails.Add(mail);
+        foreach (var file in cmd.Attachments)
+        {
+            db.ScheduledMailAttachments.Add(ScheduledMailAttachment.Create(
+                me.TenantId, mail.Id, file.Name, file.ContentType, file.Content.Length, protector.Protect(Convert.ToBase64String(file.Content))!));
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var (tenantId, id) = (me.TenantId, mail.Id);
+        jobs?.Schedule<SendScheduledMailJob>(job => job.ExecuteAsync(tenantId, id), mail.SendAt);
+        return Result.Ok(new SendMailOutcome(mail.Id, mail.SendAt));
     }
 
     /// <summary>
@@ -594,11 +643,13 @@ internal static class ConnectedMailboxSendEndpoints
                 + "`replyToMessageId`: a kept message of the same mailbox — the reply is threaded. `forwardMessageId` + repeated "
                 + "`forwardAttachmentIds`: the original's attachments, fetched now. `files`: up to 10 files, 20 MB in all, "
                 + "executables refused. Answers 202: the provider accepted it; it appears in the conversation after the sync "
-                + "that follows, when a lead or a client is among its recipients. Limited to 30 sends a minute per user.")
+                + "that follows, when a lead or a client is among its recipients. Limited to 30 sends a minute per user. "
+                + "`sendAt`: « Programmer l'envoi » — everything is checked now and the message is kept, encrypted, to leave "
+                + "at that instant; the answer carries its `scheduledId`.")
             .Accepts<SendMailForm>("multipart/form-data")
             .DisableAntiforgery()
             .RequireRateLimiting("mail-send")
-            .Produces(StatusCodes.Status202Accepted)
+            .Produces<SendMailOutcome>(StatusCodes.Status202Accepted)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity)
@@ -720,12 +771,16 @@ internal static class ConnectedMailboxSendEndpoints
                 Path.GetFileName(file.FileName), string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType, buffer.ToArray()));
         }
 
+        DateTimeOffset? sendAt = DateTimeOffset.TryParse(form["sendAt"], System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+        if (!string.IsNullOrWhiteSpace(form["sendAt"]) && sendAt is null) return Problem(MailSendErrors.ScheduleInvalid);
+
         var result = await sender.Send(new SendMailCommand(
             accountId, All(form["to"]), All(form["cc"]), All(form["bcc"]), form["subject"].ToString(), form["body"].ToString(),
             OptionalGuid(form["replyToMessageId"]), OptionalGuid(form["forwardMessageId"]), forwardIds, attachments,
-            OptionalGuid(form["toClientId"])), ct);
+            OptionalGuid(form["toClientId"]), sendAt), ct);
 
-        return result.IsSuccess ? Results.Accepted() : Problem(result.Error!);
+        return result.IsSuccess ? Results.Accepted(value: result.Value) : Problem(result.Error!);
     }
 
     private static IResult Map<T>(Result<T> result) => result.IsSuccess ? Results.Ok(result.Value) : Problem(result.Error!);
@@ -768,4 +823,10 @@ public sealed class SendMailForm
     /// masked) and adds it to « À ».
     /// </summary>
     public Guid? ToClientId { get; set; }
+
+    /// <summary>
+    /// « Programmer l'envoi » : the instant the message leaves (ISO 8601, with its offset). Between
+    /// a minute and a year from now; absent, it leaves now.
+    /// </summary>
+    public DateTimeOffset? SendAt { get; set; }
 }

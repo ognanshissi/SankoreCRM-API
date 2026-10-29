@@ -67,24 +67,42 @@ public sealed record MailMessageDto(
     IReadOnlyList<MailAttachmentDto> Attachments,
     IReadOnlyList<MailLinkDto> Links);
 
+/// <summary>The four tabs of the Messagerie: every conversation, unread ones, with a lead, with a client.</summary>
+public sealed record MailThreadCountsDto(int All, int Unread, int Leads, int Clients);
+
+/// <summary>A page of conversations, plus the tab counts under the same mailbox and search.</summary>
+public sealed record MailThreadPageDto(IReadOnlyList<MailThreadSummaryDto> Items, int TotalCount, int Page, int PageSize, MailThreadCountsDto Counts);
+
 public sealed record MailThreadDto(Guid AccountId, string AccountLabel, string? Subject, IReadOnlyList<MailMessageDto> Messages);
 
 // ── Threads ──────────────────────────────────────────────────────────────────────────────────
 
 /// <param name="Page">1-based.</param>
-internal sealed record ListMyMailThreadsQuery(Guid? AccountId, bool UnreadOnly, int Page, int PageSize)
-    : IRequest<PagedResult<MailThreadSummaryDto>>;
+/// <param name="Entity">« Lead » or « Client »: only conversations with one; null for all.</param>
+/// <param name="Search">Words looked for in the lead's or client's name, the subject and the addresses.</param>
+internal sealed record ListMyMailThreadsQuery(
+    Guid? AccountId, bool UnreadOnly, int Page, int PageSize, string? Entity = null, string? Search = null)
+    : IRequest<MailThreadPageDto>;
 
 /// <summary>
 /// The caller's conversations, latest first. Grouped in SQL on (account, thread) — counts and the
-/// last date — then only the page's latest messages are read and decrypted. No search: subjects
-/// and addresses are ciphertext, so a text search would decrypt the whole mailbox; it waits for a
-/// screen that needs it (lot 5).
+/// last date — then only the page's latest messages are read and decrypted.
+///
+/// <para>
+/// <b>The search decrypts, and only the caller's own messages.</b> Subjects and addresses are
+/// ciphertext, so no SQL predicate can match them: the newest <see cref="SearchScanLimit"/>
+/// messages of the caller's mailboxes are decrypted here, matched with the names of their leads
+/// and clients, and the matching conversations are what the page is built from. A colleague's
+/// message is never read — the scan starts from <c>UserId == me.Id</c> like everything else here.
+/// </para>
 /// </summary>
 internal sealed class ListMyMailThreadsHandler(IntegrationDbContext db, ICurrentUser me, ConnectedMailboxSync sync, MailLinkNames? names = null)
-    : IRequestHandler<ListMyMailThreadsQuery, PagedResult<MailThreadSummaryDto>>
+    : IRequestHandler<ListMyMailThreadsQuery, MailThreadPageDto>
 {
-    public async Task<PagedResult<MailThreadSummaryDto>> Handle(ListMyMailThreadsQuery query, CancellationToken ct)
+    /// <summary>Messages decrypted for one search: a mailbox only keeps exchanges with leads and clients.</summary>
+    internal const int SearchScanLimit = 5000;
+
+    public async Task<MailThreadPageDto> Handle(ListMyMailThreadsQuery query, CancellationToken ct)
     {
         var page = Math.Max(1, query.Page);
         var size = Math.Clamp(query.PageSize, 1, 100);
@@ -92,18 +110,22 @@ internal sealed class ListMyMailThreadsHandler(IntegrationDbContext db, ICurrent
         var messages = db.ConnectedMailMessages.Where(m => m.UserId == me.Id);
         if (query.AccountId is { } accountId) messages = messages.Where(m => m.AccountId == accountId);
 
-        var grouped = messages
-            .GroupBy(m => new { m.AccountId, m.ThreadKey })
-            .Select(g => new
-            {
-                g.Key.AccountId,
-                g.Key.ThreadKey,
-                LastAt = g.Max(m => m.SentAt),
-                Count = g.Count(),
-                Unread = g.Count(m => !m.IsRead),
-                Attachments = g.Any(m => m.HasAttachments),
-            });
+        if (Normalize(query.Search) is { Length: > 0 } search)
+        {
+            var keys = await MatchingThreadsAsync(messages, search, ct);
+            if (keys.Count == 0) return new MailThreadPageDto([], 0, page, size, new MailThreadCountsDto(0, 0, 0, 0));
+            messages = messages.Where(m => keys.Contains(m.ThreadKey));
+        }
 
+        var counts = new MailThreadCountsDto(
+            await Group(messages).CountAsync(ct),
+            await Group(messages).Where(g => g.Unread > 0).CountAsync(ct),
+            await Group(WithLink(db, messages, MailLinkEntity.Lead)).CountAsync(ct),
+            await Group(WithLink(db, messages, MailLinkEntity.Client)).CountAsync(ct));
+
+        if (Enum.TryParse<MailLinkEntity>(query.Entity, ignoreCase: true, out var entity)) messages = WithLink(db, messages, entity);
+
+        var grouped = Group(messages);
         if (query.UnreadOnly) grouped = grouped.Where(g => g.Unread > 0);
 
         var total = await grouped.CountAsync(ct);
@@ -112,13 +134,13 @@ internal sealed class ListMyMailThreadsHandler(IntegrationDbContext db, ICurrent
             .Skip((page - 1) * size).Take(size)
             .ToListAsync(ct);
 
-        if (threads.Count == 0) return new PagedResult<MailThreadSummaryDto>([], total, page, size);
+        if (threads.Count == 0) return new MailThreadPageDto([], total, page, size, counts);
 
         var accountIds = threads.Select(t => t.AccountId).Distinct().ToList();
-        var keys = threads.Select(t => t.ThreadKey).Distinct().ToList();
+        var threadKeys = threads.Select(t => t.ThreadKey).Distinct().ToList();
 
-        var rows = await db.ConnectedMailMessages
-            .Where(m => m.UserId == me.Id && accountIds.Contains(m.AccountId) && keys.Contains(m.ThreadKey))
+        var rows = await messages
+            .Where(m => accountIds.Contains(m.AccountId) && threadKeys.Contains(m.ThreadKey))
             .ToListAsync(ct);
 
         var ids = rows.Select(r => r.Id).ToList();
@@ -142,7 +164,81 @@ internal sealed class ListMyMailThreadsHandler(IntegrationDbContext db, ICurrent
                 MailLinks.Of(links.Where(l => threadIds.Contains(l.MessageId)), linkNames));
         }).ToList();
 
-        return new PagedResult<MailThreadSummaryDto>(items, total, page, size);
+        return new MailThreadPageDto(items, total, page, size, counts);
+    }
+
+    // Member initialisation, not a positional record: EF composes a Where or an OrderBy on a
+    // member-init projection, never on one built through a constructor.
+    internal sealed class ThreadGroup
+    {
+        public Guid AccountId { get; init; }
+        public string ThreadKey { get; init; } = string.Empty;
+        public DateTimeOffset LastAt { get; init; }
+        public int Count { get; init; }
+        public int Unread { get; init; }
+        public bool Attachments { get; init; }
+    }
+
+    internal static IQueryable<ThreadGroup> Group(IQueryable<ConnectedMailMessage> messages) => messages
+        .GroupBy(m => new { m.AccountId, m.ThreadKey })
+        .Select(g => new ThreadGroup
+        {
+            AccountId = g.Key.AccountId,
+            ThreadKey = g.Key.ThreadKey,
+            LastAt = g.Max(m => m.SentAt),
+            Count = g.Count(),
+            Unread = g.Count(m => !m.IsRead),
+            Attachments = g.Any(m => m.HasAttachments),
+        });
+
+    /// <summary>Messages linked to a lead (or a client): every kept message has at least one link.</summary>
+    internal static IQueryable<ConnectedMailMessage> WithLink(IntegrationDbContext db, IQueryable<ConnectedMailMessage> messages, MailLinkEntity entity) =>
+        messages.Where(m => db.ConnectedMailLinks.Any(l => l.MessageId == m.Id && l.EntityType == entity));
+
+    /// <summary>The conversations whose subject, an address, or the name of their lead or client holds every word searched.</summary>
+    private async Task<List<string>> MatchingThreadsAsync(IQueryable<ConnectedMailMessage> messages, string search, CancellationToken ct)
+    {
+        var scanned = await messages
+            .OrderByDescending(m => m.SentAt)
+            .Take(SearchScanLimit)
+            .Select(m => new { m.Id, m.ThreadKey, m.SubjectEnc, m.FromEnc, m.ToEnc, m.CcEnc })
+            .ToListAsync(ct);
+        if (scanned.Count == 0) return [];
+
+        var ids = scanned.Select(m => m.Id).ToList();
+        var links = await db.ConnectedMailLinks.Where(l => ids.Contains(l.MessageId)).ToListAsync(ct);
+        var linkNames = names is null ? new Dictionary<(MailLinkEntity, Guid), string>() : await names.ResolveAsync(links, ct);
+        var namesByMessage = links.ToLookup(l => l.MessageId, l => linkNames.GetValueOrDefault((l.EntityType, l.EntityId)));
+
+        var words = search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var m in scanned)
+        {
+            if (keys.Contains(m.ThreadKey)) continue;
+
+            var parties = new[] { sync.Reveal<MailParty>(m.FromEnc) }
+                .Concat(sync.Reveal<List<MailParty>>(m.ToEnc) ?? [])
+                .Concat(sync.Reveal<List<MailParty>>(m.CcEnc) ?? [])
+                .Where(p => p is not null)
+                .SelectMany(p => new[] { p!.Address, p.Name });
+
+            var haystack = Normalize(string.Join(' ',
+                new[] { sync.RevealText(m.SubjectEnc) }.Concat(parties).Concat(namesByMessage[m.Id]).Where(v => !string.IsNullOrWhiteSpace(v))));
+
+            if (haystack is not null && words.All(haystack.Contains)) keys.Add(m.ThreadKey);
+        }
+
+        return keys.ToList();
+    }
+
+    /// <summary>Lower-case, accents removed, spaces collapsed: « Koné » is found by « kone ».</summary>
+    internal static string? Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var decomposed = value.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+        var kept = decomposed.Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark);
+        return System.Text.RegularExpressions.Regex.Replace(new string(kept.ToArray()), @"\s+", " ");
     }
 
     internal static MailPartyDto? Party(MailParty? p) => p is null ? null : new MailPartyDto(p.Address, p.Name);
@@ -161,9 +257,9 @@ internal static class MailLinks
 }
 
 /// <summary>
-/// The names behind a page's links (lot 5): clients in ONE batch read, leads one by one — a page
-/// names a handful. A module that cannot answer leaves the name null; the screen says « Lead » or
-/// « Client » rather than failing the mailbox.
+/// The names behind links (lot 5): clients and leads in one batch read each — a page names a
+/// handful, a search the whole mailbox. A module that cannot answer leaves the name null; the
+/// screen says « Lead » or « Client » rather than failing the mailbox.
 /// </summary>
 internal sealed class MailLinkNames(ICurrentUser me, ILeadsModule? leads = null, ICustomersModule? customers = null)
 {
@@ -181,12 +277,11 @@ internal sealed class MailLinkNames(ICurrentUser me, ILeadsModule? leads = null,
                     names[(MailLinkEntity.Client, id)] = summary.DisplayName;
             }
 
-            if (leads is not null)
+            var leadIds = distinct.Where(l => l.EntityType == MailLinkEntity.Lead).Select(l => l.EntityId).ToList();
+            if (leads is not null && leadIds.Count > 0)
             {
-                foreach (var (_, id) in distinct.Where(l => l.EntityType == MailLinkEntity.Lead))
-                {
-                    if (await leads.GetLeadAsync(id, ct) is { } lead) names[(MailLinkEntity.Lead, id)] = lead.FullName;
-                }
+                foreach (var (id, name) in await leads.GetLeadNamesAsync(leadIds, ct))
+                    names[(MailLinkEntity.Lead, id)] = name;
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -279,11 +374,11 @@ internal static class ConnectedMailboxReadEndpoints
             .WithTags("ConnectedMailbox")
             .RequireAuthorization(Permissions.CanUseConnectedAccounts.Code);
 
-        group.MapGet("threads", async (Guid? accountId, bool? unreadOnly, int? page, int? pageSize, ISender sender, CancellationToken ct) =>
-                Results.Ok(await sender.Send(new ListMyMailThreadsQuery(accountId, unreadOnly ?? false, page ?? 1, pageSize ?? 25), ct)))
+        group.MapGet("threads", async (Guid? accountId, bool? unreadOnly, int? page, int? pageSize, string? entity, string? search, ISender sender, CancellationToken ct) =>
+                Results.Ok(await sender.Send(new ListMyMailThreadsQuery(accountId, unreadOnly ?? false, page ?? 1, pageSize ?? 25, entity, search), ct)))
             .WithName("ListMyMailThreads")
             .WithSummary("The caller's conversations kept from their mailboxes (only those with a lead or a client), latest first")
-            .Produces<PagedResult<MailThreadSummaryDto>>()
+            .Produces<MailThreadPageDto>()
             .WithOpenApi()
             .WithTenantHeader();
 

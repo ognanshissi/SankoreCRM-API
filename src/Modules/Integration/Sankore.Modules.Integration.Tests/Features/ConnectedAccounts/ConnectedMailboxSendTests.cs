@@ -7,6 +7,7 @@ using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MimeKit;
 using NSubstitute;
@@ -220,6 +221,195 @@ public sealed class ConnectedMailboxSendTests : IDisposable
 
         result.Error.Should().Be(code);
         _mailbox.Sent.Should().BeEmpty();
+    }
+
+    // ── Scheduled send ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_scheduled_message_is_checked_now_kept_encrypted_with_its_files_and_handed_to_hangfire()
+    {
+        var account = await AccountAsync();
+        var client = Guid.NewGuid();
+        var customers = Substitute.For<ICustomersModule>();
+        customers.ResolveEmailForMailAsync(_tenant, client, _me, Arg.Any<CancellationToken>()).Returns(Result.Ok("client@example.ci"));
+
+        var result = await SendAsync(Command(account.Id, to: ["aya@example.ci"], subject: "Prêt 2 000 000",
+                attachments: [new OutgoingAttachment("rib.pdf", "application/pdf", [1, 2, 3])]) with { ToClientId = client, SendAt = _now.AddHours(10) },
+            customers: customers);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.SendAt.Should().Be(_now.AddHours(10));
+        _mailbox.Sent.Should().BeEmpty("nothing leaves before its time");
+        _jobs.Received(1).Create(Arg.Is<Job>(j => j.Type == typeof(SendScheduledMailJob)), Arg.Any<ScheduledState>());
+
+        await using var db = _factory.CreateContext();
+        var stored = await db.ScheduledMails.SingleAsync();
+        stored.Status.Should().Be(ScheduledMailStatus.Pending);
+        stored.PayloadEnc.Should().StartWith("enc:", "recipients, subject and body are encrypted");
+        var payload = System.Text.Json.JsonSerializer.Deserialize<ScheduledMailPayload>(stored.PayloadEnc["enc:".Length..])!;
+        payload.To.Should().Equal(["client@example.ci", "aya@example.ci"], "the client was addressed at scheduling time, with the agent's rights");
+        (await db.ScheduledMailAttachments.SingleAsync()).ContentEnc.Should().Be("enc:" + Convert.ToBase64String([1, 2, 3]));
+
+        var listed = await new ListMyScheduledMailsHandler(db, _currentUser, new CalendarEventProtector(new PrefixEncryptor()))
+            .Handle(new ListMyScheduledMailsQuery(), CancellationToken.None);
+        listed.Should().ContainSingle().Which.Should().Match<ScheduledMailDto>(m => m.Subject == "Prêt 2 000 000" && m.AttachmentCount == 1);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(400 * 24 * 60)]
+    public async Task A_time_under_a_minute_or_over_a_year_away_is_refused_before_anything_is_kept(int minutes)
+    {
+        var account = await AccountAsync();
+        (await SendAsync(Command(account.Id) with { SendAt = _now.AddMinutes(minutes) })).Error.Should().Be(MailSendErrors.ScheduleInvalid);
+
+        await using var db = _factory.CreateContext();
+        (await db.ScheduledMails.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_scheduled_message_is_cancelled_by_its_owner_only_and_a_failed_one_retried_now()
+    {
+        var account = await AccountAsync();
+        var scheduled = (await SendAsync(Command(account.Id, attachments: [new OutgoingAttachment("a.pdf", "application/pdf", [1])]) with { SendAt = _now.AddDays(1) })).Value!.ScheduledId!.Value;
+
+        var colleague = Substitute.For<ICurrentUser>();
+        colleague.Id.Returns(Guid.NewGuid());
+        await using (var db = _factory.CreateContext())
+        {
+            (await new CancelScheduledMailHandler(db, colleague).Handle(new CancelScheduledMailCommand(scheduled), CancellationToken.None))
+                .Error.Should().Be(ScheduledMails.NotFound);
+            (await new CancelScheduledMailHandler(db, _currentUser).Handle(new CancelScheduledMailCommand(scheduled), CancellationToken.None))
+                .IsSuccess.Should().BeTrue();
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.ScheduledMails.CountAsync()).Should().Be(0);
+            (await db.ScheduledMailAttachments.CountAsync()).Should().Be(0, "the files go with the message");
+        }
+
+        // A message that failed at its time goes again now, through Hangfire.
+        var failed = ScheduledMail.Create(_tenant, _me, account.Id, _now.AddHours(1), "enc:{}", _now).Value!;
+        failed.TryStartSending().Should().BeTrue();
+        failed.Fail("CONNECTED_ACCOUNT_NEEDS_RECONNECT", _now);
+        await using (var db = _factory.CreateContext())
+        {
+            db.ScheduledMails.Add(failed);
+            await db.SaveChangesAsync();
+            (await new RetryScheduledMailHandler(db, _currentUser, new FixedClock(_now.AddHours(2)), _jobs).Handle(new RetryScheduledMailCommand(failed.Id), CancellationToken.None))
+                .IsSuccess.Should().BeTrue();
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var retried = await db.ScheduledMails.SingleAsync();
+            retried.Status.Should().Be(ScheduledMailStatus.Pending);
+            retried.SendAt.Should().Be(_now.AddHours(2));
+            retried.LastError.Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public void A_scheduled_message_is_taken_once_and_one_being_sent_is_no_longer_cancellable_or_retried()
+    {
+        var mail = ScheduledMail.Create(_tenant, _me, Guid.NewGuid(), _now.AddHours(1), "enc:{}", _now).Value!;
+
+        mail.TryStartSending().Should().BeTrue();
+        mail.TryStartSending().Should().BeFalse("a second run of the job sends nothing");
+        mail.Retry(_now).Error.Should().Be("MAIL_SCHEDULE_NOT_FAILED");
+    }
+
+    [Fact]
+    public async Task Turning_a_mailbox_off_deletes_what_was_waiting_to_leave_from_it()
+    {
+        var account = await AccountAsync();
+        await SendAsync(Command(account.Id) with { SendAt = _now.AddDays(1) });
+
+        await using var db = _factory.CreateContext();
+        await ConnectedMailboxSync.ForgetMailboxAsync(db, account.Id, CancellationToken.None);
+        await db.SaveChangesAsync();
+        (await db.ScheduledMails.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task At_its_time_the_message_leaves_as_its_owner_with_its_files_and_the_row_is_gone()
+    {
+        var account = await AccountAsync();
+        var id = (await SendAsync(Command(account.Id, to: ["aya@example.ci"], attachments: [new OutgoingAttachment("rib.pdf", "application/pdf", [4, 5])])
+            with { SendAt = _now.AddHours(1) })).Value!.ScheduledId!.Value;
+
+        var sender = Substitute.For<MediatR.ISender>();
+        sender.Send(Arg.Any<SendMailCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Ok(new SendMailOutcome(null, null)));
+        await new SendScheduledMailJob(JobServices(sender, Substitute.For<Sankore.Modules.Notifications.PublicApi.INotificationsModule>()), NullLogger<SendScheduledMailJob>.Instance)
+            .ExecuteAsync(_tenant, id);
+
+        await sender.Received(1).Send(Arg.Is<SendMailCommand>(c =>
+            c.AccountId == account.Id && c.To.SequenceEqual(new[] { "aya@example.ci" }) && c.SendAt == null
+            && c.Attachments.Single().Content.SequenceEqual(new byte[] { 4, 5 })), Arg.Any<CancellationToken>());
+
+        await using var db = _factory.CreateContext();
+        (await db.ScheduledMails.CountAsync()).Should().Be(0, "the copy that stays is the one in « Envoyés »");
+        (await db.ScheduledMailAttachments.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_message_that_cannot_leave_is_kept_as_failed_and_its_owner_is_told_once()
+    {
+        var account = await AccountAsync();
+        var id = (await SendAsync(Command(account.Id) with { SendAt = _now.AddHours(1) })).Value!.ScheduledId!.Value;
+
+        var sender = Substitute.For<MediatR.ISender>();
+        sender.Send(Arg.Any<SendMailCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Fail<SendMailOutcome>("CONNECTED_ACCOUNT_NEEDS_RECONNECT"));
+        var notifications = Substitute.For<Sankore.Modules.Notifications.PublicApi.INotificationsModule>();
+        var job = new SendScheduledMailJob(JobServices(sender, notifications), NullLogger<SendScheduledMailJob>.Instance);
+
+        await job.ExecuteAsync(_tenant, id);
+        await job.ExecuteAsync(_tenant, id);
+
+        await sender.Received(1).Send(Arg.Any<SendMailCommand>(), Arg.Any<CancellationToken>());
+        await notifications.Received(1).NotifyInAppAsync(
+            Arg.Is<Sankore.Modules.Notifications.PublicApi.InAppNotificationRequest>(n => n.UserId == _me && n.Link == "/tasks/mail?programmes=1"),
+            Arg.Any<CancellationToken>());
+
+        await using var db = _factory.CreateContext();
+        var failed = await db.ScheduledMails.SingleAsync();
+        failed.Status.Should().Be(ScheduledMailStatus.Failed);
+        failed.LastError.Should().Be("CONNECTED_ACCOUNT_NEEDS_RECONNECT");
+    }
+
+    private IServiceScopeFactory JobServices(MediatR.ISender sender, Sankore.Modules.Notifications.PublicApi.INotificationsModule notifications) =>
+        new ServiceCollection()
+            .AddScoped(_ => _factory.CreateContext())
+            .AddSingleton(new CalendarEventProtector(new PrefixEncryptor()))
+            .AddSingleton<TimeProvider>(new FixedClock(_now.AddHours(1)))
+            .AddSingleton(sender)
+            .AddSingleton(notifications)
+            .BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>();
+
+    // ── Signature ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_signature_is_kept_without_anything_that_runs_and_an_empty_one_is_none()
+    {
+        var account = await AccountAsync();
+        await using var db = _factory.CreateContext();
+        var handler = new SetMailSignatureHandler(db, _currentUser);
+
+        (await handler.Handle(new SetMailSignatureCommand(account.Id,
+            "<p onclick=\"steal()\">Awa Koné<script>alert(1)</script></p><p><a href=\"javascript:alert(1)\">site</a> <img src=\"data:image/png;base64,AAA\"></p>"),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var signature = (await db.ConnectedAccounts.SingleAsync()).MailSignature!;
+        signature.Should().Contain("Awa Koné").And.Contain("data:image/png").And.NotContain("script").And.NotContain("onclick").And.NotContain("javascript:");
+
+        (await handler.Handle(new SetMailSignatureCommand(account.Id, "<p><br></p>"), CancellationToken.None)).IsSuccess.Should().BeTrue();
+        (await db.ConnectedAccounts.SingleAsync()).MailSignature.Should().BeNull();
+
+        (await handler.Handle(new SetMailSignatureCommand(account.Id, "<p>" + new string('x', MailSignatures.MaxLength) + "</p>"), CancellationToken.None))
+            .Error.Should().Be("MAIL_SIGNATURE_TOO_LONG");
     }
 
     [Fact]
@@ -468,10 +658,11 @@ public sealed class ConnectedMailboxSendTests : IDisposable
     private ConnectedMailboxSync Sync(IntegrationDbContext db) => new(
         db, [_mailbox], new CalendarEventProtector(new PrefixEncryptor()), new FixedClock(_now), NullLogger<ConnectedMailboxSync>.Instance);
 
-    private async Task<Result> SendAsync(SendMailCommand command, ICurrentUser? user = null, ICustomersModule? customers = null)
+    private async Task<Result<SendMailOutcome>> SendAsync(SendMailCommand command, ICurrentUser? user = null, ICustomersModule? customers = null)
     {
         await using var db = _factory.CreateContext();
-        return await new SendMailHandler(db, user ?? _currentUser, [_mailbox], Sync(db), NullLogger<SendMailHandler>.Instance, _jobs, customers)
+        return await new SendMailHandler(db, user ?? _currentUser, [_mailbox], Sync(db), NullLogger<SendMailHandler>.Instance, _jobs, customers,
+                new CalendarEventProtector(new PrefixEncryptor()), new FixedClock(_now))
             .Handle(command, CancellationToken.None);
     }
 
