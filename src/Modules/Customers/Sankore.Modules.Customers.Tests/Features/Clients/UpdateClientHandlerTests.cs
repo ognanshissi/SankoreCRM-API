@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Features.Clients.UpdateClient;
 using Sankore.Modules.Customers.Infrastructure;
+using Sankore.Modules.Customers.PublicApi.Events;
+using Sankore.Modules.Customers.Tests.Features.Lifecycle;
 using Sankore.Modules.Customers.Tests.TestSupport;
 using Sankore.Shared.Kernel;
 using Xunit;
@@ -164,6 +166,50 @@ public sealed class UpdateClientHandlerTests : IDisposable
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Announces_the_names_of_the_fields_that_changed_and_never_their_values()
+    {
+        await using var seed = _factory.CreateContext();
+        var client = await TestClientFactory.SeedIndividualAsync(seed, TenantId, AgencyId);
+
+        await using var db = _factory.CreateContext();
+        var publisher = new RecordingEventPublisher();
+        var handler = new UpdateClientHandler(
+            db, TestDoubles.CurrentUser(TenantId, ActorId), TestDoubles.AgencyScope(), TestDoubles.Encryptor(),
+            publisher: publisher);
+
+        var result = await handler.Handle(
+            Command(client.Id, client.Version) with { Employer = "Nouvelle SARL", DeclaredIncome = 410000m, DeclaredIncomeCurrency = "XOF" },
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var announced = publisher.OfType<ClientUpdatedEvent>().Should().ContainSingle().Subject;
+        announced.TenantId.Should().Be(TenantId);
+        announced.ClientId.Should().Be(client.Id);
+        announced.ChangedFields.Should().BeEquivalentTo("employer", "declaredIncome", "declaredIncomeCurrency");
+        announced.ChangedFields.Should().NotContain(f => f.Contains("Nouvelle") || f.Contains("410000"));
+    }
+
+    [Fact]
+    public async Task Announces_nothing_when_nothing_changed()
+    {
+        await using var seed = _factory.CreateContext();
+        var client = await TestClientFactory.SeedIndividualAsync(seed, TenantId, AgencyId);
+
+        await using var db = _factory.CreateContext();
+        var publisher = new RecordingEventPublisher();
+        var handler = new UpdateClientHandler(
+            db, TestDoubles.CurrentUser(TenantId, ActorId), TestDoubles.AgencyScope(), TestDoubles.Encryptor(),
+            publisher: publisher);
+
+        var result = await handler.Handle(
+            Command(client.Id, client.Version) with { Profession = client.Profession },
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        publisher.OfType<ClientUpdatedEvent>().Should().BeEmpty();
+    }
 
     private static UpdateClientCommand Command(Guid clientId, uint expectedVersion)
         => new(

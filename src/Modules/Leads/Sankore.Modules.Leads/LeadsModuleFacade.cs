@@ -86,6 +86,55 @@ public sealed class LeadsModuleFacade(
         return await db.Leads.Where(l => ids.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.FullName, ct);
     }
 
+    public async Task<LeadNotificationFacts?> GetNotificationFactsAsync(
+        Guid tenantId, string workflowEntityType, Guid entityId, CancellationToken ct)
+    {
+        Guid leadId;
+        Guid? projectOwner = null;
+        string? projectProduct = null;
+        string link;
+
+        if (string.Equals(workflowEntityType, "Opportunity", StringComparison.OrdinalIgnoreCase))
+        {
+            var project = await db.Opportunities
+                .IgnoreQueryFilters()
+                .Where(o => o.TenantId == tenantId && o.Id == entityId)
+                .Select(o => new { o.LeadId, o.OwnerId, o.Product })
+                .FirstOrDefaultAsync(ct);
+            if (project is null) return null;
+
+            link = $"/leads/projets/{entityId}";
+            projectOwner = project.OwnerId;
+            projectProduct = project.Product;
+            if (project.LeadId is not { } owningLead)
+                return new LeadNotificationFacts(null, projectOwner, null, null, projectProduct, link);
+            leadId = owningLead;
+        }
+        else
+        {
+            leadId = entityId;
+            link = $"/leads/{entityId}";
+        }
+
+        var lead = await db.Leads
+            .IgnoreQueryFilters()
+            .Where(l => l.TenantId == tenantId && l.Id == leadId)
+            .Select(l => new { l.AgencyId, l.CurrentAssignedId, l.OwnerId, l.FirstName, l.LastName, l.FullName, l.InterestedProduct })
+            .FirstOrDefaultAsync(ct);
+        if (lead is null)
+            return projectOwner is null && projectProduct is null
+                ? null
+                : new LeadNotificationFacts(null, projectOwner, null, null, projectProduct, link);
+
+        return new LeadNotificationFacts(
+            lead.AgencyId,
+            projectOwner ?? lead.CurrentAssignedId ?? lead.OwnerId,
+            lead.FirstName,
+            lead.LastName ?? (lead.FirstName is null ? lead.FullName : null),
+            projectProduct ?? Features.WorkflowNotifications.LeadNotificationValues.Product(lead.InterestedProduct),
+            link);
+    }
+
     public async Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)
     {
         var lead = await db.Leads

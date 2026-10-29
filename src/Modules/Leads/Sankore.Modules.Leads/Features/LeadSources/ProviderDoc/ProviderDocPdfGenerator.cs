@@ -16,8 +16,15 @@ internal static class ProviderDocPdfGenerator
         QuestPDF.Settings.License = LicenseType.Community;
     }
 
-    public static byte[] Generate(LeadSourceConfig source, ServerWebhookSettings settings)
+    /// <param name="signed">
+    /// Whether the source has a signing secret — then every push must be signed (WebhookSigning).
+    /// Decided by the caller, which can read the vault.
+    /// </param>
+    public static byte[] Generate(LeadSourceConfig source, ServerWebhookSettings settings, bool signed)
     {
+        var header = Ingestion.Webhook.WebhookSigning.HeaderName(settings);
+        var algorithm = Ingestion.Webhook.WebhookSigning.Algorithm(settings).ToUpperInvariant();
+
         var doc = Document.Create(container =>
         {
             container.Page(page =>
@@ -45,7 +52,7 @@ internal static class ProviderDocPdfGenerator
                         c.Item().Text("Send lead data via HTTP POST to:")
                             .FontSize(10);
                         c.Item().Background(Colors.Grey.Lighten4).Padding(8)
-                            .Text($"POST /api/ingest/webhook/{source.PublicKey ?? "<YOUR_PUBLIC_KEY>"}")
+                            .Text($"POST /api/ingest/hooks/{source.PublicKey ?? "<YOUR_PUBLIC_KEY>"}")
                             .FontFamily(Fonts.Courier).FontSize(9);
                     });
 
@@ -96,23 +103,26 @@ internal static class ProviderDocPdfGenerator
                     });
 
                     // 3. Signature
-                    if (settings.SignatureAlgorithm is not null)
+                    if (signed)
                     {
                         Section(col, "3. Request Signature", c =>
                         {
-                            c.Item().Text("Each request must include an HMAC signature for verification.")
+                            c.Item().Text("Every request MUST be signed. An unsigned or wrongly signed request is refused with 401.")
                                 .FontSize(10);
-                            c.Item().PaddingTop(5).Text($"Algorithm: HMAC-{settings.SignatureAlgorithm.ToUpperInvariant()}")
-                                .Bold();
-                            c.Item().Text($"Header: {settings.SignatureHeaderName ?? "X-Signature"}")
-                                .Bold();
+                            c.Item().PaddingTop(5).Text($"Header: {header}").Bold();
+                            c.Item().Text($"Algorithm: HMAC-{algorithm}, hexadecimal, lower case").Bold();
                             c.Item().PaddingTop(5)
-                                .Text("Compute HMAC over the raw request body using the shared secret provided during onboarding.")
+                                .Text("Sign the timestamp, a dot, then the RAW request body exactly as sent. The timestamp is "
+                                      + "Unix seconds and must be within 5 minutes of our clock.")
                                 .FontSize(9).Italic();
                             c.Item().PaddingTop(5).Background(Colors.Grey.Lighten4).Padding(8)
-                                .Text($"signature = HMAC-{settings.SignatureAlgorithm.ToUpperInvariant()}(body, shared_secret)\n" +
-                                      $"{settings.SignatureHeaderName ?? "X-Signature"}: {{signature}}")
+                                .Text($"t = current Unix time in seconds\n" +
+                                      $"v1 = hex(HMAC-{algorithm}(shared_secret, t + \".\" + raw_body))\n" +
+                                      $"{header}: t={{t}},v1={{v1}}")
                                 .FontFamily(Fonts.Courier).FontSize(8);
+                            c.Item().PaddingTop(5)
+                                .Text("When the secret is rotated, the previous one is still accepted for 7 days.")
+                                .FontSize(9);
                             c.Item().PaddingTop(5)
                                 .Text("⚠ The secret value is NOT included in this document. It was provided securely during setup.")
                                 .FontSize(9).Bold().FontColor(Colors.Red.Darken1);
@@ -120,7 +130,7 @@ internal static class ProviderDocPdfGenerator
                     }
 
                     // 4. Response Codes
-                    Section(col, settings.SignatureAlgorithm is not null ? "4. Response Codes" : "3. Response Codes", c =>
+                    Section(col, signed ? "4. Response Codes" : "3. Response Codes", c =>
                     {
                         c.Item().Table(table =>
                         {
@@ -130,18 +140,46 @@ internal static class ProviderDocPdfGenerator
                                 cols.RelativeColumn(1);
                             });
 
-                            ResponseRow(table, "202", "Accepted — lead queued for processing");
-                            ResponseRow(table, "400", "Bad Request — malformed JSON or missing required fields");
-                            ResponseRow(table, "401", "Unauthorized — invalid or missing public key");
-                            ResponseRow(table, "403", "Forbidden — IP not allowed or invalid signature");
-                            ResponseRow(table, "409", "Conflict — duplicate external ID (idempotent)");
-                            ResponseRow(table, "413", "Payload Too Large — body exceeds 32 KB");
-                            ResponseRow(table, "429", "Too Many Requests — rate limit exceeded");
+                            ResponseRow(table, "202", "Accepted — one result per item: Accepted, Duplicate, Updated, Rejected or Failed");
+                            ResponseRow(table, "400", "Bad Request — malformed JSON, empty payload, or more than 100 items");
+                            ResponseRow(table, "401", "Unauthorized — missing, invalid or expired signature");
+                            ResponseRow(table, "403", "Forbidden — IP address not allowed");
+                            ResponseRow(table, "404", "Not Found — unknown or inactive endpoint URL");
+                            ResponseRow(table, "413", "Payload Too Large — body exceeds 256 KB");
+                            ResponseRow(table, "429", "Too Many Requests — more than 300 requests a minute");
                         });
+
+                        c.Item().PaddingTop(5).Text(settings.AllowUpdates
+                                ? "Sending an item whose external ID was already received UPDATES that lead's custom fields (status \"Updated\")."
+                                : "Sending an item whose external ID was already received changes nothing: the first result is returned again.")
+                            .FontSize(9);
                     });
 
                     // 5. Support
-                    Section(col, settings.SignatureAlgorithm is not null ? "5. Support" : "4. Support", c =>
+                    // Partner events (webhooks lot 6)
+                    Section(col, signed ? "5. Reporting events about a lead" : "4. Reporting events about a lead", c =>
+                    {
+                        c.Item().Text("Tell the CRM that something happened to a lead you sent — an appointment booked, a file "
+                                      + "completed. Same signature and IP rules as above.").FontSize(10);
+                        c.Item().Background(Colors.Grey.Lighten4).Padding(8)
+                            .Text($"POST /api/ingest/hooks/{source.PublicKey ?? "<YOUR_PUBLIC_KEY>"}/events")
+                            .FontFamily(Fonts.Courier).FontSize(9);
+                        c.Item().PaddingTop(5).Background(Colors.Grey.Lighten4).Padding(8)
+                            .Text("{\n" +
+                                  "  \"id\": \"evt-123\",                 // your event id: sent twice, counted once\n" +
+                                  "  \"type\": \"appointment.booked\",    // lower case, letters, digits . _ -\n" +
+                                  "  \"lead\": { \"externalId\": \"…\" },  // or { \"phone\": \"+225…\" }\n" +
+                                  "  \"data\": { \"agency\": \"Plateau\", \"amount\": 150000 }  // flat, 30 keys max\n" +
+                                  "}")
+                            .FontFamily(Fonts.Courier).FontSize(8);
+                        c.Item().PaddingTop(5)
+                            .Text("Answers 202 with status Matched (the lead was found) or Unmatched (kept, nothing triggered), "
+                                  + "200 Duplicate for an id already received, 400 with the reason for a malformed event. "
+                                  + "A phone number only matches leads this source sent.")
+                            .FontSize(9);
+                    });
+
+                    Section(col, signed ? "6. Support" : "5. Support", c =>
                     {
                         c.Item().Text("For integration support, contact your SankoreCRM account manager.")
                             .FontSize(10);

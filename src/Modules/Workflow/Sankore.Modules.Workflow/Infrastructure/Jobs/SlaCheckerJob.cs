@@ -112,14 +112,14 @@ internal sealed class SlaCheckerJob(
                 or WorkflowStatus.WaitingForChild)
             return;
 
-        // Check whether the template defines a TIMEOUT escalation transition.
+        // Every transition of the template: the TIMEOUT one decides whether to escalate, and the
+        // step it leads to may be an automatic one, which leaves through its own AUTO/APPROVE.
         var timeoutTransitions = await db.WorkflowTransitions
             .IgnoreQueryFilters()
-            .Where(t => t.TemplateId == instance.TemplateId
-                     && t.EventCode  == EventCodes.Timeout)
+            .Where(t => t.TemplateId == instance.TemplateId)
             .ToListAsync(ct);
 
-        if (timeoutTransitions.Count > 0)
+        if (timeoutTransitions.Any(t => t.EventCode == EventCodes.Timeout))
         {
             // Load actions for transitions so they can be dispatched after save.
             var transitionIds = timeoutTransitions.Select(t => t.Id).ToList();

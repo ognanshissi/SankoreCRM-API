@@ -56,6 +56,17 @@ public sealed record ClientArchivedEvent(
     Guid ActorUserId,
     DateTimeOffset ArchivedAt) : IntegrationEventBase;
 
+/// <summary>
+/// Non-sensitive fields of the client were edited (profession, employer, marital status, declared
+/// income, language, custom fields). NAMES only, camelCase, as the API spells them — the protected
+/// fields have <see cref="ClientSensitiveDataChangedEvent"/>.
+/// </summary>
+public sealed record ClientUpdatedEvent(
+    Guid TenantId,
+    Guid ClientId,
+    IReadOnlyList<string> ChangedFields,
+    Guid ActorUserId) : IntegrationEventBase;
+
 /// <summary>The client's owning agency changed (portfolio transfer).</summary>
 public sealed record ClientTransferredEvent(
     Guid TenantId,

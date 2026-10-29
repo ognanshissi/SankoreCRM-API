@@ -1,6 +1,8 @@
 namespace Sankore.Modules.Leads.Features.LeadSources.UpdateLeadSource;
 
 using FluentValidation;
+using Microsoft.Extensions.Options;
+using Sankore.Shared.Infrastructure.Egress;
 using NCrontab;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.LeadSources.Mapping;
@@ -9,7 +11,7 @@ using Sankore.Shared.Infrastructure.Validation;
 internal sealed class UpdateLeadSourceValidator
     : AbstractValidator<UpdateLeadSourceCommand>
 {
-    public UpdateLeadSourceValidator()
+    public UpdateLeadSourceValidator(IOptions<OutboundHttpOptions>? egress = null)
     {
         RuleFor(x => x.SourceId).NotEmpty();
         RuleFor(x => x.Label).NotEmpty().MaximumLength(100);
@@ -83,12 +85,16 @@ internal sealed class UpdateLeadSourceValidator
             // `NoEndpointConfigured` rather than activating, and `LeadSourceConfig.UpdateSettings`
             // refuses to blank the URL of a source that is already past Testing. A present one
             // must still parse — a typo stored now is a pull that fails later, in a Hangfire log.
+            // The platform's egress policy, the one the puller enforces at run time (HTTPS, allowed
+            // ports, no internal address): an http URL used to save fine and then fail every run.
             RuleFor(x => ((ScheduledPullSettings)x.Settings!).EndpointUrl)
-                .Must(BeAValidUrl)
+                .Custom((url, ctx) =>
+                {
+                    var problem = SafeOutboundHttp.ValidateUrl(WithSampleTemplateValues(url), egress?.Value);
+                    if (problem is not null) ctx.AddFailure("settings.pull.baseUrl", problem);
+                })
                 .When(x => !string.IsNullOrWhiteSpace(
-                    ((ScheduledPullSettings)x.Settings!).EndpointUrl))
-                .WithClientField("settings.pull.baseUrl")
-                .WithMessage("settings.pull.baseUrl and requestPath must compose a valid http/https URL.");
+                    ((ScheduledPullSettings)x.Settings!).EndpointUrl));
 
             // No rule on the verb: it is an enum now, so an unknown value is refused when the
             // body is deserialized rather than here.
@@ -139,7 +145,17 @@ internal sealed class UpdateLeadSourceValidator
     private static bool BeAParseableCron(string? expression)
         => CrontabSchedule.TryParse(expression) is not null;
 
+    /// <summary>A website origin for the embedded form — http stays legitimate there.</summary>
     private static bool BeAValidUrl(string url)
         => Uri.TryCreate(url, UriKind.Absolute, out var uri)
            && uri.Scheme is "http" or "https";
+
+    /// <summary>The URL with its pull placeholders filled, so it can be parsed as the puller will send it.</summary>
+    private static string WithSampleTemplateValues(string url)
+        => url
+            .Replace("{{since}}", "2026-01-01T00:00:00Z")
+            .Replace("{{cursor}}", "abc")
+            .Replace("{{page}}", "1")
+            .Replace("{{offset}}", "0")
+            .Replace("{{pageSize}}", "100");
 }

@@ -23,4 +23,8 @@ public sealed record WorkflowInstanceStepDto(
     Guid? ActedByUserId,
     string? Comment,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    // The template step it was made from — the id the history entries point at — and its kind,
+    // so the screen can tell an automatic notification from a validation.
+    Guid StepDefinitionId,
+    string Kind);

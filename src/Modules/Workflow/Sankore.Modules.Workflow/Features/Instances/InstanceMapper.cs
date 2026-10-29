@@ -28,6 +28,8 @@ internal static class InstanceMapper
                     ActedByUserId: s.ActedByUserId,
                     Comment: s.Comment,
                     CreatedAt: s.CreatedAt,
-                    CompletedAt: s.CompletedAt))
+                    CompletedAt: s.CompletedAt,
+                    StepDefinitionId: s.StepDefinitionId,
+                    Kind: s.Kind.ToString()))
                 .ToList());
 }

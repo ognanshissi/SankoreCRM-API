@@ -50,3 +50,17 @@ internal sealed class RawIngestionsPurge(LeadsDbContext db) : ITechnicalPurge
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.RawPayloadJson, (string?)null), ct);
     }
 }
+
+/// <summary>What a partner reported about a lead (webhooks lot 6), purged like an ingestion's payload.</summary>
+internal sealed class RawExternalEventsPurge(LeadsDbContext db) : ITechnicalPurge
+{
+    public string Name => "leads.lead_external_events";
+
+    public Task<int> PurgeAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var before = now - TechnicalRetention.RawIngestions;
+        return db.LeadExternalEvents.IgnoreQueryFilters()
+            .Where(e => e.ReceivedAt < before && e.PayloadJson != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.PayloadJson, (string?)null), ct);
+    }
+}

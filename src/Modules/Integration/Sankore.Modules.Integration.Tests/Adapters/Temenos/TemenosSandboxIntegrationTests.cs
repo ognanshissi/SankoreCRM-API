@@ -279,7 +279,7 @@ public sealed class TemenosSandboxIntegrationTests(ITestOutputHelper output)
 
     /// <summary>
     /// A real <see cref="HttpClient"/>, one per call, over one shared handler — the shape
-    /// <c>TemenosAdapterRegistration</c> configures, SsrfSafeHandler included by its absence: an
+    /// <c>TemenosAdapterRegistration</c> configures, SafeOutboundHttp included by its absence: an
     /// on-premise installation at <c>10.x</c> is the ordinary case, and a run that could not reach
     /// one would be proving the wrong thing.
     /// </summary>

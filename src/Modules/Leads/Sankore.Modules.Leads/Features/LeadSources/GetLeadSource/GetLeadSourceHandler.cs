@@ -7,7 +7,7 @@ using Sankore.Modules.Leads.Features.LeadSources.ListLeadSources;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetLeadSourceHandler(LeadsDbContext db, TimeProvider clock)
+internal sealed class GetLeadSourceHandler(LeadsDbContext db, TimeProvider clock, ISecretsModule? vault = null)
     : IRequestHandler<GetLeadSourceQuery, Result<LeadSourceDetailDto>>
 {
     public async Task<Result<LeadSourceDetailDto>> Handle(
@@ -37,7 +37,18 @@ internal sealed class GetLeadSourceHandler(LeadsDbContext db, TimeProvider clock
         var health = ListLeadSourcesHandler.ComputeHealth(source.Status, lastReceived, now);
 
         // Build secret hints from settings vault references — never expose actual values
-        var secrets = BuildSecretHints(source.Settings);
+        var secrets = BuildSecretHints(source.Settings).ToList();
+
+        // The HMAC secret of a server webhook lives in the vault, not behind a settings reference:
+        // without this hint the « Connexion » tab said « Aucun secret : les envois ne sont pas
+        // vérifiés » for a source whose every push was in fact being verified.
+        if (source.Mode == IntegrationMode.ServerWebhook && vault is not null)
+        {
+            var hint = await vault.GetHintAsync(
+                new SecretKey(source.TenantId, Ingestion.Webhook.WebhookSigning.Scope, source.Id, Ingestion.Webhook.WebhookSigning.CurrentName), ct);
+            if (hint is not null)
+                secrets.Add(new SecretHintDto("hmac", hint.MaskedValue, null, hint.ExpiresAt));
+        }
 
         return Result.Ok(new LeadSourceDetailDto(
             source.Id, source.Code, source.Label, source.Description,
@@ -47,7 +58,7 @@ internal sealed class GetLeadSourceHandler(LeadsDbContext db, TimeProvider clock
             source.DedupWindowDays, source.CostPerLead,
             source.DefaultAgencyId, source.DefaultDispatchingRuleId,
             source.IsSystem, source.DisplayOrder, source.Version, source.CreatedAt,
-            secrets));
+            secrets, source.LastRejectedAt, source.LastRejectedReason));
     }
 
     private static IReadOnlyList<SecretHintDto> BuildSecretHints(SourceSettings? settings)

@@ -25,7 +25,8 @@ internal static class InboundCustomFields
         Lead lead,
         IReadOnlyDictionary<string, string?> mapped,
         Guid sourceId,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool mergeWithExisting = false)
     {
         var values = CustomFieldValues.FromText(mapped);
         if (values.Count == 0) return;
@@ -37,7 +38,9 @@ internal static class InboundCustomFields
         }
 
         var (json, rejected) = await EntityFormGate.ApplyBestEffortAsync(
-            administration, FormEntity.Lead, lead.TenantId, null, values,
+            // An update by external id (webhooks lot 5) merges into what the lead holds; a capture
+            // starts from nothing.
+            administration, FormEntity.Lead, lead.TenantId, mergeWithExisting ? lead.CustomFieldsJson : null, values,
             new Dictionary<string, string?> { ["prospectType"] = lead.ProspectType.ToString() },
             ex => logger?.LogWarning(ex, "Lead form unreadable: custom values of source {SourceId} dropped", sourceId),
             ct);

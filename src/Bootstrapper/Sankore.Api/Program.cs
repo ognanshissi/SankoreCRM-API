@@ -407,6 +407,22 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
             }));
 
+    // Server webhook ingest (webhooks lot 5): 300 req/min per IP+key. A provider pushes in
+    // bursts — the web form's 10 a minute cut one off mid-hour. Each request is up to 100 leads.
+    options.AddPolicy(Sankore.Modules.Leads.Features.Ingestion.Webhook.WebhookIngestEndpoint.RateLimitPolicy, ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var key = ctx.Request.RouteValues["publicKey"]?.ToString() ?? "none";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"ingest-hook:{ip}:{key}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 300,
+                QueueLimit = 0,
+            });
+    });
+
     // Web ingest: 10 req/min per IP+key (US-F13.37-BE-12)
     options.AddPolicy("ingest-key", ctx =>
     {
@@ -543,6 +559,20 @@ builder.Services.AddMassTransit(x =>
     // Connected mailbox: the e-mails kept for an erased lead or client go with it.
     x.AddConsumer<Sankore.Modules.Integration.Features.ConnectedAccounts.LeadErasedMailConsumer>();
     x.AddConsumer<Sankore.Modules.Integration.Features.ConnectedAccounts.ClientAnonymizedMailConsumer>();
+    // Outbound webhooks (lot 3): every event of WebhookEventCatalog becomes one delivery per
+    // subscription that wants it. Also the erasure path for what is still owed about a person.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Webhooks.WebhookFanOutConsumer>();
+    // The same catalogue events, offered to workflows as triggers named by their code
+    // (lead.status_changed, project.closed, client.kyc_validated…). Its own queue.
+    x.AddConsumer<Sankore.Modules.Integration.Features.Webhooks.WorkflowEventBridgeConsumer>();
+    // A workflow « Notification » step: the person of the record (Leads for a lead or a project,
+    // Customers for a client) and the people working it (Workflow, in-app). Three consumers of one
+    // message, each skipping what is not theirs.
+    x.AddConsumer<Sankore.Modules.Leads.Features.WorkflowNotifications.WorkflowNotificationPersonConsumer>();
+    x.AddConsumer<Sankore.Modules.Customers.Features.WorkflowNotifications.WorkflowNotificationClientConsumer>();
+    x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Notifications.WorkflowNotificationInternalConsumer>();
+    // …and what became of each audience, written into the instance's history (lot 4).
+    x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Notifications.WorkflowNotificationOutcomeConsumer>();
 
     // TEL-B-19 : la qualification d'un appel rafraîchit le jour de cet appel dans le modèle de
     // lecture des indicateurs. Ce n'est PAS un incrément — l'événement dit quel jour a changé, et
@@ -1102,6 +1132,14 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(),
             "* * * * *");
 
+        // Every 5 minutes, global: the outbound webhook deliveries whose scheduled run was lost.
+        // Their retries are Hangfire schedules set by WebhookDeliveryJob itself; this only catches
+        // the ones overdue past a claim lease, so it never doubles a run in progress.
+        AddOrUpdate<Sankore.Modules.Integration.Features.Webhooks.WebhookDeliverySweepJob>(
+            "webhook-delivery-sweep",
+            job => job.ExecuteAsync(),
+            "*/5 * * * *");
+
         // 02:00 daily, and daily rather than monthly on purpose: the four statements are
         // CREATE TABLE IF NOT EXISTS ... PARTITION OF, so re-running is a no-op, while a monthly
         // schedule that misses its single slot loses the month — and an INSERT past the last
@@ -1318,6 +1356,7 @@ app.UseTenantResolution(
     "/api/ingest",                  // M13 web form + webhook ingest (public key in the path)
     "/sdk",                         // the forms.js builds those pages load
     "/integration/webhooks",        // M14 inbound sync hooks (connection id + HMAC)
+    "/integration/telephony/webhooks", // TEL-B-07 provider events (connection id + HMAC) — NOT under the line above
     "/integration/relay-agents",    // M14 relay agent enrolment + heartbeat (client certificate)
     "/integration/oauth",           // retour OAuth Microsoft/Google : le tenant vient de la ligne `state`
     SankoreRealtimeHub.Path);       // le hub : le tenant vient du claim du jeton, pas du domaine

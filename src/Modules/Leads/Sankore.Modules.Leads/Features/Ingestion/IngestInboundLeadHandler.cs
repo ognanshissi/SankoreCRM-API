@@ -34,10 +34,14 @@ internal sealed class IngestInboundLeadHandler(
                                           && i.ExternalId == cmd.ExternalId, ct);
 
             if (existing is not null)
+            {
+                var updated = await TryUpdateAsync(cmd, existing, ct);
                 return Result.Ok(new IngestInboundLeadResult(
                     existing.Id,
                     existing.LeadId == Guid.Empty ? null : existing.LeadId,
-                    existing.Status));
+                    existing.Status,
+                    Updated: updated));
+            }
         }
 
         // ── 2. Load source config ───────────────────────────────────────
@@ -166,5 +170,48 @@ internal sealed class IngestInboundLeadHandler(
 
         return Result.Ok(new IngestInboundLeadResult(
             ingestion.Id, lead.Id, ingestion.Status));
+    }
+
+    /// <summary>
+    /// The same external id again, on a server webhook that allows updates: the custom fields of
+    /// the lead it created are merged from this push (webhooks lot 5). Custom fields ONLY — a
+    /// provider must not move a lead's status, owner or what an agent typed, and a resend need not
+    /// repeat the name and phone, so the mapping's missing-field errors are ignored here.
+    /// </summary>
+    private async Task<bool> TryUpdateAsync(IngestInboundLeadCommand cmd, LeadIngestion existing, CancellationToken ct)
+    {
+        if (existing.Status != LeadIngestionStatus.Accepted || existing.LeadId == Guid.Empty)
+            return false;
+
+        var source = await db.LeadSourceConfigs
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.Id == cmd.SourceId && s.TenantId == cmd.TenantId, ct);
+
+        if (source is not { Settings: ServerWebhookSettings { AllowUpdates: true } }
+            || source.Status is not (LeadSourceStatus.Active or LeadSourceStatus.Testing))
+            return false;
+
+        var fieldMapping = source.Settings.FieldMappingsOf();
+        if (fieldMapping is null || fieldMapping.Count == 0)
+            return false;
+
+        var mapped = new Dictionary<string, string?>(
+            FieldMappingEngine.Apply(fieldMapping, cmd.RawPayloadJson).MappedValues, StringComparer.OrdinalIgnoreCase);
+
+        var lead = await db.Leads
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .FirstOrDefaultAsync(l => l.TenantId == cmd.TenantId && l.Id == existing.LeadId, ct);
+
+        if (lead is null || lead.IsAnonymized || lead.Status == LeadStatus.Archived)
+            return false;
+
+        var before = lead.CustomFieldsJson;
+        await CustomFields.InboundCustomFields.ApplyAsync(administration, logger, lead, mapped, source.Id, ct, mergeWithExisting: true);
+        if (string.Equals(before, lead.CustomFieldsJson, StringComparison.Ordinal))
+            return false;
+
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 }

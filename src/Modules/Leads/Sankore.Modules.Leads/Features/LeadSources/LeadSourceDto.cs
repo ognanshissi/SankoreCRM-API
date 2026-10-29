@@ -44,7 +44,11 @@ public sealed record LeadSourceDetailDto(
     int DisplayOrder,
     uint Version,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<SecretHintDto> Secrets);
+    IReadOnlyList<SecretHintDto> Secrets,
+    // The last push the webhook endpoint refused, and why (signature, IP) — a refusal writes no
+    // ingestion row, so this is the only place the tenant sees it.
+    DateTimeOffset? LastRejectedAt = null,
+    string? LastRejectedReason = null);
 
 /// <summary>Secret metadata exposed without the actual value.</summary>
 public sealed record SecretHintDto(

@@ -595,9 +595,9 @@ commentaire énonce précisément cet argument. 45 tests passent sur cet adaptat
 
 ### Dette enregistrée au L4, non traitée
 
-- **La liste de blocage SSRF est dupliquée** — `SftpEgressGuard` ici, `SsrfSafeHandler` dans Leads.
-  Un test comportemental épingle les adresses de bord des deux côtés, mais une **divergence** entre
-  les deux ne serait signalée par rien. Sa place est `Sankore.Shared.Kernel`.
+- ~~**La liste de blocage SSRF est dupliquée**~~ — **traité le 2026-10-29** : une seule liste,
+  `EgressAddressPolicy` (`Sankore.Shared.Infrastructure/Egress/`), utilisée par `SftpEgressGuard`,
+  `MailServerEgress` et le client HTTP partagé `SafeOutboundHttp` (ex-`SsrfSafeHandler` de Leads).
 - **`TemenosTransport` en mode `Api` ne valide pas sa sortie** — le même raisonnement que pour le
   SFTP s'y applique : une adresse privée vue depuis ce processus est notre réseau, pas celui de
   l'IMF.

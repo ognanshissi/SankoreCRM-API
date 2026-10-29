@@ -848,6 +848,23 @@ public static class Permissions
         new("MailTemplates.Manage", "Write the institution's e-mail templates",
             ApplicationModules.Integration, "MailTemplates.Manage");
 
+    /// <summary>
+    /// Seeing the institution's outbound webhooks — addresses, chosen events, delivery health.
+    /// Never the signing secret, which no endpoint returns after it was first shown.
+    /// </summary>
+    public static readonly PermissionItem CanViewWebhooks =
+        new("Integration.Webhook.View", "View the outbound webhooks and their deliveries",
+            ApplicationModules.Integration, "Webhook.View");
+
+    /// <summary>
+    /// Creating, editing, testing and rotating the secret of an outbound webhook. It decides which
+    /// events about leads and clients leave the platform and where they go, so no default role holds
+    /// it — the administrator does.
+    /// </summary>
+    public static readonly PermissionItem CanManageWebhooks =
+        new("Integration.Webhook.Manage", "Create and manage outbound webhooks",
+            ApplicationModules.Integration, "Webhook.Manage");
+
     public static readonly PermissionItem CanConfigureWhatsAppBot =
         new("WhatsApp.Bot.Config", "Configure the WhatsApp bot per product and switch it on",
             ApplicationModules.Leads, "WhatsApp.Bot.Config");
@@ -1140,6 +1157,8 @@ public static class Permissions
         CanConfigureWhatsAppBot,
         CanUseConnectedAccounts,
         CanManageMailTemplates,
+        CanViewWebhooks,
+        CanManageWebhooks,
 
         // Insurance family (ASS-11), plus Ins.Product.View, Ins.Statement.Finalise and the
         // complaints pair — see their own remarks for why the specification's table of seven

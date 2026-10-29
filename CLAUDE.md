@@ -424,6 +424,214 @@ score of each dimension and the cases a change here must not break, is in
 `docs/plan-test-qualification-lead.md`; `docs/workflow-complet-leads.md` lists every endpoint of
 the module.
 
+### Lead and project lifecycle events, and the webhook catalogue (webhooks lot 1)
+
+`Leads.PublicApi/Events/LeadLifecycleEvents.cs` holds the PUBLIC lifecycle of a lead and of a
+project (`LeadCreated`, `LeadAssigned`, `LeadStatusChanged`, `LeadStageChanged`, `LeadQualified`,
+`LeadConvertedToClient`, `LeadClosed`, `LeadReopened`, `LeadMerged`, `LeadConsentWithdrawn`,
+`ProjectCreated`, `ProjectStageChanged`, `ProjectClosed`). **No handler publishes them.**
+`LeadsDbContext.SaveChanges` walks the tracked `Lead` and `Opportunity` aggregates and
+`LeadLifecycleEventTranslator` turns their domain events into these records, written to the outbox
+in the same transaction. So a new handler that changes a status is announced without doing
+anything — and a status change that does NOT go through the aggregate (an `ExecuteUpdate`) is not.
+
+- Domain events are **not cleared** (household PEP reads them after saving); a reference set on the
+  context stops a second save from announcing them twice.
+- `Lead.Qualify` now raises a status change too; `lead.qualified` means REACHING `Qualified`.
+  Conversion is read off the status change (`ConvertedToCustomerId`), so the legacy `Convert()` is
+  announced as well. Closed = Lost / Disqualified / Archived; Converted is its own outcome.
+- `Opportunity.MoveToStep` / `AdvanceStage` raise `OpportunityStageChanged` only when the phase or
+  the step actually changes, `OpportunityClosed` on won/lost.
+- Same contract as Customers' events: TenantId first, ids and enum names, **no personal value and
+  no agent-typed text** (loss detail, closing motive).
+- Clients: `ClientUpdatedEvent` (field NAMES) is published by `UpdateClientHandler`; the other client
+  events already existed.
+
+`Integration/Features/Webhooks/WebhookEventCatalog.cs` is what outbound webhooks may say: a stable
+code (`lead.status_changed`…), the source event, a hand-written `data` projection and a sample.
+**The projection is the contract**: a field reaches partners only when added there. The client
+NUMBER (the remote-KYC secret) and every operator motive are deliberately left out.
+`WebhookEventCatalogTests` pins the codes, forbids personal/free-text keys, and fails when a new
+event appears in `Leads.PublicApi.Events` without an entry.
+
+**Subscriptions (webhooks lot 2)** — `Integration/Features/Webhooks/`, table `whk_subscription`
+(the `whk_` family), routes `integration/webhook-subscriptions` (NOT `integration/webhooks`: that
+prefix outside `api/v1` is the inbound sync hooks', exempt from tenant resolution). Permissions
+`Integration.Webhook.View` / `.Manage`, administrator-only. At most 20 per tenant.
+
+- **The secret is in the vault** (scope `integration`, the subscription id, `webhook-signing`),
+  `whsec_` + 32 random bytes, returned ONCE at creation and at rotation (`[SensitiveData]`); the DTO
+  only carries its mask. A rotation keeps the previous one 7 days (`webhook-signing-old`, expiry
+  checked by `WebhookSecrets` — the vault itself returns expired values) and every delivery in that
+  window carries both signatures.
+- **Signature**: `X-Sankore-Signature: t=<unix>,v1=<hex>[,v1=<hex>]`, HMAC-SHA256 of `"{t}.{body}"`
+  keyed by the secret STRING — the lead-source inbound format. Plus `X-Sankore-Event` and
+  `X-Sankore-Delivery` (= the envelope `id`, the partner's idempotency key).
+- **Envelope**: `{ id, type, version, occurredAt, test?, data }` (`WebhookPayload.Body`).
+- `WebhookSender` makes ONE POST through `AddSafeOutboundHttpClient("WebhookDelivery")`, 10 s, no
+  retry (lot 3 owns retries), and reports `HTTP_<n>` / `TIMEOUT` / `UNREACHABLE` /
+  `ADDRESS_REFUSED` / `REDIRECT_REFUSED`. « Envoyer un test » sends a catalogue sample marked
+  `"test": true` and records nothing on the subscription.
+- URL and event codes are checked by `SaveWebhookSubscriptionValidator` (French messages on the
+  field); an event whose `RequiredModule` the tenant lacks → `WEBHOOK_EVENT_MODULE_DISABLED`.
+- Subscriptions are configuration: kept by the test-tenant wipe (`IntegrationTenantDataWipe.Keep`).
+
+**Delivery (webhooks lot 3)** — `WebhookDispatcher` (scoped, tenant-bound), table `whk_delivery`.
+**At least once, unordered**: the partner deduplicates on the envelope `id` (= the integration
+event's id) and orders on `occurredAt`.
+
+- `WebhookFanOutConsumer` implements `IConsumer<T>` for EVERY catalogue event (one interface each,
+  pinned by a test against the catalogue): one `WebhookDelivery` per active subscription wanting the
+  code, unique on (subscription, event) with a read first — a redelivered message creates nothing —
+  then one `WebhookDeliveryJob` enqueued per row AFTER the save.
+- `WebhookDeliveryJob` → `DeliverAsync`: `TryClaim` (pending AND due; pushes `NextAttemptAt` by a
+  2-min lease) + the `xmin` row version, so the scheduled run and the sweep never both send. One
+  POST; on failure the delivery schedules its own next run (`RetryDelays` 1 min, 5 min, 30 min, 2 h,
+  6 h, 12 h, 24 h → 8 attempts, ~45 h), then `Failed`. Hangfire retries nothing (`Attempts = 0`).
+  A delivery whose subscription is off or gone is `Cancelled` unsent. `X-Sankore-Delivery` = the
+  delivery row id.
+- `WebhookDeliverySweepJob` (global, `*/5`) re-enqueues pending deliveries overdue past the lease.
+- **Auto switch-off**: 20 failed attempts in a row AND no success for 24 h (`RecordFailure`) — a
+  partner down ten minutes in a busy hour is not dead. The last editor and the creator get the bell
+  (`integration.webhook.disabled`). Switching on by hand clears the streak.
+- **Erasure**: on `LeadErasedEvent` / `ClientAnonymizedEvent` the consumer first blanks and cancels
+  every delivery naming that lead/client (`LeadId`/`ClientId` columns, read off the payload), then
+  fans the erasure event out — that one is kept, it tells the partner to delete its copy.
+- Log: `GET …/{id}/deliveries` (paged, `status`), `GET …/deliveries/{deliveryId}` (with the body),
+  `POST …/replay` (same event id, fresh round; refused when the subscription is off or the body was
+  erased). Purged 30 days after a terminal state (`WebhookDeliveryPurge`); wiped with a test tenant.
+- Migration `AddWebhookDeliveries`: the `xmin` column was removed by hand, as everywhere here.
+
+**Inbound lead webhook, hardened (webhooks lot 5)** — `POST /api/ingest/hooks/{publicKey}`.
+
+- **A secret in the vault means a signature is required** (`WebhookSigning`, read by the endpoint,
+  the activation and the provider PDF). Before, verification ran only when
+  `ServerWebhookSettings.SignatureAlgorithm` was set — which no screen set — so a source showing
+  « Secret de signature » accepted unsigned pushes. A source without a secret still accepts them
+  (legacy live sources), but **a server webhook cannot be (re)activated without its secret**
+  (`Activate(signingSecretStored)`; the old rule read a vault REFERENCE nothing ever wrote).
+- Format `t=<unix>,v1=<hex>[,v1=…]` over `"{t}.{body}"`, ±5 min, `sha256` by default; any `v1`
+  may match. Header `SignatureHeaderName` (default `X-Sankore-Signature`) is now honoured — the
+  endpoint passes every header mentioning « signature ». The previous secret is accepted only
+  until its expiry: the vault returns expired values, `WebhookSigning.KeysAsync` checks.
+- Refusals (401 signature, 403 IP) write no ingestion row; the source keeps `LastRejectedAt` /
+  `LastRejectedReason` (throttled to once a minute per reason), shown on its « Connexion » tab.
+- Body capped at 256 KB (413), rate policy `ingest-hook` 300/min per IP+key (the web form keeps
+  `ingest-key` 10/min). The provider PDF now documents the real format and response codes.
+- **`ServerWebhookSettings.AllowUpdates`** (editor field, off by default): a push whose external id
+  was already ACCEPTED merges that lead's custom fields (`InboundCustomFields.ApplyAsync(…,
+  mergeWithExisting: true)`) and answers `Updated`. Custom fields only — never status, owner or
+  agent-typed data; mapping errors (a resend without name/phone) are ignored on this path.
+- Pull-source URLs are checked at save by `SafeOutboundHttp.ValidateUrl` (they accepted `http`,
+  which then failed every run). Website origins keep accepting http.
+- `GetLeadSourceHandler` returns the vault HMAC secret as the `hmac` hint (it only listed settings
+  vault REFERENCES, so the « Connexion » tab said « Aucun secret » for a verified source). The front's
+  activation checklist lists « Secret de signature généré » for a server webhook.
+- **A source is only activated from Testing/Paused/Error, and no screen ever called
+  `start-testing`**: a server webhook stayed Draft forever (and its URL answered 404). The front's
+  `LeadSourcesService.activateFrom` now starts testing then activates from Draft; a refused
+  activation leaves the source in Testing, ready for trial pushes. (Found in the lot 7 run.)
+
+**Partner events → workflow (webhooks lot 6)** — `POST /api/ingest/hooks/{publicKey}/events`
+(`ExternalEventIngest.cs`), behind the SAME gate as the leads endpoint (`WebhookSourceGate`:
+live source, IP allow-list, signature, refusal noted). Body `{ id, type, lead: { externalId |
+phone }, data: { flat scalars, ≤ 30 } }`; `type` is lower-cased and must match
+`^[a-z0-9][a-z0-9._-]{0,99}$`.
+
+- One `leads.lead_external_events` row per (tenant, source, partner event id): a resend answers
+  200 `Duplicate` and starts nothing. Payload purged like an ingestion's (`RawExternalEventsPurge`).
+- The lead is the ingestion's for that external id (a Duplicate ingestion names the survivor), else
+  **by phone among the leads THIS source brought in** (`Lead.LeadSourceConfigId`) — a partner must
+  not reach a lead it never sent. No match → kept `Unmatched` (202), nothing triggered.
+- A match publishes `WorkflowTriggerSignal { IsExternal = true }` (EntityType `Lead`, context =
+  `data` + `eventType` + `source`) **through the Leads outbox**, in the row's transaction — the
+  signal is now an `IntegrationEventBase` for that. `CaptureLeadHandler` still publishes it directly.
+- `WorkflowTriggerConsumer` matches `ExternalEvent` triggers for an external signal and
+  `EntityEvent` ones otherwise — the two name spaces never mix — and, for external signals only,
+  requires the template's `EntityType` to be the signal's (now for every signal, see below). `AddTriggerHandler` lower-cases an
+  ExternalEvent trigger's name; the trigger editor now asks for it (it sent `null` before).
+- Clients are not addressable by partners (their identifiers are secrets or encrypted).
+
+**Internal events start workflows (2026-10-29).** Before, the only `EntityEvent` signal ever sent
+was `LEAD_CAPTURED`: a trigger named anything else (the journey builder's `LEAD_QUALIFIED`, a
+« Planifié » trigger carrying `LEAD_CREATED`) was stored and never fired.
+
+- `PlatformEvents` (Kernel) is the one list of internal event codes — label, family, the workflow
+  entity it is about (`Lead`, `Opportunity` for a project, `Account` for a client) and the payload key
+  carrying its id. `WebhookEventCatalog` takes its labels from there; a new code goes there first.
+- `WorkflowEventBridgeConsumer` (Integration, beside `WebhookFanOutConsumer`, both deriving from
+  `CatalogueEventConsumer`) turns every catalogue event into a `WorkflowTriggerSignal` (EventName =
+  the code, context = the webhook `data` projection, so no personal value). `lead.erased` and
+  `client.anonymized` start nothing (`StartsWorkflows = false`).
+- `GET workflow-templates/trigger-events?entityType=` lists them (plus `LEAD_CAPTURED`) for the
+  trigger editor's drop-down. `AddTriggerHandler` refuses an `EntityEvent` name that is not one of
+  them or not about the template's entity; existing triggers are not migrated.
+- `WorkflowTriggerConsumer` now requires the template's `EntityType` to match for EVERY signal, not
+  only external ones — a `client.*` event must not start a circuit on a lead template.
+
+**Automatic « Notification » steps (2026-10-29, lot 1).** The engine ran EVERY step as a validation
+whatever its `StepKind`: a notification step (no role) waited for an approval nobody was asked for,
+the instance stopped there and nothing was sent. `StepKinds.RunsAutomatically` (Notification only)
+now marks the steps the engine franchit on entry — status `Executed`, audit `AUTO`.
+
+- Both advancement paths: `AdvanceToNextStep` (start, legacy approval) and `Fire` (state machine),
+  which leaves an automatic step through an `AUTO` transition if one is drawn, else the generated
+  `APPROVE`. No way out → the step stays open for a human.
+- **A path that fires an event must load ALL the template's transitions**, not only its own event's:
+  the step it reaches may be automatic. The SLA job and the child-completed consumer filtered on
+  TIMEOUT / CHILD_COMPLETED and were changed for that.
+- `WorkflowInstanceStep` now snapshots `Kind` + `ConfigJson` from its definition (migration
+  `AddInstanceStepKind` backfills running instances).
+- The step raises `NotificationStepExecutedEvent`; `WorkflowDbContext.SaveChanges` writes a
+  `WorkflowNotificationRequested` (Workflow.PublicApi) to the Workflow outbox — here and not in the
+  seven callers that move an instance. **The Workflow outbox had no processor**:
+  `AddOutboxForModule<WorkflowDbContext>()` is now registered.
+- Config read by `NotificationStepConfig`: `channel`, `recipients` (`subject` / `assignedAgent` /
+  `role`), `roleCodes`, `subject`, `message`. An ABSENT `recipients` means `subject` (steps saved with
+  a channel only); an empty list means nobody.
+- `AutomaticStepsCatchUp` (hosted, once, after `ApplicationStarted`) releases instances already
+  stuck on an open notification step.
+- **Sending (lot 2)** — three consumers of the one message, each skipping what is not theirs
+  (registered in `Program.cs`). Never an error for « cannot send »: the step is already franchie;
+  the reason is logged (lot 4 will show it on the step). Idempotent through the queue keys
+  `workflow.notification:{instanceStepId}:subject:{email|sms}` / `…:user:{userId}`.
+  - **The person** of a lead or project — `LeadWorkflowNotifier` (Leads). A lead is a prospect: the
+    channel's consent (`EmailContact` / `SmsContact`, the lead's own — `SubjectId` null — active) is
+    REQUIRED; SMS also needs the tenant's channel (`CanSend`) and an E.164 number
+    (`PhoneAddress.ToE164`, moved to Shared from `ClientSmsNotifier`). A project opened for a client
+    goes through `ICustomersModule.NotifyClient[BySms]Async`, refused when processing is restricted.
+  - **The client** of an `Account` record — `ClientWorkflowNotifier` (Customers): no consent asked
+    (a relationship, not prospecting), refused when anonymised or restricted.
+  - **The people working it** — `InternalWorkflowNotifier` (Workflow), in-app only: the record's
+    agent (lead agent else owner; project owner; client advisor; none for a KYC file) and the
+    holders of `roleCodes` in the record's agency **or a parent agency**
+    (`IAdministrationModule.ListActiveUsersInRolesAsync`; tenant-wide when no agency is known).
+    Facts come from `ILeadsModule.GetNotificationFactsAsync`, `GetClientSummaryAsync`,
+    `GetKycFileSummaryAsync` — Workflow now references those PublicApis.
+  - Text: `WorkflowNotificationText.Render` replaces `{{prenom}}`, `{{nom}}`, `{{agent}}`,
+    `{{produit}}`, `{{institution}}` (plain text, NOT Scriban — a designer's text must not run in the
+    platform's template engine). Platform templates `workflow.notification` (e-mail, escaped, fr/en)
+    and SMS (`{{ body }}`), data `subject`, `body`, `company_name`. Empty subject → the step name.
+- **Editor (lot 3)** — the journey builder's step panel writes `recipients` (always, even empty),
+  `roleCodes`, `subject`, `message`; variable buttons, a preview with sample values, unknown
+  variables flagged, and the SMS segment count (`smsSegments` in `journey-model.ts` mirrors the
+  server's `SmsSegments`: one non-GSM-7 character drops the budget to 70). « Étape bloquante » is
+  hidden and saved false for a notification. Publishing is blocked by `validateJourney` (no
+  recipient, role without roles, no message) and **activation is refused server-side** for the
+  same reasons (`NotificationStepConfig.Problem` in `ActivateTemplateHandler`) — the « Activer »
+  button of the template tabs does not go through the builder's check.
+- **Outcomes (lot 4)** — each sender publishes a `WorkflowNotificationOutcome` (Sent = QUEUED,
+  one French sentence, no address): « E-mail mis en file pour le lead. », « Non envoyé : le lead n'a
+  pas consenti au contact par e-mail. », « 2 utilisateurs prévenus dans l'application. »…
+  `WorkflowNotificationOutcomeConsumer` writes it as a history entry (`NOTIFICATION_SENT` /
+  `NOTIFICATION_NOT_SENT`, from = to = the step definition, deduplicated on the text). The
+  instance screen lists them under the step (`WorkflowInstanceStepDto` now carries
+  `StepDefinitionId` and `Kind`). Delivery itself (provider accepted or refused) stays in the
+  notification module's delivery log.
+- The transition action `SendNotification` used to publish a `WorkflowNotificationIntegrationEvent`
+  nobody consumed (removed). It now publishes a `WorkflowNotificationRequested` (role audience, in-app),
+  keyed on (instance, action) so a replay notifies once; its outcome has no step and is only logged.
+
 ### Dynamic forms: one layout per entity, native and custom fields (lot 1)
 
 A tenant lays out the **Lead**, **Client** and **Product** forms: sections, the placement of every
@@ -558,6 +766,24 @@ runs, so they pass every test on a machine whose culture is invariant.
 `Sankore.Shared.Spreadsheets` exists to keep ClosedXML off the projects that never open a
 workbook: it is referenced by those three modules only, not by `Shared.Infrastructure`, so
 `Sankore.Admin` ships no spreadsheet engine.
+
+### Outbound calls to a tenant-configured target
+
+Any URL, host or port a tenant types — a lead puller, a workflow « Appeler un webhook », an SFTP
+deposit, a mail server, and the outbound event webhooks to come — is reached through
+`Shared.Infrastructure/Egress/`, never a plain `AddHttpClient`:
+
+- `EgressAddressPolicy.IsBlocked` is the ONE block list (loopback, RFC 1918, link-local and cloud
+  metadata, CGNAT, `::`, multicast/reserved, and the v6 spellings that embed a v4 address: 6to4,
+  NAT64, IPv4-compatible, Teredo). It replaced two hand-synchronised copies (Leads, Integration).
+- `services.AddSafeOutboundHttpClient(name)` registers a client that resolves the name itself and
+  connects to the checked address (no rebinding), HTTPS only, ports `Egress:Http:AllowedPorts`
+  (443 and 8443 by default), no proxy, no automatic redirect — `SafeRedirectHandler` follows one,
+  same host, HTTPS. Every refusal is `OutboundAddressNotAllowed`, deliberately indistinguishable.
+- `SafeOutboundHttp.ValidateUrl` is the save-time check (French message, no DNS lookup); the
+  connect callback is the one that holds when a name changes its answer.
+- Not for CBS/insurer adapters (`IntegrationResiliencePipelineProvider`, Temenos): their targets
+  may legitimately be private and the relay agent is their route.
 
 ### Host configuration that must not be hardcoded
 
@@ -3294,7 +3520,7 @@ the lead/client, « Envoyer un e-mail » everywhere). Lot 1 is the accounts.
   per user — otherwise a password-guessing relay). Commands carry the password `[SensitiveData]`.
 - **Egress.** Ports are a closed list (IMAP 993/143, SMTP 465/587/25/2525), security `Ssl` or
   `StartTls` REQUIRED (no clear text), and `MailServerEgress` refuses private/loopback/link-local/CGNAT
-  addresses with `SftpEgressGuard.IsBlockedAddress` under `Integration:Egress:AllowPrivateAddresses`.
+  addresses with `EgressAddressPolicy.IsBlocked` under `Integration:Egress:AllowPrivateAddresses`.
   The probe connects its own socket to the vetted ADDRESS and hands MailKit the host name only for
   SNI and the certificate check (no rebinding). A refused host reads « unreachable ».
 - **Certificates (`MailServerCertificates`)**: chain and name enforced, a REVOKED certificate refused,

@@ -83,13 +83,13 @@ public static class TemenosAdapterRegistration
                 client.MaxResponseContentBufferSize = options.MaxResponseBytes;
             });
 
-        // NOT wired, deliberately: SsrfSafeHandler refuses every RFC 1918 address, and a Temenos
+        // NOT wired, deliberately: SafeOutboundHttp refuses every RFC 1918 address, and a Temenos
         // Transact installation is frequently on-premise at 10.x or 192.168.x — the ordinary case
         // this adapter exists to serve. It is opt-in per HttpClient, so the correct action is
         // simply never to call it. The threat it defends against is a URL supplied by a caller; a
         // connection's base URL is set by an administrator of the deployment through INT-03.
         //
-        //   .ConfigurePrimaryHttpMessageHandler(() => new SsrfSafeHandler(...))   // do not add
+        //   .ConfigurePrimaryHttpMessageHandler(() => SafeOutboundHttp.CreateHandler(...))   // do not add
 
         // Scoped, like every adapter: it resolves the tenant's connection once per scope and
         // holds it, and a singleton would carry one tenant's binding into the next tenant's job.

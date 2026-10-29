@@ -68,14 +68,14 @@ public sealed class ChildWorkflowCompletedConsumer(
             return;
         }
 
-        // Load CHILD_COMPLETED transitions and their actions.
+        // Every transition of the template, not only CHILD_COMPLETED: the step it leads to may be an
+        // automatic one, which leaves through its own AUTO/APPROVE transition.
         var transitions = await db.WorkflowTransitions
             .IgnoreQueryFilters()
-            .Where(t => t.TemplateId == parent.TemplateId
-                     && t.EventCode  == EventCodes.ChildCompleted)
+            .Where(t => t.TemplateId == parent.TemplateId)
             .ToListAsync(ct);
 
-        if (transitions.Count == 0)
+        if (!transitions.Any(t => t.EventCode == EventCodes.ChildCompleted))
         {
             // No transition defined — just save the resumed status and leave it to a human.
             db.WorkflowAuditEntries.Add(WorkflowAuditEntry.Create(

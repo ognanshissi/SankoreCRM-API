@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Workflow.Domain;
 using Sankore.Modules.Workflow.Infrastructure;
+using Sankore.Modules.Workflow.Infrastructure.Notifications;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Workflow.Features.Templates.ActivateTemplate;
@@ -37,6 +39,14 @@ internal sealed class ActivateTemplateHandler(WorkflowDbContext db)
             return Result.Fail(
                 $"Another active template for entity type '{template.EntityType}' already exists. " +
                 "Deactivate it first.");
+
+        // A notification step that would send nothing used to be published anyway: it then waited
+        // for an approval nobody was asked for. It is franchie automatically now, so say it here.
+        foreach (var step in template.Steps.Where(s => s.Kind == StepKind.Notification).OrderBy(s => s.Order))
+        {
+            if (NotificationStepConfig.Problem(step.Name, step.ConfigJson) is { } problem)
+                return Result.Fail(problem);
+        }
 
         try
         {

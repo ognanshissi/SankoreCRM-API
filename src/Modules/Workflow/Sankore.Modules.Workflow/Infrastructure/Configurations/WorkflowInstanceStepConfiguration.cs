@@ -15,6 +15,10 @@ internal sealed class WorkflowInstanceStepConfiguration : IEntityTypeConfigurati
         b.Property(s => s.ApproverRoleCode).HasMaxLength(100);
         b.Property(s => s.Comment).HasMaxLength(2000);
         b.Property(s => s.Status).HasConversion<string>().HasMaxLength(50);
+        b.Property(s => s.Kind).HasConversion<string>().HasMaxLength(50)
+         .HasDefaultValue(StepKind.Validation).ValueGeneratedNever();
+        b.Property(s => s.ConfigJson).HasColumnType("text");
+        b.Ignore(s => s.RunsAutomatically);
         b.Property(s => s.SlaHours);
         b.Property(s => s.DueAt);
         b.Property(s => s.AssignedToUserId);

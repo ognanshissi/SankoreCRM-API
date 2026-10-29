@@ -30,6 +30,17 @@ public sealed class WorkflowInstanceStep
     /// <summary>Absolute deadline computed when the step enters AwaitingApproval. Null when no SLA.</summary>
     public DateTimeOffset? DueAt { get; private set; }
 
+    /// <summary>
+    /// Copied from the definition at start, with <see cref="ConfigJson"/>: a running instance keeps
+    /// the circuit it was started on, and the engine reads them without loading the template.
+    /// </summary>
+    public StepKind Kind { get; private set; } = StepKind.Validation;
+
+    public string? ConfigJson { get; private set; }
+
+    /// <summary>Run on entry, decided by nobody — see <see cref="StepKinds.RunsAutomatically"/>.</summary>
+    public bool RunsAutomatically => StepKinds.RunsAutomatically(Kind);
+
     public StepStatus Status { get; private set; }
     public Guid? ActedByUserId { get; private set; }
     public string? Comment { get; private set; }
@@ -53,6 +64,8 @@ public sealed class WorkflowInstanceStep
             Name = definition.Name,
             ApproverRoleCode = definition.ApproverRoleCode,
             SlaHours = definition.TimeoutHours,
+            Kind = definition.Kind,
+            ConfigJson = definition.ConfigJson,
             Status = StepStatus.Pending,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -98,6 +111,18 @@ public sealed class WorkflowInstanceStep
     public void Skip()
     {
         Status = StepStatus.Skipped;
+        CompletedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Runs an automatic step, whether the engine reached it pending or already opened it.</summary>
+    public void ExecuteAutomatically()
+    {
+        if (!RunsAutomatically)
+            throw new DomainException("Only an automatic step can be executed by the engine.");
+        if (Status is not (StepStatus.Pending or StepStatus.AwaitingApproval))
+            throw new DomainException("Step has already been completed.");
+        Status = StepStatus.Executed;
+        DueAt = null;
         CompletedAt = DateTimeOffset.UtcNow;
     }
 

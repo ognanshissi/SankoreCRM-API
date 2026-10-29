@@ -2,14 +2,17 @@ namespace Sankore.Modules.Customers.Features.Clients.UpdateClient;
 
 using System.Globalization;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.Features.Clients.Shared;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
+using Sankore.Modules.Customers.PublicApi.Events;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Crypto;
+using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.Authorization;
 
@@ -30,9 +33,25 @@ internal sealed class UpdateClientHandler(
     IFieldEncryptor encryptor,
     IAdministrationModule? administration = null,
     ILogger<UpdateClientHandler>? logger = null,
-    IInstitutionCurrency? institutionCurrency = null
+    IInstitutionCurrency? institutionCurrency = null,
+    [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher? publisher = null
 ) : IRequestHandler<UpdateClientCommand, Result>
 {
+    /// <summary>
+    /// The columns this slice writes, by the name the API gives them. A column absent from the map
+    /// (UpdatedAt, the version) is bookkeeping and never announced.
+    /// </summary>
+    private static readonly Dictionary<string, string> AnnouncedFields = new()
+    {
+        [nameof(Client.Profession)] = "profession",
+        [nameof(Client.Employer)] = "employer",
+        [nameof(Client.MaritalStatus)] = "maritalStatus",
+        [nameof(Client.EncryptedDeclaredIncome)] = "declaredIncome",
+        [nameof(Client.DeclaredIncomeCurrency)] = "declaredIncomeCurrency",
+        [nameof(Client.PreferredLanguage)] = "preferredLanguage",
+        [nameof(Client.CustomFieldsJson)] = "customFields",
+    };
+
     public async Task<Result> Handle(UpdateClientCommand cmd, CancellationToken ct)
     {
         var tenantId = currentUser.TenantId;
@@ -102,6 +121,15 @@ internal sealed class UpdateClientHandler(
             if (stored.IsFailure)
                 return stored;
         }
+
+        // Read before saving: SaveChanges resets the modified flags. Names only, never values.
+        var changed = db.Entry(client).Properties
+            .Where(p => p.IsModified && AnnouncedFields.ContainsKey(p.Metadata.Name))
+            .Select(p => AnnouncedFields[p.Metadata.Name])
+            .ToList();
+
+        if (changed.Count > 0 && publisher is not null)
+            await publisher.PublishAsync(new ClientUpdatedEvent(tenantId, client.Id, changed, actor), ct);
 
         try
         {

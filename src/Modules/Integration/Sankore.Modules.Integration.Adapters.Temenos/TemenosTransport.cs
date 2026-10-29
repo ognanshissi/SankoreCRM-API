@@ -55,7 +55,7 @@ internal sealed class TemenosTransport(
     /// Named client, so the host owns the handler chain, the proxy and the connection pool.
     ///
     /// <para>
-    /// <b>No <c>SsrfSafeHandler</c> on it, deliberately — do not add one.</b> M13's handler
+    /// <b>No <c>SafeOutboundHttp</c> on it, deliberately — do not add one.</b> M13's handler
     /// refuses every RFC 1918 address, and a Temenos Transact installation is frequently
     /// on-premise at <c>10.x</c> or <c>192.168.x</c>: that is the ordinary case this adapter
     /// exists to serve, not an attack. The threat the handler defends against is a URL supplied by

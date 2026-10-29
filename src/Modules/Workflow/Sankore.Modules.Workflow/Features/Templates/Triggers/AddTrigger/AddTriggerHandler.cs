@@ -20,20 +20,37 @@ internal sealed class AddTriggerHandler(
         if (template is null)
             return Result.Fail<Guid>("Workflow template not found.");
 
+        // A partner's event type arrives lower-cased (Leads' external-event endpoint, webhooks lot
+        // 6): a trigger typed « Appointment.Booked » would otherwise never match it.
+        var eventName = request.TriggerType == TriggerType.ExternalEvent
+            ? request.EventName.Trim().ToLowerInvariant()
+            : request.EventName;
+
+        // An internal event must be one the platform publishes, about this template's entity: a
+        // free name used to be accepted and then never matched anything (« LEAD_QUALIFIED »).
+        if (request.TriggerType == TriggerType.EntityEvent && eventName != PlatformEvents.LegacyLeadCaptured)
+        {
+            var known = PlatformEvents.Find(eventName);
+            if (known is null || !known.StartsWorkflows)
+                return Result.Fail<Guid>($"Unknown internal event '{eventName}'.");
+            if (!string.Equals(known.WorkflowEntityType, template.EntityType, StringComparison.OrdinalIgnoreCase))
+                return Result.Fail<Guid>($"Event '{eventName}' is about {known.WorkflowEntityType}, not {template.EntityType}.");
+        }
+
         // Guard duplicate: same template + event name already registered.
         var exists = await db.WorkflowTriggers
             .AnyAsync(t => t.TemplateId == request.TemplateId
-                        && t.EventName  == request.EventName, ct);
+                        && t.EventName  == eventName, ct);
 
         if (exists)
             return Result.Fail<Guid>(
-                $"A trigger for event '{request.EventName}' already exists on this template.");
+                $"A trigger for event '{eventName}' already exists on this template.");
 
         var trigger = WorkflowTrigger.Create(
             tenantId:     currentUser.TenantId,
             templateId:   request.TemplateId,
             triggerType:  request.TriggerType,
-            eventName:    request.EventName,
+            eventName:    eventName,
             conditionJson: request.ConditionJson);
 
         db.WorkflowTriggers.Add(trigger);

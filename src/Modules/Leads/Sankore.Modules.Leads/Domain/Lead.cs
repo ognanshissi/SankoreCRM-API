@@ -702,10 +702,13 @@ public sealed class Lead : AggregateRoot
         if (score is < 0 or > 100)
             return Result.Fail("SCORE_OUT_OF_RANGE");
 
+        var previous = Status;
         Score     = score;
         Status    = score >= qualifiedThreshold ? LeadStatus.Qualified : LeadStatus.Qualifying;
         UpdatedAt = DateTimeOffset.UtcNow;
 
+        if (previous != Status)
+            RaiseDomainEvent(new LeadStatusChangedDomainEvent(Id, previous, Status));
         RaiseDomainEvent(new LeadQualifiedDomainEvent(Id, Status, score));
         return Result.Ok();
     }

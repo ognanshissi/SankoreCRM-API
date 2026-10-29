@@ -6,7 +6,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetProviderDocHandler(LeadsDbContext db)
+internal sealed class GetProviderDocHandler(LeadsDbContext db, ISecretsModule secrets)
     : IRequestHandler<GetProviderDocQuery, Result<ProviderDocResult>>
 {
     public async Task<Result<ProviderDocResult>> Handle(
@@ -25,7 +25,8 @@ internal sealed class GetProviderDocHandler(LeadsDbContext db)
         if (settings is null)
             return Result.Fail<ProviderDocResult>("NO_WEBHOOK_SETTINGS");
 
-        var pdfBytes = ProviderDocPdfGenerator.Generate(source, settings);
+        var signed = await Ingestion.Webhook.WebhookSigning.HasSecretAsync(secrets, source.TenantId, source.Id, ct);
+        var pdfBytes = ProviderDocPdfGenerator.Generate(source, settings, signed);
         var fileName = $"webhook-integration-{source.Code.ToLowerInvariant()}.pdf";
 
         return Result.Ok(new ProviderDocResult(pdfBytes, fileName));

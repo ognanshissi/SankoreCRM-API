@@ -32,4 +32,10 @@ public static class EventCodes
     /// Template designers define a transition on this event to control the next state.
     /// </summary>
     public const string ChildCompleted = "CHILD_COMPLETED";
+
+    /// <summary>A « Notification » step's message was queued for one audience (history only).</summary>
+    public const string NotificationSent = "NOTIFICATION_SENT";
+
+    /// <summary>A « Notification » step could not reach one audience, with the reason (history only).</summary>
+    public const string NotificationNotSent = "NOTIFICATION_NOT_SENT";
 }

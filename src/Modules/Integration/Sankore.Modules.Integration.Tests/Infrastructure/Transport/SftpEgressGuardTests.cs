@@ -104,36 +104,6 @@ public sealed class SftpEgressGuardTests
     }
 
     [Fact]
-    public void The_block_list_matches_the_ranges_SsrfSafeHandler_blocks()
-    {
-        // Range for range, in the same order, as
-        // Sankore.Modules.Leads.Infrastructure.SsrfProtection.SsrfSafeHandler.IsBlockedAddress.
-        // Re-stated rather than referenced because a module may not reference another module's
-        // assembly; the correct home is the shared kernel. A change to one must be made to both,
-        // and this is the test that notices.
-        foreach (var blocked in new[]
-                 {
-                     "127.0.0.1", "::1", "10.255.255.255", "172.16.0.0", "172.31.255.255",
-                     "192.168.255.255", "169.254.0.1", "0.1.2.3", "100.64.0.0",
-                     "100.127.255.255", "fe80::abcd", "fc00::1", "fdff::1",
-                 })
-        {
-            SftpEgressGuard.IsBlockedAddress(IPAddress.Parse(blocked))
-                .Should().BeTrue($"{blocked} is in a blocked range");
-        }
-
-        foreach (var allowed in new[]
-                 {
-                     "8.8.8.8", "1.1.1.1", "172.15.0.1", "172.32.0.1", "192.167.0.1",
-                     "169.253.0.1", "100.63.255.255", "100.128.0.1", "2606:4700::1111",
-                 })
-        {
-            SftpEgressGuard.IsBlockedAddress(IPAddress.Parse(allowed))
-                .Should().BeFalse($"{allowed} is a public address and must not be blocked");
-        }
-    }
-
-    [Fact]
     public void The_escape_hatch_is_off_by_default()
     {
         new IntegrationEgressOptions().AllowPrivateAddresses.Should().BeFalse(

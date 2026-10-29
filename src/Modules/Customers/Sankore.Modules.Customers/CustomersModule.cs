@@ -124,6 +124,8 @@ public static class CustomersModule
         services.AddScoped<Infrastructure.RemoteIdentity.RemoteIdentityVerifier>();
         services.AddScoped<Infrastructure.RemoteIdentity.ReadIdentityComparer>();
         services.AddScoped<Infrastructure.Notifications.ClientSmsNotifier>();
+        // Writes to the client when a workflow « Notification » step on a client record asks.
+        services.AddScoped<Features.WorkflowNotifications.ClientWorkflowNotifier>();
 
         // The single path into the complaints register, shared by the agent's endpoint and the
         // WhatsApp bot's contract (2026-10-26).

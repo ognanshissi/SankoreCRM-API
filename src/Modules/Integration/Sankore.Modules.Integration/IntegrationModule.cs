@@ -31,6 +31,7 @@ using Sankore.Modules.Integration.Features.Sync;
 using Sankore.Modules.Integration.Features.Telephony;
 using Sankore.Modules.Integration.Features.Telephony.Webhook;
 using Sankore.Modules.Integration.Features.References;
+using Sankore.Modules.Integration.Features.Webhooks;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.Infrastructure.CallLog;
 using Sankore.Modules.Integration.Infrastructure.Crypto;
@@ -124,6 +125,7 @@ public static class IntegrationModule
         services.AddTelephonyServices(config);
         services.AddMessagingServices();
         services.AddConnectedAccountsServices(config);
+        services.AddWebhookSubscriptions();
 
         // The insurance family (ASS-03 →). On the SAME socle: no second DbContext, no second
         // outbox, no second dispatcher — which is the whole claim of ASS-01.
@@ -176,6 +178,7 @@ public static class IntegrationModule
         app.MapTelephonyEndpoints();
         app.MapWhatsAppChannelEndpoints();
         app.MapConnectedAccountEndpoints();
+        app.MapWebhookSubscriptionEndpoints();
 
         return app;
     }

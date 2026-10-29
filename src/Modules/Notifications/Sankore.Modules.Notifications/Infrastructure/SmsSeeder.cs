@@ -57,8 +57,18 @@ internal static class SmsSeeder
             fr: "Finalisez votre dossier ({{ hours }}h) : {{ link }}",
             en: "Complete your file ({{ hours }}h): {{ link }}");
 
+        // A workflow « Notification » step: the administrator's text, variables already replaced by
+        // the sending module. Its length is theirs — the editor counts the segments (lot 3).
+        await SeedAsync(
+            db, logger, ct,
+            key: WorkflowNotificationTemplateKey,
+            fr: "{{ body }}",
+            en: "{{ body }}");
+
         await db.SaveChangesAsync(ct);
     }
+
+    internal const string WorkflowNotificationTemplateKey = "workflow.notification";
 
     private static async Task SeedAsync(
         NotificationsDbContext db,

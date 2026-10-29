@@ -201,13 +201,23 @@ public sealed class Opportunity : AggregateRoot
         if (Stage == OpportunityStage.ClosedWon || Stage == OpportunityStage.ClosedLost)
             return Result.Fail("OPPORTUNITY_ALREADY_CLOSED");
 
+        var (previousStage, previousStep) = (Stage, StepId);
+
         Stage       = newStage;
         Probability = StageProbability(newStage);
         StepId      = null;
         UpdatedAt   = now;
 
         if (newStage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
+        {
             ClosedAt = now;
+            RaiseDomainEvent(new Events.OpportunityClosedDomainEvent(Id, newStage));
+        }
+        else if (previousStage != newStage || previousStep is not null)
+        {
+            RaiseDomainEvent(new Events.OpportunityStageChangedDomainEvent(
+                Id, previousStage, newStage, previousStep, null));
+        }
 
         return Result.Ok();
     }
@@ -278,10 +288,18 @@ public sealed class Opportunity : AggregateRoot
         if (Stage == OpportunityStage.ClosedWon || Stage == OpportunityStage.ClosedLost)
             return Result.Fail("OPPORTUNITY_ALREADY_CLOSED");
 
+        var (previousStage, previousStep) = (Stage, StepId);
+
         Stage       = phase;
         Probability = probability / 100.0;
         StepId      = stepId;
         UpdatedAt   = now;
+
+        if (previousStage != phase || previousStep != stepId)
+        {
+            RaiseDomainEvent(new Events.OpportunityStageChangedDomainEvent(
+                Id, previousStage, phase, previousStep, stepId));
+        }
 
         return Result.Ok();
     }

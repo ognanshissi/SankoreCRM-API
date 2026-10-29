@@ -37,7 +37,7 @@ using Sankore.Integration.RelayAgent.Protocol;
 /// </para>
 ///
 /// <para>
-/// Note what is deliberately NOT here: SSRF filtering. The repository's <c>SsrfSafeHandler</c>
+/// Note what is deliberately NOT here: SSRF filtering. The repository's <c>SafeOutboundHttp</c>
 /// blocks RFC 1918 and loopback, and every address this executor is meant to reach is RFC 1918 —
 /// a core banking system in a branch office. The protection that replaces it is the allow-list:
 /// not "any address except the private ones" but "these addresses and no others".

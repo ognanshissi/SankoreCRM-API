@@ -229,12 +229,7 @@ public sealed class WorkflowInstance : AggregateRoot
         var current = CurrentStep()!;
         var ctx     = context ?? _emptyContext;
 
-        var transition = transitions
-            .Where(t => t.FromStateId == current.StepDefinitionId && t.EventCode == eventCode)
-            .OrderBy(t => t.Priority)
-            .FirstOrDefault(t =>
-                t.ConditionJson is null ||
-                conditionEvaluator?.Evaluate(t.ConditionJson, ctx) == true)
+        var transition = SelectTransition(current, eventCode, transitions, ctx, conditionEvaluator)
             ?? throw new DomainException(
                 $"No eligible transition for event '{eventCode}' from the current state. " +
                 "Ensure at least one transition has a matching condition or no condition.");
@@ -246,6 +241,89 @@ public sealed class WorkflowInstance : AggregateRoot
             case EventCodes.Timeout: current.MarkTimedOut();                  break;
         }
 
+        Follow(transition, current, eventCode, actedByUserId, comment, actionsByTransitionId);
+        RunAutomaticSteps(transitions, ctx, conditionEvaluator, actionsByTransitionId);
+    }
+
+    private WorkflowTransition? SelectTransition(
+        WorkflowInstanceStep from,
+        string eventCode,
+        IReadOnlyCollection<WorkflowTransition> transitions,
+        IReadOnlyDictionary<string, object> ctx,
+        IConditionEvaluator? conditionEvaluator)
+        => transitions
+            .Where(t => t.FromStateId == from.StepDefinitionId && t.EventCode == eventCode)
+            .OrderBy(t => t.Priority)
+            .FirstOrDefault(t =>
+                t.ConditionJson is null ||
+                conditionEvaluator?.Evaluate(t.ConditionJson, ctx) == true);
+
+    /// <summary>
+    /// Franchit the automatic steps the state machine has just entered, one after the other. An
+    /// <see cref="EventCodes.Auto"/> transition a designer drew wins; otherwise the generated
+    /// <see cref="EventCodes.Approve"/> one carries the circuit on, as an approval would have.
+    /// </summary>
+    private void RunAutomaticSteps(
+        IReadOnlyCollection<WorkflowTransition> transitions,
+        IReadOnlyDictionary<string, object> ctx,
+        IConditionEvaluator? conditionEvaluator,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId)
+    {
+        while (Status == WorkflowStatus.InProgress && CurrentStep() is { RunsAutomatically: true } step)
+        {
+            var transition = SelectTransition(step, EventCodes.Auto, transitions, ctx, conditionEvaluator)
+                          ?? SelectTransition(step, EventCodes.Approve, transitions, ctx, conditionEvaluator);
+
+            // No way out drawn: the step stays open, where someone can still approve it by hand.
+            if (transition is null) return;
+
+            ExecuteAutomatic(step);
+            Follow(transition, step, EventCodes.Auto, Guid.Empty, null, actionsByTransitionId);
+        }
+    }
+
+    private void ExecuteAutomatic(WorkflowInstanceStep step)
+    {
+        step.ExecuteAutomatically();
+        if (step.Kind == StepKind.Notification)
+            RaiseDomainEvent(new NotificationStepExecutedEvent(
+                Id, TenantId, EntityType, EntityId, step.Id, step.Name, step.ConfigJson));
+    }
+
+    /// <summary>
+    /// Moves an instance past the automatic step it is stuck on — one opened before the engine ran
+    /// them, and left waiting for an approval nobody was asked for. True when something moved.
+    /// </summary>
+    public bool ResumeAutomaticSteps(
+        IReadOnlyCollection<WorkflowTransition>? transitions = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowRule>>? rulesByStepDefId = null,
+        IReadOnlyDictionary<string, object>? context = null,
+        IRuleEvaluator? evaluator = null,
+        IConditionEvaluator? conditionEvaluator = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId = null)
+    {
+        if (Status != WorkflowStatus.InProgress || CurrentStep() is not { RunsAutomatically: true } step)
+            return false;
+
+        if (transitions is { Count: > 0 })
+        {
+            RunAutomaticSteps(transitions, context ?? _emptyContext, conditionEvaluator, actionsByTransitionId);
+            return step.Status == StepStatus.Executed;
+        }
+
+        ExecuteAutomatic(step);
+        AdvanceToNextStep(rulesByStepDefId, context, evaluator);
+        return true;
+    }
+
+    private void Follow(
+        WorkflowTransition transition,
+        WorkflowInstanceStep current,
+        string eventCode,
+        Guid actedByUserId,
+        string? comment,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId)
+    {
         if (transition.ToStateId.HasValue)
         {
             var nextStep = _steps.FirstOrDefault(s => s.StepDefinitionId == transition.ToStateId.Value)
@@ -411,6 +489,12 @@ public sealed class WorkflowInstance : AggregateRoot
                     step.AutoApprove();
                     continue;
                 }
+            }
+
+            if (step.RunsAutomatically)
+            {
+                ExecuteAutomatic(step);
+                continue;
             }
 
             step.StartReview();

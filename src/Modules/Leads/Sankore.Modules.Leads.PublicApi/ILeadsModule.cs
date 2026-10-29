@@ -21,6 +21,15 @@ public interface ILeadsModule
     Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct);
 
     /// <summary>
+    /// What a workflow « Notification » step needs to tell the people working a lead or a project
+    /// (<paramref name="workflowEntityType"/> <c>Lead</c> or <c>Opportunity</c>): its agency, the
+    /// agent on it, the names its message may quote and the screen it opens. No contact value.
+    /// Null when the record does not exist in that tenant.
+    /// </summary>
+    Task<LeadNotificationFacts?> GetNotificationFactsAsync(
+        Guid tenantId, string workflowEntityType, Guid entityId, CancellationToken ct);
+
+    /// <summary>
     /// The names of several leads in one read (connected mailbox: a page of conversations, or a
     /// search over them). Ambient tenant, like <see cref="GetLeadAsync"/>; an unknown id is simply
     /// absent from the answer.
@@ -348,6 +357,17 @@ public sealed record LeadPhoneMatch(
     string Status,
     Guid? AgencyId,
     Guid? AssignedAgentId);
+
+/// <param name="AssignedUserId">The agent on the lead, else its owner; for a project its owner, else its lead's agent.</param>
+/// <param name="LastName">The person's surname, or the full name when only that is known.</param>
+/// <param name="Link">The CRM route of the record.</param>
+public sealed record LeadNotificationFacts(
+    Guid? AgencyId,
+    Guid? AssignedUserId,
+    string? FirstName,
+    string? LastName,
+    string? Product,
+    string Link);
 
 public sealed record LeadSummary(
     Guid Id,

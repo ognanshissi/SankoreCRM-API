@@ -32,7 +32,7 @@ internal static class TemenosFixtures
 
     /// <summary>
     /// An RFC 1918 host on purpose. A Transact installation is frequently on-premise, and this
-    /// base URL is what a run would prove unreachable if <c>SsrfSafeHandler</c> were ever wired
+    /// base URL is what a run would prove unreachable if <c>SafeOutboundHttp</c> were ever wired
     /// onto the adapter's HttpClient.
     /// </summary>
     public const string BaseUrl = "https://10.20.30.40/irf-provider-container/api";

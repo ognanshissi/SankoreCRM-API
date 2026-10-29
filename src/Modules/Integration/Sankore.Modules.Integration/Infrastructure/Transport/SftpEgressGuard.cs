@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Sankore.Shared.Infrastructure.Egress;
 
 /// <summary>
 /// Resolves an SFTP target and refuses one that points inside SANKORE's own network (SSRF).
@@ -29,12 +30,9 @@ using Microsoft.Extensions.Options;
 /// </para>
 ///
 /// <para>
-/// <b>The block list is the one in</b> <c>Sankore.Modules.Leads.Infrastructure.SsrfProtection.SsrfSafeHandler</c>,
-/// range for range. It is re-stated rather than referenced because a module may not reference
-/// another module's assembly — the correct home for it is the shared kernel, and hoisting it
-/// there touches a shared project outside this slice's ownership (reported, not done). Any change
-/// to one must be made to the other; the ranges are listed in the same order so a diff of the two
-/// methods is readable.
+/// <b>The block list is <see cref="EgressAddressPolicy"/></b>, shared with every outbound HTTP
+/// call. It used to be re-stated here range for range, because a module may not reference
+/// another module's assembly; the shared infrastructure is where it belongs.
 /// </para>
 ///
 /// <para>
@@ -64,7 +62,7 @@ internal sealed class SftpEgressGuard(
         // name — and on a host with no DNS it would fail a target that is perfectly valid.
         if (IPAddress.TryParse(host, out var literal))
         {
-            if (!allowPrivate && IsBlockedAddress(literal))
+            if (!allowPrivate && EgressAddressPolicy.IsBlocked(literal))
             {
                 Refuse(connectionId, host, "the configured literal address is in private, "
                                            + "loopback, link-local or CGNAT space");
@@ -100,7 +98,7 @@ internal sealed class SftpEgressGuard(
 
         foreach (var address in addresses)
         {
-            if (!IsBlockedAddress(address)) return new EgressTarget(address, port);
+            if (!EgressAddressPolicy.IsBlocked(address)) return new EgressTarget(address, port);
         }
 
         // EVERY answer was internal. Refusing rather than picking the least-bad one: a name that
@@ -128,58 +126,6 @@ internal sealed class SftpEgressGuard(
             + "(IntegrationMode.Relay, INT-26). A single-tenant self-hosted deployment may set "
             + "{Setting}:AllowPrivateAddresses to true.",
             connectionId, reason, host, IntegrationEgressOptions.SectionName);
-
-    /// <summary>
-    /// Private, loopback, link-local (cloud metadata included), unspecified and CGNAT space.
-    /// Kept range-for-range identical to <c>SsrfSafeHandler.IsBlockedAddress</c>.
-    /// </summary>
-    internal static bool IsBlockedAddress(IPAddress address)
-    {
-        ArgumentNullException.ThrowIfNull(address);
-
-        // Loopback (127.0.0.0/8, ::1)
-        if (IPAddress.IsLoopback(address)) return true;
-
-        // An IPv4 address written as ::ffff:10.0.0.1 is the same address; mapping it back is what
-        // stops the v6 spelling of a private v4 target from skipping the v4 branch entirely.
-        var addr = address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
-
-        if (addr.AddressFamily == AddressFamily.InterNetwork)
-        {
-            var bytes = addr.GetAddressBytes();
-
-            // 10.0.0.0/8
-            if (bytes[0] == 10) return true;
-
-            // 172.16.0.0/12
-            if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
-
-            // 192.168.0.0/16
-            if (bytes[0] == 192 && bytes[1] == 168) return true;
-
-            // Link-local 169.254.0.0/16 — the cloud metadata service at 169.254.169.254 lives
-            // here, and it is the single most valuable target an SSRF can reach.
-            if (bytes[0] == 169 && bytes[1] == 254) return true;
-
-            // 0.0.0.0/8
-            if (bytes[0] == 0) return true;
-
-            // 100.64.0.0/10 (carrier-grade NAT)
-            if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
-        }
-        else if (addr.AddressFamily == AddressFamily.InterNetworkV6)
-        {
-            var bytes = addr.GetAddressBytes();
-
-            // Link-local fe80::/10
-            if (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80) return true;
-
-            // Unique local fc00::/7
-            if ((bytes[0] & 0xfe) == 0xfc) return true;
-        }
-
-        return false;
-    }
 }
 
 /// <summary>

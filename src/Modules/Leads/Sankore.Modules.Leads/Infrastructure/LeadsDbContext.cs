@@ -58,6 +58,7 @@ public sealed class LeadsDbContext(
     public DbSet<LeadSourceConfig> LeadSourceConfigs => Set<LeadSourceConfig>();
     public DbSet<LeadSourceRun> LeadSourceRuns => Set<LeadSourceRun>();
     public DbSet<LeadIngestion> LeadIngestions => Set<LeadIngestion>();
+    public DbSet<LeadExternalEvent> LeadExternalEvents => Set<LeadExternalEvent>();
     public DbSet<ScoringConfig> ScoringConfigs => Set<ScoringConfig>();
     public DbSet<TaskTypeConfig> TaskTypeConfigs => Set<TaskTypeConfig>();
     public DbSet<PipelineStageConfig> PipelineStageConfigs => Set<PipelineStageConfig>();
@@ -73,6 +74,63 @@ public sealed class LeadsDbContext(
     public DbSet<FatcaDeclaration> FatcaDeclarations => Set<FatcaDeclaration>();
     public DbSet<LeadSetting> LeadSettings => Set<LeadSetting>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
+    /// <summary>The domain events already written to the outbox by an earlier save of this context.</summary>
+    private readonly HashSet<object> _announced = new(ReferenceEqualityComparer.Instance);
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        AnnounceLifecycleEvents();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        AnnounceLifecycleEvents();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes the public lifecycle events of every tracked lead and project to the outbox, in the
+    /// transaction about to commit their change (<see cref="Events.LeadLifecycleEventTranslator"/>).
+    ///
+    /// <para>
+    /// <see cref="AggregateRoot"/> promised an interceptor that dispatched domain events after
+    /// commit; none existed, so a status change, an assignment or a project step was raised and
+    /// lost — nothing outside the handler that made it could ever learn of it.
+    /// </para>
+    ///
+    /// <para>
+    /// The domain events are NOT cleared: handlers read them after saving (household PEP), and a
+    /// second save of the same context must not announce them twice — hence the reference set.
+    /// </para>
+    /// </summary>
+    private void AnnounceLifecycleEvents()
+    {
+        var aggregates = ChangeTracker.Entries<AggregateRoot>()
+            .Where(e => e.State != EntityState.Deleted && e.State != EntityState.Detached)
+            .Select(e => e.Entity)
+            .ToList();
+
+        foreach (var aggregate in aggregates)
+        {
+            foreach (var raised in aggregate.DomainEvents)
+            {
+                if (!_announced.Add(raised)) continue;
+
+                foreach (var @event in Events.LeadLifecycleEventTranslator.Translate(aggregate, raised))
+                {
+                    OutboxMessages.Add(new OutboxMessage
+                    {
+                        Id = @event.EventId,
+                        EventType = @event.GetType().AssemblyQualifiedName!,
+                        PayloadJson = System.Text.Json.JsonSerializer.Serialize(@event, @event.GetType(), OutboxJson.Options),
+                        OccurredAt = @event.OccurredAt,
+                    });
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.
@@ -203,6 +261,7 @@ public sealed class LeadsDbContext(
         modelBuilder.Entity<LeadImportJob>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<LeadSourceRun>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<LeadIngestion>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<LeadExternalEvent>().HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ScoringConfig>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TaskTypeConfig>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<PipelineStageConfig>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);

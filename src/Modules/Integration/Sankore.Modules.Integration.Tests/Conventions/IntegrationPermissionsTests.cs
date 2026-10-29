@@ -48,6 +48,13 @@ public sealed class IntegrationPermissionsTests
         "MailTemplates.Manage",
     ];
 
+    /// <summary>Outbound webhooks: seeing them, and deciding which events leave and where.</summary>
+    private static readonly string[] WebhookCodes =
+    [
+        "Integration.Webhook.View",
+        "Integration.Webhook.Manage",
+    ];
+
     /// <summary>The seven codes of TEL-B-18's table, verbatim.</summary>
     private static readonly string[] TelephonyCodes =
     [
@@ -138,7 +145,7 @@ public sealed class IntegrationPermissionsTests
 
         // Guards the other direction: a permission invented in passing would widen the surface
         // an administrator has to reason about, and nothing else would report it.
-        declared.Should().BeEquivalentTo([.. IntegrationCodes, .. InsuranceCodes, .. TelephonyCodes, .. MessagingCodes, .. ConnectedAccountCodes]);
+        declared.Should().BeEquivalentTo([.. IntegrationCodes, .. InsuranceCodes, .. TelephonyCodes, .. MessagingCodes, .. ConnectedAccountCodes, .. WebhookCodes]);
     }
 
     [Fact]

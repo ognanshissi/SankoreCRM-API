@@ -565,15 +565,26 @@ public sealed record ServerWebhookSettings : SourceSettings
     /// <summary>JSONPath to extract the external ID from each payload item.</summary>
     public string? ExternalIdPath { get; init; }
 
+    /// <summary>
+    /// A push carrying an external id already received UPDATES that lead instead of being ignored
+    /// (webhooks lot 5) — its custom fields only, merged: never its status, its owner, nor what an
+    /// agent typed. Off by default: a provider that resends everything daily would otherwise
+    /// rewrite custom values agents corrected.
+    /// </summary>
+    public bool AllowUpdates { get; init; }
+
     // ── Server-owned: the editor never sends these ──────────────────────
 
     /// <summary>Expected Content-Type (default: application/json).</summary>
     public string ContentType { get; init; } = "application/json";
 
-    /// <summary>HMAC algorithm for signature validation (e.g. "sha256").</summary>
+    /// <summary>
+    /// HMAC algorithm, <c>sha256</c> when unset. Whether a signature is required does NOT depend on
+    /// it: a source whose secret is in the vault requires one (<c>WebhookSigning</c>).
+    /// </summary>
     public string? SignatureAlgorithm { get; init; }
 
-    /// <summary>Header name carrying the HMAC signature.</summary>
+    /// <summary>Header carrying the signature, <c>X-Sankore-Signature</c> when unset.</summary>
     public string? SignatureHeaderName { get; init; }
 
     /// <summary>Vault reference for the HMAC signing credential (never inline).</summary>

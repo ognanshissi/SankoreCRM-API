@@ -755,6 +755,46 @@ internal sealed class AdministrationModuleFacade(
     /// <summary>Public for the cache's serializer only; not part of any contract.</summary>
     internal sealed record CatalogueEntry(Guid Id, string NormalizedCode, string NormalizedName);
 
+    public async Task<IReadOnlyList<Guid>> ListActiveUsersInRolesAsync(
+        Guid tenantId, IReadOnlyCollection<string> roleCodes, Guid? agencyId, CancellationToken ct)
+    {
+        var normalized = roleCodes
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim().ToUpperInvariant())
+            .Distinct()
+            .ToList();
+        if (normalized.Count == 0) return [];
+
+        // The agency and its parents, walked in memory: a tenant's tree is a few dozen rows and a
+        // recursive CTE would not run on the InMemory provider the tests use.
+        List<Guid>? perimeter = null;
+        if (agencyId is { } start)
+        {
+            var parents = await db.Agencies
+                .IgnoreQueryFilters()
+                .Where(a => a.TenantId == tenantId)
+                .Select(a => new { a.Id, a.ParentAgencyId })
+                .ToDictionaryAsync(a => a.Id, a => a.ParentAgencyId, ct);
+
+            perimeter = [];
+            for (Guid? current = start; current is { } id && !perimeter.Contains(id); current = parents.GetValueOrDefault(id))
+                perimeter.Add(id);
+        }
+
+        return await db.UserRoles
+            .IgnoreQueryFilters()
+            .Where(ur => ur.TenantId == tenantId && ur.IsActive)
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.NormalizedName })
+            .Where(x => x.NormalizedName != null && normalized.Contains(x.NormalizedName))
+            .Join(db.Users.IgnoreQueryFilters(), x => x.UserId, u => u.Id, (x, u) => u)
+            .Where(u => u.TenantId == tenantId
+                     && u.Status == UserStatus.Active
+                     && (perimeter == null || (u.AgencyId != null && perimeter.Contains(u.AgencyId.Value))))
+            .Select(u => u.Id)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Guid>> ListUsersWithPermissionAsync(
         Guid tenantId, string permissionCode, CancellationToken ct)
         => await db.UserRoles

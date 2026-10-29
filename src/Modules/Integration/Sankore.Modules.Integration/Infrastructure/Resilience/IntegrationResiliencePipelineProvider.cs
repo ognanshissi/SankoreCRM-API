@@ -39,7 +39,7 @@ using Sankore.Modules.Integration.Domain;
 /// </para>
 ///
 /// <para>
-/// <b>No <c>SsrfSafeHandler</c>, deliberately.</b> M13's handler is the right default for a URL a
+/// <b>No <c>SafeOutboundHttp</c>, deliberately.</b> M13's handler is the right default for a URL a
 /// tenant typed into a lead-source form, and it is wrong here: it refuses every RFC 1918 address,
 /// and a core banking system is frequently on-premise at <c>10.x</c> or <c>192.168.x</c> — the
 /// perfectly ordinary case this module exists to serve. It is opt-in per HttpClient, so the

@@ -33,11 +33,15 @@ public sealed class WorkflowTriggerConsumer(
         var ruleEvaluator    = scope.ServiceProvider.GetRequiredService<IRuleEvaluator>();
         var conditionEvaluator = scope.ServiceProvider.GetRequiredService<IConditionEvaluator>();
 
+        // A partner's event name and one of the CRM's own never match each other (webhooks lot 6):
+        // a partner naming its event LEAD_CAPTURED must not start the capture journeys.
+        var triggerType = signal.IsExternal ? TriggerType.ExternalEvent : TriggerType.EntityEvent;
+
         var triggers = await db.WorkflowTriggers
             .IgnoreQueryFilters()
             .Where(t => t.TenantId   == signal.TenantId
                      && t.EventName  == signal.EventName
-                     && t.TriggerType == TriggerType.EntityEvent
+                     && t.TriggerType == triggerType
                      && t.IsActive)
             .ToListAsync(ct);
 
@@ -96,6 +100,13 @@ public sealed class WorkflowTriggerConsumer(
                 ct);
 
         if (template is null || !template.Steps.Any())
+            return;
+
+        // A signal names an entity; a trigger set on a circuit of another entity must not start
+        // that circuit on this id — client.created on a lead circuit would open a lead workflow on
+        // a client's id. Every internal event now comes with its entity (PlatformEvents), so the
+        // check holds for all of them, not only partners' events.
+        if (!string.Equals(template.EntityType, signal.EntityType, StringComparison.OrdinalIgnoreCase))
             return;
 
         var contextJson = context.Count > 0

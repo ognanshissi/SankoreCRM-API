@@ -29,6 +29,8 @@ public sealed class RoleDefaultGrantsTests
         Permissions.CanManageEntityForms,
         Permissions.CanManageNotificationSettings,
         Permissions.CanManageIntegrationConnection,
+        Permissions.CanViewWebhooks,
+        Permissions.CanManageWebhooks,
         Permissions.CanManageTelephonySettings,
         Permissions.CanConfigureWhatsApp,
         Permissions.CanConfigureWhatsAppBot,

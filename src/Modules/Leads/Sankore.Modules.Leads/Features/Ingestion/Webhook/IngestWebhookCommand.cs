@@ -9,10 +9,15 @@ using Sankore.Shared.Kernel;
 /// The endpoint handles HTTP concerns (signature, IP, body reading);
 /// this command handles domain logic (source resolution, parsing, batching, ingestion).
 /// </summary>
+/// <param name="SignatureHeaders">
+/// Every request header whose name mentions « signature », keyed case-insensitively: which one
+/// carries it is the source's setting (<c>SignatureHeaderName</c>), known only once the source is
+/// resolved.
+/// </param>
 internal sealed record IngestWebhookCommand(
     string PublicKey,
     string Body,
-    string? SignatureHeader,
+    IReadOnlyDictionary<string, string> SignatureHeaders,
     string RemoteIp
 ) : IRequest<Result<IngestWebhookResult>>, ICommand, IResourceCommand
 {

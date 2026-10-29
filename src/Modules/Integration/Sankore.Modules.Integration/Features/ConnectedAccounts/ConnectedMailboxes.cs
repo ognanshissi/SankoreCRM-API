@@ -22,6 +22,7 @@ using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.Infrastructure.Transport;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
+using Sankore.Shared.Infrastructure.Egress;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
 
@@ -96,8 +97,8 @@ internal enum MailServerStep
 // ── Egress ───────────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Resolves a mail host and refuses one inside SANKORÉ's own network — the SFTP deposits' rule,
-/// range for range (<see cref="SftpEgressGuard.IsBlockedAddress"/>) and under the same setting
+/// Resolves a mail host and refuses one inside SANKORÉ's own network — the shared block list
+/// (<see cref="EgressAddressPolicy.IsBlocked"/>) and the SFTP deposits' setting
 /// (<c>Integration:Egress:AllowPrivateAddresses</c>). Here the host is typed by ANY user, not by
 /// an administrator, which makes the check more necessary, not less: pointed at 127.0.0.1:25 or a
 /// 10.x address, the server would hand an internal service a login attempt.
@@ -115,7 +116,7 @@ internal sealed class MailServerEgress(IOptions<IntegrationEgressOptions> option
         var allowPrivate = options.Value.AllowPrivateAddresses;
 
         if (IPAddress.TryParse(host, out var literal))
-            return allowPrivate || !SftpEgressGuard.IsBlockedAddress(literal) ? literal : Refused(host);
+            return allowPrivate || !EgressAddressPolicy.IsBlocked(literal) ? literal : Refused(host);
 
         IPAddress[] addresses;
 
@@ -133,7 +134,7 @@ internal sealed class MailServerEgress(IOptions<IntegrationEgressOptions> option
 
         // IPv4 first: a mail host announcing an AAAA record this network cannot route is common.
         return addresses.OrderBy(a => a.AddressFamily == AddressFamily.InterNetwork ? 0 : 1)
-                   .FirstOrDefault(a => !SftpEgressGuard.IsBlockedAddress(a))
+                   .FirstOrDefault(a => !EgressAddressPolicy.IsBlocked(a))
                ?? Refused(host);
     }
 

@@ -78,6 +78,17 @@ public sealed class LeadSourceConfig : ITenant
     /// <summary>Origin that attempted to ping but was not in AllowedOrigins.</summary>
     public string? UnauthorizedOriginSeen { get; private set; }
 
+    // ── Refused server pushes (webhooks lot 5) ───────────────────────────
+    /// <summary>
+    /// The last push the webhook endpoint refused — bad or missing signature, IP not allowed. A
+    /// refused push creates no ingestion row (an unauthenticated caller must not write rows), so
+    /// without this the tenant would never learn that its partner signs wrongly.
+    /// </summary>
+    public DateTimeOffset? LastRejectedAt { get; private set; }
+
+    /// <summary><c>SIGNATURE_MISSING</c>, <c>SIGNATURE_INVALID</c>, <c>SIGNATURE_EXPIRED</c>, <c>SIGNATURE_MALFORMED</c>, <c>IP_NOT_ALLOWED</c>.</summary>
+    public string? LastRejectedReason { get; private set; }
+
     public bool IsSystem { get; private set; }
     public int DisplayOrder { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -241,12 +252,16 @@ public sealed class LeadSourceConfig : ITenant
     /// Transition to Active. Only from Testing, Paused, or Error.
     /// Returns activation prerequisite violations (empty = OK).
     /// </summary>
-    public IReadOnlyList<string> Activate()
+    /// <param name="signingSecretStored">
+    /// Whether the source's HMAC secret is in the vault — which only the caller can read. Only the
+    /// activation handler answers it for real; it decides whether a server webhook may go live.
+    /// </param>
+    public IReadOnlyList<string> Activate(bool signingSecretStored = true)
     {
         EnsureTransition(LeadSourceStatus.Active,
             LeadSourceStatus.Testing, LeadSourceStatus.Paused, LeadSourceStatus.Error);
 
-        var missing = CheckActivationPrerequisites();
+        var missing = CheckActivationPrerequisites(signingSecretStored);
         if (missing.Count > 0) return missing;
 
         Status = LeadSourceStatus.Active;
@@ -286,6 +301,20 @@ public sealed class LeadSourceConfig : ITenant
     {
         LastPullCursor = cursor;
         LastPullAt = now;
+    }
+
+    /// <summary>
+    /// Notes a refused push. At most once a minute: a partner hammering with a wrong signature
+    /// must not turn every request into a write.
+    /// </summary>
+    public bool RecordRejection(string reason, DateTimeOffset now)
+    {
+        if (LastRejectedAt is { } last && now - last < TimeSpan.FromMinutes(1) && LastRejectedReason == reason)
+            return false;
+
+        LastRejectedAt = now;
+        LastRejectedReason = reason;
+        return true;
     }
 
     /// <summary>Records a successful pull run. Resets consecutive failures.</summary>
@@ -345,7 +374,7 @@ public sealed class LeadSourceConfig : ITenant
 
     // ── Activation prerequisites ────────────────────────────────────────
 
-    private IReadOnlyList<string> CheckActivationPrerequisites()
+    private IReadOnlyList<string> CheckActivationPrerequisites(bool signingSecretStored)
     {
         var missing = new List<string>();
 
@@ -360,7 +389,11 @@ public sealed class LeadSourceConfig : ITenant
         // Webhook/Pull with vault credentials — check settings
         switch (Settings)
         {
-            case ServerWebhookSettings { SignatureAlgorithm: not null, SignatureCredentialVaultRef: null }:
+            // A server webhook goes live signed or not at all (webhooks lot 5). The rule used to
+            // read a vault REFERENCE nothing ever wrote, so it could only be met by a source that
+            // never verified anything — and the screen's « Générer le secret » produced a secret
+            // the endpoint then ignored. Paused or errored sources re-activated go through it too.
+            case ServerWebhookSettings when !signingSecretStored:
                 missing.Add("SecretMissing");
                 break;
 

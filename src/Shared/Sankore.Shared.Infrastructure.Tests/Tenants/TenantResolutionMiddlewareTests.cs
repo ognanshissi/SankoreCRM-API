@@ -35,7 +35,7 @@ public sealed class TenantResolutionMiddlewareTests
 {
     /// <summary>The prefixes Sankore.Api passes to UseTenantResolution.</summary>
     private static readonly string[] HostExemptPrefixes =
-        ["/api/ingest", "/sdk", "/integration/webhooks", "/integration/relay-agents"];
+        ["/api/ingest", "/sdk", "/integration/webhooks", "/integration/telephony/webhooks", "/integration/relay-agents"];
 
     private static readonly Guid TenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
@@ -50,6 +50,8 @@ public sealed class TenantResolutionMiddlewareTests
     [InlineData("/sdk/v1/forms.min.js")]
     // M14 — connection id plus an HMAC over the body, and the relay agent's certificate.
     [InlineData("/integration/webhooks/8f14e45f-ceea-467a-9f4e-0f4e2e1e0001")]
+    // TEL-B-07 — its own prefix: it is not under /integration/webhooks, and was unreachable.
+    [InlineData("/integration/telephony/webhooks/8f14e45f-ceea-467a-9f4e-0f4e2e1e0001")]
     [InlineData("/integration/relay-agents/enrol")]
     [InlineData("/integration/relay-agents/heartbeat")]
     // Infrastructure paths every host has.
@@ -73,6 +75,7 @@ public sealed class TenantResolutionMiddlewareTests
     [InlineData("/api/v1/leads")]
     [InlineData("/api/v1/integration/connections")]
     [InlineData("/api/ingestion-not-a-prefix-match")]
+    [InlineData("/integration/telephony/connections")]
     public async Task Everything_else_still_needs_a_tenant(string path)
     {
         var ctx = Request(path);

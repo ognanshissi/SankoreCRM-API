@@ -1436,6 +1436,63 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("lead_consents", "leads");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadExternalEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("ExternalEventId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("external_event_id");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lead_id");
+
+                    b.Property<string>("MatchedBy")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("matched_by");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lead_external_events");
+
+                    b.HasIndex("TenantId", "LeadId")
+                        .HasDatabaseName("ix_lead_external_events_tenant_id_lead_id");
+
+                    b.HasIndex("TenantId", "SourceId", "ExternalEventId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_lead_external_event_idempotency");
+
+                    b.ToTable("lead_external_events", "leads");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.LeadHouseholdMember", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1937,6 +1994,14 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("last_pull_cursor");
+
+                    b.Property<DateTimeOffset?>("LastRejectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_rejected_at");
+
+                    b.Property<string>("LastRejectedReason")
+                        .HasColumnType("text")
+                        .HasColumnName("last_rejected_reason");
 
                     b.Property<string>("Mode")
                         .IsRequired()

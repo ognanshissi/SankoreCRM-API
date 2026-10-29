@@ -1,11 +1,8 @@
 namespace Sankore.Modules.Leads.Features.Ingestion.Webhook;
 
 using MediatR;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Sankore.Modules.Leads.Domain;
-using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -13,10 +10,8 @@ using Sankore.Shared.Kernel;
 /// Resolves source, verifies signature + IP, parses batch, delegates to IngestInboundLeadCommand.
 /// </summary>
 internal sealed class IngestWebhookHandler(
-    LeadsDbContext db,
     ISender sender,
-    ISecretsModule secrets,
-    ILogger<IngestWebhookHandler> logger)
+    WebhookSourceGate gate)
     : IRequestHandler<IngestWebhookCommand, Result<IngestWebhookResult>>
 {
     private const int MaxBatchSize = 100;
@@ -24,52 +19,12 @@ internal sealed class IngestWebhookHandler(
     public async Task<Result<IngestWebhookResult>> Handle(
         IngestWebhookCommand cmd, CancellationToken ct)
     {
-        // ── 1. Resolve source ───────────────────────────────────────────
-        var source = await db.LeadSourceConfigs
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.PublicKey == cmd.PublicKey, ct);
-
-        if (source is null || source.Status == LeadSourceStatus.Archived)
-            return Result.Ok(new IngestWebhookResult(404, []));
-
-        if (source.Status is not (LeadSourceStatus.Active or LeadSourceStatus.Testing))
-            return Result.Ok(new IngestWebhookResult(404, []));
+        // ── 1-3. Source, IP allow-list, signature ───────────────────────
+        var (source, status) = await gate.AuthenticateAsync(cmd.PublicKey, cmd.Body, cmd.SignatureHeaders, cmd.RemoteIp, ct);
+        if (source is null)
+            return Result.Ok(new IngestWebhookResult(status, []));
 
         var settings = source.Settings as ServerWebhookSettings;
-
-        // ── 2. IP allowlist ─────────────────────────────────────────────
-        if (settings?.AllowedIps.Count > 0
-            && !settings.AllowedIps.Contains(cmd.RemoteIp))
-        {
-            logger.LogWarning("Webhook IP rejected: {Ip} for source {SourceId}", cmd.RemoteIp, source.Id);
-            return Result.Ok(new IngestWebhookResult(403, []));
-        }
-
-        // ── 3. Signature verification ───────────────────────────────────
-        if (settings?.SignatureAlgorithm is not null)
-        {
-            var currentKey = new SecretKey(source.TenantId, "LeadSource", source.Id, "hmac-signing");
-            var currentSecret = await secrets.GetValueAsync(currentKey, ct);
-
-            if (currentSecret is null)
-            {
-                logger.LogError("Webhook secret not found for source {SourceId}", source.Id);
-                return Result.Ok(new IngestWebhookResult(401, []));
-            }
-
-            var oldKey = new SecretKey(source.TenantId, "LeadSource", source.Id, "hmac-signing-old");
-            var previousSecret = await secrets.GetValueAsync(oldKey, ct);
-
-            var sigError = WebhookSignatureVerifier.Verify(
-                cmd.SignatureHeader, cmd.Body, settings.SignatureAlgorithm,
-                currentSecret, previousSecret, DateTimeOffset.UtcNow);
-
-            if (sigError is not null)
-            {
-                logger.LogWarning("Webhook signature failed: {Error} for source {SourceId}", sigError, source.Id);
-                return Result.Ok(new IngestWebhookResult(401, []));
-            }
-        }
 
         // ── 4. Parse payload — single or batch ──────────────────────────
         JToken parsed;
@@ -131,7 +86,7 @@ internal sealed class IngestWebhookHandler(
             }
 
             var v = ingestResult.Value;
-            results.Add(new WebhookItemResult(v.IngestionId, v.LeadId, v.Status.ToString(), v.Error));
+            results.Add(new WebhookItemResult(v.IngestionId, v.LeadId, v.Updated ? "Updated" : v.Status.ToString(), v.Error));
         }
 
         return Result.Ok(new IngestWebhookResult(202, results));

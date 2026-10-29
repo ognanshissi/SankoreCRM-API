@@ -358,6 +358,15 @@ public interface IAdministrationModule
     /// The active users whose roles carry <paramref name="permissionCode"/> — who to tell when a
     /// deadline concerns a function rather than a person (a remittance, a compliance alert).
     /// </summary>
+    /// <summary>
+    /// The active users holding one of <paramref name="roleCodes"/> (compared case-insensitively),
+    /// in <paramref name="agencyId"/> or one of its parent agencies — a branch manager hears about
+    /// their branch, a head-office officer about every branch. Null agency = the whole tenant.
+    /// For a workflow « Notification » step addressed to a role.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListActiveUsersInRolesAsync(
+        Guid tenantId, IReadOnlyCollection<string> roleCodes, Guid? agencyId, CancellationToken ct);
+
     Task<IReadOnlyList<Guid>> ListUsersWithPermissionAsync(
         Guid tenantId, string permissionCode, CancellationToken ct);
 

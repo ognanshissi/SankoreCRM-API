@@ -21,7 +21,10 @@ using Sankore.Modules.Workflow.Infrastructure.Actions.Executors;
 using Sankore.Modules.Workflow.Infrastructure.Consumers;
 using Sankore.Modules.Workflow.Infrastructure.Seeders;
 using Sankore.Modules.Workflow.Infrastructure.Triggers;
+using Sankore.Modules.Workflow.Infrastructure.Notifications;
+using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Modules.Workflow.PublicApi;
+using Sankore.Shared.Infrastructure.Egress;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Workflow;
@@ -49,7 +52,8 @@ public static class WorkflowModule
         services.AddSingleton<IConditionEvaluator, ConditionEvaluator>();
 
         // Action executor pipeline
-        services.AddHttpClient("WorkflowWebhook");
+        services.AddSafeOutboundHttpClient(CallWebhookExecutor.HttpClientName)
+            .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(15));
         services.AddScoped<IActionExecutor, SendNotificationExecutor>();
         services.AddScoped<IActionExecutor, PublishEventExecutor>();
         services.AddScoped<IActionExecutor, CallWebhookExecutor>();
@@ -71,6 +75,17 @@ public static class WorkflowModule
 
         // Schedule trigger job (stub — full cron scheduling is a future phase).
         services.AddHostedService<WorkflowScheduleTriggerJob>();
+
+        // The table existed with nothing reading it. It now carries the notification requests
+        // WorkflowDbContext writes when an instance franchit a « Notification » step.
+        services.AddOutboxForModule<WorkflowDbContext>();
+
+        // Once per start: releases instances stuck on a notification step opened before the
+        // engine ran them (they waited for an approval nobody was asked for).
+        services.AddHostedService<AutomaticStepsCatchUp>();
+
+        // Tells a record's agent and role holders in-app when a « Notification » step is reached.
+        services.AddScoped<InternalWorkflowNotifier>();
 
         return services;
     }

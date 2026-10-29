@@ -20,6 +20,13 @@
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Kernel\Sankore.Shared.Kernel.csproj" />
     <ProjectReference Include="..\..\..\Shared\Sankore.Shared.Infrastructure\Sankore.Shared.Infrastructure.csproj" />
     <ProjectReference Include="..\Sankore.Modules.Workflow.PublicApi\Sankore.Modules.Workflow.PublicApi.csproj" />
+    <!-- Workflow « Notification » steps (2026-10-29): who works a record (Leads, Customers, Kyc),
+         the holders of a role (Administration) and the bell (Notifications). Contracts only. -->
+    <ProjectReference Include="..\..\Administration\Sankore.Modules.Administration.PublicApi\Sankore.Modules.Administration.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Notifications\Sankore.Modules.Notifications.PublicApi\Sankore.Modules.Notifications.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Leads\Sankore.Modules.Leads.PublicApi\Sankore.Modules.Leads.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Customers\Sankore.Modules.Customers.PublicApi\Sankore.Modules.Customers.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Kyc\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
   </ItemGroup>
 
   <ItemGroup>

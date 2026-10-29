@@ -19,6 +19,7 @@ using Sankore.Modules.Workflow.Features.Templates.Transitions.ListTransitions;
 using Sankore.Modules.Workflow.Features.Templates.Transitions.RemoveAction;
 using Sankore.Modules.Workflow.Features.Templates.Transitions.RemoveTransition;
 using Sankore.Modules.Workflow.Features.Templates.Triggers.AddTrigger;
+using Sankore.Modules.Workflow.Features.Templates.Triggers.ListTriggerEvents;
 using Sankore.Modules.Workflow.Features.Templates.Triggers.ListTriggers;
 using Sankore.Modules.Workflow.Features.Templates.Triggers.RemoveTrigger;
 using Sankore.Modules.Workflow.Features.Templates.GetTemplateDiff;
@@ -55,6 +56,7 @@ public static class TemplatesEndpoints
             .MapListActions()
             .MapAddAction()
             .MapRemoveAction()
+            .MapListTriggerEvents()
             .MapListTriggers()
             .MapAddTrigger()
             .MapRemoveTrigger();

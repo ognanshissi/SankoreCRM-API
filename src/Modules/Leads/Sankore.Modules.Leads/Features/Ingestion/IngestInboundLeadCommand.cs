@@ -21,8 +21,14 @@ internal sealed record IngestInboundLeadCommand(
     public string? ResourceId  => null;
 }
 
+/// <param name="Updated">
+/// True when this push carried an external id already received and, the source allowing it,
+/// updated that lead's custom fields (webhooks lot 5). <see cref="Status"/> is then the original
+/// ingestion's.
+/// </param>
 internal sealed record IngestInboundLeadResult(
     Guid IngestionId,
     Guid? LeadId,
     LeadIngestionStatus Status,
-    string? Error = null);
+    string? Error = null,
+    bool Updated = false);

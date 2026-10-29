@@ -79,6 +79,8 @@ public sealed class InsuranceOnTheSocleTests : IDisposable
             .Where(t => !t.StartsWith("msg_", StringComparison.Ordinal))
             // `cal_` connected agendas: a USER's Microsoft and Google accounts, not the institution's.
             .Where(t => !t.StartsWith("cal_", StringComparison.Ordinal))
+            // `whk_` outbound webhooks: the institution's subscriptions and, lot 3, their deliveries.
+            .Where(t => !t.StartsWith("whk_", StringComparison.Ordinal))
             .ToList();
 
         unclassified.Should().BeEquivalentTo(["outbox_messages", "inbox_messages"]);

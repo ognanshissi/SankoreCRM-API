@@ -15,5 +15,7 @@ public enum StepStatus
     /// <summary>Step approved automatically by an AutoApproveIf rule.</summary>
     AutoApproved,
     /// <summary>Step exceeded its SLA deadline without a decision.</summary>
-    TimedOut
+    TimedOut,
+    /// <summary>An automatic step (a notification) was run on entry; nobody decided anything.</summary>
+    Executed
 }

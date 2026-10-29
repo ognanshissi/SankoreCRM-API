@@ -27,10 +27,11 @@ internal static class WebhookSignatureVerifier
         if (string.IsNullOrEmpty(signatureHeader))
             return "SIGNATURE_MISSING";
 
-        // Parse "t={unix},v1={hex}"
+        // Parse "t={unix},v1={hex}[,v1={hex}]" — several v1 when the sender is itself rotating
+        // its secret, as our own outbound webhooks do; any one matching is enough.
         var parts = signatureHeader.Split(',');
         string? timestamp = null;
-        string? signature = null;
+        var signatures = new List<string>(2);
 
         foreach (var part in parts)
         {
@@ -38,10 +39,10 @@ internal static class WebhookSignatureVerifier
             if (kv.StartsWith("t=", StringComparison.Ordinal))
                 timestamp = kv[2..];
             else if (kv.StartsWith("v1=", StringComparison.Ordinal))
-                signature = kv[3..];
+                signatures.Add(kv[3..]);
         }
 
-        if (timestamp is null || signature is null)
+        if (timestamp is null || signatures.Count == 0)
             return "SIGNATURE_MALFORMED";
 
         // Validate timestamp within tolerance
@@ -55,21 +56,15 @@ internal static class WebhookSignatureVerifier
         // Build signed payload: "{timestamp}.{body}"
         var signedPayload = $"{timestamp}.{body}";
 
-        // Verify against current secret
-        var expectedCurrent = ComputeHmac(algorithm, currentSecret, signedPayload);
-        if (CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(signature),
-                Encoding.UTF8.GetBytes(expectedCurrent)))
-            return null; // Valid
-
-        // Verify against previous secret (rotation window)
+        var expected = new List<byte[]> { Encoding.UTF8.GetBytes(ComputeHmac(algorithm, currentSecret, signedPayload)) };
         if (previousSecret is not null)
+            expected.Add(Encoding.UTF8.GetBytes(ComputeHmac(algorithm, previousSecret, signedPayload)));
+
+        foreach (var signature in signatures)
         {
-            var expectedPrevious = ComputeHmac(algorithm, previousSecret, signedPayload);
-            if (CryptographicOperations.FixedTimeEquals(
-                    Encoding.UTF8.GetBytes(signature),
-                    Encoding.UTF8.GetBytes(expectedPrevious)))
-                return null; // Valid with old secret
+            var presented = Encoding.UTF8.GetBytes(signature.ToLowerInvariant());
+            if (expected.Any(e => CryptographicOperations.FixedTimeEquals(presented, e)))
+                return null;
         }
 
         return "SIGNATURE_INVALID";

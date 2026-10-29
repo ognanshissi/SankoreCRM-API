@@ -30,6 +30,7 @@ using Sankore.Modules.Leads.Features.Enrichment;
 using Sankore.Modules.Leads.Features.Questionnaires;
 using Sankore.Modules.Leads.Features.Bulk;
 using Sankore.Modules.Leads.Features.Import;
+using Sankore.Shared.Infrastructure.Egress;
 using Sankore.Shared.Infrastructure.FileStore;
 using Sankore.Shared.Infrastructure.Google;
 using Sankore.Modules.Leads.Features.Import.ValidateImport;
@@ -125,10 +126,14 @@ public static class LeadsModule
         // Assigned-only reads: an Agent or a CommercialAgent sees the leads they hold.
         services.AddScoped<Features.Visibility.LeadVisibility>();
         services.AddScoped<Features.ProjectTemplates.ProjectTemplateResolver>();
+        // Writes to the person of a lead or project when a workflow « Notification » step asks.
+        services.AddScoped<Features.WorkflowNotifications.LeadWorkflowNotifier>();
 
         // Nightly technical purge (TechnicalPurgeJob).
         services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.LeadImportFilesPurge>();
         services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.RawIngestionsPurge>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.RawExternalEventsPurge>();
+        services.AddScoped<Features.Ingestion.Webhook.WebhookSourceGate>();
         // Emptying a TEST institution (data-purge lot 4).
         services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.LeadsTenantDataWipe>();
         services.AddScoped<Features.ProjectTemplates.ProjectStepGate>();
@@ -335,11 +340,7 @@ public static class LeadsModule
         services.AddTransient<ReplayIngestionJob>();
 
         // Generic REST puller — SSRF-safe HttpClient with Polly retry (F13.37-BE-19/20)
-        services.AddTransient<Infrastructure.SsrfProtection.SafeRedirectHandler>();
-        services.AddHttpClient("LeadPuller")
-            .ConfigurePrimaryHttpMessageHandler(() =>
-                Infrastructure.SsrfProtection.SsrfSafeHandler.Create())
-            .AddHttpMessageHandler<Infrastructure.SsrfProtection.SafeRedirectHandler>()
+        services.AddSafeOutboundHttpClient("LeadPuller")
             .AddStandardResilienceHandler(opts =>
             {
                 opts.Retry.MaxRetryAttempts = 3;
@@ -571,6 +572,7 @@ public static class LeadsModule
         ingest.MapWebPingEndpoint();
         ingest.MapWebFormEndpoint();
         ingest.MapWebhookIngestEndpoint();
+        ingest.MapExternalEventIngestEndpoint();
 
         // Outside the group on purpose: an SDK file is the same bytes for every tenant, the route
         // carries no public key, and SdkVersion is platform-level with no tenant column.

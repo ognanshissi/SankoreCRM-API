@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Workflow.Domain;
+using Sankore.Modules.Workflow.Domain.Events;
+using Sankore.Modules.Workflow.Infrastructure.Notifications;
+using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Infrastructure.Persistence;
@@ -21,6 +24,49 @@ public sealed class WorkflowDbContext(
     public DbSet<WorkflowTrigger> WorkflowTriggers => Set<WorkflowTrigger>();
     public DbSet<WorkflowInstance> WorkflowInstances => Set<WorkflowInstance>();
     public DbSet<WorkflowInstanceStep> WorkflowInstanceSteps => Set<WorkflowInstanceStep>();
+
+    /// <summary>The domain events already written to the outbox by an earlier save of this context.</summary>
+    private readonly HashSet<object> _announced = new(ReferenceEqualityComparer.Instance);
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        AnnounceNotificationSteps();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        AnnounceNotificationSteps();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes a <see cref="WorkflowNotificationRequested"/> to the outbox for every notification
+    /// step an instance has just franchie, in the transaction that records it. Here and not in the
+    /// handlers because seven places move an instance (start, approval, task, SLA, child, trigger,
+    /// facade) and a handler that forgot would silently send nothing — the very bug this replaces.
+    /// </summary>
+    private void AnnounceNotificationSteps()
+    {
+        var raised = ChangeTracker.Entries<WorkflowInstance>()
+            .Where(e => e.State != EntityState.Deleted && e.State != EntityState.Detached)
+            .SelectMany(e => e.Entity.DomainEvents.OfType<NotificationStepExecutedEvent>())
+            .ToList();
+
+        foreach (var executed in raised)
+        {
+            if (!_announced.Add(executed)) continue;
+
+            var request = NotificationStepConfig.ToRequest(executed);
+            OutboxMessages.Add(new OutboxMessage
+            {
+                Id = request.EventId,
+                EventType = typeof(WorkflowNotificationRequested).AssemblyQualifiedName!,
+                PayloadJson = System.Text.Json.JsonSerializer.Serialize(request, OutboxJson.Options),
+                OccurredAt = request.OccurredAt,
+            });
+        }
+    }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

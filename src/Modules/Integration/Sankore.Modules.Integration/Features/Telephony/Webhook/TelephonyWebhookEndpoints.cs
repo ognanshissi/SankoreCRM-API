@@ -23,8 +23,10 @@ using Sankore.Shared.Kernel;
 /// ROOT application, <b>outside <c>api/v1</c></b> and <b>before <c>app.UseAuthentication()</c></b>,
 /// next to <c>MapIntegrationWebhookEndpoints()</c>, and the host must declare the named rate-limit
 /// policy <c>telephony-webhook</c>: <b>a policy named here but not declared there limits nothing,
-/// silently.</b> The <c>/api/v1/public</c> and <c>/integration/webhooks</c> prefixes are already
-/// exempt from FQDN tenant resolution and this route sits under the second one.
+/// silently.</b> This route is NOT under <c>/integration/webhooks</c> (a comment here once said it
+/// was): <c>/integration/telephony/webhooks</c> is its own entry in the host's
+/// <c>UseTenantResolution</c> list, without which every provider call — no JWT, no tenant domain —
+/// answered 400 "Cannot determine tenant" before reaching the signature check.
 /// </para>
 /// <para>
 /// ───────────────────────────────────────────────────────────────────────────────────────────
