@@ -38,4 +38,34 @@ public static class EventCodes
 
     /// <summary>A « Notification » step could not reach one audience, with the reason (history only).</summary>
     public const string NotificationNotSent = "NOTIFICATION_NOT_SENT";
+
+    /// <summary>An « Attente » step ended — delay elapsed or awaited event received (history only).</summary>
+    public const string WaitResumed = "WAIT_RESUMED";
+
+    /// <summary>The CRM task of a « Tâche manuelle » step was created (history only, from Leads).</summary>
+    public const string TaskCreated = "TASK_CREATED";
+
+    /// <summary>The CRM task of a « Tâche manuelle » step was cancelled (history only).</summary>
+    public const string TaskCancelled = "TASK_CANCELLED";
+
+    /// <summary>A « Condition » step was evaluated: which branch, on which value (history only).</summary>
+    public const string ConditionResolved = "CONDITION_RESOLVED";
+
+    /// <summary>A « Vérification KYC » step passed: the client's KYC reached the level (history only).</summary>
+    public const string KycValidated = "KYC_VALIDATED";
+
+    /// <summary>A « Vérification KYC » step is waiting, or its client's KYC was refused (history only).</summary>
+    public const string KycPending = "KYC_PENDING";
+
+    /// <summary>An « Action Integration » step passed: the back office has the record (history only).</summary>
+    public const string IntegrationSynced = "INTEGRATION_SYNCED";
+
+    /// <summary>An « Action Integration » step waits, or the back office refused (history only).</summary>
+    public const string IntegrationPending = "INTEGRATION_PENDING";
+
+    /// <summary>An overdue step was handed to someone else — supervisor or another role holder.</summary>
+    public const string Escalated = "ESCALATED";
+
+    /// <summary>An overdue step stayed where it was and its people were reminded.</summary>
+    public const string SlaReminder = "SLA_REMINDER";
 }

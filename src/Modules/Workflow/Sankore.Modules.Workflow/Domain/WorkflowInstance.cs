@@ -291,6 +291,218 @@ public sealed class WorkflowInstance : AggregateRoot
     }
 
     /// <summary>
+    /// Ends the « Attente » step the instance is on — its delay ran out, or the event it waited for
+    /// arrived — and carries the circuit on as an approval would, through an <see cref="EventCodes.Auto"/>
+    /// transition if one is drawn, else the generated <see cref="EventCodes.Approve"/>. The reason
+    /// goes into the history. False when the instance is not waiting.
+    /// </summary>
+    public bool ResumeWait(
+        string reason,
+        IReadOnlyCollection<WorkflowTransition>? transitions = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowRule>>? rulesByStepDefId = null,
+        IReadOnlyDictionary<string, object>? context = null,
+        IRuleEvaluator? evaluator = null,
+        IConditionEvaluator? conditionEvaluator = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId = null)
+        => Status == WorkflowStatus.InProgress && CurrentStep() is { Kind: StepKind.Wait } step
+        && PassByEngine(step, EventCodes.WaitResumed, reason, transitions, rulesByStepDefId, context,
+            evaluator, conditionEvaluator, actionsByTransitionId);
+
+    /// <summary>
+    /// The client's KYC reached the level the « Vérification KYC » step requires: the step passes
+    /// and the circuit goes on. False when that step is not the open one.
+    /// </summary>
+    public bool PassKycCheck(
+        Guid instanceStepId,
+        string reason,
+        IReadOnlyCollection<WorkflowTransition>? transitions = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowRule>>? rulesByStepDefId = null,
+        IReadOnlyDictionary<string, object>? context = null,
+        IRuleEvaluator? evaluator = null,
+        IConditionEvaluator? conditionEvaluator = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId = null)
+        => Status == WorkflowStatus.InProgress
+        && CurrentStep() is { Kind: StepKind.KycCheck } step && step.Id == instanceStepId
+        && PassByEngine(step, EventCodes.KycValidated, reason, transitions, rulesByStepDefId, context,
+            evaluator, conditionEvaluator, actionsByTransitionId);
+
+    /// <summary>
+    /// The open step's delay ran out (product owner, 2026-10-29: escalate, never end the instance):
+    /// it is handed to <paramref name="assignTo"/> — a supervisor, another holder of its role — or
+    /// stays where it was when nobody was found, with a fresh delay either way. The history says which.
+    /// </summary>
+    public bool EscalateCurrentStep(Guid? assignTo, string comment, DateTimeOffset now)
+    {
+        if (Status != WorkflowStatus.InProgress || CurrentStep() is not { } step) return false;
+
+        step.Escalate(assignTo, now);
+        _pendingAuditEntries.Add(WorkflowAuditEntry.Create(
+            tenantId:        TenantId,
+            instanceId:      Id,
+            fromStateId:     step.StepDefinitionId,
+            toStateId:       step.StepDefinitionId,
+            eventCode:       assignTo.HasValue ? EventCodes.Escalated : EventCodes.SlaReminder,
+            actedByUserId:   Guid.Empty,
+            comment:         comment,
+            contextSnapshot: ContextJson));
+        return true;
+    }
+
+    /// <summary>
+    /// The back office answered for the « Action Integration » step's record (the client created at
+    /// the core banking, the contract issued by the insurer): the step passes.
+    /// </summary>
+    public bool PassIntegration(
+        Guid instanceStepId,
+        string reason,
+        IReadOnlyCollection<WorkflowTransition>? transitions = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowRule>>? rulesByStepDefId = null,
+        IReadOnlyDictionary<string, object>? context = null,
+        IRuleEvaluator? evaluator = null,
+        IConditionEvaluator? conditionEvaluator = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId = null)
+        => Status == WorkflowStatus.InProgress
+        && CurrentStep() is { Kind: StepKind.IntegrationAction } step && step.Id == instanceStepId
+        && PassByEngine(step, EventCodes.IntegrationSynced, reason, transitions, rulesByStepDefId, context,
+            evaluator, conditionEvaluator, actionsByTransitionId);
+
+    /// <summary>
+    /// Ends an open step nobody decides (a wait, a KYC check) with its reason in the history, and
+    /// carries the circuit on as an approval would — an <see cref="EventCodes.Auto"/> transition if
+    /// one is drawn, else the generated <see cref="EventCodes.Approve"/>.
+    /// </summary>
+    private bool PassByEngine(
+        WorkflowInstanceStep step,
+        string eventCode,
+        string reason,
+        IReadOnlyCollection<WorkflowTransition>? transitions,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowRule>>? rulesByStepDefId,
+        IReadOnlyDictionary<string, object>? context,
+        IRuleEvaluator? evaluator,
+        IConditionEvaluator? conditionEvaluator,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId)
+    {
+        var ctx = context ?? _emptyContext;
+        WorkflowTransition? transition = null;
+        if (transitions is { Count: > 0 })
+        {
+            transition = SelectTransition(step, EventCodes.Auto, transitions, ctx, conditionEvaluator)
+                      ?? SelectTransition(step, EventCodes.Approve, transitions, ctx, conditionEvaluator);
+            // No way out drawn: the step stays open, where someone can still approve it by hand.
+            if (transition is null) return false;
+        }
+
+        step.CompleteByEngine();
+        _pendingAuditEntries.Add(WorkflowAuditEntry.Create(
+            tenantId:        TenantId,
+            instanceId:      Id,
+            fromStateId:     step.StepDefinitionId,
+            toStateId:       step.StepDefinitionId,
+            eventCode:       eventCode,
+            actedByUserId:   Guid.Empty,
+            comment:         reason,
+            contextSnapshot: ContextJson));
+
+        if (transition is not null)
+        {
+            Follow(transition, step, EventCodes.Auto, Guid.Empty, null, actionsByTransitionId);
+            RunAutomaticSteps(transitions!, ctx, conditionEvaluator, actionsByTransitionId);
+        }
+        else
+        {
+            AdvanceToNextStep(rulesByStepDefId, context, evaluator);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Settles the « Condition » step the instance is on: the steps of the branch NOT taken are
+    /// skipped, the reason goes into the history, and the circuit carries on into the branch taken
+    /// (or past both, if that branch is empty). False when that step is not the open one.
+    /// </summary>
+    public bool ResolveCondition(
+        Guid instanceStepId,
+        bool outcome,
+        string reason,
+        IReadOnlyCollection<WorkflowTransition>? transitions = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowRule>>? rulesByStepDefId = null,
+        IReadOnlyDictionary<string, object>? context = null,
+        IRuleEvaluator? evaluator = null,
+        IConditionEvaluator? conditionEvaluator = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId = null)
+    {
+        if (Status != WorkflowStatus.InProgress
+            || CurrentStep() is not { Kind: StepKind.Condition } step
+            || step.Id != instanceStepId)
+            return false;
+
+        var ctx = context ?? _emptyContext;
+        WorkflowTransition? transition = null;
+        if (transitions is { Count: > 0 })
+        {
+            transition = SelectTransition(step, EventCodes.Auto, transitions, ctx, conditionEvaluator)
+                      ?? SelectTransition(step, EventCodes.Approve, transitions, ctx, conditionEvaluator);
+            if (transition is null) return false;
+        }
+
+        step.CompleteCondition();
+
+        // The branches are the contiguous steps right after the condition that carry one.
+        var losing = outcome ? StepBranch.No : StepBranch.Yes;
+        foreach (var branchStep in _steps.Where(s => s.Order > step.Order).OrderBy(s => s.Order)
+                     .TakeWhile(s => s.Branch is not null)
+                     .Where(s => s.Branch == losing && s.Status == StepStatus.Pending))
+            branchStep.Skip();
+
+        _pendingAuditEntries.Add(WorkflowAuditEntry.Create(
+            tenantId:        TenantId,
+            instanceId:      Id,
+            fromStateId:     step.StepDefinitionId,
+            toStateId:       step.StepDefinitionId,
+            eventCode:       EventCodes.ConditionResolved,
+            actedByUserId:   Guid.Empty,
+            comment:         reason,
+            contextSnapshot: ContextJson));
+
+        if (transition is not null)
+        {
+            Follow(transition, step, EventCodes.Auto, Guid.Empty, null, actionsByTransitionId);
+            RunAutomaticSteps(transitions!, ctx, conditionEvaluator, actionsByTransitionId);
+        }
+        else
+        {
+            AdvanceToNextStep(rulesByStepDefId, context, evaluator);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The CRM task of the « Tâche manuelle » step the instance is on was completed: the step is
+    /// approved by whoever did the task, and the circuit goes on. False when that step is not the
+    /// open one any more (approved by hand meanwhile, instance cancelled…).
+    /// </summary>
+    public bool CompleteManualTask(
+        Guid instanceStepId,
+        Guid actedByUserId,
+        string comment,
+        IReadOnlyCollection<WorkflowTransition>? transitions = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowRule>>? rulesByStepDefId = null,
+        IReadOnlyDictionary<string, object>? context = null,
+        IRuleEvaluator? evaluator = null,
+        IConditionEvaluator? conditionEvaluator = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId = null)
+    {
+        if (Status != WorkflowStatus.InProgress
+            || CurrentStep() is not { Kind: StepKind.ManualTask } step
+            || step.Id != instanceStepId)
+            return false;
+
+        Approve(actedByUserId, comment, transitions, rulesByStepDefId, context, evaluator,
+            conditionEvaluator, actionsByTransitionId);
+        return true;
+    }
+
+    /// <summary>
     /// Moves an instance past the automatic step it is stuck on — one opened before the engine ran
     /// them, and left waiting for an approval nobody was asked for. True when something moved.
     /// </summary>
@@ -324,13 +536,23 @@ public sealed class WorkflowInstance : AggregateRoot
         string? comment,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<WorkflowAction>>? actionsByTransitionId)
     {
-        if (transition.ToStateId.HasValue)
+        var nextStep = transition.ToStateId.HasValue
+            ? _steps.FirstOrDefault(s => s.StepDefinitionId == transition.ToStateId.Value)
+                ?? throw new DomainException("Target state not found in instance steps.")
+            : null;
+
+        // A step skipped by a « Condition » (the branch not taken) is stepped over: the circuit goes
+        // to the next step still pending, in order — where the generated transitions lead anyway.
+        if (nextStep is { Status: StepStatus.Skipped })
+            nextStep = _steps.Where(s => s.Order > nextStep.Order && s.Status == StepStatus.Pending)
+                .OrderBy(s => s.Order)
+                .FirstOrDefault();
+
+        if (nextStep is not null)
         {
-            var nextStep = _steps.FirstOrDefault(s => s.StepDefinitionId == transition.ToStateId.Value)
-                ?? throw new DomainException("Target state not found in instance steps.");
             nextStep.StartReview();
             CurrentStepOrder = nextStep.Order;
-            CurrentStateId   = transition.ToStateId.Value;
+            CurrentStateId   = nextStep.StepDefinitionId;
             Status           = WorkflowStatus.InProgress;
         }
         else

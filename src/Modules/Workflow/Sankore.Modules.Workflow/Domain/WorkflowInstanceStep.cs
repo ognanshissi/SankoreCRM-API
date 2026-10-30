@@ -126,6 +126,48 @@ public sealed class WorkflowInstanceStep
         CompletedAt = DateTimeOffset.UtcNow;
     }
 
+    /// <summary>
+    /// Ends an « Attente » step: its delay ran out or the awaited event arrived. Nobody decided it,
+    /// hence <see cref="StepStatus.Executed"/> like an automatic step.
+    /// </summary>
+    public void CompleteWait() => CompleteByEngine();
+
+    /// <summary>
+    /// Ends an open step the engine settles itself — a wait (delay or event), a condition, a KYC
+    /// check whose client reached the level. <see cref="StepStatus.Executed"/>: nobody decided it.
+    /// </summary>
+    public void CompleteByEngine()
+    {
+        if (Kind is not (StepKind.Wait or StepKind.Condition or StepKind.KycCheck or StepKind.IntegrationAction))
+            throw new DomainException("This step is not settled by the engine.");
+        if (Status != StepStatus.AwaitingApproval)
+            throw new DomainException("The step is not open.");
+        Status = StepStatus.Executed;
+        DueAt = null;
+        CompletedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>A « Condition » step was evaluated by the engine; nobody decided it.</summary>
+    public void CompleteCondition() => CompleteByEngine();
+
+    /// <summary>
+    /// The branch of the preceding « Condition » this step belongs to (<c>"branch"</c> in its
+    /// configuration, set by the journey builder), or null for a step on the main line.
+    /// </summary>
+    public string? Branch => StepBranch.Of(ConfigJson);
+
+    /// <summary>
+    /// The step's delay ran out and it is escalated: handed to <paramref name="assignTo"/> when the
+    /// escalation found someone (else it stays with whoever had it), and given a fresh delay.
+    /// </summary>
+    public void Escalate(Guid? assignTo, DateTimeOffset now)
+    {
+        if (Status != StepStatus.AwaitingApproval)
+            throw new DomainException("Only an open step can be escalated.");
+        if (assignTo is { } user) AssignedToUserId = user;
+        DueAt = SlaHours.HasValue ? now.AddHours(SlaHours.Value) : null;
+    }
+
     public void AutoApprove()
     {
         if (Status != StepStatus.Pending)
@@ -156,5 +198,31 @@ public sealed class WorkflowInstanceStep
         if (AssignedToUserId.HasValue && AssignedToUserId.Value != fromUserId)
             throw new DomainException("You are not the current assignee of this step.");
         AssignedToUserId = toUserId;
+    }
+}
+
+/// <summary>The two branches of a « Condition » step, as the journey builder writes them.</summary>
+public static class StepBranch
+{
+    public const string Yes = "yes";
+    public const string No = "no";
+
+    public static string? Of(string? configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(configJson);
+            return doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("branch", out var b)
+                && b.ValueKind == System.Text.Json.JsonValueKind.String
+                && b.GetString() is Yes or No
+                    ? b.GetString()
+                    : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 }

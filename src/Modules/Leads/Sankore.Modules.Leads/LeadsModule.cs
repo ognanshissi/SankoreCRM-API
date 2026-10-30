@@ -128,6 +128,8 @@ public static class LeadsModule
         services.AddScoped<Features.ProjectTemplates.ProjectTemplateResolver>();
         // Writes to the person of a lead or project when a workflow « Notification » step asks.
         services.AddScoped<Features.WorkflowNotifications.LeadWorkflowNotifier>();
+        // The CRM task of a workflow « Tâche manuelle » step.
+        services.AddScoped<Features.WorkflowTasks.LeadWorkflowTasks>();
 
         // Nightly technical purge (TechnicalPurgeJob).
         services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.LeadImportFilesPurge>();
@@ -212,6 +214,10 @@ public static class LeadsModule
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddScoped<IContextProvider, LeadContextProvider>();
+        services.AddScoped<IContextProvider, ProjectContextProvider>();
+        // What workflow « Formulaire », « Formulaire de qualification » and « Vérification KYC » steps ask of a lead or a project.
+        services.AddScoped<IWorkflowRecordGate, LeadRecordGate>();
+        services.AddScoped<IWorkflowRecordGate, ProjectRecordGate>();
         // Public contract of M13. Consumed by the Customers module (M01) to import a
         // converted lead's commercial history into the client timeline (F13.29).
         services.AddScoped<PublicApi.ILeadsModule, LeadsModuleFacade>();

@@ -573,6 +573,17 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Notifications.WorkflowNotificationInternalConsumer>();
     // …and what became of each audience, written into the instance's history (lot 4).
     x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Notifications.WorkflowNotificationOutcomeConsumer>();
+    // « Tâche manuelle » steps: Leads creates / withdraws the CRM task, Workflow moves on when it is done.
+    x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Waits.WorkflowStepTaskClosedConsumer>();
+    x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Waits.WorkflowStepNoteConsumer>();
+    // « Condition » steps: evaluated on the record's current facts, then the branch not taken is skipped.
+    x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Branching.ConditionStepConsumer>();
+    // « Vérification KYC » steps: checked against the client's KYC when they open.
+    x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Gates.KycCheckStepConsumer>();
+    // « Action Integration » steps: checked when they open and whenever the back office answers.
+    x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Gates.IntegrationStepConsumer>();
+    x.AddConsumer<Sankore.Modules.Leads.Features.WorkflowTasks.WorkflowTaskRequestedConsumer>();
+    x.AddConsumer<Sankore.Modules.Leads.Features.WorkflowTasks.WorkflowTaskWithdrawnConsumer>();
 
     // TEL-B-19 : la qualification d'un appel rafraîchit le jour de cet appel dans le modèle de
     // lecture des indicateurs. Ce n'est PAS un incrément — l'événement dit quel jour a changé, et

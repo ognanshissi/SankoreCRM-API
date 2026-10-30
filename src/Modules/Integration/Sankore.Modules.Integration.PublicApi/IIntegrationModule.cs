@@ -31,7 +31,22 @@ public interface IIntegrationModule
     /// number gets answers that say so.
     /// </summary>
     IMessagingGateway Messaging { get; }
+
+    /// <summary>
+    /// Whether a CRM record is known to its back office — the client to the core banking
+    /// (<see cref="IntegrationSyncTarget.CoreBanking"/>, <paramref name="crmId"/> = the client) or a
+    /// contract to the insurer (<see cref="IntegrationSyncTarget.Insurance"/>, the holding) — read
+    /// from what the synchronisation recorded, never by calling the back office. For a workflow
+    /// « Action Integration » step, which waits for it.
+    /// </summary>
+    Task<IntegrationSyncState> GetSyncStateAsync(Guid tenantId, IntegrationSyncTarget target, Guid crmId, CancellationToken ct);
 }
+
+public enum IntegrationSyncTarget { CoreBanking, Insurance }
+
+/// <param name="Synced">The back office answered with its own reference.</param>
+/// <param name="Rejection">The back office's last refusal, when the latest send was refused; null otherwise.</param>
+public sealed record IntegrationSyncState(bool Synced, string? Rejection);
 
 /// <summary>
 /// The institution's WhatsApp numbers, as M13 sees them: which number writes to a lead, what it

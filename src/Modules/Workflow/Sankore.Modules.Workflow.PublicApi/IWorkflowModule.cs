@@ -74,6 +74,15 @@ public interface IWorkflowModule
     /// </summary>
     Task<IReadOnlyList<StepSlaStat>> GetStepSlaStatsAsync(
         Guid tenantId, Guid userId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Les étapes « bloquantes » pas encore franchies des parcours en cours sur un dossier
+    /// (<paramref name="entityType"/> <c>Lead</c>, <c>Opportunity</c>…), au format « Étape (parcours) ».
+    /// Choix du propriétaire, 2026-10-29 : tant qu'il en reste une, le lead n'est pas converti en
+    /// client et le projet n'est pas clôturé gagné. Vide quand rien ne bloque.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetBlockingStepsAsync(
+        Guid tenantId, string entityType, Guid entityId, CancellationToken ct = default);
 }
 
 /// <param name="StepName">Le nom de l'étape tel que le parcours le définit.</param>

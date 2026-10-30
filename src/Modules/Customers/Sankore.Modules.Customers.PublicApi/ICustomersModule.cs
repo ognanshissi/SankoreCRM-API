@@ -541,6 +541,13 @@ public interface ICustomersModule
     /// at-least-once event consumer and must not fail on a holding somebody closed in between.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The contract (holding) a project opened — its latest, a project closed twice keeps the last.
+    /// Null while the project has none. For a workflow « Action Integration » step waiting for the
+    /// insurer to issue it.
+    /// </summary>
+    Task<Guid?> GetProjectHoldingIdAsync(Guid tenantId, Guid opportunityId, CancellationToken ct);
+
     Task<HoldingForSync?> GetHoldingForSyncAsync(
         Guid tenantId, Guid holdingId, CancellationToken ct);
 

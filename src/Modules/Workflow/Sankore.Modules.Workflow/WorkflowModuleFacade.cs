@@ -235,6 +235,30 @@ internal sealed class WorkflowModuleFacade(WorkflowDbContext db) : IWorkflowModu
         return Result.Ok();
     }
 
+    public async Task<IReadOnlyList<string>> GetBlockingStepsAsync(
+        Guid tenantId, string entityType, Guid entityId, CancellationToken ct = default)
+    {
+        // The flag is the definition's (« Étape bloquante » in the builder); the instance step says
+        // whether it is passed. Skipped (a branch not taken) and passed steps block nothing.
+        var blocking = await db.WorkflowInstanceSteps
+            .IgnoreQueryFilters()
+            .Where(s => s.TenantId == tenantId
+                     && (s.Status == StepStatus.Pending || s.Status == StepStatus.AwaitingApproval))
+            .Join(db.WorkflowInstances.IgnoreQueryFilters()
+                    .Where(i => i.TenantId == tenantId && i.EntityType == entityType && i.EntityId == entityId
+                             && (i.Status == WorkflowStatus.InProgress || i.Status == WorkflowStatus.Pending
+                                 || i.Status == WorkflowStatus.WaitingForChild)),
+                s => s.InstanceId, i => i.Id, (s, i) => new { s.StepDefinitionId, s.Name, s.Order, i.TemplateId })
+            .Join(db.WorkflowStepDefinitions.IgnoreQueryFilters().Where(d => d.IsBlocking),
+                x => x.StepDefinitionId, d => d.Id, (x, d) => x)
+            .Join(db.WorkflowTemplates.IgnoreQueryFilters(), x => x.TemplateId, t => t.Id,
+                (x, t) => new { x.Name, x.Order, Circuit = t.Name })
+            .OrderBy(x => x.Circuit).ThenBy(x => x.Order)
+            .ToListAsync(ct);
+
+        return blocking.Select(b => $"{b.Name} ({b.Circuit})").ToList();
+    }
+
     public async Task<IReadOnlyList<StepSlaStat>> GetStepSlaStatsAsync(
         Guid tenantId, Guid userId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default)
     {

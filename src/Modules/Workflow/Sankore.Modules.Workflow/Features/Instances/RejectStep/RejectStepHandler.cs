@@ -32,7 +32,10 @@ internal sealed class RejectStepHandler(
             .FirstOrDefault(s => s.Order == instance.CurrentStepOrder
                               && s.Status == StepStatus.AwaitingApproval);
 
+        // The person the step was handed to (an escalation to a supervisor) acts on it whatever
+        // their roles: escalating to someone who could not approve would only move the deadlock.
         if (currentStep?.ApproverRoleCode is { } requiredRole &&
+            currentStep.AssignedToUserId != currentUser.Id &&
             !currentUser.Roles.Contains(requiredRole, StringComparer.OrdinalIgnoreCase))
         {
             return Result.Fail(

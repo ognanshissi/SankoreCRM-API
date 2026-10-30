@@ -30,4 +30,20 @@ public static class StepKinds
     /// it used to wait for an approval nobody was asked for (no role), and the instance stopped there.
     /// </summary>
     public static bool RunsAutomatically(StepKind kind) => kind == StepKind.Notification;
+
+    /// <summary>
+    /// Kinds the engine does not execute yet and that STOP a dossier when run as a validation: no
+    /// role, so in nobody's « mes étapes ». Empty since every kind has its execution (2026-10-29);
+    /// kept so a future kind starts here rather than shipping half-run.
+    /// </summary>
+    public static bool BlocksActivation(StepKind kind)
+        => false;
+
+    public static string Label(StepKind kind) => kind switch
+    {
+        StepKind.Condition => "Condition",
+        StepKind.Wait => "Attente",
+        StepKind.IntegrationAction => "Action Integration",
+        _ => kind.ToString(),
+    };
 }

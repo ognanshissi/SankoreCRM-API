@@ -98,9 +98,24 @@ public sealed class InternalWorkflowNotifier(
         return told;
     }
 
-    /// <summary>Who works the record and where. Null when the record does not exist.</summary>
-    private async Task<RecordFacts?> FactsAsync(WorkflowNotificationRequested request, CancellationToken ct)
+    private Task<RecordFacts?> FactsAsync(WorkflowNotificationRequested request, CancellationToken ct)
+        => new RecordFactsReader(leads, customers, kyc).ReadAsync(request.TenantId, request.EntityType, request.EntityId, ct);
+
+    private static string? Clip(string? text, int max)
+        => string.IsNullOrWhiteSpace(text) ? null : text.Length <= max ? text : text[..(max - 1)] + "…";
+}
+
+/// <summary>Who works a record and where — its agency, its agent, the names a message may quote, its screen.</summary>
+public sealed record RecordFacts(
+    Guid? AgencyId, Guid? AgentId, string? FirstName, string? LastName, string? Product, string? Link);
+
+/// <summary>Reads <see cref="RecordFacts"/> from the module that owns the record.</summary>
+public sealed class RecordFactsReader(ILeadsModule leads, ICustomersModule customers, IKycModule kyc)
+{
+    /// <summary>Null when the record does not exist.</summary>
+    public async Task<RecordFacts?> ReadAsync(Guid tenantId, string entityType, Guid entityId, CancellationToken ct)
     {
+        var request = new { TenantId = tenantId, EntityType = entityType, EntityId = entityId };
         switch (request.EntityType.ToLowerInvariant())
         {
             case "lead":
@@ -129,9 +144,4 @@ public sealed class InternalWorkflowNotifier(
         }
     }
 
-    private static string? Clip(string? text, int max)
-        => string.IsNullOrWhiteSpace(text) ? null : text.Length <= max ? text : text[..(max - 1)] + "…";
-
-    private sealed record RecordFacts(
-        Guid? AgencyId, Guid? AgentId, string? FirstName, string? LastName, string? Product, string? Link);
 }

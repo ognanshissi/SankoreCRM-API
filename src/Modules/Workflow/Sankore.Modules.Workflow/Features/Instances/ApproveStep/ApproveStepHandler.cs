@@ -16,7 +16,8 @@ internal sealed class ApproveStepHandler(
     IBus bus,
     IRuleEvaluator evaluator,
     IConditionEvaluator conditionEvaluator,
-    IActionExecutorDispatcher actionDispatcher
+    IActionExecutorDispatcher actionDispatcher,
+    Infrastructure.Gates.RecordStepGates? stepGates = null
 ) : IRequestHandler<ApproveStepCommand, Result>
 {
     public async Task<Result> Handle(ApproveStepCommand request, CancellationToken ct)
@@ -36,13 +37,23 @@ internal sealed class ApproveStepHandler(
             .FirstOrDefault(s => s.Order == instance.CurrentStepOrder
                               && s.Status == StepStatus.AwaitingApproval);
 
+        // The person the step was handed to (an escalation to a supervisor) acts on it whatever
+        // their roles: escalating to someone who could not approve would only move the deadlock.
         if (currentStep?.ApproverRoleCode is { } requiredRole &&
+            currentStep.AssignedToUserId != currentUser.Id &&
             !currentUser.Roles.Contains(requiredRole, StringComparer.OrdinalIgnoreCase))
         {
             return Result.Fail(
                 $"Step {instance.CurrentStepOrder} requires role '{requiredRole}'. " +
                 "You do not have the required role.");
         }
+
+        // A step waiting on the record (form, questionnaires, KYC) is not approved while the record
+        // does not meet it — product owner, 2026-10-29: an incomplete form must not be approved.
+        if (currentStep is not null && stepGates is not null
+            && await stepGates.ApprovalRefusalAsync(instance.TenantId, instance.EntityType, instance.EntityId,
+                   currentStep.Kind, currentStep.ConfigJson, ct) is { } refusal)
+            return Result.Fail(refusal);
 
         // Load transitions (state-machine path) and step definitions with rules (legacy path).
         var transitions = await db.WorkflowTransitions

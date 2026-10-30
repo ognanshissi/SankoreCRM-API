@@ -104,6 +104,35 @@ public sealed class CrmTask : ITenant
         return this;
     }
 
+    /// <summary>
+    /// The task of a workflow « Tâche manuelle » step, about the circuit's record. Linked back to the
+    /// step through <see cref="TriggerEventType"/> <c>workflow.step</c> and <see cref="TriggerEventId"/>
+    /// = the instance step: completing it moves the circuit on.
+    /// </summary>
+    public static CrmTask ForWorkflowStep(
+        Guid tenantId,
+        string title,
+        string description,
+        TaskEntityType? entityType,
+        Guid? entityId,
+        Guid? assignedAgentId,
+        DateTimeOffset dueAt,
+        Guid instanceStepId,
+        string triggerEventType)
+    {
+        var task = Create(
+            tenantId, CrmTaskType.Generic, CrmTaskPriority.Medium,
+            title.Length <= TitleMaxLength ? title : title[..TitleMaxLength], dueAt,
+            leadId: entityType == TaskEntityType.Lead ? entityId : null,
+            assignedAgentId: assignedAgentId,
+            description: description,
+            triggerEventType: triggerEventType,
+            triggerEventId: instanceStepId);
+        task.EntityType = entityId.HasValue ? entityType : null;
+        task.EntityId = entityType.HasValue ? entityId : null;
+        return task;
+    }
+
     public const int TitleMaxLength = 200;
     public const int DescriptionMaxLength = 4000;
 

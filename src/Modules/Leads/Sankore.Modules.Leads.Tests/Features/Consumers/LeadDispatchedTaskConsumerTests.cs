@@ -186,7 +186,7 @@ public sealed class LeadDispatchedTaskConsumerTests : IDisposable
         user.Roles.Returns(Array.Empty<string>());
         await using (var db = _db.CreateContext())
         {
-            var result = await new CompleteTaskHandler(db, new AgentCapacityService(db), Substitute.For<IBus>(), user)
+            var result = await new CompleteTaskHandler(db, new AgentCapacityService(db), Substitute.For<IBus>(), user, new Sankore.Shared.Infrastructure.Outbox.OutboxEventPublisher<Sankore.Modules.Leads.Infrastructure.LeadsDbContext>(db))
                 .Handle(new CompleteTaskCommand(task.Id), default);
             result.IsSuccess.Should().BeTrue();
         }

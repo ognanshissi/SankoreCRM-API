@@ -58,7 +58,24 @@ public sealed class ConvertLeadHandlerTests : IDisposable
 
         return new ConvertLeadHandler(
             db, currentUser, _customers, Substitute.For<Sankore.Modules.Administration.PublicApi.IAdministrationModule>(), TestSupport.TestLeadEmailIndexer.Instance,
-            TestCompleteness.Calculator(db, customers: _customers), _publisher);
+            TestCompleteness.Calculator(db, customers: _customers), _publisher, _workflow);
+    }
+
+    private readonly Sankore.Modules.Workflow.PublicApi.IWorkflowModule _workflow =
+        Substitute.For<Sankore.Modules.Workflow.PublicApi.IWorkflowModule>();
+
+    [Fact]
+    public async Task A_blocking_workflow_step_not_yet_passed_holds_the_conversion_and_names_itself()
+    {
+        var lead = await SeedLeadAsync();
+        _workflow.GetBlockingStepsAsync(_tenantId, "Lead", lead.Id, Arg.Any<CancellationToken>())
+            .Returns(["Visite terrain (Dossier crédit)"]);
+
+        var result = await Handler().Handle(new ConvertLeadCommand(lead.Id, Force: true), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("Étape bloquante non franchie : Visite terrain (Dossier crédit). Le lead ne peut pas encore être converti.");
+        await _customers.DidNotReceiveWithAnyArgs().CreateFromLeadAsync(default!, default);
     }
 
     private void CustomersReturn(CreateFromLeadResult result) =>

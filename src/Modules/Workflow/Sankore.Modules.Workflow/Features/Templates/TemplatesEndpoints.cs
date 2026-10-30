@@ -1,3 +1,5 @@
+using Sankore.Modules.Workflow.Features.Templates.FormFields;
+using Sankore.Modules.Workflow.Features.Templates.ConditionFields;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -57,6 +59,8 @@ public static class TemplatesEndpoints
             .MapAddAction()
             .MapRemoveAction()
             .MapListTriggerEvents()
+            .MapListConditionFields()
+            .MapListFormFields()
             .MapListTriggers()
             .MapAddTrigger()
             .MapRemoveTrigger();

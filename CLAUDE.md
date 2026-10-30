@@ -569,6 +569,111 @@ was `LEAD_CAPTURED`: a trigger named anything else (the journey builder's `LEAD_
 - `WorkflowTriggerConsumer` now requires the template's `EntityType` to match for EVERY signal, not
   only external ones — a `client.*` event must not start a circuit on a lead template.
 
+**Step kinds the engine does not run (2026-10-29).** Apart from `Notification`, the engine runs
+EVERY `StepKind` as an approval by the step's role: Form, QualificationForm, KycCheck and ManualTask
+are approvals only (no form, no KYC check, no task), escalation and « Étape bloquante » are never
+read. Condition, Wait and IntegrationAction would STOP a dossier (no role → in nobody's queue; a
+Wait delay is read as an SLA and ends the instance « Délai dépassé »), so
+`StepKinds.BlocksActivation` makes `ActivateTemplateHandler` refuse a circuit holding one, and the
+builder (`STEP_KIND_SUPPORT` in `journey-model.ts`) marks them « Bientôt » and blocks publishing.
+Already-active circuits are not touched. Lift a kind from that list only with its execution.
+
+**« Attente » steps run (2026-10-29, step-kinds lot 1).** A wait is a delay (`TimeoutHours`, hence
+`DueAt`) and/or an internal event (`{"eventCode": "lead.qualified"}`, a `PlatformEvents` code of the
+template's entity); with both, the delay is a maximum. It ends through `WaitStepRunner` →
+`WorkflowInstance.ResumeWait`: from `SlaCheckerJob` when `DueAt` passes (a wait's DueAt is NOT an
+SLA — it used to end the instance « Délai dépassé ») and from `WorkflowTriggerConsumer` when the
+awaited event arrives on the same record (`EntityType` + `EntityId`). Step `Executed`, history
+`WAIT_RESUMED` with the reason (« Délai d'attente écoulé… », « Événement reçu : « Lead qualifié » »),
+then the `AUTO`/`APPROVE` transition as an approval would. Activation refuses a wait with neither
+delay nor a valid event of the template's entity (`WaitStepConfig.Problem`). Wait left
+`BlocksActivation` / `STEP_KIND_SUPPORT`.
+
+**« Tâche manuelle » steps create a CRM task (2026-10-29, step-kinds lot 2).** When such a step OPENS,
+`WorkflowDbContext.SaveChanges` (read off the step status change, like notifications) writes a
+`WorkflowTaskRequested`; Leads (`LeadWorkflowTasks`) creates one `CrmTask` (type Generic, due = the
+step's delay or 24 h, `TriggerEventType = "workflow.step"`, `TriggerEventId` = the instance step,
+idempotent on it) about the record — Lead, Project, Client or KycFile — for the record's agent (lead
+assignee else owner; project owner else its lead's agent; client advisor; none for a KYC file → left
+unassigned), and notes it in the history (`TASK_CREATED`, via `WorkflowStepNote`). Completing the task
+(`CompleteTaskHandler`) publishes `WorkflowStepTaskClosed` through the Leads outbox and
+`InstanceRunner.CompleteTaskStepAsync` approves the step in the name of whoever did it; cancelling it
+leaves the step open for a manual approval (`TASK_CANCELLED`). A step that closes WITHOUT its task —
+approved/rejected by hand, timed out, instance cancelled — writes `WorkflowTaskWithdrawn` and Leads
+cancels the open task. `InstanceRunner` (was `WaitStepRunner`) is the shared « move an instance from
+a job or consumer » service.
+
+**« Condition » steps branch (2026-10-29, step-kinds lot 3).** Config `{"condition": {"nodeType":
+"leaf", "field", "operator", "value"}}` — one comparison on a fact the record's `IContextProvider`
+fills; the contiguous steps after it carrying `"branch": "yes"|"no"` are its branches. When the step
+opens (AwaitingApproval, no role) `WorkflowDbContext.SaveChanges` writes a Workflow-internal
+`ConditionStepReached`; `ConditionStepConsumer` builds the facts NOW (not the start snapshot),
+evaluates with `IConditionEvaluator` and calls `WorkflowInstance.ResolveCondition`: step `Executed`,
+the losing branch `Skipped`, history `CONDITION_RESOLVED` (« Score du lead ≥ 60 : oui (valeur : 72) →
+branche Oui. »). `Follow` steps over a skipped target to the next pending step by order (what the
+generated linear transitions lead to). Unreadable facts → branche Non, said in the history.
+- Providers now DESCRIBE their keys (`IContextProvider.Fields`, `ContextField`): Lead (status, score,
+  intent, source, product, desired amount, kind, hasEmail, PEP, completeness, language), Opportunity
+  (`ProjectContextProvider`: product, amount, probability, phase, hasClient + the lead's under
+  `lead.`), Account (`ClientContextProvider`: type, status, KYC status, risk, segment, PEP). No
+  protected value. KYC file: none, so a KYC circuit cannot hold a condition.
+  `GET workflow/templates/condition-fields?entityType=` serves them to the editor.
+  `ContextProviderFieldsTests` (Leads) pins that every declared key is filled.
+- Activation refuses a condition with no comparison, an unknown field, an empty value, or on an
+  entity no provider describes (`ConditionStepConfig.Problem`). Condition left `BlocksActivation`;
+  only Action Integration remains.
+
+**Steps that wait on the record (2026-10-29, step-kinds lot 4).** `IWorkflowRecordGate` (Shared, one
+per entity, like `IContextProvider`: `LeadRecordGate`, `ProjectRecordGate`, `ClientRecordGate`)
+answers PRESENCE only — empty fields by label, questionnaires « à compléter », the client of the
+record. `RecordStepGates` (Workflow) uses it:
+- « Formulaire » (`{"fields": [...]}` chosen among `GET workflow/templates/form-fields`): approval
+  refused while a field is empty (« Champs à remplir avant d'approuver : E-mail, … »). Product owner:
+  an incomplete form must not be approved. A project's form is its lead's.
+- « Formulaire de qualification »: approval refused while questionnaires are to complete (a project:
+  its own + its lead's not tied to a project). Lead and project circuits only.
+- « Vérification KYC » (`kycLevel` Full by default): `KycCheckStepReached` (outbox, on opening) →
+  `KycStepRunner` checks the client's KYC (`IKycModule` status Approved, and `GetLimitsAsync().Tier
+  == "Full"` for Full) and passes the step (`KYC_VALIDATED`) or notes what it waits for
+  (`KYC_PENDING`); `client.kyc_validated` / `client.kyc_rejected` signals re-check the open steps of
+  that client. A refused KYC leaves the step open for a manual decision; approval is refused until
+  the KYC is there. KycFile records use the file's customer.
+- The refusals are in `ApproveStepHandler` (the human path) and are shown as-is by the approval
+  screens. Activation refuses a Form without fields, and these kinds on an entity with no gate.
+
+**« Action Integration » steps wait for the back office (2026-10-29, step-kinds lot 5).** Product
+owner: the step SENDS NOTHING — the Integration module already creates the client at the CBS once
+its KYC is validated and sends a contract to the insurer once created; a second sender would risk a
+double send to a real system. `{"target": "CoreBanking"|"Insurance"}`:
+- CoreBanking: passes when the record's client has an `IntegrationReference` (the CBS answered with
+  its id); Insurance (project circuits only): when the PROJECT's holding
+  (`ICustomersModule.GetProjectHoldingIdAsync`, latest `SourceOpportunityId`) has one. Read by
+  `IIntegrationModule.GetSyncStateAsync` from the database — never a call to the back office. A
+  refused latest `CreateCustomer` / `SubscribePolicy` command is reported with its message and leaves
+  the step open (manual decision; approval refused until synced).
+- Checked on opening (`IntegrationStepReached`) and on every `CbsCustomerCreatedEvent`,
+  `PolicyIssuedEvent`, `IntegrationCommandSucceededEvent`, `IntegrationCommandRejectedEvent` of the
+  tenant (`IntegrationStepConsumer` re-checks all open integration steps — there are few). History
+  `INTEGRATION_SYNCED` / `INTEGRATION_PENDING`.
+- `StepKinds.BlocksActivation` is now empty: every step kind has its execution.
+
+**Overdue steps escalate; « bloquante » holds conversion and win (2026-10-29, step-kinds lot 6).**
+Product owner's choices.
+- **An overdue step never ends its instance any more** (it used to, `TimedOut`, nobody told; a
+  project circuit then read it as refused). A drawn TIMEOUT transition still routes; otherwise
+  `StepEscalator` applies the step's `escalation`: `supervisor` → the line manager of whoever holds
+  it (else of the record's agent), else their agency's head; `reassign` → another active holder of
+  its role in the record's agency or above; `supervisor_then_reassign` → the first, then the second
+  (counted from `ESCALATED` history lines); `none` or nobody found → it stays, its people are
+  reminded (`SLA_REMINDER`). A fresh delay each time, a bell (`workflow.escalation`) for whoever must
+  act. The person a step was HANDED to may approve/reject it without its role.
+- **« Étape bloquante »**: `IWorkflowModule.GetBlockingStepsAsync` lists the blocking steps not yet
+  passed (Pending/AwaitingApproval, definition `IsBlocking`) of the running circuits on a record.
+  `ConvertLeadHandler` (after its already-converted answer) and `CloseOpportunityHandler` (ClosedWon
+  only) refuse with « Étape bloquante non franchie : X (circuit) ». Nothing else is held.
+- `RecordFactsReader` (who works a record and where) is now shared by the notifications and the
+  escalation.
+
 **Automatic « Notification » steps (2026-10-29, lot 1).** The engine ran EVERY step as a validation
 whatever its `StepKind`: a notification step (no role) waited for an approval nobody was asked for,
 the instance stopped there and nothing was sent. `StepKinds.RunsAutomatically` (Notification only)

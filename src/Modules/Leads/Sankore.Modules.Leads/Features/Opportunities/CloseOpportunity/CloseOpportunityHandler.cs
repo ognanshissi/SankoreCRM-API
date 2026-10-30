@@ -33,7 +33,8 @@ internal sealed class CloseOpportunityHandler(
     ProjectTemplates.ProjectTemplateResolver? templates = null,
     ProjectTemplates.ProjectStepGate? gate = null,
     ProjectTemplates.ProjectLeadConversion? conversion = null,
-    History.ProjectHistoryRecorder? history = null)
+    History.ProjectHistoryRecorder? history = null,
+    Sankore.Modules.Workflow.PublicApi.IWorkflowModule? workflow = null)
     : IRequestHandler<CloseOpportunityCommand, Result<CloseOpportunityResult>>
 {
     public async Task<Result<CloseOpportunityResult>> Handle(
@@ -48,6 +49,14 @@ internal sealed class CloseOpportunityHandler(
 
         if (opportunity.IsStale(cmd.ExpectedUpdatedAt))
             return Result.Fail<CloseOpportunityResult>(LeadConcurrency.ConflictError);
+
+        // A « bloquante » step of a circuit running on the project holds the win until it is passed
+        // (product owner, 2026-10-29). Losing is always allowed.
+        if (cmd.Outcome == OpportunityStage.ClosedWon && workflow is not null
+            && opportunity.Stage is not (OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
+            && await workflow.GetBlockingStepsAsync(opportunity.TenantId, "Opportunity", opportunity.Id, ct) is { Count: > 0 } blocking)
+            return Result.Fail<CloseOpportunityResult>(
+                $"Étape bloquante non franchie : {string.Join(", ", blocking)}. Le projet ne peut pas encore être gagné.");
 
         // Winning reaches every step of the template, the approval one included (lot 3): a project
         // cannot be won around its KYC check by skipping the step that carries it. Losing is

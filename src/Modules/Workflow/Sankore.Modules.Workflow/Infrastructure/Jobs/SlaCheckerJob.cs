@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Workflow.Domain;
 using Sankore.Modules.Workflow.Infrastructure.Actions;
+using Sankore.Modules.Workflow.Infrastructure.Waits;
 
 namespace Sankore.Modules.Workflow.Infrastructure.Jobs;
 
@@ -57,14 +58,37 @@ internal sealed class SlaCheckerJob(
 
         // Find all instance IDs where the active step has exceeded its DueAt.
         // IgnoreQueryFilters: no HTTP context in a background job — tenant filter skipped intentionally.
-        var timedOutInstanceIds = await db.WorkflowInstanceSteps
+        var overdue = await db.WorkflowInstanceSteps
             .IgnoreQueryFilters()
             .Where(s => s.Status == StepStatus.AwaitingApproval
                      && s.DueAt.HasValue
                      && s.DueAt.Value <= now)
+            .Select(s => new { s.InstanceId, s.Kind, s.ConfigJson })
+            .ToListAsync(ct);
+
+        if (overdue.Count == 0)
+            return;
+
+        // An « Attente » step's DueAt is its delay, not an SLA: when it runs out the circuit
+        // RESUMES. Read as an SLA, it used to end the instance in « Délai dépassé ».
+        var runner = scope.ServiceProvider.GetRequiredService<InstanceRunner>();
+        foreach (var wait in overdue.Where(s => s.Kind == StepKind.Wait))
+        {
+            try
+            {
+                await runner.ResumeWaitAsync(wait.InstanceId, WaitStepConfig.ElapsedReason(wait.ConfigJson), ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "SlaCheckerJob: failed to resume the wait of instance {InstanceId}.", wait.InstanceId);
+            }
+        }
+
+        var timedOutInstanceIds = overdue
+            .Where(s => s.Kind != StepKind.Wait)
             .Select(s => s.InstanceId)
             .Distinct()
-            .ToListAsync(ct);
+            .ToList();
 
         if (timedOutInstanceIds.Count == 0)
             return;
@@ -80,7 +104,8 @@ internal sealed class SlaCheckerJob(
         {
             try
             {
-                await TimeoutInstanceAsync(db, conditionEvaluator, actionDispatcher, instanceId, ct);
+                await TimeoutInstanceAsync(db, conditionEvaluator, actionDispatcher,
+                    scope.ServiceProvider.GetRequiredService<StepEscalator>(), instanceId, ct);
             }
             catch (Exception ex)
             {
@@ -94,6 +119,7 @@ internal sealed class SlaCheckerJob(
         WorkflowDbContext db,
         IConditionEvaluator conditionEvaluator,
         IActionExecutorDispatcher actionDispatcher,
+        StepEscalator escalator,
         Guid instanceId,
         CancellationToken ct)
     {
@@ -167,17 +193,9 @@ internal sealed class SlaCheckerJob(
         }
         else
         {
-            // No escalation path configured — hard-terminate the workflow.
-            instance.TimeoutCurrentStep();
-
-            if (instance.PendingAuditEntries.Count > 0)
-                db.WorkflowAuditEntries.AddRange(instance.PendingAuditEntries);
-
-            await db.SaveChangesAsync(ct);
-
-            logger.LogInformation(
-                "SlaCheckerJob: instance {InstanceId} hard-terminated (no TIMEOUT transition defined).",
-                instanceId);
+            // No TIMEOUT transition drawn: the step's « Escalade » applies (product owner,
+            // 2026-10-29). It used to hard-terminate the instance in « Délai dépassé », nobody told.
+            await escalator.EscalateAsync(instanceId, ct);
         }
     }
 }

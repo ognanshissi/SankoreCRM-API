@@ -19,6 +19,7 @@ internal sealed class WorkflowInstanceStepConfiguration : IEntityTypeConfigurati
          .HasDefaultValue(StepKind.Validation).ValueGeneratedNever();
         b.Property(s => s.ConfigJson).HasColumnType("text");
         b.Ignore(s => s.RunsAutomatically);
+        b.Ignore(s => s.Branch);
         b.Property(s => s.SlaHours);
         b.Property(s => s.DueAt);
         b.Property(s => s.AssignedToUserId);

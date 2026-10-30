@@ -32,7 +32,8 @@ internal sealed class ConvertLeadHandler(
     IAdministrationModule administration,
     ILeadEmailIndexer emailIndexer,
     Features.Enrichment.LeadCompletenessCalculator completeness,
-    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
+    Sankore.Modules.Workflow.PublicApi.IWorkflowModule? workflow = null)
     : IRequestHandler<ConvertLeadCommand, Result<ConvertLeadResult>>
 {
     /// <summary>
@@ -71,6 +72,14 @@ internal sealed class ConvertLeadHandler(
                 AlreadyConverted: true,
                 LeadConverted:   true));
         }
+
+        // A « bloquante » step of a circuit running on the lead holds the conversion until it is
+        // passed (product owner, 2026-10-29). After the already-converted answer: a retry of a
+        // conversion that went through must still get its client back.
+        if (workflow is not null
+            && await workflow.GetBlockingStepsAsync(lead.TenantId, "Lead", lead.Id, ct) is { Count: > 0 } blocking)
+            return Result.Fail<ConvertLeadResult>(
+                $"Étape bloquante non franchie : {string.Join(", ", blocking)}. Le lead ne peut pas encore être converti.");
 
         // An open file names its client: naming ANOTHER one is not a choice to honour silently —
         // one of the two records is wrong. Refused before any check that reads the client file.

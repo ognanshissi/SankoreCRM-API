@@ -1427,4 +1427,26 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             _ => IntegrationResult.Technical<T>(failure.Code!, failure.Detail),
         };
     }
+    public async Task<IntegrationSyncState> GetSyncStateAsync(
+        Guid tenantId, IntegrationSyncTarget target, Guid crmId, CancellationToken ct)
+    {
+        // A reference is recorded when the back office answered with its own id: the customer it
+        // created, the policy it issued. Customers and holdings have distinct ids, so the CRM id alone
+        // tells which.
+        var synced = await _db.References
+            .IgnoreQueryFilters()
+            .AnyAsync(r => r.TenantId == tenantId && r.CrmId == crmId, ct);
+        if (synced) return new IntegrationSyncState(true, null);
+
+        var command = target == IntegrationSyncTarget.CoreBanking ? CommandType.CreateCustomer : CommandType.SubscribePolicy;
+        var latest = await _db.Commands
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId && c.CrmId == crmId && c.CommandType == command)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => new { c.Status, c.LastErrorMessage })
+            .FirstOrDefaultAsync(ct);
+
+        return new IntegrationSyncState(false,
+            latest?.Status == CommandStatus.Rejected ? latest.LastErrorMessage ?? "refus sans motif" : null);
+    }
 }

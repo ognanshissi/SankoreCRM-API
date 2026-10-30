@@ -62,6 +62,14 @@ internal sealed class CustomersModuleFacade(
         Guid tenantId, Guid holdingId, CancellationToken ct)
         => holdingSync.GetForSyncAsync(tenantId, holdingId, ct);
 
+    public Task<Guid?> GetProjectHoldingIdAsync(Guid tenantId, Guid opportunityId, CancellationToken ct)
+        => db.ProductHoldings
+            .IgnoreQueryFilters()
+            .Where(h => h.TenantId == tenantId && h.SourceOpportunityId == opportunityId)
+            .OrderByDescending(h => h.CreatedAt)
+            .Select(h => (Guid?)h.Id)
+            .FirstOrDefaultAsync(ct);
+
     public async Task<InsuranceApplicantFacts?> GetInsuranceApplicantFactsAsync(
         Guid tenantId, Guid clientId, CancellationToken ct)
     {

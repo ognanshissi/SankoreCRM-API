@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\Leads\Sankore.Modules.Leads.PublicApi\Sankore.Modules.Leads.PublicApi.csproj" />
     <ProjectReference Include="..\..\Customers\Sankore.Modules.Customers.PublicApi\Sankore.Modules.Customers.PublicApi.csproj" />
     <ProjectReference Include="..\..\Kyc\Sankore.Modules.Kyc.PublicApi\Sankore.Modules.Kyc.PublicApi.csproj" />
+    <ProjectReference Include="..\..\Integration\Sankore.Modules.Integration.PublicApi\Sankore.Modules.Integration.PublicApi.csproj" />
   </ItemGroup>
 
   <ItemGroup>

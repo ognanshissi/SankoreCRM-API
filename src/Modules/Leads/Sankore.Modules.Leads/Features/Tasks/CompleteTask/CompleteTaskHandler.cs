@@ -1,3 +1,6 @@
+using Sankore.Shared.Infrastructure.Messaging;
+using Microsoft.Extensions.DependencyInjection;
+using Sankore.Modules.Workflow.PublicApi;
 namespace Sankore.Modules.Leads.Features.Tasks.CompleteTask;
 
 using MassTransit;
@@ -13,7 +16,8 @@ internal sealed class CompleteTaskHandler(
     LeadsDbContext db,
     AgentCapacityService capacityService,
     IBus bus,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<CompleteTaskCommand, Result>
 {
     public async Task<Result> Handle(CompleteTaskCommand cmd, CancellationToken ct)
@@ -39,6 +43,10 @@ internal sealed class CompleteTaskHandler(
         if (result.IsFailure) return result;
 
         await RecordFirstContactAsync(task, ct);
+
+        // The task of a workflow « Tâche manuelle » step: done means the step is done.
+        if (task.TriggerEventType == WorkflowTaskRequested.TriggerType && task.TriggerEventId is { } stepId)
+            await publisher.PublishAsync(new WorkflowStepTaskClosed(task.TenantId, stepId, true, currentUser.Id, task.Title), ct);
 
         await db.SaveChangesAsync(ct);
 

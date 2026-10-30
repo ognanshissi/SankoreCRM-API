@@ -126,6 +126,9 @@ public static class CustomersModule
         services.AddScoped<Infrastructure.Notifications.ClientSmsNotifier>();
         // Writes to the client when a workflow « Notification » step on a client record asks.
         services.AddScoped<Features.WorkflowNotifications.ClientWorkflowNotifier>();
+        // What a workflow « Condition » step on a client record may read.
+        services.AddScoped<Sankore.Shared.Infrastructure.Workflow.IContextProvider, Infrastructure.ClientContextProvider>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Workflow.IWorkflowRecordGate, Infrastructure.ClientRecordGate>();
 
         // The single path into the complaints register, shared by the agent's endpoint and the
         // WhatsApp bot's contract (2026-10-26).

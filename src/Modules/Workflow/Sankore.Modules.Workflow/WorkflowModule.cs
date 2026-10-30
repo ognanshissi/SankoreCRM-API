@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
@@ -86,6 +87,19 @@ public static class WorkflowModule
 
         // Tells a record's agent and role holders in-app when a « Notification » step is reached.
         services.AddScoped<InternalWorkflowNotifier>();
+
+        // Ends an « Attente » step (delay elapsed or awaited event) and carries the circuit on.
+        services.AddScoped<Infrastructure.Waits.InstanceRunner>();
+
+        // What Formulaire / Formulaire de qualification / Vérification KYC steps require of the record.
+        services.AddScoped<Infrastructure.Gates.RecordStepGates>();
+        services.AddScoped<Infrastructure.Gates.KycStepRunner>();
+        services.AddScoped<Infrastructure.Gates.IntegrationStepRunner>();
+
+        // Overdue steps: escalated (supervisor / another role holder) or reminded, never ended.
+        services.AddScoped<Infrastructure.Notifications.RecordFactsReader>();
+        services.AddScoped<StepEscalator>();
+        services.TryAddSingleton(TimeProvider.System);
 
         return services;
     }

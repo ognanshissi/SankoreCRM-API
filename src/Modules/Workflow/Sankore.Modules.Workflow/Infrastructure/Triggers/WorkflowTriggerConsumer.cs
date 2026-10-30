@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Workflow.Domain;
 using Sankore.Modules.Workflow.Infrastructure;
+using Sankore.Modules.Workflow.Infrastructure.Waits;
 using Sankore.Shared.Infrastructure.Workflow;
 
 namespace Sankore.Modules.Workflow.Infrastructure.Triggers;
@@ -36,6 +37,15 @@ public sealed class WorkflowTriggerConsumer(
         // A partner's event name and one of the CRM's own never match each other (webhooks lot 6):
         // a partner naming its event LEAD_CAPTURED must not start the capture journeys.
         var triggerType = signal.IsExternal ? TriggerType.ExternalEvent : TriggerType.EntityEvent;
+
+        // The same signal ends the « Attente » steps waiting for it on this very record.
+        if (!signal.IsExternal)
+            await ResumeWaitsAsync(scope.ServiceProvider, db, signal, ct);
+
+        // A client's KYC decided: the « Vérification KYC » steps depending on that client re-check.
+        if (!signal.IsExternal && signal.EventName is "client.kyc_validated" or "client.kyc_rejected")
+            await scope.ServiceProvider.GetRequiredService<Gates.KycStepRunner>()
+                .ReevaluateForClientAsync(signal.TenantId, signal.EntityId, ct);
 
         var triggers = await db.WorkflowTriggers
             .IgnoreQueryFilters()
@@ -76,6 +86,40 @@ public sealed class WorkflowTriggerConsumer(
                 logger.LogError(ex,
                     "Failed to start workflow instance for trigger {TriggerId} (EntityType={EntityType}, EntityId={EntityId}).",
                     trigger.Id, signal.EntityType, signal.EntityId);
+            }
+        }
+    }
+
+    private async Task ResumeWaitsAsync(
+        IServiceProvider services, WorkflowDbContext db, WorkflowTriggerSignal signal, CancellationToken ct)
+    {
+        var waiting = await db.WorkflowInstanceSteps
+            .IgnoreQueryFilters()
+            .Where(s => s.TenantId == signal.TenantId
+                     && s.Kind == StepKind.Wait
+                     && s.Status == StepStatus.AwaitingApproval)
+            .Join(db.WorkflowInstances.IgnoreQueryFilters()
+                    .Where(i => i.TenantId == signal.TenantId
+                             && i.EntityId == signal.EntityId
+                             && i.EntityType == signal.EntityType
+                             && i.Status == WorkflowStatus.InProgress),
+                s => s.InstanceId, i => i.Id, (s, i) => new { s.InstanceId, s.ConfigJson })
+            .ToListAsync(ct);
+
+        var matching = waiting.Where(w => WaitStepConfig.EventCode(w.ConfigJson) == signal.EventName).ToList();
+        if (matching.Count == 0) return;
+
+        var runner = services.GetRequiredService<InstanceRunner>();
+        foreach (var wait in matching)
+        {
+            try
+            {
+                await runner.ResumeWaitAsync(wait.InstanceId, WaitStepConfig.ReceivedReason(signal.EventName), ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to resume the wait of instance {InstanceId} on '{EventName}'.",
+                    wait.InstanceId, signal.EventName);
             }
         }
     }
