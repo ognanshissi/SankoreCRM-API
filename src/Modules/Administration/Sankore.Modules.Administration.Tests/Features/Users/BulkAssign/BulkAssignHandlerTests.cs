@@ -28,7 +28,7 @@ public sealed class BulkAssignHandlerTests : IDisposable
     {
         _factory = new TestAdminDbContextFactory(_tenantId);
         _currentUser = Substitute.For<ICurrentUser>();
-        _currentUser.TenantId.Returns(_tenantId);
+        _currentUser.TenantId.Returns(_tenantId); _currentUser.TeamTenantId.Returns(_tenantId);
         _currentUser.Id.Returns(_operatorId);
     }
 

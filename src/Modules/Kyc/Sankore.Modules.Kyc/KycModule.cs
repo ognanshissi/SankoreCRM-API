@@ -101,6 +101,16 @@ public static class KycModule
 
     public static IServiceCollection AddKycModule(this IServiceCollection services, IConfiguration config)
     {
+        // The same per-tenant start as InitializeAsync, for a tenant created while the host runs.
+        services.AddSingleton<Sankore.Shared.Infrastructure.Tenants.ITenantSeeder>(new Sankore.Shared.Infrastructure.Tenants.TenantSeeder("Kyc", async (sp, ct) =>
+        {
+            await KycSettingsSeeder.SeedAsync(
+                sp.GetRequiredService<KycDbContext>(),
+                sp.GetRequiredService<ITenantStore>(),
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<ILogger<KycDbContext>>());
+        }));
+
         services.AddDbContext<KycDbContext>(opt =>
             opt.UseNpgsql(
                     config.GetConnectionString("Database"),

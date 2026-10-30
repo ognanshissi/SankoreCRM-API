@@ -76,7 +76,7 @@ internal sealed class BulkAssignRoleHandler(
             // Attributed to the operator, not to the system sentinel: this is a deliberate act,
             // so a later agency handover must never revoke it automatically.
             await db.UserRoles.AddAsync(
-                UserRole.Assign(currentUser.TenantId, user.Id, role.Id, currentUser.Id), ct);
+                UserRole.Assign(currentUser.TeamTenantId, user.Id, role.Id, currentUser.Id), ct);
 
             outcomes.Add(new(userId, true, null));
             granted.Add(user);
@@ -87,7 +87,7 @@ internal sealed class BulkAssignRoleHandler(
         // Only the users who actually gained the role are told, and only once it is committed.
         var changedAt = DateTimeOffset.UtcNow;
         foreach (var user in granted)
-            await notifier.NotifyRoleGrantedAsync(currentUser.TenantId, role, user, changedAt, ct);
+            await notifier.NotifyRoleGrantedAsync(currentUser.TeamTenantId, role, user, changedAt, ct);
 
         return Result.Ok(BulkAssignAgencyHandler.Report(userIds.Count, outcomes));
     }

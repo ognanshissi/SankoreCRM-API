@@ -104,7 +104,7 @@ internal sealed class WorkflowModuleFacade(WorkflowDbContext db) : IWorkflowModu
             .IgnoreQueryFilters()
             .Where(t => t.TenantId == tenantId && t.EntityType == entityType && t.IsActive)
             .OrderBy(t => t.Name)
-            .Select(t => new WorkflowCircuitSummary(t.Circuit, t.Name, t.Version, t.Steps.Count))
+            .Select(t => new WorkflowCircuitSummary(t.Circuit, t.Name, t.Version, t.Steps.Count, t.Id))
             .ToListAsync(ct);
 
     public async Task<Result<WorkflowInstanceStatus>> GetInstanceStatusAsync(

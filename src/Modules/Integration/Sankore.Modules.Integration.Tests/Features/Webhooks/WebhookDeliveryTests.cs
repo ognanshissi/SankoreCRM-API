@@ -72,6 +72,37 @@ public sealed class WebhookDeliveryTests : IDisposable
     }
 
     [Fact]
+    public async Task A_test_tenants_signing_secret_says_so()
+    {
+        var tenants = Substitute.For<ITenantStore>();
+        tenants.GetAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new TenantInfo(TenantId, "Caisse test", "test.sankore.local", true, false, null, null, IsTest: true));
+
+        (await new WebhookSecrets(_vault, _clock, tenants).CreateAsync(TenantId, Guid.NewGuid(), default))
+            .Should().StartWith(TestModeKeys.TestWebhookSecret);
+        (await new WebhookSecrets(_vault, _clock).CreateAsync(TenantId, Guid.NewGuid(), default))
+            .Should().StartWith(TestModeKeys.LiveWebhookSecret).And.NotStartWith(TestModeKeys.TestWebhookSecret);
+    }
+
+    [Fact]
+    public async Task A_test_tenants_events_are_marked_test_like_a_sample()
+    {
+        await using var db = _factory.CreateContext();
+        await SubscribeAsync(db, ["lead.status_changed"]);
+        var tenants = Substitute.For<ITenantStore>();
+        tenants.GetAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new TenantInfo(TenantId, "Caisse test", "test.sankore.local", true, false, null, null, IsTest: true));
+
+        await Dispatcher(db, new RecordingPartner(HttpStatusCode.OK), tenants)
+            .FanOutAsync(new LeadStatusChangedEvent(TenantId, Guid.NewGuid(), "New", "Open"), default);
+
+        // Still delivered — a partner wires its test endpoint to a test tenant on purpose — but it
+        // can tell, as from Stripe's `livemode: false`.
+        using var body = JsonDocument.Parse((await db.WebhookDeliveries.SingleAsync()).Body);
+        body.RootElement.GetProperty("test").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
     public async Task An_event_outside_the_catalogue_or_nobody_listening_creates_nothing()
     {
         await using var db = _factory.CreateContext();
@@ -271,10 +302,10 @@ public sealed class WebhookDeliveryTests : IDisposable
     private Task<IReadOnlyList<Guid>> FanOutLeadCreatedAsync(IntegrationDbContext db, RecordingPartner partner)
         => Dispatcher(db, partner).FanOutAsync(new LeadCreatedEvent(TenantId, Guid.NewGuid(), "New", "Web", null, null, null, null), default);
 
-    private WebhookDispatcher Dispatcher(IntegrationDbContext db, RecordingPartner partner)
+    private WebhookDispatcher Dispatcher(IntegrationDbContext db, RecordingPartner partner, ITenantStore? tenants = null)
         => new(db, FixedTenantModules.All, new WebhookSecrets(_vault, _clock),
             new WebhookSender(new SingleClientFactory(new HttpClient(partner)), _clock, NullLogger<WebhookSender>.Instance),
-            _jobs, _notifications, _clock, NullLogger<WebhookDispatcher>.Instance);
+            _jobs, _notifications, _clock, NullLogger<WebhookDispatcher>.Instance, tenants);
 
     public void Dispose() => _factory.Dispose();
 }

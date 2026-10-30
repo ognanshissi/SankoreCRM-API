@@ -1,3 +1,4 @@
+using Sankore.Shared.Infrastructure.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -18,7 +19,7 @@ public static class AgenciesEndpoints
 {
     public static IEndpointRouteBuilder MapAgenciesEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("agencies").WithTags("Agencies");
+        var group = app.MapGroup("agencies").WithTags("Agencies").LiveModeWritesOnly();
 
         return group
             .MapCreateAgency()

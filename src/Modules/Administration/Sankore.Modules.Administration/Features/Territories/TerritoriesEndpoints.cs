@@ -1,3 +1,4 @@
+using Sankore.Shared.Infrastructure.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -13,7 +14,7 @@ public static class TerritoriesEndpoints
 {
     public static IEndpointRouteBuilder MapTerritoriesEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group =  endpoints.MapGroup("territories").WithTags("Territories");
+        var group =  endpoints.MapGroup("territories").WithTags("Territories").LiveModeWritesOnly();
         return group.MapCreateTerritory()
             .MapGetTerritory()
             .MapListTerritories()

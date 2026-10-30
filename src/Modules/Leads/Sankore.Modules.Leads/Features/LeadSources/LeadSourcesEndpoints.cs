@@ -29,6 +29,9 @@ public static class LeadSourcesEndpoints
     {
         var group = app.MapGroup("lead-sources");
 
+        // « Copier en production » from the test mode (sandbox lot 4)
+        group.MapPromoteLeadSource();
+
         group.MapGet("", ListSources)
             .WithName("ListLeadSources")
             .WithTags("LeadSources")

@@ -22,7 +22,7 @@ public sealed class EntityFormHandlersTests : IDisposable
     {
         _db = new TestAdminDbContextFactory(_tenantId);
         _user.Id.Returns(Guid.NewGuid());
-        _user.TenantId.Returns(_tenantId);
+        _user.TenantId.Returns(_tenantId); _user.TeamTenantId.Returns(_tenantId);
     }
 
     public void Dispose() => _db.Dispose();

@@ -20,7 +20,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
     {
         var um = IdentityMockFactory.BuildUserManager();
         var cu = Substitute.For<ICurrentUser>();
-        cu.TenantId.Returns(_tenantId);
+        cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId);
 
         if (returnUser is not null)
         {
@@ -53,7 +53,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
 
         var um = IdentityMockFactory.BuildUserManager();
         var cu = Substitute.For<ICurrentUser>();
-        cu.TenantId.Returns(_tenantId);
+        cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId);
         um.FindByIdAsync(user.Id.ToString()).Returns(user);
         um.GetRolesAsync(user).Returns(new List<string> { "SalesManager" });
 
@@ -90,7 +90,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
 
         var um = IdentityMockFactory.BuildUserManager();
         var cu = Substitute.For<ICurrentUser>();
-        cu.TenantId.Returns(_tenantId);
+        cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId);
         um.FindByIdAsync(userId.ToString()).Returns(user);
         um.GetRolesAsync(user).Returns(new List<string>());
 
@@ -124,7 +124,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
 
         var um = IdentityMockFactory.BuildUserManager();
         var cu = Substitute.For<ICurrentUser>();
-        cu.TenantId.Returns(_tenantId);
+        cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId);
         um.FindByIdAsync(userId.ToString()).Returns(user);
         um.GetRolesAsync(user).Returns(new List<string>());
 
@@ -156,7 +156,7 @@ public sealed class GetUserPermissionsHandlerTests : IDisposable
 
         var um = IdentityMockFactory.BuildUserManager();
         var cu = Substitute.For<ICurrentUser>();
-        cu.TenantId.Returns(_tenantId); // caller's tenant ≠ user's tenant
+        cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId); // caller's tenant ≠ user's tenant
         um.FindByIdAsync(user.Id.ToString()).Returns(user);
 
         var handler = new GetUserPermissionsHandler(_factory.CreateContext(), um, cu);

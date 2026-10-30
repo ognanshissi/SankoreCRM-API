@@ -81,7 +81,7 @@ internal static class CompanyLogoEndpoints
         {
             if (logo is null)
             {
-                logo = Domain.CompanyLogo.Create(tenant.CurrentTenantId, buffer.ToArray());
+                logo = Domain.CompanyLogo.Create(tenant.TeamTenantId, buffer.ToArray());
                 db.CompanyLogos.Add(logo);
             }
             else
@@ -94,7 +94,7 @@ internal static class CompanyLogoEndpoints
             return Results.Problem(ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var url = $"{ExternalOrigin(request)}{string.Format(PublicPathTemplate, tenant.CurrentTenantId)}"
+        var url = $"{ExternalOrigin(request)}{string.Format(PublicPathTemplate, tenant.TeamTenantId)}"
                   + $"?v={logo.UpdatedAt.ToUnixTimeMilliseconds()}";
         info.SetLogoUrl(url);
 
@@ -111,7 +111,7 @@ internal static class CompanyLogoEndpoints
         // Seulement si l'URL pointe encore vers le logo déposé : une adresse externe saisie depuis
         // ne doit pas disparaître parce qu'on retire un fichier qui ne servait plus.
         var info = await db.CompanyInfos.AsTracking().FirstOrDefaultAsync(ct);
-        if (info is not null && info.LogoUrl.Contains(string.Format(PublicPathTemplate, tenant.CurrentTenantId), StringComparison.OrdinalIgnoreCase))
+        if (info is not null && info.LogoUrl.Contains(string.Format(PublicPathTemplate, tenant.TeamTenantId), StringComparison.OrdinalIgnoreCase))
             info.SetLogoUrl(string.Empty);
 
         await db.SaveChangesAsync(ct);

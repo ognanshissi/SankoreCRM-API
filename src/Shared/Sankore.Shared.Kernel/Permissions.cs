@@ -445,6 +445,18 @@ public static class Permissions
     public static readonly PermissionItem CanDeactivateTenantModule =
         new("tenant:modules:deactivate", "Deactivate a Module, Effective Immediately", ApplicationModules.Administration, "modules:deactivate");
 
+    // Sandbox lot 2: switching to « Mode test » — the tenant's twin with its own data and
+    // configuration. Administrator-only by the everything-grant, like the modules above: whoever
+    // holds it may create the twin on first use.
+    public static readonly PermissionItem CanUseTestMode =
+        new("tenant:test-mode", "Switch to Test Mode: a Sandbox Copy of the Data and Configuration", ApplicationModules.Administration, "test-mode:use");
+
+    // Sandbox lot 4: « Copier en production » — an object of the test mode replaces or creates its
+    // production counterpart. Its own permission, without four eyes (product owner), and always
+    // paired on the route with the right to edit that kind of configuration.
+    public static readonly PermissionItem CanPromoteTestConfiguration =
+        new("tenant:test-mode:promote", "Copy Configuration from Test Mode to Production", ApplicationModules.Administration, "test-mode:promote");
+
     // ── Support (Administration module) ─────────────────────────────────────
     //
     // Tickets a tenant user addresses to the platform team. Reading and opening are granted to
@@ -1063,6 +1075,8 @@ public static class Permissions
         CanReadTenantModules,
         CanRequestTenantModule,
         CanDeactivateTenantModule,
+        CanUseTestMode,
+        CanPromoteTestConfiguration,
         CanReadSupportTickets,
         CanCreateSupportTicket,
         CanReadAllSupportTickets,

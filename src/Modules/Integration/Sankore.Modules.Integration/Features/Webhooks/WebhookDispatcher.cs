@@ -37,7 +37,8 @@ internal sealed class WebhookDispatcher(
     IBackgroundJobClient jobs,
     INotificationsModule notifications,
     TimeProvider clock,
-    ILogger<WebhookDispatcher> logger)
+    ILogger<WebhookDispatcher> logger,
+    ITenantStore? tenants = null)
 {
     /// <returns>The deliveries created — none for an event outside the catalogue, or already fanned out.</returns>
     public async Task<IReadOnlyList<Guid>> FanOutAsync(IIntegrationEvent @event, CancellationToken ct)
@@ -62,7 +63,10 @@ internal sealed class WebhookDispatcher(
             .ToListAsync(ct);
 
         var data = definition.Data(@event);
-        var body = WebhookPayload.Body(definition, @event);
+        // A test tenant's events say so, as Stripe's `livemode: false` does: a partner wired to
+        // both environments must never act on a test lead.
+        var test = tenants is not null && (await tenants.GetAsync(tenantId, ct))?.IsTest == true;
+        var body = WebhookPayload.Body(definition, @event, test);
         var now = clock.GetUtcNow();
 
         var created = subscriptions.Except(already)

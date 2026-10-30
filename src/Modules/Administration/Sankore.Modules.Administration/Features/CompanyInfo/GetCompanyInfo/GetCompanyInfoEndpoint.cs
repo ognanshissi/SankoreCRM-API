@@ -26,7 +26,7 @@ internal static class GetCompanyInfoEndpoint
     private static async Task<IResult> Handle(
         ISender sender, ITenantContext tenantContext, CancellationToken ct)
     {
-        var result = await sender.Send(new GetCompanyInfoQuery(tenantContext.CurrentTenantId), ct);
+        var result = await sender.Send(new GetCompanyInfoQuery(tenantContext.TeamTenantId), ct);
         return result is null ? Results.NotFound() : Results.Ok(result);
     }
 }

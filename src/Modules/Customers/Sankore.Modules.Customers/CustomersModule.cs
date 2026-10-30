@@ -41,6 +41,16 @@ public static class CustomersModule
 {
     public static IServiceCollection AddCustomersModule(this IServiceCollection services, IConfiguration config)
     {
+        // The same per-tenant start as InitializeAsync, for a tenant created while the host runs.
+        services.AddSingleton<Sankore.Shared.Infrastructure.Tenants.ITenantSeeder>(new Sankore.Shared.Infrastructure.Tenants.TenantSeeder("Customers", async (sp, ct) =>
+        {
+            await CustomerSeeder.SeedAsync(
+                sp.GetRequiredService<CustomersDbContext>(),
+                sp.GetRequiredService<ITenantStore>(),
+                sp.GetRequiredService<ILogger<CustomersDbContext>>(),
+                ct);
+        }));
+
         services.AddDbContext<CustomersDbContext>(opt =>
             opt.UseNpgsql(
                     config.GetConnectionString("Database"),

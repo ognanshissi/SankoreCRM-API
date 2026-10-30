@@ -110,6 +110,23 @@ public static class LeadsModule
     public static IServiceCollection AddLeadsModule(
         this IServiceCollection services, IConfiguration config)
     {
+        // Copying configuration between production and its test mode (sandbox lots 4-5).
+        services.AddScoped<Features.ProjectTemplates.ProjectTemplateCopier>();
+        services.AddScoped<Sankore.Shared.Infrastructure.TestMode.IConfigurationCopier>(sp => sp.GetRequiredService<Features.ProjectTemplates.ProjectTemplateCopier>());
+        services.AddScoped<Features.LeadSources.LeadSourceCopier>();
+        services.AddScoped<Sankore.Shared.Infrastructure.TestMode.IConfigurationCopier>(sp => sp.GetRequiredService<Features.LeadSources.LeadSourceCopier>());
+
+        // The same per-tenant start as InitializeAsync, for a tenant created while the host runs.
+        services.AddSingleton<Sankore.Shared.Infrastructure.Tenants.ITenantSeeder>(new Sankore.Shared.Infrastructure.Tenants.TenantSeeder("Leads", async (sp, ct) =>
+        {
+            var db = sp.GetRequiredService<Infrastructure.LeadsDbContext>();
+            var store = sp.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>();
+            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Infrastructure.LeadsDbContext>>();
+            await Features.DispatchingRules.DispatchingRuleSeeder.SeedAsync(db, store, logger);
+            await Features.TaskTypes.TaskTypeSeeder.SeedAsync(db, store, logger);
+            await Infrastructure.LeadSettingSeeder.SeedAsync(db, store, logger);
+        }));
+
         services.AddDbContext<LeadsDbContext>(opt =>
             opt.UseNpgsql(
                 config.GetConnectionString("Database"),

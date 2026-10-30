@@ -145,7 +145,8 @@ public sealed record WorkflowStepDecision(
     DateTimeOffset? DecidedAt);
 
 /// <param name="Circuit">The stable key a project step stores; survives new versions.</param>
-public sealed record WorkflowCircuitSummary(string Circuit, string Name, int Version, int StepCount);
+/// <param name="TemplateId">The active version's template.</param>
+public sealed record WorkflowCircuitSummary(string Circuit, string Name, int Version, int StepCount, Guid TemplateId = default);
 
 /// <summary>What the calling module decided, in the engine's vocabulary.</summary>
 public enum WorkflowDecision

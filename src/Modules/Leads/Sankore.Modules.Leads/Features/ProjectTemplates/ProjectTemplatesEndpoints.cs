@@ -54,6 +54,9 @@ public static class ProjectTemplatesEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        // « Copier en production » from the test mode (sandbox lot 4)
+        group.MapPromoteProjectTemplate();
+
         return app;
     }
 

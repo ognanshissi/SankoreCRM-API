@@ -27,7 +27,7 @@ internal static class TenantModulesEndpoints
 {
     public static IEndpointRouteBuilder MapTenantModulesEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("tenant-modules").WithTags("Tenant Modules");
+        var group = app.MapGroup("tenant-modules").WithTags("Tenant Modules").LiveModeWritesOnly();
 
         group.MapGet("", async (ISender sender, CancellationToken ct) =>
             {
@@ -116,7 +116,7 @@ internal sealed class ListTenantModulesHandler(ITenantModuleRegistry registry, I
 {
     public async Task<Result<TenantModulesDto>> Handle(ListTenantModulesQuery request, CancellationToken ct)
     {
-        var answer = await registry.ListAsync(currentUser.TenantId, ct);
+        var answer = await registry.ListAsync(currentUser.TeamTenantId, ct);
         return answer.IsSuccess
             ? Result.Ok(new TenantModulesDto(answer.Value!.Modules.Select(m => m.ToDto()).ToList()))
             : Result.Fail<TenantModulesDto>(answer.Error!);
@@ -160,14 +160,14 @@ internal sealed class RequestTenantModuleHandler(
         var email = await CurrentEmail.ReadAsync(db, currentUser, ct);
         if (email is null) return Result.Fail<Guid>(TenantModulesErrors.UserNotFound);
 
-        var answer = await registry.RequestAsync(currentUser.TenantId, cmd.Module, currentUser.Id, email,
+        var answer = await registry.RequestAsync(currentUser.TeamTenantId, cmd.Module, currentUser.Id, email,
             cmd.AcceptedMonthlyPrice, cmd.AcceptedCurrency, ct);
         if (!answer.IsSuccess) return Result.Fail<Guid>(answer.Error!);
 
-        await tenantCache.InvalidateAsync(currentUser.TenantId, ct);
+        await tenantCache.InvalidateAsync(currentUser.TeamTenantId, ct);
 
         // The platform team decides: tell it there is something to decide.
-        await notifier.RequestedAsync(currentUser.TenantId, answer.Value, cmd.Module, email,
+        await notifier.RequestedAsync(currentUser.TeamTenantId, answer.Value, cmd.Module, email,
             cmd.AcceptedMonthlyPrice, cmd.AcceptedCurrency, ct);
         return Result.Ok(answer.Value);
     }
@@ -187,7 +187,7 @@ internal sealed class CancelTenantModuleRequestHandler(ITenantModuleRegistry reg
 {
     public async Task<Result> Handle(CancelTenantModuleRequestCommand cmd, CancellationToken ct)
     {
-        var answer = await registry.CancelAsync(currentUser.TenantId, cmd.SubscriptionId, currentUser.Id, ct);
+        var answer = await registry.CancelAsync(currentUser.TeamTenantId, cmd.SubscriptionId, currentUser.Id, ct);
         return answer.IsSuccess ? Result.Ok() : Result.Fail(answer.Error!);
     }
 }
@@ -218,15 +218,15 @@ internal sealed class DeactivateTenantModuleHandler(
         var email = await CurrentEmail.ReadAsync(db, currentUser, ct);
         if (email is null) return Result.Fail(TenantModulesErrors.UserNotFound);
 
-        var answer = await registry.DeactivateAsync(currentUser.TenantId, cmd.Module, currentUser.Id, email, ct);
+        var answer = await registry.DeactivateAsync(currentUser.TeamTenantId, cmd.Module, currentUser.Id, email, ct);
         if (!answer.IsSuccess) return Result.Fail(answer.Error!);
 
         // Immediate means the next request: without this, the cached TenantInfo would keep the
         // module on for up to TenantStore:CacheTtl.
-        await tenantCache.InvalidateAsync(currentUser.TenantId, ct);
+        await tenantCache.InvalidateAsync(currentUser.TeamTenantId, ct);
 
         // No approval needed, but the invoice changes: the platform is told.
-        await notifier.DeactivatedAsync(currentUser.TenantId, cmd.Module, email, clock.GetUtcNow(), ct);
+        await notifier.DeactivatedAsync(currentUser.TeamTenantId, cmd.Module, email, clock.GetUtcNow(), ct);
         return Result.Ok();
     }
 }

@@ -118,6 +118,8 @@ builder.Services.AddScoped<ITenantContext>(sp =>
     return new HttpTenantContext(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>());
 });
 builder.Services.AddTenantStore(builder.Configuration);
+// « Copier en production » (sandbox lot 4): replays a module's save commands in the live tenant.
+builder.Services.AddScoped<Sankore.Shared.Infrastructure.TestMode.ProductionReplay>();
 
 // The system user SystemUserSeeder provisions at start-up. No ValidateOnStart: a bad value is
 // reported by the seeder and the API still comes up, so /health answers and the manual
@@ -160,8 +162,9 @@ builder.Services
             {
                 if (SessionClaim.Read(ctx.Principal) is not { } sessionId) return;
                 // Lu sur le jeton : HttpContext.User n'est pas encore renseigné à ce stade, donc
-                // ITenantContext non plus.
-                if (!Guid.TryParse(ctx.Principal!.FindFirst("tenant_id")?.Value, out var tenantId))
+                // ITenantContext non plus. Le tenant du COMPTE — celui de l'équipe en mode test, où
+                // tenant_id désigne le jumeau et où la session n'existe pas.
+                if (TestModeClaims.AccountTenantOf(ctx.Principal) is not { } tenantId)
                 {
                     ctx.Fail("Missing tenant.");
                     return;
@@ -742,6 +745,8 @@ builder.Services.AddTransient<MigrateObjectsJob>();
 builder.Services.AddTransient<Sankore.Api.Features.Retention.TechnicalPurgeJob>();
 // Platform job: empties the TEST institutions a platform administrator asked to wipe (data-purge lot 4).
 builder.Services.AddTransient<Sankore.Api.Features.Retention.TenantDataWipeJob>();
+// « Repartir de la production » (sandbox lot 5).
+builder.Services.AddTransient<Sankore.Api.Features.TestMode.RefreshTestTwinJob>();
 
 // Redis distributed cache — used by Notifications module for provider resolution
 builder.AddRedisDistributedCache("redis");
@@ -1397,6 +1402,7 @@ appVersion1.MapNotificationsModuleEndpoints();
 appVersion1.MapCustomersModuleEndpoints();
 appVersion1.MapKycModuleEndpoints();
 appVersion1.MapIntegrationModuleEndpoints();
+Sankore.Api.Features.TestMode.RefreshTestModeEndpoint.MapRefreshTestMode(appVersion1);
 
 // The customer-facing remote-KYC surface (KRM-B-05/06/07). Under api/v1/public, which is what
 // TenantResolutionMiddleware exempts — so the tenant is resolved from the token or the session and

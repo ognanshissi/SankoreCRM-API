@@ -10,7 +10,16 @@ using Sankore.Shared.Kernel;
 public interface ICurrentUser
 {
     Guid Id { get; }
+
+    /// <summary>The tenant of the DATA the caller works on — the test twin in « Mode test ».</summary>
     Guid TenantId { get; }
+
+    /// <summary>
+    /// The tenant the caller's account belongs to (sandbox lot 2): the live tenant, in either mode.
+    /// Read it to find users, roles and agencies; never to stamp a row of data.
+    /// </summary>
+    Guid TeamTenantId => TenantTwins.TeamOf(TenantId);
+
     string DisplayName { get; }
     bool IsAuthenticated { get; }
 
@@ -48,6 +57,11 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICur
     public Guid TenantId => IsAuthenticated
         ? Guid.Parse(Principal!.FindFirst("tenant_id")!.Value)
         : Guid.Empty;
+
+    public Guid TeamTenantId
+        => Guid.TryParse(Principal?.FindFirst(TestModeClaims.TeamTenantId)?.Value, out var team)
+            ? team
+            : TenantTwins.TeamOf(TenantId);
 
     public string DisplayName => Principal?.FindFirst("name")?.Value ?? "anonymous";
 
@@ -101,4 +115,13 @@ public sealed class HttpTenantContext(IHttpContextAccessor accessor) : ITenantCo
 
     public Guid CurrentTenantId => Resolve()
         ?? throw new InvalidOperationException("No tenant resolved for the current context.");
+
+    /// <summary>
+    /// A « Mode test » token carries its live tenant beside the twin (<see cref="TestModeClaims"/>),
+    /// so a request never depends on the process having already seen the twin.
+    /// </summary>
+    public Guid TeamTenantId
+        => Guid.TryParse(accessor.HttpContext?.User.FindFirst(TestModeClaims.TeamTenantId)?.Value, out var team)
+            ? team
+            : TenantTwins.TeamOf(CurrentTenantId);
 }

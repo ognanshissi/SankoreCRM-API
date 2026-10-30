@@ -139,6 +139,29 @@ internal sealed class EmailOutboxProcessor(
         db.EmailOutboxMessages.Update(message);
         await db.SaveChangesAsync(ct);
 
+        // ── Test mode ───────────────────────────────────────────────────────
+        // Before the quota: a message a test tenant may not send must not consume its allowance.
+        if (await admin.IsEmailBlockedInTestAsync(message.TenantId, message.RecipientEmail, ct))
+        {
+            message.MarkBlockedInTest();
+            db.EmailOutboxMessages.Update(message);
+
+            db.EmailDeliveryLogs.Add(EmailDeliveryLog.Record(
+                message.TenantId,
+                message.Id,
+                EmailDeliveryEventType.Rejected,
+                message.RecipientEmail,
+                "{\"source\":\"outbox_processor\",\"reason\":\"test_mode_recipient\"}"));
+
+            await db.SaveChangesAsync(ct);
+
+            logger.LogInformation(
+                "Email not sent — test tenant, recipient outside its team | MessageId={Id} Tenant={TenantId}",
+                message.Id, message.TenantId);
+
+            return;
+        }
+
         // ── Monthly quota ───────────────────────────────────────────────────
         // Enforced HERE and nowhere else. Checking at queue time would need the usage count,
         // which is cached for 15 minutes alongside the provider config — a stale count is worse

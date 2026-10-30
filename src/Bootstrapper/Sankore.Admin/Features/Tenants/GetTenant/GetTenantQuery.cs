@@ -31,7 +31,14 @@ public record TenantResponse(
     /// A recette or demo institution (data-purge lot 4). Read into <c>TenantInfo.IsTest</c> by name:
     /// the API checks it again before wiping anything.
     /// </summary>
-    bool IsTest);
+    bool IsTest,
+    /// <summary>
+    /// Sandbox lot 2. On a test twin, the live tenant it belongs to; read into
+    /// <c>TenantInfo.ParentTenantId</c>. Null on every other tenant.
+    /// </summary>
+    Guid? ParentTenantId = null,
+    /// <summary>On a live tenant, its test twin once created; read into <c>TenantInfo.TestTenantId</c>.</summary>
+    Guid? TestTenantId = null);
 
 internal sealed class GetTenantHandler(AdminDbContext db) : IRequestHandler<GetTenantQuery, TenantResponse?>
 {

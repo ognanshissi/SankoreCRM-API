@@ -23,7 +23,7 @@ public sealed class AssignRoleHandlerTests : IDisposable
         var um = IdentityMockFactory.BuildUserManager();
         var rm = IdentityMockFactory.BuildRoleManager();
         var cu = currentUser ?? Substitute.For<ICurrentUser>();
-        if (currentUser is null) cu.TenantId.Returns(_tenantId);
+        if (currentUser is null) { cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId); }
         var db = _factory.CreateContext();
         return (new AssignRoleHandler(db, um, rm, cu), um, rm);
     }

@@ -71,6 +71,7 @@ internal sealed class GetCurrentUserHandler(
             ImpersonatorId:  currentUser.ImpersonatorId,
             ImpersonatorName: impersonatorName,
             ActiveModules:   await tenantModules.ActiveAsync(user.TenantId, ct),
-            ReadOnlyModules: await tenantModules.ReadOnlyAsync(user.TenantId, ct)));
+            ReadOnlyModules: await tenantModules.ReadOnlyAsync(user.TenantId, ct),
+            TestMode:        currentUser.TenantId != user.TenantId));
     }
 }

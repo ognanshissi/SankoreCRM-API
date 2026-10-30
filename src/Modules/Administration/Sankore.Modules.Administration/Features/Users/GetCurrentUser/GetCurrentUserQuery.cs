@@ -29,4 +29,9 @@ public sealed record CurrentUserDto(
     /// </summary>
     IReadOnlyList<string>? ActiveModules = null,
     /// <summary>Modules deactivated by the tenant: their screens stay open for consultation only.</summary>
-    IReadOnlyList<string>? ReadOnlyModules = null);
+    IReadOnlyList<string>? ReadOnlyModules = null,
+    /// <summary>
+    /// The session works on the tenant's TEST TWIN (sandbox lot 2): data and configuration are the
+    /// sandbox's, the team is production's. The front shows its banner while this is true.
+    /// </summary>
+    bool TestMode = false);

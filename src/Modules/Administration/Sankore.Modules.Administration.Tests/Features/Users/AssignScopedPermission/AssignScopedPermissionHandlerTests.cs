@@ -23,7 +23,7 @@ public sealed class AssignScopedPermissionHandlerTests : IDisposable
     {
         var um = IdentityMockFactory.BuildUserManager();
         var cu = Substitute.For<ICurrentUser>();
-        cu.TenantId.Returns(_tenantId);
+        cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId);
         cu.Id.Returns(Guid.NewGuid());
 
         if (user is not null)

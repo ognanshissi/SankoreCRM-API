@@ -324,6 +324,9 @@ namespace Sankore.Admin.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("ParentTenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("RootUserEmail")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -345,6 +348,10 @@ namespace Sankore.Admin.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("Id");
+
+                    b.HasIndex("ParentTenantId")
+                        .IsUnique()
+                        .HasFilter("\"ParentTenantId\" IS NOT NULL");
 
                     b.HasIndex("RootUserEmail")
                         .IsUnique();

@@ -1,3 +1,4 @@
+using Sankore.Shared.Infrastructure.Auth;
 namespace Sankore.Modules.Administration.Features.Credentials;
 
 using MediatR;
@@ -30,7 +31,8 @@ public static class CredentialsEndpoints
     public static IEndpointRouteBuilder MapCredentialsEndpoints(this IEndpointRouteBuilder app)
     {
         var perUser = app.MapGroup("users/{userId:guid}/credentials")
-            .WithTags("Distribution Credentials");
+            .WithTags("Distribution Credentials")
+            .LiveModeWritesOnly();
 
         perUser.MapGet(string.Empty, List)
             .WithName("ListUserCredentials")

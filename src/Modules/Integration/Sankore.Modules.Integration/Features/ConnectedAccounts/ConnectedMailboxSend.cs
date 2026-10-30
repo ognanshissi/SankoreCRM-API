@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Infrastructure;
@@ -61,6 +62,8 @@ internal static class MailSendErrors
     public const string ClientEmailMissing = "MAIL_CLIENT_EMAIL_MISSING";
     /// <summary>A scheduled time in less than a minute, or more than a year away.</summary>
     public const string ScheduleInvalid = "MAIL_SCHEDULE_INVALID";
+    /// <summary>The tenant is in test mode and a recipient is not one of its users.</summary>
+    public const string TestRecipient = "MAIL_TEST_RECIPIENT";
 }
 
 // ── Send ─────────────────────────────────────────────────────────────────────────────────────
@@ -115,7 +118,8 @@ internal sealed class SendMailHandler(
     IBackgroundJobClient? jobs = null,
     ICustomersModule? customers = null,
     CalendarEventProtector? protector = null,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    IAdministrationModule? administration = null)
     : IRequestHandler<SendMailCommand, Result<SendMailOutcome>>
 {
     public async Task<Result<SendMailOutcome>> Handle(SendMailCommand cmd, CancellationToken ct)
@@ -142,6 +146,15 @@ internal sealed class SendMailHandler(
         }
         if (to.Count + cc.Count + bcc.Count == 0) return Fail(MailSendErrors.RecipientsRequired);
         if (to.Count + cc.Count + bcc.Count > MailSendLimits.MaxRecipients) return Fail(MailSendErrors.TooManyRecipients);
+
+        // A test tenant writes only to its team — every recipient, the client resolved above
+        // included. A scheduled message goes through here again when it leaves.
+        if (administration is not null)
+        {
+            foreach (var party in to.Concat(cc).Concat(bcc))
+                if (await administration.IsEmailBlockedInTestAsync(me.TenantId, party.Address, ct))
+                    return Fail(MailSendErrors.TestRecipient);
+        }
 
         var subject = cmd.Subject?.Trim() ?? string.Empty;
         if (subject.Length > MailSendLimits.MaxSubject || subject.Contains('\n') || subject.Contains('\r')) return Fail(MailSendErrors.SubjectInvalid);

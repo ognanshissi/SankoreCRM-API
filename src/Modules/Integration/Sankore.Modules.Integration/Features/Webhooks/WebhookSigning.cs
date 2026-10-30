@@ -19,21 +19,24 @@ using Sankore.Shared.Kernel;
 /// the week rather than at the instant the administrator clicked.
 /// </para>
 /// </summary>
-internal sealed class WebhookSecrets(ISecretsModule vault, TimeProvider clock)
+internal sealed class WebhookSecrets(ISecretsModule vault, TimeProvider clock, ITenantStore? tenants = null)
 {
     public const string Scope = "integration";
     public const string CurrentName = "webhook-signing";
     public const string PreviousName = "webhook-signing-old";
     public static readonly TimeSpan RotationOverlap = TimeSpan.FromDays(7);
 
-    /// <summary><c>whsec_</c> + 32 random bytes, base64url. The whole string is the HMAC key.</summary>
-    public static string Generate()
-        => "whsec_" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+    /// <summary>
+    /// <c>whsec_</c> — <c>whsec_test_</c> for a test tenant (sandbox lot 3) — + 32 random bytes,
+    /// base64url. The whole string is the HMAC key, prefix included.
+    /// </summary>
+    public static string Generate(bool test = false)
+        => TestModeKeys.WebhookSecretPrefix(test) + Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     public async Task<string> CreateAsync(Guid tenantId, Guid subscriptionId, CancellationToken ct)
     {
-        var secret = Generate();
+        var secret = Generate(await TestModeKeys.IsTestAsync(tenants, tenantId, ct));
         await vault.SetAsync(Key(tenantId, subscriptionId, CurrentName), secret, ct: ct);
         return secret;
     }
@@ -47,7 +50,7 @@ internal sealed class WebhookSecrets(ISecretsModule vault, TimeProvider clock)
         if (current is not null)
             await vault.SetAsync(Key(tenantId, subscriptionId, PreviousName), current, until, ct);
 
-        var secret = Generate();
+        var secret = Generate(await TestModeKeys.IsTestAsync(tenants, tenantId, ct));
         await vault.SetAsync(Key(tenantId, subscriptionId, CurrentName), secret, ct: ct);
         return (secret, until);
     }

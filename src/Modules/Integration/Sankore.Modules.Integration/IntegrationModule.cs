@@ -70,6 +70,19 @@ public static class IntegrationModule
     public static IServiceCollection AddIntegrationModule(
         this IServiceCollection services, IConfiguration config)
     {
+        // Copying outbound webhooks between production and its test mode (sandbox lots 4-5).
+        services.AddScoped<Features.Webhooks.WebhookSubscriptionCopier>();
+        services.AddScoped<Sankore.Shared.Infrastructure.TestMode.IConfigurationCopier>(sp => sp.GetRequiredService<Features.Webhooks.WebhookSubscriptionCopier>());
+
+        // The same per-tenant start as InitializeAsync, for a tenant created while the host runs.
+        services.AddSingleton<Sankore.Shared.Infrastructure.Tenants.ITenantSeeder>(new Sankore.Shared.Infrastructure.Tenants.TenantSeeder("Integration", async (sp, ct) =>
+        {
+            await Features.Telephony.Outcomes.TelCallOutcomeSeeder.SeedAsync(
+                sp.GetRequiredService<IntegrationDbContext>(),
+                sp.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>(),
+                sp.GetRequiredService<ILogger<IntegrationDbContext>>());
+        }));
+
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(config);
 

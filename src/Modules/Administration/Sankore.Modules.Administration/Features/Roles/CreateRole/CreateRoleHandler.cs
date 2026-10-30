@@ -21,11 +21,11 @@ internal sealed class CreateRoleHandler(
         var nameNormalized = request.Name.ToUpperInvariant();
         var exists = await db.Roles
             .AnyAsync(r => r.NormalizedName == nameNormalized
-                        && (r.TenantId == null || r.TenantId == currentUser.TenantId), ct);
+                        && (r.TenantId == null || r.TenantId == currentUser.TeamTenantId), ct);
         if (exists)
             return Result.Fail<Guid>("ROLE_NAME_TAKEN: A role with that name already exists for this tenant.");
 
-        var role = AppRole.CreateCustom(currentUser.TenantId, request.Name, request.Label);
+        var role = AppRole.CreateCustom(currentUser.TeamTenantId, request.Name, request.Label);
         var identityResult = await roleManager.CreateAsync(role);
         if (!identityResult.Succeeded)
             return Result.Fail<Guid>(string.Join("; ", identityResult.Errors.Select(e => e.Description)));

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.FindDuplicates;
+using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
@@ -31,6 +32,7 @@ public static class CaptureLeadEndpoint
         CaptureLeadRequest req,
         ISender sender,
         ICurrentUser currentUser,
+        LeadVisibility visibility,
         HttpContext http,
         CancellationToken ct)
     {
@@ -87,7 +89,7 @@ public static class CaptureLeadEndpoint
             Channel:              req.Channel,
             Comment:              req.Comment,
             ExternalReference:    req.ExternalReference,
-            OwnerId:              req.OwnerId,
+            OwnerId:              ResolveOwner(req.OwnerId, visibility.SeesAll, currentUser.Id),
             AgencyId:             req.AgencyId,
             // The person typing the lead is who collected it, unless the form named somebody: an
             // agent who captures a lead nobody holds yet must still see it (assigned-only reads).
@@ -119,6 +121,17 @@ public static class CaptureLeadEndpoint
         // Warn mode with duplicates (or no duplicates): lead WAS created.
         return Results.Created($"/api/leads/{result.Value.LeadId}", result.Value);
     }
+
+    /// <summary>
+    /// The lead's owner. An Agent or CommercialAgent — who sees only the leads they hold — owns the
+    /// lead they type when the form names nobody (product owner, 2026-10-30). Unowned, it went
+    /// straight to auto-dispatch, which handed it to a colleague: the agent who had the prospect in
+    /// front of them could no longer record the first contact. An owned lead is skipped by
+    /// <c>LeadAutoDispatchConsumer</c>. A supervisor's capture is unchanged — it is dispatched.
+    /// </summary>
+    internal static Guid? ResolveOwner(Guid? requestedOwner, bool callerSeesAllLeads, Guid callerId)
+        => requestedOwner
+           ?? (callerSeesAllLeads || callerId == Guid.Empty ? null : callerId);
 
     /// <summary>
     /// v1's name, v2's derived one, or null when the request carries neither.

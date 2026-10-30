@@ -8,9 +8,9 @@ public static class ListTenantsEndpoint
 {
     public static void Map(RouteGroupBuilder group)
     {
-        group.MapGet("/", async (IMediator mediator, [FromQuery] bool? activeOnly, CancellationToken ct) =>
+        group.MapGet("/", async (IMediator mediator, [FromQuery] bool? activeOnly, [FromQuery] bool? includeTwins, CancellationToken ct) =>
             {
-                var tenants = await mediator.Send(new ListTenantsQuery(activeOnly), ct);
+                var tenants = await mediator.Send(new ListTenantsQuery(activeOnly, includeTwins ?? false), ct);
                 return Results.Ok(tenants);
             })
             .WithName("ListTenants")

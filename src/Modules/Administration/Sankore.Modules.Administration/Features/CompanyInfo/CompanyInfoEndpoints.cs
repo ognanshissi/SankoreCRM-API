@@ -1,3 +1,4 @@
+using Sankore.Shared.Infrastructure.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -11,7 +12,7 @@ internal static class CompanyInfoEndpoints
 {
     public static IEndpointRouteBuilder MapCompanyInfoEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("company-info").WithTags("Company Info");
+        var group = app.MapGroup("company-info").WithTags("Company Info").LiveModeWritesOnly();
 
         group.MapGetCompanyInfo();
         group.MapUpdateCompanyInfo();

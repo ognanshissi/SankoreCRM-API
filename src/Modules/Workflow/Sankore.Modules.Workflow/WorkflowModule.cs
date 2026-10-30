@@ -40,6 +40,19 @@ public static class WorkflowModule
         this IServiceCollection services,
         IConfiguration config)
     {
+        // Copying workflows between production and its test mode (sandbox lots 4-5).
+        services.AddScoped<Features.Templates.Promote.WorkflowTemplateCopier>();
+        services.AddScoped<Sankore.Shared.Infrastructure.TestMode.IConfigurationCopier>(sp => sp.GetRequiredService<Features.Templates.Promote.WorkflowTemplateCopier>());
+
+        // The same per-tenant start as InitializeAsync, for a tenant created while the host runs.
+        services.AddSingleton<Sankore.Shared.Infrastructure.Tenants.ITenantSeeder>(new Sankore.Shared.Infrastructure.Tenants.TenantSeeder("Workflow", async (sp, ct) =>
+        {
+            await WorkflowTemplateSeeder.SeedAsync(
+                sp.GetRequiredService<WorkflowDbContext>(),
+                sp.GetRequiredService<ITenantStore>(),
+                sp.GetRequiredService<ILogger<WorkflowDbContext>>());
+        }));
+
         services.AddDbContext<WorkflowDbContext>(opt =>
             opt.UseNpgsql(
                 config.GetConnectionString("Database"),

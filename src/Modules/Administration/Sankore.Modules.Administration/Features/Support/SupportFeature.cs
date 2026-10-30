@@ -150,7 +150,7 @@ internal sealed record SupportCaller(Guid Id, Guid TenantId, string Email, strin
             .FirstOrDefaultAsync(ct);
         if (user?.Email is null) return null;
 
-        return new SupportCaller(currentUser.Id, currentUser.TenantId, user.Email,
+        return new SupportCaller(currentUser.Id, currentUser.TeamTenantId, user.Email,
             string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName,
             RecordVisibility.SeesAll(currentUser, Permissions.CanReadAllSupportTickets));
     }
@@ -170,7 +170,7 @@ internal sealed class ListSupportTicketsHandler(ISupportRegistry registry, ICurr
         var seesAll = RecordVisibility.SeesAll(currentUser, Permissions.CanReadAllSupportTickets);
         Guid? requester = seesAll && !query.Mine ? null : currentUser.Id;
 
-        var answer = await registry.ListAsync(currentUser.TenantId, requester, query.Status, query.OpenOnly,
+        var answer = await registry.ListAsync(currentUser.TeamTenantId, requester, query.Status, query.OpenOnly,
             query.Search, Math.Max(1, query.Page), Math.Clamp(query.PageSize, 1, 100), ct);
         if (!answer.IsSuccess) return Result.Fail<SupportTicketPageDto>(answer.Error!);
 
@@ -252,7 +252,7 @@ internal sealed class GetSupportTicketHandler(ISupportRegistry registry, ICurren
             ? (Guid?)null
             : currentUser.Id;
 
-        var answer = await registry.GetAsync(currentUser.TenantId, query.TicketId, requester, ct);
+        var answer = await registry.GetAsync(currentUser.TeamTenantId, query.TicketId, requester, ct);
         if (!answer.IsSuccess) return Result.Fail<SupportTicketDto>(answer.Error!);
         return answer.Value is null
             ? Result.Fail<SupportTicketDto>(SupportTicketErrors.TicketNotFound)

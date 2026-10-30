@@ -19,7 +19,7 @@ public sealed class RevokeScopedPermissionHandlerTests : IDisposable
     private RevokeScopedPermissionHandler BuildHandler()
     {
         var cu = Substitute.For<ICurrentUser>();
-        cu.TenantId.Returns(_tenantId);
+        cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId);
         return new RevokeScopedPermissionHandler(_factory.CreateContext(), cu);
     }
 

@@ -19,11 +19,18 @@ public sealed class RefreshToken
     /// <summary>La session que ce jeton prolonge. Null pour les jetons émis avant les sessions.</summary>
     public Guid? SessionId { get; private set; }
 
+    /// <summary>
+    /// Sandbox lot 2: the test twin this session works on, null in production. Carried from token
+    /// to token so a refresh keeps the mode the user chose — the access token it mints names this
+    /// tenant, and <see cref="TenantId"/> stays the user's own (the team's).
+    /// </summary>
+    public Guid? DataTenantId { get; private set; }
+
     public bool IsActive => RevokedAt is null && DateTimeOffset.UtcNow < ExpiresAt;
 
     private RefreshToken() { } // EF Core
 
-    public static RefreshToken Create(Guid tenantId, Guid userId, TimeSpan ttl, Guid? sessionId = null)
+    public static RefreshToken Create(Guid tenantId, Guid userId, TimeSpan ttl, Guid? sessionId = null, Guid? dataTenantId = null)
     {
         return new RefreshToken
         {
@@ -34,6 +41,7 @@ public sealed class RefreshToken
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.Add(ttl),
             SessionId = sessionId,
+            DataTenantId = dataTenantId,
         };
     }
 

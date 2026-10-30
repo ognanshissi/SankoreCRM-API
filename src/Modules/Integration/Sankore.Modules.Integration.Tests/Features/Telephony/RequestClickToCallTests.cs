@@ -2,6 +2,7 @@ namespace Sankore.Modules.Integration.Tests.Features.Telephony;
 
 using System.Text;
 using FluentAssertions;
+using Sankore.Modules.Administration.PublicApi;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -73,6 +74,20 @@ public sealed class RequestClickToCallTests : IDisposable
         // rather than by the two-minute fallback.
         request.Status.Should().Be(TelClickToCallStatus.AgentRinging);
         request.ExternalRef.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task A_test_tenant_does_not_ring_a_customer_and_records_no_attempt()
+    {
+        await LinkAsync();
+        var administration = Substitute.For<IAdministrationModule>();
+        administration.IsPhoneBlockedInTestAsync(_tenant, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await DialAsync(administration: administration);
+
+        result.Error.Should().Be(TelephonyErrors.TestNumber);
+        await using var db = _factory.CreateContext();
+        db.TelClickToCalls.Should().BeEmpty();
     }
 
     [Fact]
@@ -271,7 +286,8 @@ public sealed class RequestClickToCallTests : IDisposable
     private async Task<Result<Guid>> DialAsync(
         FakeAdapter? adapter = null,
         string entityType = TelEntityTypes.Customer,
-        TelephonyPhoneSlot slot = TelephonyPhoneSlot.Primary)
+        TelephonyPhoneSlot slot = TelephonyPhoneSlot.Primary,
+        IAdministrationModule? administration = null)
     {
         await using var db = _factory.CreateContext();
 
@@ -283,7 +299,8 @@ public sealed class RequestClickToCallTests : IDisposable
                 TelephonyTestHarness.Numbers(),
                 TelephonyTestHarness.User(_tenant, _agent),
                 TelephonyTestHarness.Clock,
-                NullLogger<RequestClickToCallHandler>.Instance)
+                NullLogger<RequestClickToCallHandler>.Instance,
+                administration)
             .Handle(new RequestClickToCallCommand(entityType, _clientId, slot), CancellationToken.None);
     }
 }

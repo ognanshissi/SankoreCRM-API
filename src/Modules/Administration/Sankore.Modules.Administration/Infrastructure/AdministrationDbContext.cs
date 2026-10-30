@@ -117,29 +117,34 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 
         // Multi-tenant isolation enforced at the ORM level: no query can
         // ever leak rows across tenants, even if a handler forgets to filter.
+        //
+        // Sandbox lot 2: the TEAM — accounts, roles, agencies, territories, sessions and the
+        // institution's own identity — is shared by both modes and filters on TeamTenantId, the
+        // live tenant even in « Mode test ». CONFIGURATION — products, forms, notification and SMS
+        // channels, compliance settings — is the mode's own and filters on CurrentTenantId.
         modelBuilder.Entity<AppUser>()
-            .HasQueryFilter(u => u.TenantId == tenant.CurrentTenantId);
+            .HasQueryFilter(u => u.TenantId == tenant.TeamTenantId);
         
-        modelBuilder.Entity<Agency>().HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<PasswordHistory>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<UserLoginLocation>().HasQueryFilter(l => l.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<UserRole>().HasQueryFilter(r => r.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<UserProfile>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<PermissionAttribution>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<AgentSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<UserAvatar>().HasQueryFilter(a => a.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<UserSession>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<Territory>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<Agency>().HasQueryFilter(a => a.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<PasswordHistory>().HasQueryFilter(p => p.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<UserLoginLocation>().HasQueryFilter(l => l.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<UserRole>().HasQueryFilter(r => r.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<UserProfile>().HasQueryFilter(p => p.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<PermissionAttribution>().HasQueryFilter(p => p.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<AgentSettings>().HasQueryFilter(s => s.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<UserAvatar>().HasQueryFilter(a => a.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<UserSession>().HasQueryFilter(s => s.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<Territory>().HasQueryFilter(p => p.TenantId == tenant.TeamTenantId);
         modelBuilder.Entity<ProductSpeciality>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TenantNotificationSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TenantSmsSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ComplianceSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<CompanyLogo>().HasQueryFilter(l => l.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<DistributionCredential>().HasQueryFilter(c => c.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<InsuranceDistributorProfile>().HasQueryFilter(p => p.TenantId == tenant.CurrentTenantId);
-        modelBuilder.Entity<DistributorDocument>().HasQueryFilter(d => d.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<CompanyLogo>().HasQueryFilter(l => l.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<DistributionCredential>().HasQueryFilter(c => c.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<InsuranceDistributorProfile>().HasQueryFilter(p => p.TenantId == tenant.TeamTenantId);
+        modelBuilder.Entity<DistributorDocument>().HasQueryFilter(d => d.TenantId == tenant.TeamTenantId);
         modelBuilder.Entity<Domain.Forms.EntityFormLayout>().HasQueryFilter(f => f.TenantId == tenant.CurrentTenantId);
 
         modelBuilder.Entity<UserImportJob>(b =>
@@ -152,7 +157,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
             b.Property(j => j.OriginalFileName).HasMaxLength(300);
             b.Property(j => j.ErrorMessage).HasMaxLength(2000);
             b.Property(j => j.FailureDetailsJson).HasColumnType("jsonb");
-            b.HasQueryFilter(j => j.TenantId == tenant.CurrentTenantId);
+            b.HasQueryFilter(j => j.TenantId == tenant.TeamTenantId);
         });
 
         // Sequence creation

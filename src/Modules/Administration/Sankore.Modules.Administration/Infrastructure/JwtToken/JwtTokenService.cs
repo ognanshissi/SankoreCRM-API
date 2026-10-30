@@ -21,7 +21,8 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> option): IJwtTokenSer
         IList<string> permissionCodes,
         string language,
         Guid? sessionId = null,
-        ImpersonationGrant? impersonation = null)
+        ImpersonationGrant? impersonation = null,
+        Guid? dataTenantId = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(option.Value.SigningKey!));
         var expiresAt = DateTimeOffset.UtcNow.Add(impersonation?.Lifetime ?? TimeSpan.FromHours(8));
@@ -32,10 +33,15 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> option): IJwtTokenSer
             new(JwtRegisteredClaimNames.Email, user.Email!),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // user session id
             new("name", user.FullName),
-            new("tenant_id", user.TenantId.ToString()),
+            // « Mode test » (sandbox lot 2): tenant_id names the twin, so every module reads and
+            // writes the sandbox through the claim it always read; the team stays the user's own.
+            new("tenant_id", (dataTenantId ?? user.TenantId).ToString()),
             new("lang", language),
             new("mfa_verified", "false"),
         };
+
+        if (dataTenantId is { } twin && twin != user.TenantId)
+            claims.Add(new Claim(TestModeClaims.TeamTenantId, user.TenantId.ToString()));
 
         // La session de l'appareil : révoquée, elle invalide ce jeton avant son expiration.
         if (sessionId is { } sid)

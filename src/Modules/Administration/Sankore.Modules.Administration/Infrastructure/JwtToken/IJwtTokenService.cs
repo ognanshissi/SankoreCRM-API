@@ -11,7 +11,8 @@ internal interface IJwtTokenService
         IList<string> permissionCodes,
         string language,
         Guid? sessionId = null,
-        ImpersonationGrant? impersonation = null);
+        ImpersonationGrant? impersonation = null,
+        Guid? dataTenantId = null);
 }
 
 /// <summary>

@@ -108,6 +108,12 @@ public static class AdministrationModule
         // behalf through the named client AddTenantStore registers.
         services.AddScoped<Infrastructure.PaidModules.ITenantModuleRegistry,
             Infrastructure.PaidModules.HttpTenantModuleRegistry>();
+        // « Mode test » (sandbox lot 2): the twin at the registry, and the seeding of a new one.
+        services.AddScoped<Infrastructure.PaidModules.ITestTwinRegistry, Infrastructure.PaidModules.HttpTestTwinRegistry>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.TenantProvisioner>();
+        // Copying configuration between production and its test mode (sandbox lots 4-5).
+        services.AddScoped<Features.Products.ProductCopier>();
+        services.AddScoped<Sankore.Shared.Infrastructure.TestMode.IConfigurationCopier>(sp => sp.GetRequiredService<Features.Products.ProductCopier>());
         // Agency perimeter (Kernel contract) — Administration owns the agency tree.
         services.AddScoped<IAgencyScopeProvider, AgencyScopeProvider>();
 
@@ -222,6 +228,7 @@ public static class AdministrationModule
     {
         app.MapLogin();
         app.MapRefreshToken();
+        Features.Authentication.TestMode.SwitchTestModeEndpoint.MapSwitchTestMode(app);
         app.MapLogout();
         app.MapResetPassword();
         app.MapVerifyToken();

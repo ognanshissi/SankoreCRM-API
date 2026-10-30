@@ -107,6 +107,9 @@ public static class TelephonyErrors
     /// </summary>
     public const string ProviderRefused = "TELEPHONY_PROVIDER_REFUSED";
 
+    /// <summary>The tenant is in test mode and the number is not one of its users': no call placed.</summary>
+    public const string TestNumber = "TELEPHONY_TEST_NUMBER";
+
     /// <summary>
     /// The journal already resolved this caller, so the call belongs to a lead or a client
     /// (TEL-B-13). Creating a second record for the same person is the one thing the

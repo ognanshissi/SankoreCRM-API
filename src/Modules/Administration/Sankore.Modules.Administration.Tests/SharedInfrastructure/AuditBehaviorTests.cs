@@ -48,10 +48,10 @@ public sealed class AuditBehaviorTests
         var currentUser = Substitute.For<ICurrentUser>();
         var tenantId = Guid.NewGuid();
         currentUser.Id.Returns(Guid.NewGuid());
-        currentUser.TenantId.Returns(tenantId);
+        currentUser.TenantId.Returns(tenantId); currentUser.TeamTenantId.Returns(tenantId);
 
         var tenant = Substitute.For<ITenantCtx>();
-        tenant.CurrentTenantId.Returns(tenantId);
+        tenant.CurrentTenantId.Returns(tenantId); tenant.TeamTenantId.Returns(tenantId);
 
         return (new AuditBehavior<TReq, TResp>(writer, currentUser, tenant), writer);
     }
@@ -223,10 +223,10 @@ public sealed class AuditBehaviorTests
         var tenantId = Guid.NewGuid();
         var currentUser = Substitute.For<ICurrentUser>();
         currentUser.Id.Returns(userId);
-        currentUser.TenantId.Returns(tenantId);
+        currentUser.TenantId.Returns(tenantId); currentUser.TeamTenantId.Returns(tenantId);
 
         var tenant = Substitute.For<ITenantCtx>();
-        tenant.CurrentTenantId.Returns(tenantId);
+        tenant.CurrentTenantId.Returns(tenantId); tenant.TeamTenantId.Returns(tenantId);
         var behavior = new AuditBehavior<PlainCommand, Result>(writer, currentUser, tenant);
         AuditEntry? captured = null;
         writer.WriteAsync(Arg.Do<AuditEntry>(e => captured = e), Arg.Any<CancellationToken>())

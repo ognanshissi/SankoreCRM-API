@@ -18,7 +18,7 @@ internal sealed class ActivateAgencyHandler(
         var agency = await db.Agencies
             .AsTracking()
             .IgnoreQueryFilters()
-            .Where(a => a.Id == request.AgencyId && a.TenantId == currentUser.TenantId)
+            .Where(a => a.Id == request.AgencyId && a.TenantId == currentUser.TeamTenantId)
             .SingleOrDefaultAsync(ct);
 
         if (agency is null)

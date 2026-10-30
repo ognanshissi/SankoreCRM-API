@@ -23,7 +23,8 @@ using Sankore.Shared.Kernel.Compliance;
 internal sealed class AdministrationModuleFacade(
     AdministrationDbContext db,
     ProductCatalogCache catalogCache,
-    ModuleEmailSender? emailSender = null)
+    ModuleEmailSender? emailSender = null,
+    ITenantStore? tenants = null)
     : IAdministrationModule, IDistributionComplianceProvider
 {
     /// <summary>
@@ -61,6 +62,7 @@ internal sealed class AdministrationModuleFacade(
     public async Task<IReadOnlyList<AgentSummary>> GetAvailableAgentsAsync(
         Guid tenantId, Guid? agencyId, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         // Role membership is read from the tenant-scoped MIRROR (db.UserRoles, table user_roles),
         // not from Identity's join table. The mirror is the only one of the two that carries a
         // TenantId and a soft revoke: reading Identity's would keep handing leads to an agent whose
@@ -262,10 +264,12 @@ internal sealed class AdministrationModuleFacade(
 
         // IgnoreQueryFilters paired with an explicit tenant predicate, the rule this file follows
         // throughout: the callers are consumers and jobs, whose ambient tenant is not necessarily
-        // the tenant being notified.
+        // the tenant being notified. The account is the team's; the message is queued in the
+        // tenant asked for — the test twin's queue in « Mode test ».
+        var team = await TeamAsync(request.TenantId, ct);
         var user = await db.Users
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.TenantId == request.TenantId && u.Id == request.UserId, ct);
+            .FirstOrDefaultAsync(u => u.TenantId == team && u.Id == request.UserId, ct);
 
         if (user is null)
         {
@@ -306,6 +310,7 @@ internal sealed class AdministrationModuleFacade(
     public async Task<DistributionEligibilitySnapshot> GetDistributionEligibilityAsync(
         Guid tenantId, Guid userId, DateOnly asOf, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         // IgnoreQueryFilters paired with an explicit tenant predicate, the rule this file follows
         // throughout: the callers are a dispatching handler, a subscription gate and a consumer,
         // and the last of those has no ambient tenant of its own.
@@ -457,6 +462,67 @@ internal sealed class AdministrationModuleFacade(
         return tenantId;
     }
 
+    public async Task<bool> IsEmailBlockedInTestAsync(Guid tenantId, string email, CancellationToken ct)
+    {
+        if (!await IsTestTenantAsync(tenantId, ct)) return false;
+        tenantId = await TeamAsync(tenantId, ct);
+        if (string.IsNullOrWhiteSpace(email)) return true;
+
+        var wanted = email.Trim();
+        var normalized = wanted.ToUpperInvariant();
+
+        if (await db.Users.IgnoreQueryFilters().AnyAsync(u => u.TenantId == tenantId && u.NormalizedEmail == normalized, ct))
+            return false;
+
+        // The additional address is free text typed by the user: compared in memory, a test tenant
+        // has a handful of users.
+        var additional = await db.UserProfiles.IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId && p.AdditionalEmail != "")
+            .Select(p => p.AdditionalEmail)
+            .ToListAsync(ct);
+
+        return !additional.Any(a => string.Equals(a.Trim(), wanted, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task<bool> IsPhoneBlockedInTestAsync(Guid tenantId, string phone, CancellationToken ct)
+    {
+        if (!await IsTestTenantAsync(tenantId, ct)) return false;
+        tenantId = await TeamAsync(tenantId, ct);
+
+        var accounts = await db.Users.IgnoreQueryFilters()
+            .Where(u => u.TenantId == tenantId && u.PhoneNumber != null)
+            .Select(u => u.PhoneNumber!)
+            .ToListAsync(ct);
+
+        var profiles = await db.UserProfiles.IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId)
+            .Select(p => new { Work = p.WorkNumber.Contact, Home = p.HomeNumber.Contact, Personal = p.PersonalNumber.Contact, p.WhatsAppNumber })
+            .ToListAsync(ct);
+
+        return !accounts
+            .Concat(profiles.SelectMany(p => new[] { p.Work, p.Home, p.Personal, p.WhatsAppNumber }))
+            .Any(n => TestModePhones.Same(n, phone));
+    }
+
+    /// <summary>
+    /// The tenant whose team — users, roles, agencies — works in <paramref name="tenantId"/>: its
+    /// live parent when it is a test twin (sandbox lot 2), else itself. Every team read of this
+    /// facade goes through it, because its callers hand in the tenant of the DATA they hold.
+    /// </summary>
+    private async Task<Guid> TeamAsync(Guid tenantId, CancellationToken ct)
+    {
+        if (tenants is null || tenantId == Guid.Empty) return TenantTwins.TeamOf(tenantId);
+        return (await tenants.GetAsync(tenantId, ct))?.TeamTenantId ?? TenantTwins.TeamOf(tenantId);
+    }
+
+    /// <summary>
+    /// Read off the registry's cached record. An unknown tenant, or a facade built without the
+    /// store (unit tests), reads as live: the registry already refuses every request of a tenant it
+    /// does not know, and a live tenant whose messages stopped on a cache miss is the worse outage.
+    /// </summary>
+    private async Task<bool> IsTestTenantAsync(Guid tenantId, CancellationToken ct)
+        => tenants is not null && (await tenants.GetAsync(tenantId, ct))?.IsTest == true;
+
     public async Task<string?> GetProductCategoryAsync(
         Guid tenantId, string productCode, CancellationToken ct)
     {
@@ -535,6 +601,7 @@ internal sealed class AdministrationModuleFacade(
     public async Task<IReadOnlyList<Guid>> GetTeamAgentIdsAsync(
         Guid tenantId, Guid supervisorId, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         var supervisor = await db.Users
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.Id == supervisorId && u.TenantId == tenantId, ct);
@@ -585,6 +652,7 @@ internal sealed class AdministrationModuleFacade(
 
     public async Task<AgencySummary?> GetAgencyAsync(Guid tenantId, Guid agencyId, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         // IgnoreQueryFilters + an explicit tenant predicate: callers may be a Hangfire
         // job or a MassTransit consumer, where the ambient ITenantContext is not the
         // tenant being read. Soft-deleted agencies are invisible on purpose — a client
@@ -758,6 +826,7 @@ internal sealed class AdministrationModuleFacade(
     public async Task<IReadOnlyList<Guid>> ListActiveUsersInRolesAsync(
         Guid tenantId, IReadOnlyCollection<string> roleCodes, Guid? agencyId, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         var normalized = roleCodes
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .Select(c => c.Trim().ToUpperInvariant())
@@ -797,7 +866,9 @@ internal sealed class AdministrationModuleFacade(
 
     public async Task<IReadOnlyList<Guid>> ListUsersWithPermissionAsync(
         Guid tenantId, string permissionCode, CancellationToken ct)
-        => await db.UserRoles
+    {
+        tenantId = await TeamAsync(tenantId, ct);
+        return await db.UserRoles
             .IgnoreQueryFilters()
             .Where(ur => ur.TenantId == tenantId)
             .Join(db.RolePermissions, ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => new { ur.UserId, rp.PermissionId })
@@ -808,10 +879,12 @@ internal sealed class AdministrationModuleFacade(
             .Select(u => u.Id)
             .Distinct()
             .ToListAsync(ct);
+    }
 
     public async Task<InsuranceDistributorStanding> GetInsuranceDistributorStandingAsync(
         Guid tenantId, DateOnly today, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         // IgnoreQueryFilters + explicit tenant: Integration's consumers read this with no ambient tenant.
         var profile = await db.InsuranceDistributorProfiles
             .IgnoreQueryFilters()
@@ -897,6 +970,7 @@ internal sealed class AdministrationModuleFacade(
     public async Task<IReadOnlyDictionary<Guid, string>> GetUserNamesAsync(
         Guid tenantId, IReadOnlyCollection<Guid> userIds, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         if (userIds.Count == 0) return new Dictionary<Guid, string>();
         var ids = userIds.Distinct().ToList();
         return await db.Users
@@ -917,6 +991,7 @@ internal sealed class AdministrationModuleFacade(
     public async Task<IReadOnlyList<UserEmailMatch>> FindUsersByEmailAsync(
         Guid tenantId, IReadOnlyCollection<string> emails, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         ArgumentNullException.ThrowIfNull(emails);
 
         if (tenantId == Guid.Empty) return [];
@@ -949,6 +1024,7 @@ internal sealed class AdministrationModuleFacade(
     /// </summary>
     public async Task<UserSupervisors> GetUserSupervisorsAsync(Guid tenantId, Guid userId, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         var user = await db.Users
             .IgnoreQueryFilters()
             .Where(u => u.TenantId == tenantId && u.Id == userId)
@@ -988,6 +1064,7 @@ internal sealed class AdministrationModuleFacade(
     public async Task<Guid?> ResolveAgencyRecipientAsync(
         Guid tenantId, Guid agencyId, Guid? preferredUserId, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         // IgnoreQueryFilters with explicit tenant predicates throughout: every caller of this
         // contract may be a consumer or a job, whose ambient tenant is not necessarily this one.
         if (preferredUserId is { } preferred && preferred != Guid.Empty)
@@ -1042,6 +1119,7 @@ internal sealed class AdministrationModuleFacade(
     /// <inheritdoc />
     public async Task<Guid?> GetUserAgencyAsync(Guid tenantId, Guid userId, CancellationToken ct)
     {
+        tenantId = await TeamAsync(tenantId, ct);
         if (tenantId == Guid.Empty || userId == Guid.Empty) return null;
 
         // IgnoreQueryFilters with the tenant written out: the callers run outside a request, so

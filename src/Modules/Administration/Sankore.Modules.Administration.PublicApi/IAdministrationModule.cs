@@ -272,6 +272,28 @@ public interface IAdministrationModule
     Task<SmsQuotaDecision> TryConsumeSmsQuotaAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
+    /// Test mode (sandbox, lot 1): whether a message to <paramref name="email"/> must NOT leave a
+    /// tenant marked test. A test tenant writes only to its own team — an address of one of its
+    /// users, sign-in or additional — the way Stripe's test mode mails only the account's members.
+    /// Always false for a live tenant, and for an unknown one.
+    ///
+    /// <para>
+    /// <b>Asked as « blocked? » and not « allowed? » on purpose:</b> a module test that stubs this
+    /// contract gets <c>false</c> by default, which is the live behaviour, so no existing test of a
+    /// sender silently starts refusing its messages.
+    /// </para>
+    /// </summary>
+    Task<bool> IsEmailBlockedInTestAsync(Guid tenantId, string email, CancellationToken ct);
+
+    /// <summary>
+    /// Test mode: whether a text, a WhatsApp message or a call to <paramref name="phone"/> must
+    /// not leave a tenant marked test — true unless it is a number of one of its users (work,
+    /// home, personal, WhatsApp). Compared on digits, a local form matching its international
+    /// one. Always false for a live tenant.
+    /// </summary>
+    Task<bool> IsPhoneBlockedInTestAsync(Guid tenantId, string phone, CancellationToken ct);
+
+    /// <summary>
     /// Which tenant owns an SMS provider account, by the identifier the provider puts in its
     /// callbacks — Twilio's Account SID.
     ///

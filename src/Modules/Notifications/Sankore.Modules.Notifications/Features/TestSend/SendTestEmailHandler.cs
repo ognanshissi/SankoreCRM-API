@@ -3,6 +3,7 @@ namespace Sankore.Modules.Notifications.Features.TestSend;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Notifications.Infrastructure.Providers;
 using Sankore.Modules.Notifications.Infrastructure.Senders;
 using Sankore.Shared.Infrastructure.Auth;
@@ -14,7 +15,8 @@ internal sealed class SendTestEmailHandler(
     ICurrentUser currentUser,
     ITenantContext tenant,
     IOptions<PlatformEmailOptions> platform,
-    ILogger<SendTestEmailHandler> logger)
+    ILogger<SendTestEmailHandler> logger,
+    IAdministrationModule admin)
     : IRequestHandler<SendTestEmailCommand, Result<TestEmailResult>>
 {
     public async Task<Result<TestEmailResult>> Handle(
@@ -22,6 +24,13 @@ internal sealed class SendTestEmailHandler(
     {
         var tenantId = tenant.CurrentTenantId;
         var provider = await resolver.ResolveAsync(tenantId, ct);
+
+        // A test tenant writes only to its team, the configuration check included.
+        if (await admin.IsEmailBlockedInTestAsync(tenantId, request.RecipientEmail, ct))
+        {
+            return Result.Ok(new TestEmailResult(false, provider.ProviderType, !provider.IsDefault,
+                "Mode test : seules les adresses des utilisateurs de l'institution reçoivent des e-mails."));
+        }
 
         var usedTenantProvider = !provider.IsDefault;
 

@@ -21,7 +21,7 @@ internal sealed class RevokeScopedPermissionHandler(
             return Result.Fail("Permission attribution not found.");
 
         // Tenant guard (PermissionAttributions has global query filter, but explicit check for clarity)
-        if (attribution.TenantId != currentUser.TenantId)
+        if (attribution.TenantId != currentUser.TeamTenantId)
             return Result.Fail("Permission attribution not found.");
 
         if (!attribution.IsActive)

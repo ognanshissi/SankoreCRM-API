@@ -206,6 +206,12 @@ public static class IntegrationErrors
     public const string MessagingRecipientInvalid = "MESSAGING_RECIPIENT_INVALID";
 
     /// <summary>
+    /// Functional. The tenant is in test mode and the number is not one of its users': nothing
+    /// left. Not retried — the same number gives the same answer until it is added to a profile.
+    /// </summary>
+    public const string MessagingTestRecipient = "MESSAGING_TEST_RECIPIENT";
+
+    /// <summary>
     /// Functional. Meta refused the template: unknown, not approved in that language, paused, or
     /// sent with the wrong number of variables. The administrator re-synchronises the catalogue.
     /// </summary>

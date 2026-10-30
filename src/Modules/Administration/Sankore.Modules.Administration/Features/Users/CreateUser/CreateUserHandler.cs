@@ -27,7 +27,7 @@ internal sealed class CreateUserHandler(
     public async Task<Result<CreateUserResult>> Handle(
         CreateUserCommand request, CancellationToken ct)
     {
-        var tenantId = tenantContext.CurrentTenantId;
+        var tenantId = tenantContext.TeamTenantId;
 
         // 1. Guard: agency must exist within this tenant
         var agencyExists = await db.Agencies

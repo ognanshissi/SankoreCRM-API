@@ -1368,6 +1368,10 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("DataTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("data_tenant_id");
+
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");

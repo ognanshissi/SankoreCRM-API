@@ -15,7 +15,7 @@ internal sealed class GetUserRolesHandler(
         GetUserRolesQuery request, CancellationToken ct)
     {
         var userExists = await db.Users
-            .AnyAsync(u => u.Id == request.UserId && u.TenantId == currentUser.TenantId, ct);
+            .AnyAsync(u => u.Id == request.UserId && u.TenantId == currentUser.TeamTenantId, ct);
 
         if (!userExists)
             return Result.Fail<List<UserRoleDto>>("User not found.");

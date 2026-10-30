@@ -211,6 +211,11 @@ internal sealed class KycRemoteGate(
         if (fromHost.Id == tenantId)
             return true;
 
+        // A link issued in « Mode test » belongs to the tenant's twin, which has no address of its
+        // own and is served on its parent's (sandbox lot 2).
+        if ((await tenantStore.GetAsync(tenantId, ct))?.ParentTenantId == fromHost.Id)
+            return true;
+
         logger.LogWarning(CrossTenantLinkReplay,
             "Remote KYC link of tenant {TokenTenantId} presented on the domain of tenant "
             + "{HostTenantId} ({Fqdn})",

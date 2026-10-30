@@ -17,7 +17,7 @@ public static class ImportUsersEndpoints
 {
     public static IEndpointRouteBuilder MapImportUsersEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("users/import").WithTags("User Import");
+        var group = app.MapGroup("users/import").WithTags("User Import").LiveModeWritesOnly();
 
         group.MapPost("file", ImportFromFile)
             .WithName("ImportUsersFromFile")
@@ -72,7 +72,7 @@ public static class ImportUsersEndpoints
         var fileRef = await fileStore.StoreAsync(stream, file.FileName, ct);
 
         var result = await sender.Send(new ImportFromFileCommand(
-            tenant.CurrentTenantId, currentUser.Id, fileRef, file.FileName), ct);
+            tenant.TeamTenantId, currentUser.Id, fileRef, file.FileName), ct);
 
         return result.IsSuccess
             ? Results.Accepted($"users/import/{result.Value}/status", new ImportJobCreatedResult(result.Value))
@@ -87,7 +87,7 @@ public static class ImportUsersEndpoints
         CancellationToken ct)
     {
         var result = await sender.Send(new ImportFromGoogleSheetCommand(
-            tenant.CurrentTenantId, currentUser.Id, req.SpreadsheetUrl), ct);
+            tenant.TeamTenantId, currentUser.Id, req.SpreadsheetUrl), ct);
 
         return result.IsSuccess
             ? Results.Accepted($"users/import/{result.Value}/status", new ImportJobCreatedResult(result.Value))
@@ -101,7 +101,7 @@ public static class ImportUsersEndpoints
         CancellationToken ct)
     {
         var result = await sender.Send(new ImportFromGoogleContactsCommand(
-            tenant.CurrentTenantId, currentUser.Id), ct);
+            tenant.TeamTenantId, currentUser.Id), ct);
 
         return result.IsSuccess
             ? Results.Accepted($"users/import/{result.Value}/status", new ImportJobCreatedResult(result.Value))

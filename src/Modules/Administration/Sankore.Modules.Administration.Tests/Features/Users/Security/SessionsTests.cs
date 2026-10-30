@@ -47,7 +47,7 @@ public sealed class SessionsTests : IDisposable
     {
         var current = Substitute.For<ICurrentUser>();
         current.Id.Returns(_userId);
-        current.TenantId.Returns(_tenantId);
+        current.TenantId.Returns(_tenantId); current.TeamTenantId.Returns(_tenantId);
         return current;
     }
 

@@ -16,7 +16,7 @@ internal sealed class ListRolesHandler(AdministrationDbContext db, ICurrentUser 
             // System roles (TenantId == null) are visible to all tenants.
             // Custom roles are scoped to the calling tenant.
             .Where(r => r.IsAssignable
-                     && (r.TenantId == null || r.TenantId == currentUser.TenantId))
+                     && (r.TenantId == null || r.TenantId == currentUser.TeamTenantId))
             .OrderBy(r => r.Name)
             .Select(r => new RoleDto(
                 r.Id,

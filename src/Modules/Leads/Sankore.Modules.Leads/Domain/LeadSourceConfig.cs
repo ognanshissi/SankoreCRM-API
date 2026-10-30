@@ -98,9 +98,13 @@ public sealed class LeadSourceConfig : ITenant
 
     private LeadSourceConfig() { }
 
-    /// <summary>Generates a 32-byte base64url public key for push sources.</summary>
-    public static string GeneratePublicKey()
-        => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+    /// <summary>
+    /// A 32-byte base64url public key for push sources, prefixed <c>pk_live_</c> or — in a test
+    /// tenant — <c>pk_test_</c> (sandbox lot 3): the snippet, the hosted form and the webhook URL
+    /// all carry it, so whoever pastes one sees which mode it feeds.
+    /// </summary>
+    public static string GeneratePublicKey(bool test = false)
+        => TestModeKeys.PublicKeyPrefix(test) + Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     public static LeadSourceConfig Create(
@@ -118,7 +122,8 @@ public sealed class LeadSourceConfig : ITenant
         Money? costPerLead = null,
         Guid? defaultAgencyId = null,
         Guid? defaultDispatchingRuleId = null,
-        bool isSystem = false)
+        bool isSystem = false,
+        bool testKeys = false)
     {
         var mode = integrationMode ?? ChannelModeMap.GetDefaultMode(channelType)
             ?? throw new DomainException($"No default mode for channel: {channelType}");
@@ -132,7 +137,7 @@ public sealed class LeadSourceConfig : ITenant
 
         // Auto-generate PublicKey for push sources if not provided
         if (publicKey is null && PublicKeyModes.Contains(mode))
-            publicKey = GeneratePublicKey();
+            publicKey = GeneratePublicKey(testKeys);
 
         return new()
         {

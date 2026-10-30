@@ -148,6 +148,26 @@ internal sealed class SmsOutboxProcessor(
         message.MarkSending();
         await db.SaveChangesAsync(ct);
 
+        // ── Test mode ───────────────────────────────────────────────────────
+        // Before the allowance: a text a test tenant may not send must cost it nothing.
+        if (await admin.IsPhoneBlockedInTestAsync(message.TenantId, phone, ct))
+        {
+            message.MarkRefused($"{EmailOutboxMessage.TestModeBlocked}: tenant in test mode, the number is not one of its users'.");
+            message.Redact(masked);
+
+            db.SmsDeliveryLogs.Add(SmsDeliveryLog.Record(
+                message.TenantId, message.Id, SmsDeliveryEventType.Rejected, masked,
+                "{\"source\":\"sms_outbox_processor\",\"reason\":\"test_mode_recipient\"}"));
+
+            await db.SaveChangesAsync(ct);
+
+            logger.LogInformation(
+                "SMS not sent — test tenant, number outside its team | MessageId={Id} Tenant={TenantId}",
+                message.Id, message.TenantId);
+
+            return;
+        }
+
         // ── The allowance, and whether there is a channel at all ────────────
         // One gate, at the only moment that actually consumes anything. M12 answers
         // CHANNEL_NOT_CONFIGURED for a tenant with no provider, which is why this check comes

@@ -462,6 +462,9 @@ internal static class WebhookSubscriptionsFeature
     {
         var group = app.MapGroup("integration/webhook-subscriptions").WithTags("Webhooks");
 
+        // « Copier en production » from the test mode (sandbox lot 4)
+        group.MapPromoteWebhookSubscription();
+
         group.MapGet("", async (ISender sender, CancellationToken ct) =>
                 Results.Ok(await sender.Send(new ListWebhookSubscriptionsQuery(), ct)))
             .WithName("ListWebhookSubscriptions")

@@ -17,7 +17,7 @@ internal sealed class AssignScopedPermissionHandler(
     public async Task<Result<Guid>> Handle(AssignScopedPermissionCommand request, CancellationToken ct)
     {
         var user = await userManager.FindByIdAsync(request.UserId.ToString());
-        if (user is null || user.TenantId != currentUser.TenantId)
+        if (user is null || user.TenantId != currentUser.TeamTenantId)
             return Result.Fail<Guid>("User not found.");
 
         // Guard: permission code must exist in the catalogue
@@ -36,7 +36,7 @@ internal sealed class AssignScopedPermissionHandler(
             return Result.Fail<Guid>("An active attribution with this permission and scope already exists.");
 
         var attribution = PermissionAttribution.Create(
-            tenantId: currentUser.TenantId,
+            tenantId: currentUser.TeamTenantId,
             userId: request.UserId,
             permissionCode: request.PermissionCode,
             assignedByUserId: currentUser.Id,

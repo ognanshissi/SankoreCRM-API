@@ -1,3 +1,4 @@
+using Sankore.Shared.Infrastructure.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -31,7 +32,10 @@ public static class UsersEndpoints
 {
     public static IEndpointRouteBuilder MapUsersEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("users").WithTags("Users");
+        // The caller's own profile, avatar, password and agent settings stay editable in test mode:
+        // they write the caller's own account, whatever the mode.
+        var group = app.MapGroup("users").WithTags("Users")
+            .LiveModeWritesOnly(http => http.Request.Path.Value?.Contains("/users/me", StringComparison.OrdinalIgnoreCase) == true);
 
         return group
             .MapGetUserStatusStats()

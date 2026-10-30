@@ -128,7 +128,11 @@ public sealed class TenantResolutionMiddleware(
         // ── Step 5 ── Cross-tenant guard ──────────────────────────────────────
         // Both sources resolved but disagree → token from one tenant replayed on
         // another tenant's domain. Reject and log as a security event.
-        if (jwtTenantId.HasValue && fqdnTenantId.HasValue && jwtTenantId != fqdnTenantId)
+        // One disagreement is legitimate: a « Mode test » token names the TEST TWIN of the tenant
+        // whose address it is used on (sandbox lot 2). Accepted only when the registry says that
+        // twin belongs to exactly this tenant — a twin's token stays useless on any other domain.
+        if (jwtTenantId.HasValue && fqdnTenantId.HasValue && jwtTenantId != fqdnTenantId
+            && (await tenantStore.GetAsync(jwtTenantId.Value, ctx.RequestAborted))?.ParentTenantId != fqdnTenantId)
         {
             logger.LogWarning(SecurityEvents.CrossTenantTokenReplay,
                 "Cross-tenant token attempt: JWT tenant {JwtTenantId} vs FQDN tenant {FqdnTenantId} " +

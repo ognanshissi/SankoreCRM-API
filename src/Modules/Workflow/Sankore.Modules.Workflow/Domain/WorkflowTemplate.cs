@@ -231,19 +231,28 @@ public sealed class WorkflowTemplate : AggregateRoot
     /// The caller is responsible for persisting the returned template and all its children.
     /// Auto-generated transitions are NOT cloned — they will be rebuilt when the draft is activated.
     /// </summary>
-    public WorkflowTemplate CreateDraft(Guid createdByUserId)
+    public WorkflowTemplate CreateDraft(Guid createdByUserId) => CloneAs(TenantId, Version + 1, createdByUserId);
+
+    /// <summary>
+    /// « Copier en production » (sandbox lot 4): the same clone as <see cref="CreateDraft"/>, owned
+    /// by <paramref name="tenantId"/> at <paramref name="version"/> — an inactive version production
+    /// activates itself. Triggers are separate rows and are copied by the caller.
+    /// </summary>
+    public WorkflowTemplate CopyTo(Guid tenantId, int version, Guid createdByUserId) => CloneAs(tenantId, version, createdByUserId);
+
+    private WorkflowTemplate CloneAs(Guid tenantId, int version, Guid createdByUserId)
     {
         var now = DateTimeOffset.UtcNow;
         var draft = new WorkflowTemplate
         {
             Id              = Guid.NewGuid(),
-            TenantId        = TenantId,
+            TenantId        = tenantId,
             EntityType      = EntityType,
             Circuit         = Circuit,
             Name            = Name,
             Description     = Description,
             IsActive        = false,
-            Version         = Version + 1,
+            Version         = version,
             CreatedAt       = now,
             UpdatedAt       = now,
             CreatedByUserId = createdByUserId

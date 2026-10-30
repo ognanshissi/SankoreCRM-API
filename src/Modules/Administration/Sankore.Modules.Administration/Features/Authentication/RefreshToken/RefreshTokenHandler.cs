@@ -56,10 +56,18 @@ internal sealed class RefreshTokenHandler(
         // Rotate: revoke old token, issue new one.
         existing.Revoke();
 
+        // « Mode test » survives a refresh while its twin is still this user's tenant's — a twin
+        // gone or re-parented drops the session back to production rather than failing it.
+        Guid? dataTenantId = null;
+        if (existing.DataTenantId is { } twin
+            && (await tenantStore.GetAsync(twin, ct))?.ParentTenantId == user.TenantId)
+            dataTenantId = twin;
+
         var newRefreshToken = Domain.RefreshToken.Create(
             user.TenantId, user.Id,
             TimeSpan.FromDays(jwtOptions.Value.RefreshTokenTtlDays),
-            session?.Id);
+            session?.Id,
+            dataTenantId);
         db.RefreshTokens.Add(newRefreshToken);
 
         await db.SaveChangesAsync(ct);
@@ -90,7 +98,8 @@ internal sealed class RefreshTokenHandler(
         var tenantInfo = await tenantStore.GetAsync(user.TenantId, ct);
         var language = user.PreferredLanguage ?? tenantInfo?.DefaultLanguage ?? "fr";
 
-        var jwtResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray(), language, session?.Id);
+        var jwtResult = jwtTokenService.CreateToken(user, roles, permissions.ToArray(), language, session?.Id,
+            dataTenantId: dataTenantId);
 
         return Result.Ok(new LoginResult(
             jwtResult.Token,

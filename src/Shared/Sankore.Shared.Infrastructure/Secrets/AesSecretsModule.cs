@@ -131,11 +131,9 @@ public sealed class AesSecretsModule(
         return Encoding.UTF8.GetString(plainBytes);
     }
 
-    private static string Mask(string value)
-    {
-        if (value.Length <= 8) return "****";
-        return value[..4] + "****" + value[^4..];
-    }
+    // A mode prefix (pk_test_, whsec_test_…) is kept in full: the hint must say which mode the
+    // secret belongs to (sandbox lot 3). Anything else reads as before: four, ****, four.
+    private static string Mask(string value) => TestModeKeys.Mask(value);
 }
 
 public sealed class SecretsOptions

@@ -38,6 +38,8 @@ public sealed class TenantResolutionMiddlewareTests
         ["/api/ingest", "/sdk", "/integration/webhooks", "/integration/telephony/webhooks", "/integration/relay-agents"];
 
     private static readonly Guid TenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid TwinId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid OtherId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
     [Theory]
     // M13 — the public key in the path IS the tenant reference.
@@ -132,6 +134,41 @@ public sealed class TenantResolutionMiddlewareTests
     }
 
     [Fact]
+    public async Task A_test_mode_token_resolves_its_twin_on_its_own_tenants_address()
+    {
+        // Sandbox lot 2: the token names the twin, the address its parent — the one disagreement
+        // the cross-tenant guard lets through.
+        var ctx = TwinRequest("imf.ci");
+
+        await Pipeline(_ => Task.CompletedTask)(ctx);
+
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        ctx.Items[TenantKey.ResolvedTenantKey].Should().Be(TwinId);
+    }
+
+    [Fact]
+    public async Task A_test_mode_token_is_refused_on_another_tenants_address()
+    {
+        var ctx = TwinRequest("autre.ci");
+        var reached = false;
+
+        await Pipeline(_ => { reached = true; return Task.CompletedTask; })(ctx);
+
+        reached.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
+    private static DefaultHttpContext TwinRequest(string fqdn)
+    {
+        var ctx = Request("/api/v1/leads");
+        ctx.Request.Headers["X-Tenant-Fqdn"] = fqdn;
+        ctx.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim("tenant_id", TwinId.ToString())], "test"));
+        return ctx;
+    }
+
+    [Fact]
     public async Task An_inactive_tenant_is_refused_with_a_403_the_front_end_can_recognise()
     {
         // 403 and not 401: the front's token interceptor answers a 401 with a refresh and then a
@@ -176,7 +213,15 @@ public sealed class TenantResolutionMiddlewareTests
     {
         var store = Substitute.For<ITenantStore>();
         store.GetAsync(TenantId, Arg.Any<CancellationToken>())
-            .Returns(new TenantInfo(TenantId, "IMF", "imf.ci", tenantActive, false, null, null));
+            .Returns(new TenantInfo(TenantId, "IMF", "imf.ci", tenantActive, false, null, null, TestTenantId: TwinId));
+        store.GetByFqdnAsync("imf.ci", Arg.Any<CancellationToken>())
+            .Returns(new TenantInfo(TenantId, "IMF", "imf.ci", tenantActive, false, null, null, TestTenantId: TwinId));
+        store.GetAsync(TwinId, Arg.Any<CancellationToken>())
+            .Returns(new TenantInfo(TwinId, "IMF (test)", "imf.ci~test", tenantActive, false, null, null, IsTest: true, ParentTenantId: TenantId));
+        store.GetByFqdnAsync("autre.ci", Arg.Any<CancellationToken>())
+            .Returns(new TenantInfo(OtherId, "Autre", "autre.ci", true, false, null, null));
+        store.GetAsync(OtherId, Arg.Any<CancellationToken>())
+            .Returns(new TenantInfo(OtherId, "Autre", "autre.ci", true, false, null, null));
 
         var services = new ServiceCollection();
         services.AddSingleton(store);

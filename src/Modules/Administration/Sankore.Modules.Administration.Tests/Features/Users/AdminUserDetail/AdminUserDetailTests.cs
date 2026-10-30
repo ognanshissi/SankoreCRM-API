@@ -65,7 +65,7 @@ public sealed class AdminUserDetailTests : IDisposable
     {
         var current = Substitute.For<ICurrentUser>();
         current.Id.Returns(id);
-        current.TenantId.Returns(tenantId);
+        current.TenantId.Returns(tenantId); current.TeamTenantId.Returns(tenantId);
         current.ImpersonatorId.Returns(impersonator);
         return current;
     }

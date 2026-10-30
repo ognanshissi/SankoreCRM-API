@@ -30,6 +30,29 @@ public sealed class CaptureV2Tests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
+    // ── who owns a typed lead ───────────────────────────────────────────────
+
+    [Fact]
+    public void An_agent_owns_the_lead_they_type()
+    {
+        // Unowned, auto-dispatch gave it to a colleague and the agent lost the prospect in front of them.
+        var agent = Guid.NewGuid();
+        CaptureLeadEndpoint.ResolveOwner(null, callerSeesAllLeads: false, agent).Should().Be(agent);
+    }
+
+    [Fact]
+    public void A_supervisors_capture_stays_unowned_and_goes_to_dispatch()
+    {
+        CaptureLeadEndpoint.ResolveOwner(null, callerSeesAllLeads: true, Guid.NewGuid()).Should().BeNull();
+    }
+
+    [Fact]
+    public void An_owner_named_by_the_form_wins()
+    {
+        var named = Guid.NewGuid();
+        CaptureLeadEndpoint.ResolveOwner(named, callerSeesAllLeads: false, Guid.NewGuid()).Should().Be(named);
+    }
+
     // ── the v1 / v2 name reconciliation ─────────────────────────────────────
 
     [Fact]

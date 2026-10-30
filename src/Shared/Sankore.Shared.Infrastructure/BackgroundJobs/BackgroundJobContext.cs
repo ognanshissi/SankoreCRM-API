@@ -23,17 +23,23 @@ public static class BackgroundJobContext
     /// </summary>
     public static IDisposable SetScope(Guid tenantId, Guid userId, string displayName)
     {
+        var scope = new ContextScope(_user.Value, _tenant.Value);
         _user.Value = new SystemCurrentUser(userId, tenantId, displayName);
         _tenant.Value = new FixedTenantContext(tenantId);
-        return new ContextScope();
+        return scope;
     }
 
-    private sealed class ContextScope : IDisposable
+    /// <summary>
+    /// Restores what was there before, rather than clearing: scopes nest since a job may replay a
+    /// command in ANOTHER tenant (sandbox lot 5, a refresh of the test mode from production) and
+    /// must find its own scope again afterwards.
+    /// </summary>
+    private sealed class ContextScope(ICurrentUser? previousUser, ITenantContext? previousTenant) : IDisposable
     {
         public void Dispose()
         {
-            _user.Value = null;
-            _tenant.Value = null;
+            _user.Value = previousUser;
+            _tenant.Value = previousTenant;
         }
     }
 }

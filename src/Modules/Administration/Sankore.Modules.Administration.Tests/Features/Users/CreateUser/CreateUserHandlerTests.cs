@@ -64,7 +64,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         var tenantContext = Substitute.For<ITenantContext>();
         var currentUser = Substitute.For<ICurrentUser>();
         var tenantStore = Substitute.For<ITenantStore>();
-        tenantContext.CurrentTenantId.Returns(_tenantId);
+        tenantContext.CurrentTenantId.Returns(_tenantId); tenantContext.TeamTenantId.Returns(_tenantId);
         currentUser.Id.Returns(callerUserId);
 
         var role = AppRole.Create("Agent", "Agent", isSystem: false);
@@ -131,7 +131,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         var publisher = Substitute.For<IEventPublisher>();
         var tenantContext = Substitute.For<ITenantContext>();
         var tenantStore  = Substitute.For<ITenantStore>();
-        tenantContext.CurrentTenantId.Returns(_tenantId);
+        tenantContext.CurrentTenantId.Returns(_tenantId); tenantContext.TeamTenantId.Returns(_tenantId);
 
         var notifications = Substitute.For<INotificationsModule>();
         var handler = Build(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
@@ -181,7 +181,7 @@ public sealed class CreateUserHandlerTests : IDisposable
 
         var tenantContext = Substitute.For<ITenantContext>();
         var tenantStore = Substitute.For<ITenantStore>();
-        tenantContext.CurrentTenantId.Returns(_tenantId);
+        tenantContext.CurrentTenantId.Returns(_tenantId); tenantContext.TeamTenantId.Returns(_tenantId);
 
         var notifications = Substitute.For<INotificationsModule>();
         var handler = Build(db, userManager, roleManager, tenantContext, tenantStore, publisher, notifications);
@@ -237,7 +237,7 @@ public sealed class CreateUserHandlerTests : IDisposable
         var tenantContext = Substitute.For<ITenantContext>();
         var currentUser = Substitute.For<ICurrentUser>();
         var tenantStore = Substitute.For<ITenantStore>();
-        tenantContext.CurrentTenantId.Returns(_tenantId);
+        tenantContext.CurrentTenantId.Returns(_tenantId); tenantContext.TeamTenantId.Returns(_tenantId);
         currentUser.Id.Returns(callerUserId);
 
         var role = AppRole.Create("Agent", "Agent", isSystem: false);

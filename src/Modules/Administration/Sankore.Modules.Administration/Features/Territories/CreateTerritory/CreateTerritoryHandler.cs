@@ -28,7 +28,7 @@ internal sealed class CreateTerritoryHandler(
             : null;
 
         var territory = Territory.Create(
-            tenantId: tenant.CurrentTenantId,
+            tenantId: tenant.TeamTenantId,
             name: request.Name,
             code: request.Code,
             description: request.Description,

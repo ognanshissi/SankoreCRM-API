@@ -68,7 +68,7 @@ internal sealed class IssueCredentialHandler(
         }
 
         var credential = DistributionCredential.Issue(
-            tenantId: currentUser.TenantId,
+            tenantId: currentUser.TeamTenantId,
             userId: command.UserId,
             category: category,
             encryptedCardNumber: encryptor.Encrypt(command.CardNumber)!,

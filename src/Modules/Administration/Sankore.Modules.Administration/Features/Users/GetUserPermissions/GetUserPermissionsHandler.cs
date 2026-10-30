@@ -18,7 +18,7 @@ internal sealed class GetUserPermissionsHandler(
         GetUserPermissionsQuery request, CancellationToken ct)
     {
         var user = await userManager.FindByIdAsync(request.UserId.ToString());
-        if (user is null || user.TenantId != currentUser.TenantId)
+        if (user is null || user.TenantId != currentUser.TeamTenantId)
             return Result.Fail<UserPermissionsDto>("User not found.");
 
         // 1. Role names from Identity

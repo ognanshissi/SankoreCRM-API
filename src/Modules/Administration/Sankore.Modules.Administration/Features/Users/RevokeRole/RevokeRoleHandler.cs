@@ -18,7 +18,7 @@ internal sealed class RevokeRoleHandler(
     public async Task<Result> Handle(RevokeRoleCommand request, CancellationToken ct)
     {
         var user = await userManager.FindByIdAsync(request.UserId.ToString());
-        if (user is null || user.TenantId != currentUser.TenantId)
+        if (user is null || user.TenantId != currentUser.TeamTenantId)
             return Result.Fail("User not found.");
 
         var role = await roleManager.FindByIdAsync(request.RoleId.ToString());

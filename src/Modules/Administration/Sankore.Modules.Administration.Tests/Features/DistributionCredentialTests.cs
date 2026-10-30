@@ -46,7 +46,7 @@ public sealed class DistributionCredentialTests : IDisposable
     private ICurrentUser User()
     {
         var user = Substitute.For<ICurrentUser>();
-        user.TenantId.Returns(_tenant);
+        user.TenantId.Returns(_tenant); user.TeamTenantId.Returns(_tenant);
         user.Id.Returns(_actor);
         return user;
     }

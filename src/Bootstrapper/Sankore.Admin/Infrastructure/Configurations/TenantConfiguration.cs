@@ -35,5 +35,8 @@ public class TenantConfiguration: IEntityTypeConfiguration<Tenant>
         builder.HasIndex(p => p.RootUserEmail).IsUnique();
         builder.HasIndex(p => new { p.RootUserEmail, p.Fqdn }).IsUnique();
         builder.HasIndex(p => p.Id);
+
+        // One twin per live tenant: the guarantee EnsureTestTwinHandler's catch relies on.
+        builder.HasIndex(p => p.ParentTenantId).IsUnique().HasFilter("\"ParentTenantId\" IS NOT NULL");
     }
 }

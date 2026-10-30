@@ -30,8 +30,18 @@ public sealed record TenantInfo(
     /// not writable. <c>null</c> on an older record reads as none.
     /// </summary>
     IReadOnlyList<string>? ReadOnlyModules = null,
-    bool IsTest = false)
+    bool IsTest = false,
+    /// <summary>
+    /// Sandbox lot 2: on a TEST TWIN, the live tenant whose « Mode test » it is. The twin holds
+    /// its own data and configuration and shares this tenant's users, roles and agencies.
+    /// </summary>
+    Guid? ParentTenantId = null,
+    /// <summary>On a live tenant, its test twin once created.</summary>
+    Guid? TestTenantId = null)
 {
+    /// <summary>The tenant whose team works here: the parent of a twin, else the tenant itself.</summary>
+    public Guid TeamTenantId => ParentTenantId ?? Id;
+
     /// <summary>True when <paramref name="module"/> is in force, or when the list is unknown.</summary>
     public bool HasModule(string module) => ActiveModules is null || ActiveModules.Contains(module);
 

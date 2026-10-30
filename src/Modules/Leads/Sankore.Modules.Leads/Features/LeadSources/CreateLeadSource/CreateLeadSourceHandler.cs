@@ -14,7 +14,8 @@ using Sankore.Shared.Kernel.ValueObject;
 internal sealed class CreateLeadSourceHandler(
     LeadsDbContext db,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
-    IInstitutionCurrency? institutionCurrency = null)
+    IInstitutionCurrency? institutionCurrency = null,
+    ITenantStore? tenants = null)
     : IRequestHandler<CreateLeadSourceCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
@@ -48,7 +49,8 @@ internal sealed class CreateLeadSourceHandler(
             dedupWindowDays:      cmd.DedupWindowDays,
             costPerLead:          costPerLead,
             defaultAgencyId:          cmd.DefaultAgencyId,
-            defaultDispatchingRuleId: cmd.DefaultDispatchingRuleId);
+            defaultDispatchingRuleId: cmd.DefaultDispatchingRuleId,
+            testKeys:                 await TestModeKeys.IsTestAsync(tenants, cmd.TenantId, ct));
 
         db.LeadSourceConfigs.Add(source);
 

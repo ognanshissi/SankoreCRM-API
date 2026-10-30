@@ -107,6 +107,20 @@ public sealed class EmailOutboxMessage
         Status = EmailOutboxStatus.DeadLettered;
     }
 
+    /// <summary>
+    /// A test tenant writes only to its own team: the message is dead-lettered unsent, and says so.
+    /// </summary>
+    public void MarkBlockedInTest()
+    {
+        AttemptCount++;
+        LastAttemptAt = DateTimeOffset.UtcNow;
+        LastError = $"{TestModeBlocked}: tenant in test mode, the recipient is not one of its users.";
+        Status = EmailOutboxStatus.DeadLettered;
+    }
+
+    /// <summary>The reason code of a message a test tenant did not send.</summary>
+    public const string TestModeBlocked = "TEST_MODE_RECIPIENT_BLOCKED";
+
     public void ResetForRetry()
     {
         Status = EmailOutboxStatus.Pending;

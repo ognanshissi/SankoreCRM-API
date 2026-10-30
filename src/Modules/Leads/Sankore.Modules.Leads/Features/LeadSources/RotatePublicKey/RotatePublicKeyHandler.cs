@@ -11,7 +11,8 @@ using Sankore.Shared.Kernel;
 
 internal sealed class RotatePublicKeyHandler(
     LeadsDbContext db,
-    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
+    ITenantStore? tenants = null)
     : IRequestHandler<RotatePublicKeyCommand, Result<string>>
 {
     public async Task<Result<string>> Handle(RotatePublicKeyCommand cmd, CancellationToken ct)
@@ -23,7 +24,7 @@ internal sealed class RotatePublicKeyHandler(
             return Result.Fail<string>("LEAD_SOURCE_NOT_FOUND");
 
         var oldHint = source.PublicKey is not null ? Mask(source.PublicKey) : null;
-        var newKey = LeadSourceConfig.GeneratePublicKey();
+        var newKey = LeadSourceConfig.GeneratePublicKey(await TestModeKeys.IsTestAsync(tenants, source.TenantId, ct));
 
         source.RotatePublicKey(newKey);
 
@@ -38,9 +39,5 @@ internal sealed class RotatePublicKeyHandler(
         return Result.Ok(newKey);
     }
 
-    private static string Mask(string value)
-    {
-        if (value.Length <= 8) return "****";
-        return value[..4] + "****" + value[^4..];
-    }
+    private static string Mask(string value) => TestModeKeys.Mask(value);
 }

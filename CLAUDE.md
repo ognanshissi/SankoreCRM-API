@@ -879,6 +879,156 @@ runs, so they pass every test on a machine whose culture is invariant.
 workbook: it is referenced by those three modules only, not by `Shared.Infrastructure`, so
 `Sankore.Admin` ships no spreadsheet engine.
 
+### Test mode: a test tenant writes only to its own team (sandbox lot 1, owner, 2026-10-30)
+
+The product owner chose Stripe's model for a full sandbox (a « Mode test » switch, a hidden twin
+tenant, copy to production object by object — lots 2-7 to come). Lot 1 makes `TenantInfo.IsTest`
+mean something beyond the data wipe: **a test tenant never reaches anybody outside its users.**
+
+- `IAdministrationModule.IsEmailBlockedInTestAsync` / `IsPhoneBlockedInTestAsync` are the one
+  decision. Live or unknown tenant → never blocked. Test tenant → blocked unless the address is a
+  user's sign-in (`NormalizedEmail`) or additional e-mail, or the number one of a user's (account,
+  work, home, personal, WhatsApp), compared on digits by `TestModePhones` (the shorter is the end
+  of the longer, at least 8 digits — a local « 07 08… » matches « +225 07 08… »).
+- **Asked as « blocked? » on purpose**: an NSubstitute double answers `false`, the live behaviour,
+  so no existing sender test starts refusing. Keep new callers on that polarity.
+- Callers, each BEFORE the allowance and the provider: `EmailOutboxProcessor` and
+  `SmsOutboxProcessor` (dead-lettered `TEST_MODE_RECIPIENT_BLOCKED`, delivery log
+  `test_mode_recipient`, quota untouched, SMS number redacted), the configuration test e-mail,
+  `MessagingGateway.Send*` (WhatsApp, `MESSAGING_TEST_RECIPIENT`, recorded on the message),
+  `SendMailHandler` (connected mailboxes, `MAIL_TEST_RECIPIENT` — the whole message is refused if
+  ONE recipient is outside the team; a scheduled mail is re-checked when it leaves) and
+  `RequestClickToCallHandler` (`TELEPHONY_TEST_NUMBER`, 422, no request row).
+- **Webhooks still go out** — a partner points its test endpoint at a test tenant on purpose — but
+  every envelope of a test tenant carries `"test": true` (`WebhookDispatcher.FanOutAsync`).
+- **Not bridled**: core banking, insurer and file deposits keep the connection configured in the
+  tenant. In the twin of lot 2 those connections are re-entered (secrets are never copied), so they
+  point where the administrator says; revisit if a twin must be forced onto a simulator.
+- The registry read is the cached `ITenantStore`; an outage reads as live (a live tenant whose
+  messages stop on a cache miss is the worse failure). Optional constructor parameters everywhere,
+  null = live, for the modules' own tests.
+
+### « Mode test »: a hidden twin tenant, same team (sandbox lot 2, owner, 2026-10-30)
+
+Stripe's model: an administrator flips « Mode test » in the header and keeps working with the same
+account and session, on a COPY of the institution — its own data and configuration, production's
+team. Implemented as a **test twin**: a second tenant of the registry, so the 173 tenant filters
+isolate the sandbox without any « mode » column.
+
+- **Registry** (`Sankore.Admin`): `Tenant.ParentTenantId` marks a twin, one per tenant (filtered
+  unique index), created by `POST tenants/{id}/test-twin` (idempotent, called by the API on the first
+  switch). Always `IsTest`. Its FQDN and root e-mail columns are the parent's + `~test` — unique and
+  unresolvable — but `TenantResponse` serves the PARENT's FQDN, modules, activation and maintenance
+  (`TenantProjection`): links mailed from the sandbox open the real app; a parent cut off is cut off
+  in both modes. `TenantResponse.ParentTenantId` / `TestTenantId` name each other. The platform's
+  tenant list hides twins; the API lists them (`includeTwins=true`) so jobs and seeders run for them.
+- **Tokens**: `POST auth/test-mode { test, refreshToken }` (`SwitchTestModeHandler`; entering needs
+  `tenant:test-mode`, administrator-only; leaving needs nothing; refused while impersonating) revokes
+  the refresh token and answers a new pair. The access token's `tenant_id` is the TWIN — every module
+  reads and writes the sandbox through the claim it always read — plus `team_tenant_id` (the live
+  tenant, `TestModeClaims`). `RefreshToken.DataTenantId` keeps the mode across refreshes while the
+  registry still ties the twin to the user's tenant. `CurrentUserDto.TestMode` drives the front.
+- **Middleware**: a JWT/FQDN disagreement is accepted only when the JWT tenant's `ParentTenantId` is
+  the host's tenant. **The per-request session check** (`OnTokenValidated` in Program.cs) looks the
+  session up in the ACCOUNT's tenant, `TestModeClaims.AccountTenantOf` (team claim, else
+  `tenant_id`): reading `tenant_id` looked in the twin and failed every test-mode request with a 401
+  (found in the lot 7 run). Anything keyed on the account — sessions, refresh tokens, roles — reads
+  the team's tenant, never the token's data tenant. `KycRemoteGate` accepts a twin's link on its parent's host the same way.
+- **Team vs data**: `ITenantContext.TeamTenantId` / `ICurrentUser.TeamTenantId` (default members) are
+  the live tenant in test mode. ONLY Administration's team tables filter on it — users, roles,
+  profiles, sessions, refresh tokens, agencies, territories, attributions, agent settings, company
+  info/logo, distributor profile/documents/credentials, user imports. Its CONFIGURATION — products,
+  forms, notification/SMS settings and quotas, compliance settings — stays per mode. Every facade
+  method that reads the team maps its `tenantId` through `TeamAsync` (the store), because callers
+  hand in the tenant of the DATA. Team handlers read `currentUser.TeamTenantId`.
+- **Team writes are refused in test mode**: `LiveModeWritesOnly()` (`TestModeGuard`) on the users
+  (except `users/me/...`), import, agencies, territories, roles, company-info, credentials,
+  insurance-distribution and tenant-modules groups → 409 `TEST_MODE_TEAM_READ_ONLY`, which the front's
+  error interceptor explains once. Add it to any new group of team endpoints.
+- **`TenantTwins`** (Kernel) remembers twin → parent from every `TenantInfo` the store hands out, for
+  the SYNCHRONOUS readers (EF filters, jobs, consumers). HTTP requests carry the claim instead; the
+  facade asks the store. A miss reads the twin as its own team (no user found) — never live data. With
+  several API instances, one that has not listed tenants since the twin was created could miss until
+  its next orchestrator run or restart.
+- **A new twin is seeded at once**: each module registers an `ITenantSeeder` running the same
+  seeders as its `InitializeAsync` (settings, default dispatching rule, task types, lead settings,
+  KYC circuit, call outcomes); `TenantProvisioner` runs them outside the ambient transaction on the
+  first switch. **Per-tenant recurring jobs** (SLA, dispatch queue, nurturing…) are registered at
+  start-up only: a twin created while the API runs gets them at the next restart.
+- Mocks: an NSubstitute `ICurrentUser`/`ITenantContext` answers `Guid.Empty` for the new default
+  members — stub `TeamTenantId` too (Administration tests do).
+
+### Keys say their mode (sandbox lot 3, 2026-10-30)
+
+A key is resolved by its whole value, so a key issued in « Mode test » can only reach the twin that
+issued it — the PREFIX decides nothing on the way in, it tells the partner pasting it which mode it
+feeds. `TestModeKeys` (Kernel) is the one list: `pk_live_` / `pk_test_` on lead-source public keys
+(snippet, hosted form, inbound webhook URL — `LeadSourceConfig.GeneratePublicKey(test)`, at creation
+and rotation) and `whsec_` / `whsec_test_` on outbound webhook signing secrets (`WebhookSecrets`).
+« Test » is `TenantInfo.IsTest` — a twin, or any tenant marked test. Keys issued before the prefixes
+keep working unchanged. `TestModeKeys.Mask` keeps a mode prefix in full in every hint (the vault's
+`MaskedValue` included) and masks anything else as before (four, ****, four). Lot 4's « Copier en
+production » must issue a NEW key for a copied source or subscription — never carry a test key over.
+
+### « Copier en production » (sandbox lot 4, 2026-10-30)
+
+From « Mode test », `POST {resource}/{id}/promote?dryRun=` copies one configuration object to the
+live tenant: products (`products`), project templates (`leads/project-templates`), lead sources
+(`leads/lead-sources`), outbound webhooks (`integration/webhook-subscriptions`) and workflows
+(`workflow/templates`). Permission `tenant:test-mode:promote` (administrator-only, no four eyes —
+product owner) AND the type's own edit permission; refused outside test mode
+(`PROMOTION_TEST_MODE_REQUIRED`). `PromotionResult` = action (`Created`/`Updated`), production id,
+missing linked objects (`Blocking` or not, with the test id the front copies first), French notes,
+and a secret shown once.
+
+- **Replay, not table copy** (`ProductionReplay`, Shared): the module's ordinary save commands are
+  sent through MediatR in a scope where `BackgroundJobContext` names the live tenant (it outranks the
+  request's token), as the caller under the System role. Production's own validation, versioning and
+  audit apply. The replay suppresses the ambient transaction (each replayed command has its own), so
+  a copy is not atomic across its commands — it is idempotent instead. Cross-module reads inside a
+  promote command are suppressed too (the general rule).
+- **Matching keys**: product by code; project template by scope (product code / family / default),
+  steps and checklist points by LABEL so projects on an unchanged step stay there, field keys sent
+  as the test has them; lead source by code; webhook by name; workflow by (entity type, circuit).
+- **What never crosses**: keys and secrets (a new source gets its own `pk_live_`, an existing one
+  keeps key, status and vault references — `PromoteLeadSourceHandler.WithSecretsOf`), the platform
+  connection, the product's CBS link, a webhook's secret and on/off state (a new one is created
+  switched off with a fresh `whsec_`, returned once). Dispatching rules are matched by name, else
+  dropped with a note.
+- **Workflows** are not replayed: `WorkflowTemplate.CopyTo` (the clone `CreateDraft` uses) writes a
+  new INACTIVE version of the circuit in production, triggers included (transition actions are not,
+  like a draft); an inactive top version production never ran is replaced, an active one never
+  touched. Activation stays a production act.
+- **Dependencies**: a project template's product is blocking; its steps' workflow circuits are not
+  (production starts nothing until such a circuit is active). The front's `PromoteDialog` (settings
+  lib) previews (dryRun), copies the missing ones first, then the object.
+- Not yet promotable: questionnaires, dispatching rules, scoring/SLA/task-generation rules, task
+  types, nurturing, e-mail/SMS templates, forms, WhatsApp templates. A new type follows the same
+  shape: a `Promote…Command` (`ICommand`), a dry run, a natural key, `MapPromote` on its group.
+
+### « Repartir de la production » (sandbox lot 5, 2026-10-30)
+
+From « Mode test », `POST auth/test-mode/refresh { wipeData }` (`tenant:test-mode` AND the edit
+right of each copied kind — the replays run as System, so the route checks what they exercise; Sankore.Api
+`Features/TestMode`) enqueues `RefreshTestTwinJob`: it checks with the registry that the twin is the
+caller's production's, empties the twin's trial data when asked (every `ITenantDataWipe`, as a
+test-tenant wipe — configuration kept), then copies production's configuration into the twin and
+tells the user on the bell (`tenant.test-mode.refreshed`, counts and the first refusals).
+
+- **One copy, both ways.** Lot 4's promotions are now `IConfigurationCopier`s (one per kind, each
+  module registers its own): `ConfigurationCopy(source tenant, source id, target tenant, user,
+  dryRun, ToProduction)`. « Copier en production » is a copy test → production; the refresh runs
+  every copier production → test in `Order` (products 10, workflows 20, project templates 30, lead
+  sources 40, webhooks 50) over `ListAsync(production)`. `TenantReplay.RunAsync` replays into any
+  tenant; `ProductionReplay` is its test → production shortcut.
+- Differences by direction: a workflow copied INTO the test mode is activated there (its previous
+  active version retired) — the sandbox must behave as production; to production it stays inactive.
+  Notes say « en production » / « dans le mode test ». Keys and secrets stay the target's either way
+  (a new source in the twin gets `pk_test_`, a new webhook `whsec_test_` and arrives switched off).
+- Objects only the twin has are kept; a refresh replaces what shares a key with production.
+- **`BackgroundJobContext` scopes now nest**: disposing one RESTORES the previous scope instead of
+  clearing it — the refresh job runs in the twin's scope and each replay opens the target's inside it.
+
 ### Outbound calls to a tenant-configured target
 
 Any URL, host or port a tenant types — a lead puller, a workflow « Appeler un webhook », an SFTP

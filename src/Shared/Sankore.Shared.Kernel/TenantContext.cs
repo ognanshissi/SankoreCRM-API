@@ -11,6 +11,14 @@ public interface ITenantContext
 {
     Guid CurrentTenantId { get; }
     bool HasTenant { get; }
+
+    /// <summary>
+    /// The tenant whose USERS work here (sandbox lot 2). Equal to <see cref="CurrentTenantId"/>
+    /// except in « Mode test », where the data belong to the test twin and the team — users,
+    /// roles, agencies — stays the live tenant's. Only the Administration module's team tables
+    /// filter on it; everything else is data and filters on <see cref="CurrentTenantId"/>.
+    /// </summary>
+    Guid TeamTenantId => TenantTwins.TeamOf(CurrentTenantId);
 }
 
 /// <summary>

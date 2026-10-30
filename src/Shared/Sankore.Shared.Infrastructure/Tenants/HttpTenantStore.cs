@@ -38,13 +38,16 @@ internal sealed class HttpTenantStore(
         var client = httpClientFactory.CreateClient(ClientName);
         try
         {
-            var response = await client.GetAsync("api/v1/tenants?activeOnly=true", ct);
+            // Twins included: every per-tenant job and seeder must also run for a « Mode test ».
+            var response = await client.GetAsync("api/v1/tenants?activeOnly=true&includeTwins=true", ct);
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning("Tenant store returned {Status} for GetAllActive", (int)response.StatusCode);
                 return [];
             }
-            return await response.Content.ReadFromJsonAsync<List<TenantInfo>>(JsonOpts, ct) ?? [];
+            var tenants = await response.Content.ReadFromJsonAsync<List<TenantInfo>>(JsonOpts, ct) ?? [];
+            foreach (var tenant in tenants) TenantTwins.Remember(tenant);
+            return tenants;
         }
         catch (Exception ex)
         {
@@ -75,7 +78,9 @@ internal sealed class HttpTenantStore(
                 return null;
             }
 
-            return await response.Content.ReadFromJsonAsync<TenantInfo>(JsonOpts, ct);
+            var tenant = await response.Content.ReadFromJsonAsync<TenantInfo>(JsonOpts, ct);
+            TenantTwins.Remember(tenant);
+            return tenant;
         }
         catch (Exception ex)
         {

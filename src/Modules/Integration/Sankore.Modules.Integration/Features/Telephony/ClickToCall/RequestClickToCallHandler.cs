@@ -3,6 +3,7 @@ namespace Sankore.Modules.Integration.Features.Telephony.ClickToCall;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MediatR;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Infrastructure;
 using Sankore.Modules.Integration.PublicApi;
@@ -51,7 +52,8 @@ internal sealed class RequestClickToCallHandler(
     TelephonyNumberProtector protector,
     ICurrentUser currentUser,
     TimeProvider clock,
-    ILogger<RequestClickToCallHandler> logger)
+    ILogger<RequestClickToCallHandler> logger,
+    IAdministrationModule? administration = null)
     : IRequestHandler<RequestClickToCallCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(RequestClickToCallCommand cmd, CancellationToken ct)
@@ -94,6 +96,11 @@ internal sealed class RequestClickToCallHandler(
 
         if (number.IsFailure)
             return Result.Fail<Guid>(number.Error!);
+
+        // A test tenant rings only its team. Refused before any row: nothing was attempted.
+        if (administration is not null
+            && await administration.IsPhoneBlockedInTestAsync(tenantId, number.Value, ct))
+            return Result.Fail<Guid>(TelephonyErrors.TestNumber);
 
         var protectedNumber = protector.Protect(number.Value);
 

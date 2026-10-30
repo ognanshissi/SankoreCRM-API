@@ -47,7 +47,7 @@ public static class ValidateImportEndpoint
         try
         {
             var result = await sender.Send(
-                new ValidateImportCommand(tenant.CurrentTenantId, fileRef), ct);
+                new ValidateImportCommand(tenant.TeamTenantId, fileRef), ct);
 
             return Results.Ok(result.Value);
         }

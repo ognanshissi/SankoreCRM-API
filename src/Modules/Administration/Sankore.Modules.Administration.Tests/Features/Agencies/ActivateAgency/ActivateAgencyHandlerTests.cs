@@ -19,7 +19,7 @@ public sealed class ActivateAgencyHandlerTests : IDisposable
     {
         _factory = new TestAdminDbContextFactory(_tenantId);
         _currentUser = Substitute.For<ICurrentUser>();
-        _currentUser.TenantId.Returns(_tenantId);
+        _currentUser.TenantId.Returns(_tenantId); _currentUser.TeamTenantId.Returns(_tenantId);
     }
 
     public void Dispose() => _factory.Dispose();

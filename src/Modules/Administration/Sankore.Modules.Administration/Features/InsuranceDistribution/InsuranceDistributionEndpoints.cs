@@ -30,7 +30,7 @@ internal static class InsuranceDistributionEndpoints
 
     public static IEndpointRouteBuilder MapInsuranceDistributionEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("insurance-distribution").WithTags("Insurance distribution");
+        var group = app.MapGroup("insurance-distribution").WithTags("Insurance distribution").LiveModeWritesOnly();
 
         group.MapGet(string.Empty, Get)
             .WithName("GetInsuranceDistributor")
@@ -89,7 +89,7 @@ internal static class InsuranceDistributionEndpoints
         var documents = await db.DistributorDocuments
             .OrderBy(d => d.Kind).ThenByDescending(d => d.CreatedAt)
             .ToListAsync(ct);
-        var standing = await administration.GetInsuranceDistributorStandingAsync(user.TenantId, today, ct);
+        var standing = await administration.GetInsuranceDistributorStandingAsync(user.TeamTenantId, today, ct);
 
         return Results.Ok(new InsuranceDistributorDto(
             Status: profile?.Status.ToString(),
@@ -118,7 +118,7 @@ internal static class InsuranceDistributionEndpoints
 
         if (profile is null)
         {
-            profile = InsuranceDistributorProfile.Create(user.TenantId, user.Id, now);
+            profile = InsuranceDistributorProfile.Create(user.TeamTenantId, user.Id, now);
             db.InsuranceDistributorProfiles.Add(profile);
         }
 
@@ -165,7 +165,7 @@ internal static class InsuranceDistributionEndpoints
         try
         {
             document = DistributorDocument.Record(
-                user.TenantId, kind, reference, issuer, issuedOn, expiresOn,
+                user.TeamTenantId, kind, reference, issuer, issuedOn, expiresOn,
                 fileReference, file?.FileName, file?.ContentType, user.Id, now);
         }
         catch (DomainException ex)

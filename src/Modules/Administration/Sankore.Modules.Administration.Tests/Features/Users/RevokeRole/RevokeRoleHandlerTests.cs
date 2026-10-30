@@ -23,7 +23,7 @@ public sealed class RevokeRoleHandlerTests : IDisposable
         var um = IdentityMockFactory.BuildUserManager();
         var rm = IdentityMockFactory.BuildRoleManager();
         var cu = Substitute.For<ICurrentUser>();
-        cu.TenantId.Returns(_tenantId);
+        cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId);
         var db = _factory.CreateContext();
         return (new RevokeRoleHandler(db, um, rm, cu), um, rm);
     }

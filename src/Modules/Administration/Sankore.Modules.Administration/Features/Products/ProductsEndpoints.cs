@@ -29,6 +29,9 @@ internal static class ProductsEndpoints
 
         // Remote KYC collection and validation of the product line (KRM-B-01)
         group.MapSetKycRemotePolicy();
+
+        // « Copier en production » from the test mode (sandbox lot 4)
+        group.MapPromoteProduct();
         return app;
     }
 }

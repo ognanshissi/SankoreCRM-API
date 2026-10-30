@@ -44,7 +44,11 @@ internal sealed class CachedTenantStore(
     {
         var cached = await cache.GetStringAsync(IdKey(tenantId), ct);
         if (cached is not null)
-            return JsonSerializer.Deserialize<TenantInfo>(cached, JsonOpts);
+        {
+            var hit = JsonSerializer.Deserialize<TenantInfo>(cached, JsonOpts);
+            TenantTwins.Remember(hit);
+            return hit;
+        }
 
         var tenant = await inner.GetAsync(tenantId, ct);
         if (tenant is not null)
@@ -85,7 +89,7 @@ internal sealed class CachedTenantStore(
     }
 
     public Task<IReadOnlyList<TenantInfo>> GetAllActiveAsync(CancellationToken ct = default)
-        => inner.GetAllActiveAsync(ct);
+        => inner.GetAllActiveAsync(ct);   // the inner store remembers the twins it lists
 
     /// <summary>
     /// Only the id entry: it is the one holding a status. The FQDN entry maps an origin to an

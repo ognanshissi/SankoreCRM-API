@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MimeKit;
 using NSubstitute;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Features.ConnectedAccounts;
@@ -121,6 +122,23 @@ public sealed class ConnectedMailboxSendTests : IDisposable
         var account = await AccountAsync();
         (await SendAsync(Command(account.Id, to: [to]))).Error.Should().Be(code);
         _mailbox.Sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_test_tenant_sends_nothing_when_one_recipient_is_outside_its_team()
+    {
+        var account = await AccountAsync();
+        var administration = Substitute.For<IAdministrationModule>();
+        administration.IsEmailBlockedInTestAsync(Arg.Any<Guid>(), "client@gmail.com", Arg.Any<CancellationToken>()).Returns(true);
+
+        // A colleague in To and a customer in Cc: the whole message is refused, not trimmed —
+        // dropping a recipient silently would send something other than what the agent wrote.
+        var refused = await SendAsync(Command(account.Id, to: ["collegue@cabinet.ci"], cc: ["client@gmail.com"]), administration: administration);
+        refused.Error.Should().Be(MailSendErrors.TestRecipient);
+        _mailbox.Sent.Should().BeEmpty();
+
+        (await SendAsync(Command(account.Id, to: ["collegue@cabinet.ci"]), administration: administration)).IsSuccess.Should().BeTrue();
+        _mailbox.Sent.Should().ContainSingle();
     }
 
     [Fact]
@@ -658,11 +676,12 @@ public sealed class ConnectedMailboxSendTests : IDisposable
     private ConnectedMailboxSync Sync(IntegrationDbContext db) => new(
         db, [_mailbox], new CalendarEventProtector(new PrefixEncryptor()), new FixedClock(_now), NullLogger<ConnectedMailboxSync>.Instance);
 
-    private async Task<Result<SendMailOutcome>> SendAsync(SendMailCommand command, ICurrentUser? user = null, ICustomersModule? customers = null)
+    private async Task<Result<SendMailOutcome>> SendAsync(
+        SendMailCommand command, ICurrentUser? user = null, ICustomersModule? customers = null, IAdministrationModule? administration = null)
     {
         await using var db = _factory.CreateContext();
         return await new SendMailHandler(db, user ?? _currentUser, [_mailbox], Sync(db), NullLogger<SendMailHandler>.Instance, _jobs, customers,
-                new CalendarEventProtector(new PrefixEncryptor()), new FixedClock(_now))
+                new CalendarEventProtector(new PrefixEncryptor()), new FixedClock(_now), administration)
             .Handle(command, CancellationToken.None);
     }
 

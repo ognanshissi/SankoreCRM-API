@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Integration.Domain;
 using Sankore.Modules.Integration.Features.Commands;
 using Sankore.Modules.Integration.Features.References.GetReference;
@@ -83,6 +84,9 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
     /// </summary>
     private readonly Features.Messaging.MessagingChannels? _messaging;
 
+    /// <summary>The test-mode recipient check (sandbox lot 1). Null reads as a live tenant.</summary>
+    private readonly IAdministrationModule? _administration;
+
     /// <summary>
     /// The constructor the container uses.
     ///
@@ -120,7 +124,10 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             // member that needs it throws rather than answering null — a context read that
             // silently said "nobody is on this call" would be read as a resolution failure.
             services.GetService<MediatR.ISender>(),
-            services.GetService<Features.Messaging.MessagingChannels>())
+            services.GetService<Features.Messaging.MessagingChannels>(),
+            // GetService: the module's tests build the facade without Administration, and a
+            // missing guard reads as a live tenant.
+            services.GetService<IAdministrationModule>())
     {
     }
 
@@ -136,7 +143,8 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         ILogger<IntegrationModuleFacade> logger,
         Features.Balance.LiveBalanceGate? balanceGate = null,
         MediatR.ISender? sender = null,
-        Features.Messaging.MessagingChannels? messaging = null)
+        Features.Messaging.MessagingChannels? messaging = null,
+        IAdministrationModule? administration = null)
     {
         _db = db;
         _resolver = resolver;
@@ -149,6 +157,7 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         _balanceGate = balanceGate;
         _sender = sender;
         _messaging = messaging;
+        _administration = administration;
 
         CoreBanking = new CoreBankingGateway(this);
         Insurance = new InsuranceGateway(this);
@@ -1331,6 +1340,7 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             Guid tenantId, Guid connectionId, MessagingTemplateSend message, CancellationToken ct)
         {
             ArgumentNullException.ThrowIfNull(message);
+            if (await BlockedInTestAsync(tenantId, message.ToE164, ct)) return IntegrationResult.Functional<string>(IntegrationErrors.MessagingTestRecipient);
 
             var port = await PortAsync(tenantId, connectionId, IntegrationCapability.TemplateMessages, requireActive: true, ct);
             if (port.Failure is { } failure) return Forward<string>(failure);
@@ -1344,6 +1354,8 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
         public async Task<IntegrationResult<string>> SendTextAsync(
             Guid tenantId, Guid connectionId, string toE164, string text, CancellationToken ct)
         {
+            if (await BlockedInTestAsync(tenantId, toE164, ct)) return IntegrationResult.Functional<string>(IntegrationErrors.MessagingTestRecipient);
+
             var port = await PortAsync(tenantId, connectionId, IntegrationCapability.FreeformMessages, requireActive: true, ct);
             if (port.Failure is { } failure) return Forward<string>(failure);
 
@@ -1354,6 +1366,7 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
             Guid tenantId, Guid connectionId, string toE164, MessagingMediaContent media, string? caption, CancellationToken ct)
         {
             ArgumentNullException.ThrowIfNull(media);
+            if (await BlockedInTestAsync(tenantId, toE164, ct)) return IntegrationResult.Functional<MessagingMediaSent>(IntegrationErrors.MessagingTestRecipient);
 
             var port = await PortAsync(tenantId, connectionId, IntegrationCapability.MediaMessages, requireActive: true, ct);
             if (port.Failure is { } failure) return Forward<MessagingMediaSent>(failure);
@@ -1419,6 +1432,13 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
                 Features.Messaging.MessagingChannels.DisplayNumberOf(connection),
                 Features.Messaging.MessagingChannels.AgencyOf(connection),
                 connection.IsActive);
+
+        /// <summary>
+        /// A test tenant writes only to its team's numbers. Checked BEFORE the provider, so a
+        /// refused message never reaches 360dialog nor costs a conversation.
+        /// </summary>
+        private Task<bool> BlockedInTestAsync(Guid tenantId, string toE164, CancellationToken ct)
+            => facade._administration?.IsPhoneBlockedInTestAsync(tenantId, toE164, ct) ?? Task.FromResult(false);
 
         private static IntegrationResult<T> Forward<T>(IntegrationResult failure) => failure.Family switch
         {

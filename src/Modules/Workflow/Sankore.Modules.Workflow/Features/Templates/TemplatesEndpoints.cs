@@ -37,6 +37,9 @@ public static class TemplatesEndpoints
         var group = app.MapGroup("templates")
             .WithTags("WorkflowTemplates");
 
+        // « Copier en production » from the test mode (sandbox lot 4)
+        Promote.PromoteWorkflowTemplateEndpoint.MapPromoteWorkflowTemplate(group);
+
         return group
             .MapCreateTemplate()
             .MapCreateDraft()

@@ -48,7 +48,7 @@ internal sealed class CreateAgencyHandler(
         var code = await codeGenerator.NextCodeAsync(ct);
 
         var agency = Agency.Create(
-            tenantId: currentUser.TenantId,
+            tenantId: currentUser.TeamTenantId,
             code: code,
             name: request.Name,
             description: request.Description,

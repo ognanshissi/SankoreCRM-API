@@ -61,7 +61,7 @@ public sealed class TenantModulesFeatureTests : IDisposable
         _userId = user.Id;
 
         _currentUser.Id.Returns(_userId);
-        _currentUser.TenantId.Returns(_tenantId);
+        _currentUser.TenantId.Returns(_tenantId); _currentUser.TeamTenantId.Returns(_tenantId);
         _tenantStore.GetAsync(_tenantId, Arg.Any<CancellationToken>())
             .Returns(new TenantInfo(_tenantId, "Caisse Avenir", "https://crm.caisse.ci", true, false, null, null));
     }

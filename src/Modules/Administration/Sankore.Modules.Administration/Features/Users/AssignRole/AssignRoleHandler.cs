@@ -18,7 +18,7 @@ internal sealed class AssignRoleHandler(
     public async Task<Result> Handle(AssignRoleCommand request, CancellationToken ct)
     {
         var user = await userManager.FindByIdAsync(request.UserId.ToString());
-        if (user is null || user.TenantId != currentUser.TenantId)
+        if (user is null || user.TenantId != currentUser.TeamTenantId)
             return Result.Fail("User not found.");
 
         var role = await roleManager.FindByIdAsync(request.RoleId.ToString());
@@ -37,7 +37,7 @@ internal sealed class AssignRoleHandler(
         if (!identityResult.Succeeded)
             return Result.Fail(string.Join("; ", identityResult.Errors.Select(e => e.Description)));
 
-        var userRole = UserRole.Assign(currentUser.TenantId, user.Id, role.Id, currentUser.Id);
+        var userRole = UserRole.Assign(currentUser.TeamTenantId, user.Id, role.Id, currentUser.Id);
         await db.UserRoles.AddAsync(userRole, ct);
         await db.SaveChangesAsync(ct);
 
