@@ -12,16 +12,19 @@ internal sealed class CreateTaskTypeHandler(LeadsDbContext db)
     public async Task<Result<Guid>> Handle(
         CreateTaskTypeCommand cmd, CancellationToken ct)
     {
-        var codeExists = await db.TaskTypeConfigs
-            .AnyAsync(t => t.TenantId == cmd.TenantId && t.Code == cmd.Code, ct);
+        var code = cmd.Code.Trim();
+
+        // A system code is taken even before its row is seeded: the platform creates tasks with it.
+        var codeExists = CrmTaskType.IsSystem(code) || await db.TaskTypeConfigs
+            .AnyAsync(t => t.TenantId == cmd.TenantId && t.Code == code, ct);
 
         if (codeExists)
             return Result.Fail<Guid>("TASK_TYPE_CODE_ALREADY_EXISTS");
 
         var taskType = TaskTypeConfig.Create(
             tenantId:     cmd.TenantId,
-            code:         cmd.Code,
-            label:        cmd.Label,
+            code:         code,
+            label:        cmd.Label.Trim(),
             description:  cmd.Description,
             displayOrder: cmd.DisplayOrder);
 

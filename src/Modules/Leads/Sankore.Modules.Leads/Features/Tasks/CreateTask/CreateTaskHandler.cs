@@ -6,6 +6,7 @@ using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Tasks.Collaboration;
 using Sankore.Modules.Leads.Features.Tasks.Events;
+using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Messaging;
@@ -13,7 +14,7 @@ using Sankore.Shared.Kernel;
 
 /// <summary>
 /// A task created by a person — for themselves from « Ma journée », for a colleague, on a lead, a
-/// client, a KYC file or nothing. The subject is checked (it exists and the creator may work on
+/// client, a KYC file or nothing. The type must be an active type of the tenant, the subject is checked (it exists and the creator may work on
 /// it), the people are checked (users of this tenant), and the task, its criteria, tags and
 /// associated colleagues are written together.
 ///
@@ -26,6 +27,7 @@ internal sealed class CreateTaskHandler(
     LeadsDbContext db,
     ICurrentUser me,
     TaskSubjects subjects,
+    TaskTypeCatalog taskTypes,
     IAdministrationModule administration,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     TimeProvider clock)
@@ -34,13 +36,16 @@ internal sealed class CreateTaskHandler(
     public async Task<Result<Guid>> Handle(CreateTaskCommand cmd, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
+        var type = await taskTypes.CheckUsableAsync(cmd.Type, ct);
+        if (type.IsFailure) return Result.Fail<Guid>(type.Error!);
+
         var entityType = cmd.EntityType ?? (cmd.LeadId.HasValue ? TaskEntityType.Lead : null);
         var entityId = cmd.EntityType.HasValue ? cmd.EntityId : cmd.LeadId;
 
-        if (entityType is { } type)
+        if (entityType is { } subjectType)
         {
             if (entityId is not { } id || id == Guid.Empty) return Result.Fail<Guid>("TASK_ENTITY_INCOMPLETE");
-            var subject = await subjects.ValidateAsync(type, id, ct);
+            var subject = await subjects.ValidateAsync(subjectType, id, ct);
             if (subject.IsFailure) return Result.Fail<Guid>(subject.Error!);
             entityId = subject.Value;
         }
@@ -58,7 +63,7 @@ internal sealed class CreateTaskHandler(
         }
 
         var created = CrmTask.CreateManual(
-            me.TenantId, me.Id, cmd.Type, cmd.Priority, cmd.Title, cmd.DueAt,
+            me.TenantId, me.Id, cmd.Type.Trim(), cmd.Priority, cmd.Title, cmd.DueAt,
             entityType, entityId, cmd.AssignedAgentId, cmd.Description, now);
         if (created.IsFailure) return Result.Fail<Guid>(created.Error!);
 

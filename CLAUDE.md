@@ -666,7 +666,14 @@ Product owner's choices.
   its role in the record's agency or above; `supervisor_then_reassign` → the first, then the second
   (counted from `ESCALATED` history lines); `none` or nobody found → it stays, its people are
   reminded (`SLA_REMINDER`). A fresh delay each time, a bell (`workflow.escalation`) for whoever must
-  act. The person a step was HANDED to may approve/reject it without its role.
+  act. The person a step was HANDED to may approve/reject it without its role. `reassign` skips the
+  record's own agent too, not only the current holder.
+- **Agents approve the steps that target them (product owner, 2026-10-30).** Agent and
+  CommercialAgent hold `workflow:approve`; `ApproveStepHandler` / `RejectStepHandler` still refuse a
+  step that is neither their role nor handed to them. `GET workflow-instances/{id}` is under
+  `workflow:instance:view` (every role), not `workflow:read` (the templates), and its steps carry
+  their own `DueAt` and `AssignedToUserId`. The front opens an instance from « Ma journée » and
+  « Ma file » at `/settings/workflows/instances/:id`, outside its template's tabs.
 - **« Étape bloquante »**: `IWorkflowModule.GetBlockingStepsAsync` lists the blocking steps not yet
   passed (Pending/AwaitingApproval, definition `IsBlocking`) of the running circuits on a record.
   `ConvertLeadHandler` (after its already-converted answer) and `CloseOpportunityHandler` (ClosedWon

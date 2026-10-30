@@ -5,6 +5,7 @@ using NSubstitute;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Tasks.ListTasks;
+using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Tests.TestSupport;
 using Sankore.Shared.Kernel;
 using Xunit;
@@ -87,7 +88,7 @@ public sealed class ListTasksScopingTests : IDisposable
         Guid userId, string role, Guid? leadId = null)
     {
         await using var db = _db.CreateContext();
-        var result = await new ListTasksHandler(db, new FixedTenantContext(_tenantId), _admin).Handle(
+        var result = await new ListTasksHandler(db, new FixedTenantContext(_tenantId), _admin, new TaskTypeCatalog(db, new FixedTenantContext(_tenantId))).Handle(
             new ListTasksQuery(LeadId: leadId, CurrentUserId: userId, CurrentUserRoles: [role]), default);
         return result.Value!;
     }

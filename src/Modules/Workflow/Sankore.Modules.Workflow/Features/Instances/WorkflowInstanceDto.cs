@@ -27,4 +27,8 @@ public sealed record WorkflowInstanceStepDto(
     // The template step it was made from — the id the history entries point at — and its kind,
     // so the screen can tell an automatic notification from a validation.
     Guid StepDefinitionId,
-    string Kind);
+    string Kind,
+    // The step's own deadline — moved by an escalation — and who it is handed to, if anyone. The
+    // screen used to recompute the deadline from the TEMPLATE, which agents cannot read.
+    DateTimeOffset? DueAt,
+    Guid? AssignedToUserId);

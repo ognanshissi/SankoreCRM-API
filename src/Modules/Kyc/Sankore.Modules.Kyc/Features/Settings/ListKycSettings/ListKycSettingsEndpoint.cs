@@ -18,11 +18,12 @@ internal static class ListKycSettingsEndpoint
                 "Every declared M02 parameter with the value in force, its type, its description, "
                 + "the factory default and an IsDefault flag. A key the tenant has never customised "
                 + "answers with its factory value — the same one the module resolves to. "
-                + "Requires permission: kyc:read.")
-            // kyc:read, not kyc:settings:manage: these are the ceilings and periodicities a KYC
-            // screen explains to an agent. Needing the right to CHANGE a ceiling in order to SEE it
-            // would push the amounts back into the front, which is what KYC-B-06 undid.
-            .RequireAuthorization(Permissions.CanReadKycFile.Code)
+                + "Requires permission: kyc:settings:manage.")
+            // kyc:settings:manage, not kyc:read (product owner, 2026-10-30): kyc:read is an agent's
+            // right to work their files, and no agent screen ever read these parameters — only the
+            // settings screen does. Opening the alert thresholds and simplified-KYC ceilings to every
+            // agent served nobody.
+            .RequireAuthorization(Permissions.CanManageKycSettings.Code)
             .Produces<IReadOnlyList<KycSettingDto>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)

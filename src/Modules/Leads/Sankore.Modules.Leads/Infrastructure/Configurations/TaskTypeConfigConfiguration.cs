@@ -10,7 +10,7 @@ internal sealed class TaskTypeConfigConfiguration : IEntityTypeConfiguration<Tas
     {
         builder.ToTable("task_type_configs");
         builder.HasKey(e => e.Id);
-        builder.Property(e => e.Code).HasMaxLength(30);
+        builder.Property(e => e.Code).HasMaxLength(CrmTaskType.CodeMaxLength);
         builder.Property(e => e.Label).HasMaxLength(100);
         builder.Property(e => e.Description).HasMaxLength(500);
         builder.HasIndex(e => new { e.TenantId, e.Code }).IsUnique();

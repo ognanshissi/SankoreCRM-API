@@ -3,16 +3,17 @@ namespace Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Kernel;
 
 /// <summary>
-/// Tenant-scoped configurable task type that replaces the hard-coded
-/// <see cref="CrmTaskType"/> enum for classification purposes (US-M13-197).
-/// System types are seeded at tenant provisioning and cannot be deactivated.
+/// Tenant-scoped configurable task type (US-M13-197): <see cref="CrmTask.Type"/> and
+/// <see cref="TaskGenerationRule.TaskType"/> hold its <see cref="Code"/>. The system types of
+/// <see cref="CrmTaskType.System"/> are seeded for every tenant (<c>TaskTypeSeeder</c>) and cannot
+/// be deactivated.
 /// </summary>
 public sealed class TaskTypeConfig : ITenant
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
 
-    /// <summary>Unique machine-readable code within a tenant (e.g. "FIRST_CONTACT"). Max 30 chars.</summary>
+    /// <summary>Unique machine-readable code within a tenant (e.g. "VISITE_TERRAIN", or a system code such as "FirstContact"). Max 30 chars.</summary>
     public string Code { get; private set; } = default!;
 
     /// <summary>Human-readable label shown in the UI. Max 100 chars.</summary>

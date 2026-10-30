@@ -23,8 +23,8 @@ public static class UpdateSegmentRulesEndpoint
                 + "A rule with requiresOutstandingData=true is accepted and stored but stays INACTIVE "
                 + "until M03 (Savings) / M04 (Credit) expose a contract — the response reports how many. "
                 + "Changes take effect on the next nightly run of the segmentation job. "
-                + "Requires permission: customers:update_sensitive.")
-            .RequireAuthorization(Permissions.CanUpdateCustomerSensitive.Code)
+                + "Requires permission: customers:segments_manage.")
+            .RequireAuthorization(Permissions.CanManageCustomerSegments.Code)
             .Produces<UpdateSegmentRulesResult>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)

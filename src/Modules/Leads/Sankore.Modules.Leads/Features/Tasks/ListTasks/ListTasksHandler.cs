@@ -4,13 +4,15 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Features.Tasks.GetTask;
+using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
 internal sealed class ListTasksHandler(
     LeadsDbContext db,
     ITenantContext tenant,
-    IAdministrationModule admin)
+    IAdministrationModule admin,
+    TaskTypeCatalog taskTypes)
     : IRequestHandler<ListTasksQuery, Result<IReadOnlyList<CrmTaskDto>>>
 {
     private static readonly HashSet<string> SupervisorRoles =
@@ -54,7 +56,7 @@ internal sealed class ListTasksHandler(
         if (query.LeadId.HasValue)          q = q.Where(t => t.LeadId == query.LeadId);
         if (query.AssignedAgentId.HasValue) q = q.Where(t => t.AssignedAgentId == query.AssignedAgentId);
         if (query.Status.HasValue)          q = q.Where(t => t.Status == query.Status);
-        if (query.Type.HasValue)            q = q.Where(t => t.Type == query.Type);
+        if (!string.IsNullOrWhiteSpace(query.Type)) q = q.Where(t => t.Type == query.Type);
 
         var tasks = await q
             .OrderByDescending(t => t.DueAt)
@@ -66,6 +68,8 @@ internal sealed class ListTasksHandler(
                 t.EntityType, t.EntityId, t.CreatedBy))
             .ToListAsync(ct);
 
-        return Result.Ok<IReadOnlyList<CrmTaskDto>>(tasks);
+        var labels = await taskTypes.LabelsAsync(ct);
+        return Result.Ok<IReadOnlyList<CrmTaskDto>>(
+            tasks.Select(t => t with { TypeLabel = labels.GetValueOrDefault(t.Type, t.Type) }).ToList());
     }
 }

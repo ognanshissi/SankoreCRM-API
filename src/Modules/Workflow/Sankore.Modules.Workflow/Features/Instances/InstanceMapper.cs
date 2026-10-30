@@ -30,6 +30,8 @@ internal static class InstanceMapper
                     CreatedAt: s.CreatedAt,
                     CompletedAt: s.CompletedAt,
                     StepDefinitionId: s.StepDefinitionId,
-                    Kind: s.Kind.ToString()))
+                    Kind: s.Kind.ToString(),
+                    DueAt: s.DueAt,
+                    AssignedToUserId: s.AssignedToUserId))
                 .ToList());
 }

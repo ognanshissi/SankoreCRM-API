@@ -54,7 +54,7 @@ internal sealed class StepEscalator(
         Guid? target = mode switch
         {
             "supervisor" => await SupervisorAsync(instance.TenantId, step.AssignedToUserId ?? record?.AgentId, ct),
-            "reassign" => await OtherRoleHolderAsync(instance.TenantId, step, record?.AgencyId, ct),
+            "reassign" => await OtherRoleHolderAsync(instance.TenantId, step, record?.AgencyId, record?.AgentId, ct),
             _ => null,
         };
 
@@ -103,12 +103,17 @@ internal sealed class StepEscalator(
         return supervisors.LineManagerId ?? supervisors.AgencyManagerId;
     }
 
-    /// <summary>Another holder of the step's role than whoever has it — the first in a stable order.</summary>
-    private async Task<Guid?> OtherRoleHolderAsync(Guid tenantId, WorkflowInstanceStep step, Guid? agencyId, CancellationToken ct)
+    /// <summary>
+    /// Another holder of the step's role — neither whoever has it nor the record's own agent, who let
+    /// it run late in the first place — the first in a stable order.
+    /// </summary>
+    private async Task<Guid?> OtherRoleHolderAsync(
+        Guid tenantId, WorkflowInstanceStep step, Guid? agencyId, Guid? recordAgentId, CancellationToken ct)
     {
         if (step.ApproverRoleCode is not { } role) return null;
         var holders = await administration.ListActiveUsersInRolesAsync(tenantId, [role], agencyId, ct);
-        return holders.Where(h => h != step.AssignedToUserId).OrderBy(h => h).Cast<Guid?>().FirstOrDefault();
+        return holders.Where(h => h != step.AssignedToUserId && h != recordAgentId)
+            .OrderBy(h => h).Cast<Guid?>().FirstOrDefault();
     }
 
     /// <summary>The step's « escalation » (<c>none</c> when unset or unreadable).</summary>

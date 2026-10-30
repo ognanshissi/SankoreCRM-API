@@ -146,7 +146,7 @@ public sealed class LeadNextStepsTests : IDisposable
     }
 
     private async Task<CrmTask> AddTaskAsync(
-        Guid leadId, string title, DateTimeOffset dueAt, CrmTaskType type = CrmTaskType.Generic)
+        Guid leadId, string title, DateTimeOffset dueAt, string type = CrmTaskType.Generic)
     {
         await using var db = _db.CreateContext();
         var task = CrmTask.Create(_tenantId, type, CrmTaskPriority.Medium, title, dueAt,

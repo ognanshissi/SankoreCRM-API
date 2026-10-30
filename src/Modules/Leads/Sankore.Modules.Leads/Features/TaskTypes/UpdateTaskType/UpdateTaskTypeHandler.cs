@@ -18,7 +18,7 @@ internal sealed class UpdateTaskTypeHandler(LeadsDbContext db)
         if (taskType is null)
             return Result.Fail("TASK_TYPE_NOT_FOUND");
 
-        taskType.Update(cmd.Label, cmd.Description, cmd.DisplayOrder);
+        taskType.Update(cmd.Label.Trim(), cmd.Description, cmd.DisplayOrder);
         await db.SaveChangesAsync(ct);
 
         return Result.Ok();

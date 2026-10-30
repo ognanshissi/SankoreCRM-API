@@ -9,7 +9,7 @@ internal sealed record ListTasksQuery(
     Guid? LeadId = null,
     Guid? AssignedAgentId = null,
     CrmTaskStatus? Status = null,
-    CrmTaskType? Type = null,
+    string? Type = null,
     Guid? CurrentUserId = null,
     IReadOnlyList<string>? CurrentUserRoles = null
 ) : IRequest<Result<IReadOnlyList<CrmTaskDto>>>;

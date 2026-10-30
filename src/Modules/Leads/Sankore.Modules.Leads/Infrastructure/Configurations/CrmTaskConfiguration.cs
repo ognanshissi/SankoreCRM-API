@@ -11,7 +11,7 @@ public sealed class CrmTaskConfiguration : IEntityTypeConfiguration<CrmTask>
         builder.ToTable("crm_tasks");
         builder.HasKey(t => t.Id);
 
-        builder.Property(t => t.Type).HasConversion<string>().HasMaxLength(30);
+        builder.Property(t => t.Type).HasMaxLength(CrmTaskType.CodeMaxLength);
         builder.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(t => t.Title).HasMaxLength(200).IsRequired();

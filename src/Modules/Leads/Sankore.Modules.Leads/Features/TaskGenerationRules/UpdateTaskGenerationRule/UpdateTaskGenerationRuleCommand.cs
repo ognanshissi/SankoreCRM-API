@@ -8,7 +8,7 @@ using Sankore.Shared.Kernel;
 internal sealed record UpdateTaskGenerationRuleCommand(
     Guid RuleId,
     string TriggerEventType,
-    CrmTaskType TaskType,
+    string TaskType,
     CrmTaskPriority Priority,
     string TitleTemplate,
     TimeSpan SlaDuration,

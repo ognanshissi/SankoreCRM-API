@@ -7,6 +7,7 @@ internal sealed class CreateTaskValidator : AbstractValidator<CreateTaskCommand>
 {
     public CreateTaskValidator()
     {
+        RuleFor(x => x.Type).NotEmpty().MaximumLength(CrmTaskType.CodeMaxLength);
         RuleFor(x => x.Title).NotEmpty().MaximumLength(CrmTask.TitleMaxLength);
         RuleFor(x => x.Description).MaximumLength(CrmTask.DescriptionMaxLength);
         RuleFor(x => x.DueAt).GreaterThan(DateTimeOffset.UtcNow);

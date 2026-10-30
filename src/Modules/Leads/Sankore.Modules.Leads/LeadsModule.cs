@@ -311,6 +311,7 @@ public static class LeadsModule
         // Tasks: who may open one, and what it can be attached to.
         services.AddScoped<Features.Tasks.Collaboration.TaskAccess>();
         services.AddScoped<Features.Tasks.Collaboration.TaskSubjects>();
+        services.AddScoped<Features.TaskTypes.TaskTypeCatalog>();
 
         services.AddScoped<Features.WhatsApp.WhatsAppMediaReader>();
         services.AddScoped<Features.WhatsApp.WhatsAppPerimeter>();
@@ -401,6 +402,11 @@ public static class LeadsModule
         // Makes the implicit default rule visible and tunable per tenant. Same values, so
         // dispatching behaves exactly as before.
         await Features.DispatchingRules.DispatchingRuleSeeder.SeedAsync(
+            db, sp.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>(), logger);
+
+        // The system task types every tenant starts with: tasks and generation rules carry their
+        // codes. Inserts only what is missing, so a renamed type keeps its label.
+        await Features.TaskTypes.TaskTypeSeeder.SeedAsync(
             db, sp.GetRequiredService<Sankore.Shared.Kernel.ITenantStore>(), logger);
 
         // One lead_settings row per declared key per tenant. Idempotent: inserts only what is

@@ -5,13 +5,14 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
+/// <param name="Type">The code of an active task type of the tenant (<see cref="TaskTypeConfig"/>).</param>
 /// <param name="LeadId">The former way to attach a lead, kept for the lead's Tâches tab; same as
 /// <c>EntityType = Lead</c>.</param>
 /// <param name="EntityType">Lead, Client, KycFile or Project — or null for a task about nothing in particular.</param>
 /// <param name="ParticipantIds">Colleagues associated besides the holder.</param>
 /// <param name="Criteria">What « done » means, one line each, in order.</param>
 internal sealed record CreateTaskCommand(
-    CrmTaskType Type,
+    string Type,
     CrmTaskPriority Priority,
     string Title,
     DateTimeOffset DueAt,

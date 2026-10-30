@@ -14,6 +14,7 @@ using Sankore.Modules.Leads.Features.Opportunities.ProjectTasks;
 using Sankore.Modules.Leads.Features.Tasks.Collaboration;
 using Sankore.Modules.Leads.Features.Tasks.CreateTask;
 using Sankore.Modules.Leads.Features.Visibility;
+using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Leads.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
@@ -68,7 +69,7 @@ public sealed class ProjectTasksTests : IDisposable
         await using var db = _db.CreateContext();
         var subjects = new TaskSubjects(db, user, new LeadAccessGuard(user, _admin),
             Substitute.For<ICustomersModule>(), Substitute.For<IKycModule>(), new LeadVisibility(user));
-        return await new CreateTaskHandler(db, user, subjects, _admin, Substitute.For<IEventPublisher>(), TimeProvider.System)
+        return await new CreateTaskHandler(db, user, subjects, new TaskTypeCatalog(db, new FixedTenantContext(_tenantId)), _admin, Substitute.For<IEventPublisher>(), TimeProvider.System)
             .Handle(new CreateTaskCommand(CrmTaskType.Generic, CrmTaskPriority.Medium, title, dueAt,
                 AssignedAgentId: holder, EntityType: TaskEntityType.Project, EntityId: projectId), CancellationToken.None);
     }
@@ -79,7 +80,7 @@ public sealed class ProjectTasksTests : IDisposable
         var tenant = Substitute.For<ITenantContext>();
         tenant.CurrentTenantId.Returns(_tenantId);
         return await new ListProjectTasksHandler(db, new TaskAccess(db, user, _admin, NullLogger<TaskAccess>.Instance),
-                _admin, tenant, new LeadVisibility(user))
+                _admin, tenant, new TaskTypeCatalog(db, tenant), new LeadVisibility(user))
             .Handle(new ListProjectTasksQuery(projectId), CancellationToken.None);
     }
 

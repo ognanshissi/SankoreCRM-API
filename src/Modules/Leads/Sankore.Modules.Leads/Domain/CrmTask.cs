@@ -11,7 +11,8 @@ public sealed class CrmTask : ITenant
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
-    public CrmTaskType Type { get; private set; }
+    /// <summary>The code of a <see cref="TaskTypeConfig"/> of the tenant — see <see cref="CrmTaskType"/>.</summary>
+    public string Type { get; private set; } = default!;
     public CrmTaskPriority Priority { get; private set; }
     public string Title { get; private set; } = default!;
     public string? Description { get; private set; }
@@ -60,7 +61,7 @@ public sealed class CrmTask : ITenant
 
     public static CrmTask Create(
         Guid tenantId,
-        CrmTaskType type,
+        string type,
         CrmTaskPriority priority,
         string title,
         DateTimeOffset dueAt,
@@ -143,7 +144,7 @@ public sealed class CrmTask : ITenant
     public static Result<CrmTask> CreateManual(
         Guid tenantId,
         Guid createdBy,
-        CrmTaskType type,
+        string type,
         CrmTaskPriority priority,
         string title,
         DateTimeOffset dueAt,

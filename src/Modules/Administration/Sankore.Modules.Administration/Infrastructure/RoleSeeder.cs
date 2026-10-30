@@ -259,6 +259,10 @@ internal static class RoleSeeder
         Permissions.CanReplyWhatsApp,
         .. InsuranceDistribution,
         Permissions.CanStartWorkflow,
+        // The steps that target them — their role, or handed to them by an escalation (product
+        // owner, 2026-10-30). ApproveStepHandler still refuses any other step, so this is not a
+        // licence to approve the circuit: without it, those steps sat in their queue unopenable.
+        Permissions.CanApproveWorkflow,
     ];
 
     /// <summary>
@@ -278,6 +282,10 @@ internal static class RoleSeeder
         Permissions.CanReplyWhatsApp,
         .. InsuranceDistribution,
         Permissions.CanStartWorkflow,
+        // The steps that target them — their role, or handed to them by an escalation (product
+        // owner, 2026-10-30). ApproveStepHandler still refuses any other step, so this is not a
+        // licence to approve the circuit: without it, those steps sat in their queue unopenable.
+        Permissions.CanApproveWorkflow,
     ];
 
     /// <summary>

@@ -149,7 +149,7 @@ public static class TasksEndpoints
     private static async Task<IResult> ListTasks(
         ISender sender, ICurrentUser currentUser, CancellationToken ct,
         Guid? leadId = null, Guid? agentId = null,
-        CrmTaskStatus? status = null, CrmTaskType? type = null)
+        CrmTaskStatus? status = null, string? type = null)
     {
         var result = await sender.Send(new ListTasksQuery(
             leadId, agentId, status, type,
@@ -276,7 +276,7 @@ public static class TasksEndpoints
 }
 
 public sealed record CreateTaskRequest(
-    CrmTaskType Type,
+    string Type,
     CrmTaskPriority Priority,
     string Title,
     DateTimeOffset DueAt,

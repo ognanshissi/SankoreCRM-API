@@ -18,7 +18,8 @@ public sealed class TaskGenerationRule : ITenant
     /// </summary>
     public string TriggerEventType { get; private set; } = default!;
 
-    public CrmTaskType TaskType { get; private set; }
+    /// <summary>The code of a <see cref="TaskTypeConfig"/> of the tenant — see <see cref="CrmTaskType"/>.</summary>
+    public string TaskType { get; private set; } = default!;
     public CrmTaskPriority Priority { get; private set; }
 
     /// <summary>Task title template — supports {LeadId} placeholder.</summary>
@@ -39,7 +40,7 @@ public sealed class TaskGenerationRule : ITenant
     public static TaskGenerationRule Create(
         Guid tenantId,
         string triggerEventType,
-        CrmTaskType taskType,
+        string taskType,
         CrmTaskPriority priority,
         string titleTemplate,
         TimeSpan slaDuration,
@@ -62,7 +63,7 @@ public sealed class TaskGenerationRule : ITenant
 
     public void Update(
         string triggerEventType,
-        CrmTaskType taskType,
+        string taskType,
         CrmTaskPriority priority,
         string titleTemplate,
         TimeSpan slaDuration,

@@ -14,6 +14,7 @@ internal sealed class CreateTaskGenerationRuleValidator
                     || t == TaskTriggerEvents.LeadDispatchingFailed
                     || t == TaskTriggerEvents.LeadScoreCriticallyChanged)
             .WithMessage("TriggerEventType must be one of the known event types.");
+        RuleFor(x => x.TaskType).NotEmpty().MaximumLength(CrmTaskType.CodeMaxLength);
         RuleFor(x => x.TitleTemplate).NotEmpty().MaximumLength(200);
         RuleFor(x => x.SlaDuration).GreaterThan(TimeSpan.Zero);
         RuleFor(x => x.DueDuration).GreaterThan(TimeSpan.Zero);

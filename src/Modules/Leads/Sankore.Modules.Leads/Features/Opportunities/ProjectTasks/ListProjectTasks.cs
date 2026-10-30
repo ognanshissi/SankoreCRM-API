@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Tasks.Collaboration;
+using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
@@ -24,11 +25,13 @@ using Sankore.Shared.Kernel;
 /// </summary>
 internal sealed record ListProjectTasksQuery(Guid OpportunityId) : IRequest<Result<IReadOnlyList<ProjectTaskDto>>>;
 
+/// <param name="TypeLabel">The tenant's label for <paramref name="Type"/>.</param>
 /// <param name="AssignedAgentName">The holder's name; null when nobody holds the task.</param>
 public sealed record ProjectTaskDto(
     Guid Id,
     string Title,
-    CrmTaskType Type,
+    string Type,
+    string TypeLabel,
     CrmTaskPriority Priority,
     CrmTaskStatus Status,
     DateTimeOffset DueAt,
@@ -42,6 +45,7 @@ internal sealed class ListProjectTasksHandler(
     TaskAccess access,
     IAdministrationModule administration,
     ITenantContext tenant,
+    TaskTypeCatalog taskTypes,
     LeadVisibility? visibility = null)
     : IRequestHandler<ListProjectTasksQuery, Result<IReadOnlyList<ProjectTaskDto>>>
 {
@@ -68,12 +72,13 @@ internal sealed class ListProjectTasksHandler(
             names = await administration.GetUserNamesAsync(tenant.CurrentTenantId, holders, ct);
         }
 
+        var labels = await taskTypes.LabelsAsync(ct);
         var open = visible.Where(t => !t.IsClosed).OrderBy(t => t.DueAt);
         var closed = visible.Where(t => t.IsClosed).OrderByDescending(t => t.CompletedAt ?? t.DueAt);
 
         return Result.Ok<IReadOnlyList<ProjectTaskDto>>(open.Concat(closed)
             .Select(t => new ProjectTaskDto(
-                t.Id, t.Title, t.Type, t.Priority, t.Status, t.DueAt,
+                t.Id, t.Title, t.Type, labels.GetValueOrDefault(t.Type, t.Type), t.Priority, t.Status, t.DueAt,
                 t.AssignedAgentId,
                 t.AssignedAgentId is { } holder ? names.GetValueOrDefault(holder) : null,
                 t.CreatedAt, t.CompletedAt))

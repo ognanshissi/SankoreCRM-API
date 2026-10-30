@@ -27,6 +27,7 @@ public sealed class RoleDefaultGrantsTests
         Permissions.CanRequestTenantModule,
         Permissions.CanDeactivateTenantModule,
         Permissions.CanManageEntityForms,
+        Permissions.CanManageCustomerSegments,
         Permissions.CanManageNotificationSettings,
         Permissions.CanManageIntegrationConnection,
         Permissions.CanViewWebhooks,

@@ -16,6 +16,7 @@ using Sankore.Modules.Leads.Features.Tasks.Collaboration;
 using Sankore.Modules.Leads.Features.Tasks.CreateTask;
 using Sankore.Modules.Leads.Features.Tasks.Events;
 using Sankore.Modules.Leads.Features.Visibility;
+using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Leads.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
@@ -66,7 +67,7 @@ public sealed class TaskCollaborationTests : IDisposable
     {
         await using var db = _db.CreateContext();
         var subjects = new TaskSubjects(db, user, new LeadAccessGuard(user, _admin), _customers, _kyc, new LeadVisibility(user));
-        return await new CreateTaskHandler(db, user, subjects, _admin, _publisher, TimeProvider.System).Handle(cmd, CancellationToken.None);
+        return await new CreateTaskHandler(db, user, subjects, new TaskTypeCatalog(db, new FixedTenantContext(_tenantId)), _admin, _publisher, TimeProvider.System).Handle(cmd, CancellationToken.None);
     }
 
     private CreateTaskCommand Command(

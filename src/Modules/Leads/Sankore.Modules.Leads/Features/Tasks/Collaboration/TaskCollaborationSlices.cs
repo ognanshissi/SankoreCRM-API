@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Infrastructure.TaskAttachments;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Behaviors;
@@ -33,10 +34,12 @@ public sealed record TaskCommentsPageDto(IReadOnlyList<TaskCommentDto> Items, Da
 /// One task, everything its page shows except the comments (paged apart) and the assignment
 /// history (<c>GET tasks/{id}/assignments</c>). Enums are strings.
 /// </summary>
+/// <param name="TypeLabel">The tenant's label for <paramref name="Type"/>.</param>
 /// <param name="IsOpen">Neither completed nor cancelled: details, criteria and people can change.</param>
 public sealed record CrmTaskDetailDto(
     Guid Id,
     string Type,
+    string TypeLabel,
     string Priority,
     string Title,
     string? Description,
@@ -60,7 +63,8 @@ public sealed record CrmTaskDetailDto(
 
 internal sealed record GetTaskDetailQuery(Guid TaskId) : IRequest<Result<CrmTaskDetailDto>>;
 
-internal sealed class GetTaskDetailHandler(LeadsDbContext db, TaskAccess access, TaskSubjects subjects, IAdministrationModule administration)
+internal sealed class GetTaskDetailHandler(
+    LeadsDbContext db, TaskAccess access, TaskSubjects subjects, IAdministrationModule administration, TaskTypeCatalog taskTypes)
     : IRequestHandler<GetTaskDetailQuery, Result<CrmTaskDetailDto>>
 {
     public async Task<Result<CrmTaskDetailDto>> Handle(GetTaskDetailQuery query, CancellationToken ct)
@@ -81,9 +85,10 @@ internal sealed class GetTaskDetailHandler(LeadsDbContext db, TaskAccess access,
             .Concat(attachments.Select(a => a.UploadedBy))
             .Distinct().ToList();
         var names = await TaskPeople.NamesAsync(administration, task.TenantId, ids, ct);
+        var labels = await taskTypes.LabelsAsync(ct);
 
         return Result.Ok(new CrmTaskDetailDto(
-            task.Id, task.Type.ToString(), task.Priority.ToString(), task.Title, task.Description, task.Status.ToString(),
+            task.Id, task.Type, labels.GetValueOrDefault(task.Type, task.Type), task.Priority.ToString(), task.Title, task.Description, task.Status.ToString(),
             task.DueAt, task.SlaDeadline, task.CreatedAt, task.StartedAt, task.CompletedAt,
             await subjects.DescribeAsync(task, ct),
             TaskPeople.Person(task.AssignedAgentId, names),

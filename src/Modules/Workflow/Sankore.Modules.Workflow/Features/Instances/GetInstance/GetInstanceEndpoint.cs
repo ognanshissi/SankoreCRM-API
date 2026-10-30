@@ -13,7 +13,9 @@ internal static class GetInstanceEndpoint
         app.MapGet("{id:guid}", Handle)
             .WithName("GetWorkflowInstance")
             .WithSummary("Get a workflow instance with all its steps")
-            .RequireAuthorization(Permissions.CanReadWorkflow.Code)
+            // workflow:instance:view and not workflow:read (the TEMPLATES): whoever must act on a step
+            // has to read its instance, and agents do not read circuit definitions.
+            .RequireAuthorization(Permissions.CanViewWorkflowInstances.Code)
             .Produces<WorkflowInstanceDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status401Unauthorized)

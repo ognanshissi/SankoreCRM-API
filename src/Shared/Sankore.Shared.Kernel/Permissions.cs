@@ -535,6 +535,14 @@ public static class Permissions
     public static readonly PermissionItem CanManageCustomerGroups =
         new("customers:groups_manage", "Create and Manage Solidarity Groups, Tontines and VSLAs", ApplicationModules.Customers, "groups_manage");
 
+    /// <summary>
+    /// The tenant's automatic segmentation rules (product owner, 2026-10-30). They were written under
+    /// <see cref="CanUpdateCustomerSensitive"/>, which a counter agent holds to correct a client's
+    /// identity — so any agent could reclassify every client of the institution. Administrator-only.
+    /// </summary>
+    public static readonly PermissionItem CanManageCustomerSegments =
+        new("customers:segments_manage", "Configure the Automatic Client Segmentation Rules", ApplicationModules.Customers, "segments_manage");
+
     public static readonly PermissionItem CanExportCustomers =
         new("customers:export", "Export a Customer Search Result", ApplicationModules.Customers, "export");
 
@@ -1121,6 +1129,7 @@ public static class Permissions
         CanApproveErasure,
         CanMergeCustomers,
         CanManageCustomerGroups,
+        CanManageCustomerSegments,
         CanExportCustomers,
         CanManageCustomerHousehold,
         CanReadCustomerPep,

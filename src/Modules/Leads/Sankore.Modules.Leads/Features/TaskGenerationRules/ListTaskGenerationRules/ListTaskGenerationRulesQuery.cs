@@ -11,7 +11,7 @@ public sealed record TaskGenerationRuleDto(
     Guid Id,
     Guid TenantId,
     string TriggerEventType,
-    CrmTaskType TaskType,
+    string TaskType,
     CrmTaskPriority Priority,
     string TitleTemplate,
     string? DescriptionTemplate,

@@ -117,7 +117,7 @@ public static class TaskGenerationRulesEndpoints
 public sealed record CreateTaskGenerationRuleRequest(
     Guid TenantId,
     string TriggerEventType,
-    CrmTaskType TaskType,
+    string TaskType,
     CrmTaskPriority Priority,
     string TitleTemplate,
     TimeSpan SlaDuration,
@@ -126,7 +126,7 @@ public sealed record CreateTaskGenerationRuleRequest(
 
 public sealed record UpdateTaskGenerationRuleRequest(
     string TriggerEventType,
-    CrmTaskType TaskType,
+    string TaskType,
     CrmTaskPriority Priority,
     string TitleTemplate,
     TimeSpan SlaDuration,
