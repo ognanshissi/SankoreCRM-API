@@ -594,7 +594,7 @@ internal sealed class AdministrationModuleFacade(
         return await query
             .OrderBy(p => p.Code)
             .Select(p => new ProductSummary(
-                p.Code, p.Name, p.Category.ToString(), p.IsActive, p.Id, p.AllowMultipleHoldings))
+                p.Code, p.Name, p.Category.ToString(), p.IsActive, p.Id, p.AllowMultipleHoldings, p.Description))
             .ToListAsync(ct);
     }
 

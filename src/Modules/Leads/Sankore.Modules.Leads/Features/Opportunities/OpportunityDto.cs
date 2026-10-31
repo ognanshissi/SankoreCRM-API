@@ -68,7 +68,12 @@ public sealed record OpportunityDto(
     /// <param name="TemplateVersion">That version's number; null on the built-in or a template never saved since versions.</param>
     int? TemplateVersion = null,
     /// <param name="LatestTemplateVersion">The template's latest number: above <see cref="TemplateVersion"/>, the page offers the move.</param>
-    int? LatestTemplateVersion = null);
+    int? LatestTemplateVersion = null,
+    /// <param name="BlockingSteps">
+    /// The « bloquante » steps not yet passed of the circuits running on it, as « Step (Circuit) » —
+    /// what holds the win. Read on the single-project read only; null on a list and once closed.
+    /// </param>
+    IReadOnlyList<string>? BlockingSteps = null);
 
 /// <param name="State">NotStarted, InProgress, Approved, Refused or Unknown — null when not read.</param>
 public sealed record ProjectWorkflowRunDto(

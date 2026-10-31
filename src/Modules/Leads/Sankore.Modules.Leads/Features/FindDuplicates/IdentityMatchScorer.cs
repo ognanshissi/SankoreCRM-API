@@ -198,7 +198,8 @@ internal sealed class IdentityMatchScorer
 
     // ── Jaro-Winkler similarity ───────────────────────────────────────────────
 
-    private static double JaroWinkler(string s1, string s2)
+    /// <summary>Also read by the project suggestion's product match.</summary>
+    internal static double JaroWinkler(string s1, string s2)
     {
         if (s1 == s2) return 1.0;
         if (s1.Length == 0 || s2.Length == 0) return 0.0;

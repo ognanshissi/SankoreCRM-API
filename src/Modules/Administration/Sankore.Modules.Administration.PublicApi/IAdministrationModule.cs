@@ -733,13 +733,15 @@ public sealed record TenantSmsConfigDto(
 /// the existing positional call sites keep compiling; the facade always fills it.
 /// </param>
 /// <param name="AllowMultipleHoldings">Whether a customer may hold this line more than once (BNF-B-22).</param>
+/// <param name="Description">The catalogue's description, for the lead's project suggestion to read.</param>
 public sealed record ProductSummary(
     string Code,
     string Name,
     string Category,
     bool IsActive,
     Guid Id = default,
-    bool AllowMultipleHoldings = true);
+    bool AllowMultipleHoldings = true,
+    string? Description = null);
 
 /// <summary>
 /// A templated notification addressed to one of the tenant's users (see

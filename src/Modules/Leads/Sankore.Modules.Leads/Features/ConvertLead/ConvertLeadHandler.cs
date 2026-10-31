@@ -381,11 +381,28 @@ internal sealed class ConvertLeadHandler(
         }
     }
 
+    /// <summary>The agency of the lead's owner, outside the conversion's transaction like every M12 read here.</summary>
+    private async Task<Guid?> OwnerAgencyAsync(Lead lead, CancellationToken ct)
+    {
+        if (lead.OwnerId is not { } ownerId)
+            return null;
+
+        using var suppressed = new TransactionScope(
+            TransactionScopeOption.Suppress,
+            TransactionScopeAsyncFlowOption.Enabled);
+
+        var agencyId = await administration.GetUserAgencyAsync(lead.TenantId, ownerId, ct);
+
+        suppressed.Complete();
+        return agencyId;
+    }
+
     private async Task<Result<CreateFromLeadResult>> CreateClientAsync(Lead lead, bool kycRequired, CancellationToken ct)
     {
-        // A client belongs to an agency. A lead that was never routed to one cannot become a
-        // client without someone choosing where it lands.
-        var agencyId = lead.AgencyId ?? lead.PreferredAgencyId;
+        // A client belongs to an agency. A lead that was never routed to one lands in its owner's:
+        // an agent who typed the lead in owns it without the dispatch ever giving it an agency, and
+        // was refused here. Without an owner attached to an agency, someone has to choose.
+        var agencyId = lead.AgencyId ?? lead.PreferredAgencyId ?? await OwnerAgencyAsync(lead, ct);
         if (agencyId is null)
             return Result.Fail<CreateFromLeadResult>("LEAD_HAS_NO_AGENCY");
 

@@ -462,6 +462,7 @@ public static class LeadsModule
         group.MapQualifyLead();
         group.MapRecalculateLeadScore();
         group.MapNextActionEndpoints();
+        Features.ProjectSuggestion.GetProjectSuggestionEndpoint.MapGetProjectSuggestion(group);
         group.MapSetIntentLevel();
         group.MapSetQualificationCompleteness();
         group.MapGetScoreHistory();

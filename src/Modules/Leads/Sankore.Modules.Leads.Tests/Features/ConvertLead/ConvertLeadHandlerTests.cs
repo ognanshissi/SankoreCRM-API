@@ -25,6 +25,8 @@ public sealed class ConvertLeadHandlerTests : IDisposable
 
     private readonly ICustomersModule _customers = Substitute.For<ICustomersModule>();
     private readonly IEventPublisher _publisher = Substitute.For<IEventPublisher>();
+    private readonly Sankore.Modules.Administration.PublicApi.IAdministrationModule _administration =
+        Substitute.For<Sankore.Modules.Administration.PublicApi.IAdministrationModule>();
 
     public ConvertLeadHandlerTests() => _factory = new TestDbContextFactory(_tenantId);
 
@@ -57,7 +59,7 @@ public sealed class ConvertLeadHandlerTests : IDisposable
         var db = _factory.CreateContext();
 
         return new ConvertLeadHandler(
-            db, currentUser, _customers, Substitute.For<Sankore.Modules.Administration.PublicApi.IAdministrationModule>(), TestSupport.TestLeadEmailIndexer.Instance,
+            db, currentUser, _customers, _administration, TestSupport.TestLeadEmailIndexer.Instance,
             TestCompleteness.Calculator(db, customers: _customers), _publisher, _workflow);
     }
 
@@ -228,6 +230,30 @@ public sealed class ConvertLeadHandlerTests : IDisposable
 
         await _customers.DidNotReceive().CreateFromLeadAsync(
             Arg.Any<CreateFromLeadRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_lead_an_agent_typed_in_lands_in_its_owners_agency()
+    {
+        // Found in the agent journey run (2026-10-31): the agent owns the lead, the dispatch never
+        // gave it an agency, and opening the client file answered LEAD_HAS_NO_AGENCY.
+        var ownerId = Guid.NewGuid();
+        Lead lead;
+        await using (var db = _factory.CreateContext())
+        {
+            lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+            lead.SetOwner(ownerId);
+            db.Leads.Add(lead);
+            await db.SaveChangesAsync();
+        }
+        _administration.GetUserAgencyAsync(_tenantId, ownerId, Arg.Any<CancellationToken>()).Returns(_agencyId);
+        CustomersReturn(new CreateFromLeadResult(Guid.NewGuid(), "N-1", AlreadyExisted: false));
+
+        var result = await Handler().Handle(new ConvertLeadCommand(lead.Id, Force: true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _customers.Received(1).CreateFromLeadAsync(
+            Arg.Is<CreateFromLeadRequest>(r => r.AgencyId == _agencyId), Arg.Any<CancellationToken>());
     }
 
     // ── attaching to a customer the caller already chose ─────────────────────

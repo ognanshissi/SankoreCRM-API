@@ -9,6 +9,7 @@ using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Opportunities.AdvanceStage;
 using Sankore.Modules.Leads.Features.Opportunities.CloseOpportunity;
+using Sankore.Modules.Leads.Features.Opportunities.GetOpportunity;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Leads.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
@@ -230,6 +231,38 @@ public sealed class OpportunityLifecycleTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value!.HoldingId.Should().BeNull();
         (await Load(id)).Stage.Should().Be(OpportunityStage.ClosedWon);
+    }
+
+    // ── Ce qui retient le gain, affiché avant le clic ──────────────────────
+
+    [Fact]
+    public async Task The_project_read_names_the_blocking_steps_that_hold_the_win()
+    {
+        var id = await Seed();
+        var workflow = Substitute.For<Sankore.Modules.Workflow.PublicApi.IWorkflowModule>();
+        workflow.GetBlockingStepsAsync(_tenantId, "Opportunity", id, Arg.Any<CancellationToken>())
+            .Returns(new List<string> { "Compléter le dossier (Recette parcours)" });
+
+        await using var db = _factory.CreateContext();
+        var result = await new GetOpportunityHandler(db, workflow: workflow)
+            .Handle(new GetOpportunityQuery(id), CancellationToken.None);
+
+        result.Value!.BlockingSteps.Should().Equal("Compléter le dossier (Recette parcours)");
+    }
+
+    [Fact]
+    public async Task A_closed_project_is_not_asked_for_its_blocking_steps()
+    {
+        var id = await Seed();
+        (await Close(id, OpportunityStage.ClosedLost, "Pas intéressé")).IsSuccess.Should().BeTrue();
+        var workflow = Substitute.For<Sankore.Modules.Workflow.PublicApi.IWorkflowModule>();
+
+        await using var db = _factory.CreateContext();
+        var result = await new GetOpportunityHandler(db, workflow: workflow)
+            .Handle(new GetOpportunityQuery(id), CancellationToken.None);
+
+        result.Value!.BlockingSteps.Should().BeNull();
+        await workflow.DidNotReceiveWithAnyArgs().GetBlockingStepsAsync(default, default!, default, default);
     }
 
     // ── Fixture ────────────────────────────────────────────────────────────

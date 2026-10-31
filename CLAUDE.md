@@ -395,6 +395,15 @@ Measured capture ceilings are unaffected (no penalty at capture).
 Lost and Disqualified leads keep their tasks. A merge (`MergeInto`, which archives the duplicate)
 does NOT go through it: its tasks stay open, pending a decision.
 
+**« Créer un projet pour ce produit ? » (2026-10-31, product owner).** `GET leads/{id}/project-suggestion`
+ranks the ACTIVE catalogue products the lead's `InterestedProduct` looks like (`ProductMatcher`: code,
+name in any order / partial / with a typo via Jaro-Winkler, else the words of the description;
+accents, case, punctuation and French small words folded; confidence 60–100, at most 3). 204 for a
+closed lead, « Unknown », no match, or a product an open project already carries (by line or label).
+The lead header shows it (`lead-project-suggestion`) and opens the create-project drawer with the
+product. A SUGGESTION only: `ResolveProductLineAsync` stays exact — it decides the KYC tier and the
+conversion gates. `ProductSummary` now carries `Description`.
+
 **Which rule applies is resolved from the lead**, by `DispatchingRuleResolver`: the rule pinned
 on the source the lead was ingested through (`LeadSourceConfig.DefaultDispatchingRuleId`, reached
 directly through `Lead.LeadSourceConfigId`), else the highest-priority active rule,
