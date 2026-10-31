@@ -17,7 +17,8 @@ internal sealed record UpdateLeadSourceCommand(
     decimal? CostPerLead = null,
     string? CostCurrency = null,
     Guid? DefaultAgencyId = null,
-    Guid? DefaultDispatchingRuleId = null
+    Guid? DefaultDispatchingRuleId = null,
+    int? ScorePoints = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "LeadSourceConfig";

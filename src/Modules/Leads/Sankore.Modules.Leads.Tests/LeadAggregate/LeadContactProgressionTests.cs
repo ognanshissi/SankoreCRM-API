@@ -3,11 +3,15 @@ namespace Sankore.Modules.Leads.Tests.LeadAggregate;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Integration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Consumers;
+using Sankore.Modules.Leads.Features.Household;
 using Sankore.Modules.Leads.Features.RecordFirstContact;
 using Sankore.Modules.Leads.Tests.TestSupport;
+using Sankore.Shared.Infrastructure.Auth;
 using Xunit;
 
 /// <summary>
@@ -117,7 +121,7 @@ public sealed class LeadContactProgressionTests : IDisposable
         var lead = await SeedAssignedAsync();
 
         await using (var db = _db.CreateContext())
-            (await new RecordFirstContactHandler(db).Handle(new RecordFirstContactCommand(lead.Id), default))
+            (await FirstContact(db, _agent).Handle(new RecordFirstContactCommand(lead.Id), default))
                 .IsSuccess.Should().BeTrue();
 
         var saved = await ReloadAsync(lead.Id);
@@ -141,7 +145,61 @@ public sealed class LeadContactProgressionTests : IDisposable
         afterContact.PipelineStage.Should().Be(PipelineStage.ContactEstablished);
     }
 
+    [Fact]
+    public async Task An_agent_declares_the_first_contact_on_a_lead_they_typed_in()
+    {
+        // Owned, never dispatched (CaptureLeadEndpoint.ResolveOwner): no assignment, no SLA to stop.
+        var lead = await SeedOwnedAsync(_agent);
+
+        await using (var db = _db.CreateContext())
+            (await FirstContact(db, _agent).Handle(new RecordFirstContactCommand(lead.Id), default))
+                .IsSuccess.Should().BeTrue();
+
+        var saved = await ReloadAsync(lead.Id);
+        saved.Status.Should().Be(LeadStatus.Open);
+        saved.PipelineStage.Should().Be(PipelineStage.ContactEstablished);
+
+        await using (var db = _db.CreateContext())
+            (await FirstContact(db, _agent).Handle(new RecordFirstContactCommand(lead.Id), default))
+                .Error.Should().Be("FIRST_CONTACT_ALREADY_RECORDED");
+    }
+
+    [Fact]
+    public async Task Another_agent_cannot_declare_the_first_contact()
+    {
+        var lead = await SeedOwnedAsync(_agent);
+
+        await using (var db = _db.CreateContext())
+            (await FirstContact(db, Guid.NewGuid()).Handle(new RecordFirstContactCommand(lead.Id), default))
+                .Error.Should().Be(LeadAccessGuard.Forbidden);
+
+        (await ReloadAsync(lead.Id)).Status.Should().Be(LeadStatus.New);
+    }
+
     // ── Harness ─────────────────────────────────────────────────────────────
+
+    private RecordFirstContactHandler FirstContact(Infrastructure.LeadsDbContext db, Guid userId)
+    {
+        var user = Substitute.For<ICurrentUser>();
+        user.Id.Returns(userId);
+        user.TenantId.Returns(_tenantId);
+        user.Roles.Returns(["Agent"]);
+        var admin = Substitute.For<IAdministrationModule>();
+        admin.GetTeamAgentIdsAsync(_tenantId, userId, Arg.Any<CancellationToken>()).Returns([]);
+        return new RecordFirstContactHandler(db, new LeadAccessGuard(user, admin));
+    }
+
+    private async Task<Lead> SeedOwnedAsync(Guid owner)
+    {
+        var lead = Fresh();
+        lead.SetOwner(owner).IsSuccess.Should().BeTrue();
+        lead.ClearDomainEvents();
+
+        await using var db = _db.CreateContext();
+        db.Leads.Add(lead);
+        await db.SaveChangesAsync();
+        return lead;
+    }
 
     private Lead Fresh() => LeadTestBuilder.Create().WithTenant(_tenantId).Fresh().Build();
 

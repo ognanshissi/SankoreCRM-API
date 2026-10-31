@@ -37,7 +37,7 @@ internal sealed class RecalculateLeadScoreHandler(
         var (newScore, factorsJson) = await calculator.CalculateAsync(lead, ct);
 
         lead.RecordScoreUpdate(newScore);
-        lead.UpdateIntentLevel(DeriveIntentLevel(newScore));
+        lead.UpdateIntentLevel(await calculator.IntentLevelOfAsync(lead, newScore, ct));
 
         db.ScoreHistories.Add(ScoreHistory.Create(
             tenantId:     lead.TenantId,
@@ -76,13 +76,6 @@ internal sealed class RecalculateLeadScoreHandler(
             FactorsJson:   factorsJson));
     }
 
-    private static LeadIntentLevel DeriveIntentLevel(int score) => score switch
-    {
-        >= 80 => LeadIntentLevel.Hot,
-        >= 60 => LeadIntentLevel.Warm,
-        >= 40 => LeadIntentLevel.Cold,
-        _     => LeadIntentLevel.Unknown
-    };
 
     /// <summary>Returns true if the score crosses any threshold in either direction.</summary>
     private static bool CrossesThreshold(int prev, int next, int[] thresholds)

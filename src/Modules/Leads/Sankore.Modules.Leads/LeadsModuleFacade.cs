@@ -341,6 +341,7 @@ public sealed class LeadsModuleFacade(
             phoneBlindIndex: phoneBlindIndexer.Compute(trimmed));
 
         db.Leads.Add(lead);
+        await Features.QualifyLead.CaptureScore.ApplyAsync(db, lead, ct);
 
         try
         {

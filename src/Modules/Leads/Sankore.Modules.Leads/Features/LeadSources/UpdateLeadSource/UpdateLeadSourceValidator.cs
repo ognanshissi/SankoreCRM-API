@@ -20,6 +20,10 @@ internal sealed class UpdateLeadSourceValidator
             .When(x => x.DisplayOrder.HasValue);
         RuleFor(x => x.DedupWindowDays).GreaterThanOrEqualTo(0)
             .When(x => x.DedupWindowDays.HasValue);
+        RuleFor(x => x.ScorePoints)
+            .InclusiveBetween(0, LeadSourceConfig.MaxScorePoints)
+            .When(x => x.ScorePoints.HasValue)
+            .WithClientField("scorePoints");
         RuleFor(x => x.CostCurrency)
             .MaximumLength(3)
             .When(x => x.CostPerLead.HasValue);

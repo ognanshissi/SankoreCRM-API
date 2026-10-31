@@ -26,6 +26,13 @@ using Sankore.Modules.Leads.Infrastructure;
 /// </summary>
 internal sealed class LeadScoreCalculator(LeadsDbContext db)
 {
+    /// <summary>
+    /// The temperature a score reads as for the lead's tenant — one definition for the capture, the
+    /// qualification and every rescore (<see cref="Settings.IntentThresholds.IntentThresholds"/>).
+    /// </summary>
+    public async Task<LeadIntentLevel> IntentLevelOfAsync(Lead lead, int score, CancellationToken ct)
+        => (await Settings.IntentThresholds.IntentThresholds.ReadAsync(db, lead.TenantId, ct)).Of(score);
+
     public async Task<(int Score, string FactorsJson)> CalculateAsync(Lead lead, CancellationToken ct)
     {
         // Load activities once — shared by Interactions and Behaviour dimensions.
@@ -36,15 +43,18 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
         var now = DateTimeOffset.UtcNow;
 
         var profile     = ProfileCompletenessScore(lead);
-        var source      = SourceQualityScore(lead);
+        var source      = await SourceQualityScoreAsync(lead, ct);
         var interaction = InteractionScore(activities, now);
         var behaviour   = BehaviourScore(activities);
         var coherence   = DeclarativeCoherenceScore(lead);
         var location    = LocationScore(lead);
         var address     = AddressScore(lead);
 
-        var total = Math.Clamp(
-            profile + source + interaction + behaviour + coherence + location + address, 0, 100);
+        // The cooling (lead temperature, lot 4) comes off the CLAMPED total, so a lead whose
+        // dimensions add past 100 still feels it.
+        var inactivity  = await InactivityPenaltyAsync(lead, activities, now, ct);
+        var total = Math.Clamp(Math.Clamp(
+            profile + source + interaction + behaviour + coherence + location + address, 0, 100) - inactivity, 0, 100);
 
         var factorsJson = JsonSerializer.Serialize(new
         {
@@ -55,10 +65,34 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
             declarativeCoherence = coherence,
             location             = location,
             address              = address,
+            inactivity           = -inactivity,
             total                = total
         });
 
         return (total, factorsJson);
+    }
+
+    // ── Inactivity (0 to -30) ─────────────────────────────────────────────────
+    // A lead nobody touched cools down (lead temperature, lot 4): the recency of its interactions is
+    // worth 8 points at most, so a hot lead left for three months used to stay hot. Counted from its
+    // last touch — the last activity, else its capture — and switched off per tenant by
+    // lead-cooldown-enabled. The first activity after it gives the points back.
+
+    public static int InactivityPenalty(int daysSinceLastTouch) => daysSinceLastTouch switch
+    {
+        >= 90 => 30,
+        >= 60 => 20,
+        >= 30 => 10,
+        _     => 0,
+    };
+
+    private async Task<int> InactivityPenaltyAsync(Lead lead, IReadOnlyList<LeadActivity> activities, DateTimeOffset now, CancellationToken ct)
+    {
+        var lastTouch = new[] { lead.CapturedAt, lead.LastActivityAt ?? lead.CapturedAt, activities.Count > 0 ? activities.Max(a => a.PerformedAt) : lead.CapturedAt }.Max();
+        var penalty = InactivityPenalty((int)(now - lastTouch).TotalDays);
+        return penalty > 0 && await new LeadSettingsService(db).GetBoolAsync(lead.TenantId, LeadSettingKeys.LeadCooldownEnabled, ct)
+            ? penalty
+            : 0;
     }
 
     // ── 1. Profile completeness (0-25) ────────────────────────────────────────
@@ -81,7 +115,7 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
     // ── 2. Source quality (0-20) ──────────────────────────────────────────────
     // In-branch and referred leads carry the highest intent signal.
 
-    private static int SourceQualityScore(Lead lead)
+    private async Task<int> SourceQualityScoreAsync(Lead lead, CancellationToken ct)
     {
         // A customer M01 already holds, coming back for another product, is the strongest intent
         // signal this dimension can carry — stronger than a walk-in, because the relationship is
@@ -94,6 +128,19 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
         // point — it should clear the qualification threshold without waiting for activity history.
         if (lead.CustomerId.HasValue)
             return 20;
+
+        // A lead that came in through a configured source is worth what the admin set on that
+        // source (sources lot 1): the coarse enum says « Web » for every inbound lead. The id is
+        // opaque — an archived or deleted source falls back to the enum's grid.
+        if (lead.LeadSourceConfigId is { } sourceId)
+        {
+            var source = await db.LeadSourceConfigs.IgnoreQueryFilters().AsNoTracking()
+                .Where(s => s.Id == sourceId && s.TenantId == lead.TenantId)
+                .Select(s => new { s.ScorePoints, s.ChannelType })
+                .FirstOrDefaultAsync(ct);
+            if (source is not null)
+                return source.ScorePoints ?? LeadSourceConfig.DefaultScorePoints(source.ChannelType);
+        }
 
         return SourceOnlyQualityScore(lead);
     }

@@ -944,6 +944,12 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(tenantId),
             "0 3 * * *");
 
+        // Lead temperature, lot 4: untouched open leads are rescored so a forgotten hot lead cools.
+        AddOrUpdate<Sankore.Modules.Leads.Features.RecalculateLeadScore.CoolDownLeadsJob>(
+            $"{Sankore.Modules.Leads.Features.RecalculateLeadScore.CoolDownLeadsJob.RecurringJobPrefix}-{suffix}",
+            job => job.ExecuteAsync(tenantId),
+            Sankore.Modules.Leads.Features.RecalculateLeadScore.CoolDownLeadsJob.CronExpression);
+
         // Dispatch queue: leads no agent could take are retried under the dispatching rule until
         // one becomes available. Every two minutes — the wait an agent coming back from a break
         // sees before the queue reaches them — and nearly free when nobody is available.

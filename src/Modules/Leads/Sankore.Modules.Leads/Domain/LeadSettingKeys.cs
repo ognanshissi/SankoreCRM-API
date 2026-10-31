@@ -52,6 +52,21 @@ public static class LeadSettingKeys
     public const string SlaWarningThresholdPercent = "sla-warning-threshold-percent";
 
     /// <summary>
+    /// Scores from which a lead reads « Tiède » and « Chaud » (lead temperature, lot 3); below the
+    /// first it is « Froid ». Set together through <c>PUT lead-settings/intent-thresholds</c>, which
+    /// checks 1 ≤ warm &lt; hot ≤ 100 — a pair out of order reads as the defaults.
+    /// </summary>
+    public const string IntentWarmThreshold = "intent-warm-threshold";
+    public const string IntentHotThreshold = "intent-hot-threshold";
+
+    /// <summary>
+    /// Whether a lead left without activity loses points (lead temperature, lot 4): −10 at 30 days,
+    /// −20 at 60, −30 at 90 (<c>LeadScoreCalculator.InactivityPenalty</c>), applied by every rescore
+    /// and nightly by <c>CoolDownLeadsJob</c>. Default true — the point of the lot.
+    /// </summary>
+    public const string LeadCooldownEnabled = "lead-cooldown-enabled";
+
+    /// <summary>
     /// Whether a WhatsApp message from a number that matches no open lead and no client creates a
     /// lead (WA-BE-09) — source WhatsApp, named from the sender's profile, filed in the receiving
     /// number's agency. Off, the conversation is kept unattached for an agent to file.
@@ -162,6 +177,12 @@ public static class LeadSettingKeys
         new(SlaWarningThresholdPercent, "75", TypeInt,
             "Share of the first-contact deadline elapsed, in percent, at which the agent is warned "
             + "that the SLA is about to be breached. 0 disables the warning."),
+        new(IntentWarmThreshold, "60", TypeInt,
+            "Score from which a lead reads warm; below it, cold. Set with intent-hot-threshold."),
+        new(IntentHotThreshold, "80", TypeInt,
+            "Score from which a lead reads hot. Above intent-warm-threshold, at most 100."),
+        new(LeadCooldownEnabled, "true", TypeBool,
+            "Whether a lead without activity loses points: -10 at 30 days, -20 at 60, -30 at 90."),
         new(WhatsAppCreateLeadForUnknownNumber, "true", TypeBool,
             "Create a lead when an unknown number writes to the institution's WhatsApp number. "
             + "Off, the conversation stays unattached until an agent files it."),

@@ -124,7 +124,7 @@ internal sealed class QualifyLeadHandler(
             return Result.Fail<QualifyLeadResult>(qualifyResult.Error!);
 
         // Derive intent level from score and update the lead.
-        var intentLevel = DeriveIntentLevel(score);
+        var intentLevel = await calculator.IntentLevelOfAsync(lead, score, ct);
         lead.UpdateIntentLevel(intentLevel);
 
         // Update qualification completeness when changed.
@@ -155,13 +155,6 @@ internal sealed class QualifyLeadHandler(
 
     // ── Intent & next-action helpers ───────────────────────────────────────
 
-    private static LeadIntentLevel DeriveIntentLevel(int score) => score switch
-    {
-        >= 80 => LeadIntentLevel.Hot,
-        >= 60 => LeadIntentLevel.Warm,
-        >= 40 => LeadIntentLevel.Cold,
-        _     => LeadIntentLevel.Unknown
-    };
 
     private static (QualificationNextAction Action, string Detail) DetermineNextAction(
         int score, LeadStatus status)

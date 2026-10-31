@@ -21,6 +21,10 @@ internal sealed class CreateLeadSourceValidator
             .When(x => x.IntegrationMode.HasValue);
         RuleFor(x => x.Description).MaximumLength(500);
         RuleFor(x => x.DisplayOrder).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.ScorePoints)
+            .InclusiveBetween(0, LeadSourceConfig.MaxScorePoints)
+            .When(x => x.ScorePoints.HasValue)
+            .WithClientField("scorePoints");
         RuleFor(x => x.CostCurrency)
             .MaximumLength(3)
             .When(x => x.CostPerLead.HasValue);

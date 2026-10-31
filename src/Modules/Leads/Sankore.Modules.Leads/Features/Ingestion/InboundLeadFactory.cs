@@ -87,10 +87,9 @@ internal static class InboundLeadFactory
             tenantId:          tenantId,
             fullName:          fullName,
             phoneNumber:       phone,
-            // The coarse enum stays Web for every inbound source: it feeds
-            // LeadScoreCalculator.SourceQualityScore, whose thresholds are measured and
-            // documented, so changing it here would move auto-qualification outcomes. The real
-            // source is leadSourceConfigId below.
+            // The coarse enum stays Web for every inbound source (a reporting axis). The score
+            // reads the real source instead — leadSourceConfigId below, and the points its admin
+            // set (LeadSourceConfig.ScorePoints, sources lot 1).
             source:            LeadSource.Web,
             interestedProduct: Get("interestedProduct") ?? "Unknown",
             preferredLanguage: Get("preferredLanguage") ?? "FR",

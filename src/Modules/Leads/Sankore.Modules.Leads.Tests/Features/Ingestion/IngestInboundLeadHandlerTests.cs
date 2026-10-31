@@ -83,6 +83,23 @@ public sealed class IngestInboundLeadHandlerTests : IDisposable
         lead.Source.Should().Be(Domain.LeadSource.Web);
     }
 
+    [Fact]
+    public async Task An_ingested_lead_arrives_scored_with_its_sources_value()
+    {
+        // Lead temperature, lot 2: scored here, before any dispatch, with the walk-in channel's 20.
+        var source = await SeedActiveSource();
+
+        await using var db = _factory.CreateContext();
+        var result = await new IngestInboundLeadHandler(db, _indexer, TimeProvider.System).Handle(
+            new IngestInboundLeadCommand(_tenantId, source.Id, SimplePayload()), CancellationToken.None);
+
+        await using var verify = _factory.CreateContext();
+        var lead = verify.Leads.Single(l => l.Id == result.Value.LeadId);
+        lead.Score.Should().BeGreaterThanOrEqualTo(20);
+        lead.Status.Should().Be(Domain.LeadStatus.New);
+        verify.ScoreHistories.Single(h => h.LeadId == lead.Id).TriggerEvent.Should().Be("LEAD_CAPTURED");
+    }
+
     // ── Idempotence ─────────────────────────────────────────────────────
 
     [Fact]

@@ -2,10 +2,11 @@ namespace Sankore.Modules.Leads.Features.RecordFirstContact;
 
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Sankore.Modules.Leads.Features.Household;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class RecordFirstContactHandler(LeadsDbContext db)
+internal sealed class RecordFirstContactHandler(LeadsDbContext db, LeadAccessGuard accessGuard)
     : IRequestHandler<RecordFirstContactCommand, Result>
 {
     public async Task<Result> Handle(
@@ -19,8 +20,23 @@ internal sealed class RecordFirstContactHandler(LeadsDbContext db)
         if (lead is null)
             return Result.Fail("LEAD_NOT_FOUND");
 
+        // The endpoint is open to agents (lead:activity:log): only the lead's holder, its owner or
+        // their supervisor may say it was contacted.
+        var access = await accessGuard.EnsureCanWorkAsync(lead, ct);
+        if (access.IsFailure)
+            return access;
+
+        // A lead its agent typed in is owned, never dispatched (CaptureLeadEndpoint.ResolveOwner):
+        // no assignment, so no SLA to stop — the contact still moves the lead to « Contacté ».
         if (lead.CurrentAssignmentId is null)
-            return Result.Fail("LEAD_HAS_NO_ACTIVE_ASSIGNMENT");
+        {
+            if (lead.OwnerId is null)
+                return Result.Fail("LEAD_HAS_NO_ACTIVE_ASSIGNMENT");
+            if (!lead.RecordContactEstablished())
+                return Result.Fail("FIRST_CONTACT_ALREADY_RECORDED");
+            await db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
 
         var assignment = await db.LeadAssignments
             .AsTracking()

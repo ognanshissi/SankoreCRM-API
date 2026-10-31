@@ -523,6 +523,18 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("interval")
                         .HasColumnName("first_contact_sla");
 
+                    b.Property<TimeSpan?>("FirstContactSlaCold")
+                        .HasColumnType("interval")
+                        .HasColumnName("first_contact_sla_cold");
+
+                    b.Property<TimeSpan?>("FirstContactSlaHot")
+                        .HasColumnType("interval")
+                        .HasColumnName("first_contact_sla_hot");
+
+                    b.Property<TimeSpan?>("FirstContactSlaWarm")
+                        .HasColumnType("interval")
+                        .HasColumnName("first_contact_sla_warm");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -2018,6 +2030,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("public_key");
+
+                    b.Property<int?>("ScorePoints")
+                        .HasColumnType("integer")
+                        .HasColumnName("score_points");
 
                     b.Property<string>("Settings")
                         .HasColumnType("jsonb")

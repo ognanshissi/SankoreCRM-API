@@ -353,6 +353,7 @@ public static class LeadsModule
 
         // Recycled lead reactivation — Hangfire recurring job (US-M13-160/161)
         services.AddTransient<ReactivateRecycledLeadsJob>();
+        services.AddTransient<Features.RecalculateLeadScore.CoolDownLeadsJob>();
         services.AddTransient<Features.ProjectTemplates.ProjectCloseDateOverdueJob>();
         services.AddTransient<Features.DispatchQueue.DispatchWaitingLeadsJob>();
 

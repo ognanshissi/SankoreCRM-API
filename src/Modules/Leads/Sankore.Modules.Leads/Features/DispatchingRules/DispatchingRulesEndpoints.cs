@@ -120,7 +120,10 @@ public static class DispatchingRulesEndpoints
             AntiMonopolyThreshold: req.AntiMonopolyThreshold,
             FirstContactSla:       req.FirstContactSla,
             Priority:              req.Priority,
-            ExcludedAgentIds:      req.ExcludedAgentIds), ct);
+            ExcludedAgentIds:      req.ExcludedAgentIds,
+            FirstContactSlaHot:    req.FirstContactSlaHot,
+            FirstContactSlaWarm:   req.FirstContactSlaWarm,
+            FirstContactSlaCold:   req.FirstContactSlaCold), ct);
 
         return result.IsSuccess
             ? Results.Created($"leads/dispatching-rules/{result.Value}", result.Value)
@@ -142,7 +145,10 @@ public static class DispatchingRulesEndpoints
             AntiMonopolyThreshold: req.AntiMonopolyThreshold,
             FirstContactSla:       req.FirstContactSla,
             Priority:              req.Priority,
-            ExcludedAgentIds:      req.ExcludedAgentIds), ct);
+            ExcludedAgentIds:      req.ExcludedAgentIds,
+            FirstContactSlaHot:    req.FirstContactSlaHot,
+            FirstContactSlaWarm:   req.FirstContactSlaWarm,
+            FirstContactSlaCold:   req.FirstContactSlaCold), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -193,7 +199,11 @@ public sealed record CreateDispatchingRuleRequest(
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
     int Priority = 0,
-    IReadOnlyList<Guid>? ExcludedAgentIds = null);
+    IReadOnlyList<Guid>? ExcludedAgentIds = null,
+    /// <summary>First-contact delay for a hot / warm / cold lead; null = <c>FirstContactSla</c>.</summary>
+    TimeSpan? FirstContactSlaHot = null,
+    TimeSpan? FirstContactSlaWarm = null,
+    TimeSpan? FirstContactSlaCold = null);
 
 public sealed record UpdateDispatchingRuleRequest(
     string Name,
@@ -203,6 +213,10 @@ public sealed record UpdateDispatchingRuleRequest(
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
     int Priority = 0,
-    IReadOnlyList<Guid>? ExcludedAgentIds = null);
+    IReadOnlyList<Guid>? ExcludedAgentIds = null,
+    /// <summary>First-contact delay for a hot / warm / cold lead; null = <c>FirstContactSla</c>.</summary>
+    TimeSpan? FirstContactSlaHot = null,
+    TimeSpan? FirstContactSlaWarm = null,
+    TimeSpan? FirstContactSlaCold = null);
 
 public sealed record SimulateDispatchRequest(Guid LeadId);

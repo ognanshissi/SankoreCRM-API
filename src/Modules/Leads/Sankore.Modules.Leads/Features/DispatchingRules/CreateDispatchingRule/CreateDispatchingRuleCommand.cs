@@ -15,7 +15,10 @@ internal sealed record CreateDispatchingRuleCommand(
     int AntiMonopolyThreshold,
     TimeSpan FirstContactSla,
     int Priority = 0,
-    IReadOnlyList<Guid>? ExcludedAgentIds = null
+    IReadOnlyList<Guid>? ExcludedAgentIds = null,
+    TimeSpan? FirstContactSlaHot = null,
+    TimeSpan? FirstContactSlaWarm = null,
+    TimeSpan? FirstContactSlaCold = null
 ) : IRequest<Result<Guid>>, ICommand, IResourceCommand
 {
     public string ResourceType => "DispatchingRule";

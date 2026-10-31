@@ -14,7 +14,10 @@ public sealed record DispatchingRuleDto(
     TimeSpan DeclineExclusionTtl,
     bool IsActive,
     int Priority,
-    IReadOnlyList<Guid> ExcludedAgentIds);
+    IReadOnlyList<Guid> ExcludedAgentIds,
+    TimeSpan? FirstContactSlaHot = null,
+    TimeSpan? FirstContactSlaWarm = null,
+    TimeSpan? FirstContactSlaCold = null);
 
 public sealed record ScoringWeightsDto(
     double Language,

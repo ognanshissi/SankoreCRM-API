@@ -91,6 +91,47 @@ public sealed class LeadSourceConfig : ITenant
 
     public bool IsSystem { get; private set; }
     public int DisplayOrder { get; private set; }
+
+    /// <summary>
+    /// What a lead from this source is worth in the score's source dimension, 0 to
+    /// <see cref="MaxScorePoints"/> — set by the admin, who knows that this Facebook campaign
+    /// brings tyre-kickers and that partner's referrals sign. Null: the channel's default
+    /// (<see cref="DefaultScorePoints"/>). Before, every lead arriving through a configured source
+    /// was scored as « Site web », 12 points, whatever the source.
+    /// </summary>
+    public int? ScorePoints { get; private set; }
+
+    public int EffectiveScorePoints => ScorePoints ?? DefaultScorePoints(ChannelType);
+
+    /// <summary>The source dimension's ceiling in <c>LeadScoreCalculator</c>.</summary>
+    public const int MaxScorePoints = 20;
+
+    /// <summary>
+    /// The channel's default, aligned on the grid of <c>LeadScoreCalculator.SourceOnlyQualityScore</c>
+    /// for the channels both know: a walk-in is worth an « Agence », an inbound call a « Centre
+    /// d'appels ». Web forms, webhooks and pulls keep the 12 points they scored as « Site web ».
+    /// </summary>
+    public static int DefaultScorePoints(LeadChannelType channel) => channel switch
+    {
+        LeadChannelType.WalkIn           => 20,
+        LeadChannelType.Referral         => 18,
+        LeadChannelType.InboundCall      => 18,
+        LeadChannelType.WhatsAppInbound  => 15,
+        LeadChannelType.MobileAgent      => 15,
+        LeadChannelType.WebForm          => 12,
+        LeadChannelType.InboundWebhook   => 12,
+        LeadChannelType.ExternalApiPull  => 12,
+        LeadChannelType.FacebookLeadAds  => 10,
+        LeadChannelType.InstagramLeadAds => 10,
+        LeadChannelType.LinkedInLeadGen  => 10,
+        LeadChannelType.SocialEngagement => 10,
+        LeadChannelType.SmsUssdCampaign  => 10,
+        LeadChannelType.FileImport       => 5,
+        _                                => 8,
+    };
+
+    private static int? CheckedScorePoints(int? points)
+        => points is null or (>= 0 and <= MaxScorePoints) ? points : throw new DomainException("LEAD_SOURCE_SCORE_POINTS_OUT_OF_RANGE");
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// <summary>PostgreSQL xmin concurrency token for optimistic locking.</summary>
@@ -123,7 +164,8 @@ public sealed class LeadSourceConfig : ITenant
         Guid? defaultAgencyId = null,
         Guid? defaultDispatchingRuleId = null,
         bool isSystem = false,
-        bool testKeys = false)
+        bool testKeys = false,
+        int? scorePoints = null)
     {
         var mode = integrationMode ?? ChannelModeMap.GetDefaultMode(channelType)
             ?? throw new DomainException($"No default mode for channel: {channelType}");
@@ -157,6 +199,7 @@ public sealed class LeadSourceConfig : ITenant
             DefaultAgencyId          = defaultAgencyId,
             DefaultDispatchingRuleId = defaultDispatchingRuleId,
             IsSystem                 = isSystem,
+            ScorePoints              = CheckedScorePoints(scorePoints),
             DisplayOrder         = displayOrder,
             CreatedAt            = DateTimeOffset.UtcNow,
         };
@@ -207,7 +250,8 @@ public sealed class LeadSourceConfig : ITenant
         int? dedupWindowDays = null,
         Money? costPerLead = null,
         Guid? defaultAgencyId = null,
-        Guid? defaultDispatchingRuleId = null)
+        Guid? defaultDispatchingRuleId = null,
+        int? scorePoints = null)
     {
         // Active sources: PlatformConnectionId is immutable
         if (Status == LeadSourceStatus.Active && platformConnectionId != PlatformConnectionId)
@@ -224,6 +268,7 @@ public sealed class LeadSourceConfig : ITenant
         if (settings != Settings) changed.Add(nameof(Settings));
         if (defaultAgencyId != DefaultAgencyId) changed.Add(nameof(DefaultAgencyId));
         if (defaultDispatchingRuleId != DefaultDispatchingRuleId) changed.Add(nameof(DefaultDispatchingRuleId));
+        if (scorePoints != ScorePoints) changed.Add(nameof(ScorePoints));
 
         Label                    = label.Trim();
         Description              = description?.Trim();
@@ -233,6 +278,8 @@ public sealed class LeadSourceConfig : ITenant
         CostPerLead              = costPerLead;
         DefaultAgencyId          = defaultAgencyId;
         DefaultDispatchingRuleId = defaultDispatchingRuleId;
+        // Replaced like the cost and the defaults: null is « the channel's default », not « no change ».
+        ScorePoints              = CheckedScorePoints(scorePoints);
 
         // Only update settings if explicitly provided (null = no change, not "clear")
         if (settings is not null)

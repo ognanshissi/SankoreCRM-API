@@ -109,6 +109,16 @@ public sealed class LeadNextStepsTests : IDisposable
     }
 
     [Fact]
+    public async Task A_lead_scored_at_its_capture_is_still_to_qualify()
+    {
+        // Lead temperature, lot 2: a new lead carries its capture score; « Qualifier » is read off
+        // the status, not off a zero score.
+        var lead = Facts(score: 45, status: LeadStatus.New);
+
+        (await NextStepOf(lead)).ActionType.Should().Be(NextActionType.Qualify);
+    }
+
+    [Fact]
     public async Task A_closed_lead_has_no_next_step()
     {
         var lead = Facts(status: LeadStatus.Converted);

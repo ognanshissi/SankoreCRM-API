@@ -57,6 +57,7 @@ internal sealed class WhatsAppProspects(
             phoneBlindIndex: leadPhoneIndexer.Compute(phone));
 
         db.Leads.Add(lead);
+        await QualifyLead.CaptureScore.ApplyAsync(db, lead, ct);
 
         // The capture's own event, so auto-dispatch (when the tenant turned it on) routes the new
         // lead to an agent exactly as it would a web-form lead — and, for a deferred lead, only now.

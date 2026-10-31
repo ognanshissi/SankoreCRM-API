@@ -16,6 +16,9 @@ internal sealed class CreateDispatchingRuleValidator : AbstractValidator<CreateD
         RuleFor(x => x.MaxTasksPerAgent).GreaterThanOrEqualTo(0);
         RuleFor(x => x.AntiMonopolyThreshold).GreaterThan(0);
         RuleFor(x => x.FirstContactSla).GreaterThan(TimeSpan.Zero);
+        RuleFor(x => x.FirstContactSlaHot).GreaterThan(TimeSpan.Zero).When(x => x.FirstContactSlaHot.HasValue);
+        RuleFor(x => x.FirstContactSlaWarm).GreaterThan(TimeSpan.Zero).When(x => x.FirstContactSlaWarm.HasValue);
+        RuleFor(x => x.FirstContactSlaCold).GreaterThan(TimeSpan.Zero).When(x => x.FirstContactSlaCold.HasValue);
 
         // Weights required only for scoring-based strategies
         When(x => WeightsRequiredStrategies.Contains(x.Strategy), () =>

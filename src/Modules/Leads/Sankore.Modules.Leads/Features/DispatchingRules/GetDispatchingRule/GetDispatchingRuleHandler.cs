@@ -31,7 +31,10 @@ internal sealed class GetDispatchingRuleHandler(LeadsDbContext db)
                 r.DeclineExclusionTtl,
                 r.IsActive,
                 r.Priority,
-                r.ExcludedAgentIds))
+                r.ExcludedAgentIds,
+                r.FirstContactSlaHot,
+                r.FirstContactSlaWarm,
+                r.FirstContactSlaCold))
             .FirstOrDefaultAsync(ct);
 
         return rule is null

@@ -66,7 +66,11 @@ public sealed record DispatchRuleOverviewDto(
     int Reassigned,
     double? MedianDelayMinutes,
     IReadOnlyList<DispatchAgentDto> Agents,
-    IReadOnlyList<DispatchFeedItemDto> Recent);
+    IReadOnlyList<DispatchFeedItemDto> Recent,
+    // The first-contact delay by temperature (lead temperature, lot 3); null = FirstContactSla.
+    TimeSpan? FirstContactSlaHot = null,
+    TimeSpan? FirstContactSlaWarm = null,
+    TimeSpan? FirstContactSlaCold = null);
 
 /// <param name="Waiting">Received in the period, not contacted yet and still theirs.</param>
 /// <param name="OpenLeads">Open leads assigned to them now, whatever the rule — what the rule's ceiling is measured against.</param>
@@ -228,7 +232,8 @@ internal sealed class GetDispatchOverviewHandler(
                 Dispatched: rows.Count,
                 Reassigned: rows.Count(a => a.SupersededAt != null),
                 MedianDelayMinutes: Median(delays),
-                agents, recent);
+                agents, recent,
+                rule?.FirstContactSlaHot, rule?.FirstContactSlaWarm, rule?.FirstContactSlaCold);
         }
 
         var result = new List<DispatchRuleOverviewDto>();

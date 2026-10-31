@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Sankore.Modules.Leads.Features.Household;
 using Sankore.Shared.Kernel;
 
 public static class RecordFirstContactEndpoint
@@ -14,8 +15,11 @@ public static class RecordFirstContactEndpoint
         app.MapPost("{leadId:guid}/first-contact", Handle)
             .WithName("RecordFirstContact")
             .WithTags("Leads")
-            .RequireAuthorization(Permissions.CanAssignLead.Code)
+            // Was lead:assign, a supervisor's right: no agent could say « 1er contact eu » on their
+            // own lead. The per-lead check is LeadAccessGuard, in the handler.
+            .RequireAuthorization(Permissions.CanLogLeadActivity.Code)
             .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .WithOpenApi();
@@ -32,14 +36,15 @@ public static class RecordFirstContactEndpoint
         var result = await sender.Send(
             new RecordFirstContactCommand(leadId, req.ContactedAt), ct);
 
-        return result.IsSuccess
-            ? Results.NoContent()
-            : result.Error == "LEAD_NOT_FOUND"
-                ? Results.NotFound()
-                : Results.Problem(
-                    title: "Record first contact failed",
-                    detail: result.Error,
-                    statusCode: 422);
+        if (result.IsSuccess)
+            return Results.NoContent();
+
+        return result.Error switch
+        {
+            "LEAD_NOT_FOUND" => Results.NotFound(),
+            LeadAccessGuard.Forbidden => Results.Problem(title: "Not your lead", detail: result.Error, statusCode: 403),
+            _ => Results.Problem(title: "Record first contact failed", detail: result.Error, statusCode: 422),
+        };
     }
 }
 

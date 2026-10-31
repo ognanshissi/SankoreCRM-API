@@ -48,7 +48,10 @@ public sealed record LeadSourceDetailDto(
     // The last push the webhook endpoint refused, and why (signature, IP) — a refusal writes no
     // ingestion row, so this is the only place the tenant sees it.
     DateTimeOffset? LastRejectedAt = null,
-    string? LastRejectedReason = null);
+    string? LastRejectedReason = null,
+    // What a lead from it is worth in the score: the admin's value, else the channel's default.
+    int? ScorePoints = null,
+    int DefaultScorePoints = 0);
 
 /// <summary>Secret metadata exposed without the actual value.</summary>
 public sealed record SecretHintDto(

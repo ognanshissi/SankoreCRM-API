@@ -14,7 +14,10 @@ internal sealed record UpdateDispatchingRuleCommand(
     TimeSpan FirstContactSla,
     int Priority = 0,
     IReadOnlyList<Guid>? ExcludedAgentIds = null,
-    TimeSpan? DeclineExclusionTtl = null
+    TimeSpan? DeclineExclusionTtl = null,
+    TimeSpan? FirstContactSlaHot = null,
+    TimeSpan? FirstContactSlaWarm = null,
+    TimeSpan? FirstContactSlaCold = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "DispatchingRule";

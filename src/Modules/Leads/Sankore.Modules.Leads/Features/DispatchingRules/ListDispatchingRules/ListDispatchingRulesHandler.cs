@@ -36,7 +36,10 @@ internal sealed class ListDispatchingRulesHandler(LeadsDbContext db)
                 r.DeclineExclusionTtl,
                 r.IsActive,
                 r.Priority,
-                r.ExcludedAgentIds))
+                r.ExcludedAgentIds,
+                r.FirstContactSlaHot,
+                r.FirstContactSlaWarm,
+                r.FirstContactSlaCold))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<DispatchingRuleDto>>(rules);

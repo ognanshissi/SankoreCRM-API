@@ -262,6 +262,33 @@ public sealed class DispatchLeadHandlerTests : IDisposable
         r2.Value.AgentId.Should().NotBe(r1.Value.AgentId, "the first agent now holds one open lead more");
     }
 
+    [Theory]
+    [InlineData(LeadIntentLevel.Hot, 15)]
+    [InlineData(LeadIntentLevel.Warm, 60)]
+    [InlineData(LeadIntentLevel.Cold, 120)]   // no cold delay on the rule: its own 2 h
+    [InlineData(LeadIntentLevel.Unknown, 120)]
+    public async Task The_first_contact_delay_follows_the_leads_temperature(LeadIntentLevel level, int minutes)
+    {
+        // Lead temperature, lot 3: a hot lead must be called within the quarter hour.
+        await using var db = _factory.CreateContext();
+        var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+        lead.UpdateIntentLevel(level);
+        db.Leads.Add(lead);
+        db.DispatchingRules.Add(DispatchingRule.Create(
+            _tenantId, "Par température", DispatchingStrategy.RoundRobin,
+            new ScoringWeights(Language: 25, Product: 25, Geography: 20, Workload: 15, Performance: 15),
+            maxLeadsPerAgent: 30, antiMonopolyThreshold: 5, firstContactSla: TimeSpan.FromHours(2), priority: 10,
+            firstContactSlaHot: TimeSpan.FromMinutes(15), firstContactSlaWarm: TimeSpan.FromHours(1)));
+        await db.SaveChangesAsync();
+
+        var before = DateTimeOffset.UtcNow;
+        var result = await BuildHandler(db, PoolOf(AgentTestBuilder.Create().Named("Awa Fall").Build()), Substitute.For<IEventPublisher>())
+            .Handle(new DispatchLeadCommand(lead.Id, _tenantId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.SlaDeadline.Should().BeCloseTo(before.AddMinutes(minutes), TimeSpan.FromSeconds(30));
+    }
+
     private DispatchingRule RuleWithTaskCeiling(int maxTasks) => DispatchingRule.Create(
         _tenantId, "Plafond de tâches", DispatchingStrategy.RoundRobin,
         new ScoringWeights(Language: 25, Product: 25, Geography: 20, Workload: 15, Performance: 15),

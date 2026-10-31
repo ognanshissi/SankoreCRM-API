@@ -133,7 +133,7 @@ internal sealed class DispatchLeadHandler(
                 leadId: lead.Id,
                 agentId: named.Id,
                 reason: cmd.OverrideReason!,
-                slaDeadline: clock.GetUtcNow().Add(explicitRules.FirstContactSla),
+                slaDeadline: clock.GetUtcNow().Add(explicitRules.FirstContactSlaFor(lead.IntentLevel)),
                 createdAt: clock.GetUtcNow());
 
             var manualResult = lead.AssignTo(manualAssignment, outgoingAssignment);
@@ -253,7 +253,7 @@ internal sealed class DispatchLeadHandler(
                 agentId: clientAdvisor.Id,
                 strategy: DispatchingStrategy.StickyAssignment,
                 compatibilityScore: 100,
-                slaDeadline: clock.GetUtcNow().Add(advisorRules.FirstContactSla),
+                slaDeadline: clock.GetUtcNow().Add(advisorRules.FirstContactSlaFor(lead.IntentLevel)),
                 createdAt: clock.GetUtcNow(),
                 // Same convention as the strategy path below: Guid.Empty is the built-in default
                 // rule, which has no row, so the assignment records null rather than a dangling id.
@@ -348,7 +348,7 @@ internal sealed class DispatchLeadHandler(
             agentId: winner.Agent.Id,
             strategy: effectiveStrategy,
             compatibilityScore: winner.CompatibilityScore,
-            slaDeadline: clock.GetUtcNow().Add(rules.FirstContactSla),
+            slaDeadline: clock.GetUtcNow().Add(rules.FirstContactSlaFor(lead.IntentLevel)),
             createdAt: clock.GetUtcNow(),
             // Serialized here, at the edge: the column is an audit record of what was
             // computed, and keeping it a string leaves existing rows readable.

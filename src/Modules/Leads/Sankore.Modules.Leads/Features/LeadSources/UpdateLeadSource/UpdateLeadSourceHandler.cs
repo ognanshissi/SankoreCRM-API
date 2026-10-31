@@ -47,7 +47,8 @@ internal sealed class UpdateLeadSourceHandler(
             dedupWindowDays:      cmd.DedupWindowDays,
             costPerLead:          costPerLead,
             defaultAgencyId:          cmd.DefaultAgencyId,
-            defaultDispatchingRuleId: cmd.DefaultDispatchingRuleId);
+            defaultDispatchingRuleId: cmd.DefaultDispatchingRuleId,
+            scorePoints:              cmd.ScorePoints);
 
         await publisher.PublishAsync(new LeadSourceChangedEvent(
             SourceId:      source.Id,

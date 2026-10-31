@@ -94,11 +94,11 @@ internal sealed class LeadSourceCopier(LeadsDbContext db, IServiceScopeFactory s
                 return await sender.Send(new CreateLeadSourceCommand(
                     copy.TargetTenantId, source.Code, source.Label, source.ChannelType, source.DisplayOrder, source.Mode, source.Description,
                     settings, PlatformConnectionId: null, source.DedupWindowDays,
-                    source.CostPerLead?.Amount, source.CostPerLead?.Currency, source.DefaultAgencyId, rule), ct);
+                    source.CostPerLead?.Amount, source.CostPerLead?.Currency, source.DefaultAgencyId, rule, source.ScorePoints), ct);
 
             var updated = await sender.Send(new UpdateLeadSourceCommand(
                 target.Id, target.Version, source.Label, source.DisplayOrder, source.Description, settings, target.PlatformConnectionId,
-                source.DedupWindowDays, source.CostPerLead?.Amount, source.CostPerLead?.Currency, source.DefaultAgencyId, rule), ct);
+                source.DedupWindowDays, source.CostPerLead?.Amount, source.CostPerLead?.Currency, source.DefaultAgencyId, rule, source.ScorePoints), ct);
             return updated.IsFailure ? Result.Fail<Guid>(updated.Error!) : Result.Ok(target.Id);
         });
 

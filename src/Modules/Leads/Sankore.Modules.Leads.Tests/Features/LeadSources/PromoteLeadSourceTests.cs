@@ -54,12 +54,12 @@ public sealed class PromoteLeadSourceTests : IDisposable
 
     private static ServerWebhookSettings Webhook(string? vaultRef) => new() { SignatureCredentialVaultRef = vaultRef };
 
-    private async Task<LeadSourceConfig> SeedAsync(Guid tenantId, string label, string? vaultRef)
+    private async Task<LeadSourceConfig> SeedAsync(Guid tenantId, string label, string? vaultRef, int? scorePoints = null)
     {
         await using var scope = _services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
         var source = LeadSourceConfig.Create(tenantId, "PARTENAIRE", label, LeadChannelType.InboundWebhook, 0,
-            IntegrationMode.ServerWebhook, settings: Webhook(vaultRef), testKeys: tenantId == _twin);
+            IntegrationMode.ServerWebhook, settings: Webhook(vaultRef), testKeys: tenantId == _twin, scorePoints: scorePoints);
         db.LeadSourceConfigs.Add(source);
         await db.SaveChangesAsync();
         return source;
@@ -106,5 +106,23 @@ public sealed class PromoteLeadSourceTests : IDisposable
         live.Label.Should().Be("Courtier — nouveau mapping");
         live.PublicKey.Should().Be(existing.PublicKey);
         live.Settings.Should().BeOfType<ServerWebhookSettings>().Which.SignatureCredentialVaultRef.Should().Be("vault:live-secret");
+    }
+
+    [Fact]
+    public async Task The_value_the_admin_gave_the_source_crosses_on_creation_and_on_update()
+    {
+        var test = await SeedAsync(_twin, "Courtier", vaultRef: null, scorePoints: 17);
+        (await PromoteAsync(test.Id)).IsSuccess.Should().BeTrue();
+        (await LiveAsync()).ScorePoints.Should().Be(17);
+
+        await using (var scope = _services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
+            var twin = await db.LeadSourceConfigs.IgnoreQueryFilters().AsTracking().SingleAsync(s => s.Id == test.Id);
+            twin.Update(twin.Label, twin.Description, twin.DisplayOrder, scorePoints: 6);
+            await db.SaveChangesAsync();
+        }
+        (await PromoteAsync(test.Id)).IsSuccess.Should().BeTrue();
+        (await LiveAsync()).ScorePoints.Should().Be(6);
     }
 }

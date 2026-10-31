@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Features.Settings.GetLeadSetting;
+using Sankore.Modules.Leads.Features.Settings.IntentThresholds;
 using Sankore.Modules.Leads.Features.Settings.ListLeadSettings;
 using Sankore.Modules.Leads.Features.Settings.PreviewRetention;
 using Sankore.Modules.Leads.Features.Settings.UpdateLeadSetting;
@@ -31,6 +32,7 @@ internal static class SettingsEndpoints
         // Before {key}, or the literal segment is swallowed by the key route and the preview
         // answers SETTING_UNKNOWN for a setting called "retention".
         group.MapPreviewRetention();
+        group.MapIntentThresholds();
 
         group.MapGetLeadSetting();
         group.MapUpdateLeadSetting();

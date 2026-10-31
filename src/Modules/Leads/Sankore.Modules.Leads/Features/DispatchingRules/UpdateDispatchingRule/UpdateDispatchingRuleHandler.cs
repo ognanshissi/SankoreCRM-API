@@ -34,7 +34,10 @@ internal sealed class UpdateDispatchingRuleHandler(LeadsDbContext db)
             firstContactSla:       cmd.FirstContactSla,
             priority:              cmd.Priority,
             excludedAgentIds:      cmd.ExcludedAgentIds ?? [],
-            declineExclusionTtl:   cmd.DeclineExclusionTtl);
+            declineExclusionTtl:   cmd.DeclineExclusionTtl,
+            firstContactSlaHot:    cmd.FirstContactSlaHot,
+            firstContactSlaWarm:   cmd.FirstContactSlaWarm,
+            firstContactSlaCold:   cmd.FirstContactSlaCold);
 
         await db.SaveChangesAsync(ct);
         return Result.Ok();

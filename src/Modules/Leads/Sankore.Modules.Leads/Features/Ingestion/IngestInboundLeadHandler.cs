@@ -153,6 +153,7 @@ internal sealed class IngestInboundLeadHandler(
         await CustomFields.InboundCustomFields.ApplyAsync(administration, logger, lead, mapped, source.Id, ct);
 
         db.Leads.Add(lead);
+        await QualifyLead.CaptureScore.ApplyAsync(db, lead, ct);
 
         // ── 7. Create ingestion record ──────────────────────────────────
         var ingestion = LeadIngestion.Create(

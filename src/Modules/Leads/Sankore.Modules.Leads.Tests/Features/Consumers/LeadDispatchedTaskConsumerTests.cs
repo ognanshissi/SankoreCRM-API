@@ -5,10 +5,12 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.Consumers;
 using Sankore.Modules.Leads.Features.DispatchLead.Events;
 using Sankore.Modules.Leads.Features.DispatchLead;
+using Sankore.Modules.Leads.Features.Household;
 using Sankore.Modules.Leads.Features.RecordFirstContact;
 using Sankore.Modules.Leads.Features.Tasks.CompleteTask;
 using Sankore.Shared.Infrastructure.Auth;
@@ -165,7 +167,12 @@ public sealed class LeadDispatchedTaskConsumerTests : IDisposable
 
         await using (var db = _db.CreateContext())
         {
-            var result = await new RecordFirstContactHandler(db).Handle(new RecordFirstContactCommand(lead.Id), default);
+            var admin = Substitute.For<IAdministrationModule>();
+            var user = Substitute.For<ICurrentUser>();
+            user.Id.Returns(_awa);
+            user.Roles.Returns(["Agent"]);
+            var result = await new RecordFirstContactHandler(db, new LeadAccessGuard(user, admin))
+                .Handle(new RecordFirstContactCommand(lead.Id), default);
             result.IsSuccess.Should().BeTrue();
         }
 

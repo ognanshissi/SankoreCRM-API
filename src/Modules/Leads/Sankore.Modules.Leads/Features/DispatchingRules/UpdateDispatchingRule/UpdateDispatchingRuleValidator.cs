@@ -12,6 +12,9 @@ internal sealed class UpdateDispatchingRuleValidator : AbstractValidator<UpdateD
         RuleFor(x => x.MaxTasksPerAgent).GreaterThanOrEqualTo(0);
         RuleFor(x => x.AntiMonopolyThreshold).GreaterThan(0);
         RuleFor(x => x.FirstContactSla).GreaterThan(TimeSpan.Zero);
+        RuleFor(x => x.FirstContactSlaHot).GreaterThan(TimeSpan.Zero).When(x => x.FirstContactSlaHot.HasValue);
+        RuleFor(x => x.FirstContactSlaWarm).GreaterThan(TimeSpan.Zero).When(x => x.FirstContactSlaWarm.HasValue);
+        RuleFor(x => x.FirstContactSlaCold).GreaterThan(TimeSpan.Zero).When(x => x.FirstContactSlaCold.HasValue);
         RuleFor(x => x.Weights.Language).GreaterThanOrEqualTo(0);
         RuleFor(x => x.Weights.Product).GreaterThanOrEqualTo(0);
         RuleFor(x => x.Weights.Geography).GreaterThanOrEqualTo(0);

@@ -77,11 +77,12 @@ internal static class NextActionRules
                 $"Formulaire complété à {lead.QualificationCompleteness:P0} — au moins 50 % requis pour le dispatch.",
                 "Medium", TimeSpan.FromHours(48));
 
-        // Never scored / New / Open with no score
-        if (lead.Score == 0 && lead.Status is LeadStatus.New or LeadStatus.Open or LeadStatus.Recycled)
+        // Not yet qualified. Read off the status, not a zero score: a lead is scored at its capture
+        // now (lead temperature, lot 2), and qualifying it is still the agent's next step.
+        if (lead.Status is LeadStatus.New or LeadStatus.Open or LeadStatus.Recycled)
             return new(NextActionType.Qualify,
                 "Qualifier le lead",
-                "Le lead n'a pas encore été scoré. Lancer le formulaire de qualification.",
+                "Le lead n'a pas encore été qualifié. Lancer le formulaire de qualification.",
                 "Medium", TimeSpan.FromHours(48));
 
         // Qualified but not yet dispatched

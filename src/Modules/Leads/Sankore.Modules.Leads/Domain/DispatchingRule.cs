@@ -45,6 +45,23 @@ public sealed class DispatchingRule: ITenant
 
     public int AntiMonopolyThreshold { get; private set; }
     public TimeSpan FirstContactSla { get; private set; }
+
+    /// <summary>
+    /// The first-contact delay for a lead of that temperature (lead temperature, lot 3): a hot lead
+    /// cools within the hour, a cold one can wait the day. Null: <see cref="FirstContactSla"/>.
+    /// </summary>
+    public TimeSpan? FirstContactSlaHot { get; private set; }
+    public TimeSpan? FirstContactSlaWarm { get; private set; }
+    public TimeSpan? FirstContactSlaCold { get; private set; }
+
+    /// <summary>The delay the assignment of a lead of that temperature gets. Unknown: the rule's own.</summary>
+    public TimeSpan FirstContactSlaFor(LeadIntentLevel level) => level switch
+    {
+        LeadIntentLevel.Hot  => FirstContactSlaHot ?? FirstContactSla,
+        LeadIntentLevel.Warm => FirstContactSlaWarm ?? FirstContactSla,
+        LeadIntentLevel.Cold => FirstContactSlaCold ?? FirstContactSla,
+        _                    => FirstContactSla,
+    };
     public bool IsActive { get; private set; }
 
     /// <summary>
@@ -67,7 +84,10 @@ public sealed class DispatchingRule: ITenant
         TimeSpan firstContactSla, int priority = 0,
         IReadOnlyList<Guid>? excludedAgentIds = null,
         int maxTasksPerAgent = 20,
-        TimeSpan? declineExclusionTtl = null)
+        TimeSpan? declineExclusionTtl = null,
+        TimeSpan? firstContactSlaHot = null,
+        TimeSpan? firstContactSlaWarm = null,
+        TimeSpan? firstContactSlaCold = null)
         => new()
         {
             Id                    = Guid.NewGuid(),
@@ -80,6 +100,9 @@ public sealed class DispatchingRule: ITenant
             DeclineExclusionTtl   = declineExclusionTtl ?? TimeSpan.FromMinutes(30),
             AntiMonopolyThreshold = antiMonopolyThreshold,
             FirstContactSla       = firstContactSla,
+            FirstContactSlaHot    = firstContactSlaHot,
+            FirstContactSlaWarm   = firstContactSlaWarm,
+            FirstContactSlaCold   = firstContactSlaCold,
             IsActive              = true,
             Priority              = priority,
             ExcludedAgentIds      = excludedAgentIds ?? []
@@ -113,7 +136,10 @@ public sealed class DispatchingRule: ITenant
         TimeSpan firstContactSla,
         int priority,
         IReadOnlyList<Guid> excludedAgentIds,
-        TimeSpan? declineExclusionTtl = null)
+        TimeSpan? declineExclusionTtl = null,
+        TimeSpan? firstContactSlaHot = null,
+        TimeSpan? firstContactSlaWarm = null,
+        TimeSpan? firstContactSlaCold = null)
     {
         Name                  = name;
         Weights               = weights;
@@ -122,6 +148,10 @@ public sealed class DispatchingRule: ITenant
         DeclineExclusionTtl   = declineExclusionTtl ?? DeclineExclusionTtl;
         AntiMonopolyThreshold = antiMonopolyThreshold;
         FirstContactSla       = firstContactSla;
+        // Replaced like the rest: null puts the rule's own delay back for that temperature.
+        FirstContactSlaHot    = firstContactSlaHot;
+        FirstContactSlaWarm   = firstContactSlaWarm;
+        FirstContactSlaCold   = firstContactSlaCold;
         Priority              = priority;
         ExcludedAgentIds      = excludedAgentIds;
     }

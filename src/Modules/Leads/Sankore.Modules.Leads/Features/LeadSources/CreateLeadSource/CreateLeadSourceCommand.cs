@@ -19,7 +19,8 @@ internal sealed record CreateLeadSourceCommand(
     decimal? CostPerLead = null,
     string? CostCurrency = null,
     Guid? DefaultAgencyId = null,
-    Guid? DefaultDispatchingRuleId = null
+    Guid? DefaultDispatchingRuleId = null,
+    int? ScorePoints = null
 ) : IRequest<Result<Guid>>, ICommand, IResourceCommand
 {
     public string ResourceType => "LeadSourceConfig";

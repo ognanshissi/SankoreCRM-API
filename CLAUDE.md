@@ -344,6 +344,57 @@ and the total is clamped to 100. The front shows the same weights next to each f
 (`lead-view.models.ts`, `ADDRESS_POINTS`; pinned by `AddressScoreTests`): change both together.
 `POST leads/{id}/enrich` rescores the lead when it touches a scored field.
 
+**A configured source carries its own value (sources lot 1, 2026-10-31).** `LeadSourceConfig.ScorePoints`
+(0–20, null = `DefaultScorePoints(ChannelType)`) is what the source dimension scores for a lead whose
+`LeadSourceConfigId` resolves; an existing customer still takes 20, and a lead typed in, imported, or
+whose source is gone keeps the `LeadSource` grid. Before, every inbound lead was the enum's `Web`, 12
+points. Channel defaults align on that grid (walk-in 20, referral and inbound call 18, WhatsApp and
+mobile agent 15, web form / webhook / pull 12, social ads and SMS-USSD 10, file import 5) — web
+sources score exactly as before. Like the cost, the agency and the dispatching rule, `ScorePoints` is
+REPLACED by an update: the front's source editor resends everything the source has on every tab
+(`_unchanged`), which also stopped a mapping save from clearing the dispatching rule. Copied by
+« Copier en production » / « Repartir de la production ». Existing leads move at their next rescore.
+
+**A lead is scored at its capture (lead temperature lot 2, 2026-10-31).** `CaptureScore.ApplyAsync`
+runs on the four creation paths — `CaptureLeadHandler` (UI, system, import, pull, replay; after
+`CaptureExtras`, before `LeadCapturedEvent`), `IngestInboundLeadHandler` (web form, webhook),
+`WhatsAppProspects.CaptureAsync` and the missed-call facade — so the lead reaches the dispatch with
+its score and `IntentLevel` (`LeadScoreCalculator.IntentLevelOf`, the one definition) and a
+`ScoreHistory` row `LEAD_CAPTURED`. A score, never a qualification: the status stays the capture's,
+and **no `LeadScoreCriticallyChangedIntegrationEvent`** is published for a first score (0 → x would
+cross 40 on most captures). Score 0 therefore no longer means « never qualified »: the next-action
+rule « Qualifier le lead » reads the status (New/Open/Recycled). A new creation path must call it.
+
+**Temperature thresholds and SLA by temperature (lot 3, 2026-10-31).** `IntentThresholds` (Settings)
+is the one reading of a score: Hot ≥ `intent-hot-threshold` (80), Warm ≥ `intent-warm-threshold` (60),
+**Cold below** — « Unknown » is only a lead nobody scored. Read by the scorer
+(`LeadScoreCalculator.IntentLevelOfAsync`) through the settings' 60-s cache; a pair out of order
+(written key by key through the generic route) reads as the defaults. `PUT lead-settings/intent-thresholds`
+(`lead:dispatching-rule:manage`) sets both, checks 1 ≤ warm < hot ≤ 100, and re-reads the temperature of
+the open scored leads from their stored score (`ExecuteUpdate`, a loop on InMemory). A dispatching rule
+may carry `FirstContactSlaHot/Warm/Cold` (null = `FirstContactSla`); `DispatchLeadHandler` uses
+`FirstContactSlaFor(lead.IntentLevel)` on its three assignment paths, so the « Premier contact » task is
+due at it too. The old `ScoringConfig` / `SlaConfig` screens are read by NOTHING — do not wire new
+behaviour there. Front: the lead list read `intentLevel` as « 0 »…« 3 » (always « — ») and its
+« Température » filter sent numbers one step off (« Froid » filtered Unknown) — both now use the names.
+
+**A lead nobody touches cools (lot 4, 2026-10-31).** The calculator subtracts an inactivity penalty
+from the CLAMPED total — 10 at 30 days, 20 at 60, 30 at 90 since the last touch (latest of capture,
+`LastActivityAt`, last activity's `PerformedAt`), factor `inactivity` — unless `lead-cooldown-enabled`
+is false (default true; switched with the thresholds, `cooldownEnabled` on `PUT intent-thresholds`).
+Every rescore applies it, and `CoolDownLeadsJob` (per tenant, 04:15) rescores open, scored leads
+untouched for 7 days in batches of 500: a changed score writes `ScoreHistory` `NIGHTLY_COOLDOWN`,
+the temperature follows, the status never moves, and NO critical-change event is published. The
+recency of interactions alone was worth 8 points, so before this a hot lead left for months stayed hot.
+Measured capture ceilings are unaffected (no penalty at capture).
+
+**An archived lead keeps no open task (2026-10-31, product owner).** `CloseLeadHandler` and
+`BulkCloseHandler`, when the reason is `Archived`, cancel the lead's Pending/InProgress tasks
+(`ArchivedLeadTasks`, same unit of work; a workflow « Tâche manuelle » task tells its step, as
+`CancelTaskHandler` does). Only tasks whose `LeadId` is the lead — not its project's or client's.
+Lost and Disqualified leads keep their tasks. A merge (`MergeInto`, which archives the duplicate)
+does NOT go through it: its tasks stay open, pending a decision.
+
 **Which rule applies is resolved from the lead**, by `DispatchingRuleResolver`: the rule pinned
 on the source the lead was ingested through (`LeadSourceConfig.DefaultDispatchingRuleId`, reached
 directly through `Lead.LeadSourceConfigId`), else the highest-priority active rule,

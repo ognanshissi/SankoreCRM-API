@@ -220,6 +220,9 @@ public sealed class CaptureLeadHandler(
             return Result.Fail<CaptureLeadResult>(extras.Error!);
         }
 
+        // Scored now that every capture field is set, before the capture event that dispatches it.
+        await QualifyLead.CaptureScore.ApplyAsync(db, lead, ct);
+
         // Outbox row written into THIS DbContext so it commits with the lead: a captured lead
         // whose event was lost would never be dispatched, and an event without its lead would
         // dispatch a row that does not exist.

@@ -211,7 +211,8 @@ public static class LeadSourcesEndpoints
             CostPerLead:     req.CostPerLead,
             CostCurrency:    req.CostCurrency,
             DefaultAgencyId:          req.DefaultAgencyId,
-            DefaultDispatchingRuleId: req.DefaultDispatchingRuleId), ct);
+            DefaultDispatchingRuleId: req.DefaultDispatchingRuleId,
+            ScorePoints:              req.ScorePoints), ct);
 
         return result.IsSuccess
             ? Results.Created($"lead-sources/{result.Value}", result.Value)
@@ -233,7 +234,8 @@ public static class LeadSourcesEndpoints
             CostPerLead:     req.CostPerLead,
             CostCurrency:    req.CostCurrency,
             DefaultAgencyId:          req.DefaultAgencyId,
-            DefaultDispatchingRuleId: req.DefaultDispatchingRuleId), ct);
+            DefaultDispatchingRuleId: req.DefaultDispatchingRuleId,
+            ScorePoints:              req.ScorePoints), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -346,7 +348,9 @@ public sealed record CreateLeadSourceRequest(
     decimal? CostPerLead = null,
     string? CostCurrency = null,
     Guid? DefaultAgencyId = null,
-    Guid? DefaultDispatchingRuleId = null);
+    Guid? DefaultDispatchingRuleId = null,
+    /// <summary>0–20 points in the lead score's source dimension; null = the channel's default.</summary>
+    int? ScorePoints = null);
 
 public sealed record UpdateLeadSourceRequest(
     uint Version,
@@ -359,7 +363,9 @@ public sealed record UpdateLeadSourceRequest(
     decimal? CostPerLead = null,
     string? CostCurrency = null,
     Guid? DefaultAgencyId = null,
-    Guid? DefaultDispatchingRuleId = null);
+    Guid? DefaultDispatchingRuleId = null,
+    /// <summary>Replaced, like the cost: null puts the channel's default back.</summary>
+    int? ScorePoints = null);
 
 public sealed record PreviewMappingRequest(string SamplePayloadJson);
 
