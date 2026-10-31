@@ -622,6 +622,36 @@ internal sealed class CustomersModuleFacade(
     // Recorded as SYSTEM through the same filing as an agent's complaint, so the deadlines, the
     // assignee and the alert cannot differ. An unknown category is Other: the client's complaint
     // must not be lost to a classification.
+    public async Task<ClientComplaintReference?> GetComplaintReferenceAsync(
+        Guid tenantId, Guid clientId, Guid complaintId, CancellationToken ct)
+    {
+        if (tenantId == Guid.Empty || clientId == Guid.Empty || complaintId == Guid.Empty) return null;
+
+        var complaint = await db.ClientComplaints
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.ClientId == clientId && c.Id == complaintId, ct);
+
+        return complaint is null || complaint.AnonymizedAt is not null
+            ? null
+            : new ClientComplaintReference(complaint.Id, complaint.Reference, complaint.IsOpen, complaint.ClientId);
+    }
+
+    public async Task<ClientComplaintReference?> FindComplaintByReferenceAsync(Guid tenantId, string reference, CancellationToken ct)
+    {
+        var wanted = reference?.Trim().ToUpperInvariant();
+        if (tenantId == Guid.Empty || string.IsNullOrEmpty(wanted)) return null;
+
+        var complaint = await db.ClientComplaints
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.Reference == wanted, ct);
+
+        return complaint is null || complaint.AnonymizedAt is not null
+            ? null
+            : new ClientComplaintReference(complaint.Id, complaint.Reference, complaint.IsOpen, complaint.ClientId);
+    }
+
     public async Task<Result<FiledClientComplaint>> FileComplaintAsync(FileClientComplaintRequest request, CancellationToken ct)
     {
         if (complaintFiling is null) throw new InvalidOperationException("The complaints register is not registered.");

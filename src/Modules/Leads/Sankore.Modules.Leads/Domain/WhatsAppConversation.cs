@@ -165,6 +165,18 @@ public sealed class WhatsAppConversation : ITenant
     /// </summary>
     public DateTimeOffset? AnonymizedAt { get; private set; }
 
+    /// <summary>
+    /// When this number last wrote STOP (2026-10-31). A lead's opt-out is its withdrawn consent; a
+    /// CLIENT has no consent row, so this is what stops an advisor from writing to them again. It
+    /// stays: only the customer writing to us again reopens a reply, inside their own window.
+    /// </summary>
+    public DateTimeOffset? OptedOutAt { get; private set; }
+
+    public void RecordOptOut(DateTimeOffset now) => OptedOutAt = now;
+
+    /// <summary>Whether a free reply would answer the customer's STOP rather than a later message of theirs.</summary>
+    public bool IsOptedOut => OptedOutAt is { } stop && (LastInboundAt is not { } inbound || inbound <= stop);
+
     /// <summary>PostgreSQL xmin — two webhooks for one conversation must not lose a counter.</summary>
     public uint Version { get; private set; }
 
@@ -499,6 +511,21 @@ public sealed class WhatsAppConversation : ITenant
     /// answers. A prospect being collected stops being one: the person is already a client.
     /// </summary>
     public void IdentifyClient(Guid clientId)
+    {
+        if (LeadId is not null || ClientId is not null) return;
+
+        ClientId = clientId;
+        AmbiguousMatch = false;
+        CollectingProspect = false;
+        PendingLeadFieldsJson = null;
+    }
+
+    /// <summary>
+    /// An advisor writes to this client from their record (2026-10-31): a conversation filed on
+    /// nobody is filed on them. One of a lead or of ANOTHER client (a family phone) is never moved:
+    /// its messages are that record's, and the advisor may not even see that record.
+    /// </summary>
+    public void AttachToClient(Guid clientId)
     {
         if (LeadId is not null || ClientId is not null) return;
 

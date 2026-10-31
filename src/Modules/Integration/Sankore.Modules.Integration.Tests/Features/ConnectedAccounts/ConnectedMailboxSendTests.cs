@@ -225,6 +225,33 @@ public sealed class ConnectedMailboxSendTests : IDisposable
         _mailbox.Sent.Single().To.Select(p => p.Address).Should().Equal("Aya@Example.ci");
     }
 
+    [Fact]
+    public async Task A_mail_written_from_a_complaint_carries_its_reference_and_cannot_name_another_clients()
+    {
+        var account = await AccountAsync();
+        var client = Guid.NewGuid();
+        var complaint = Guid.NewGuid();
+        var customers = Substitute.For<ICustomersModule>();
+        customers.ResolveEmailForMailAsync(_tenant, client, _me, Arg.Any<CancellationToken>()).Returns(Result.Ok("client@example.ci"));
+        customers.GetComplaintReferenceAsync(_tenant, client, complaint, Arg.Any<CancellationToken>())
+            .Returns(new ClientComplaintReference(complaint, "RCL-2026-000042", true, client));
+
+        var sent = await SendAsync(Command(account.Id, to: []) with { ToClientId = client, ComplaintId = complaint, Subject = "Suite à votre appel" }, customers: customers);
+
+        sent.IsSuccess.Should().BeTrue(sent.Error);
+        _mailbox.Sent.Single().Subject.Should().Be("Suite à votre appel [RCL-2026-000042]");
+
+        (await SendAsync(Command(account.Id, to: []) with { ToClientId = client, ComplaintId = Guid.NewGuid() }, customers: customers))
+            .Error.Should().Be(MailSendErrors.ComplaintNotFound);
+    }
+
+    [Theory]
+    [InlineData("", "Votre réclamation RCL-2026-000042")]
+    [InlineData("RE: Votre réclamation rcl-2026-000042", "RE: Votre réclamation rcl-2026-000042")]
+    [InlineData("Votre dossier", "Votre dossier [RCL-2026-000042]")]
+    public void The_reference_is_put_in_the_subject_once(string subject, string expected)
+        => SendMailHandler.WithComplaintReference(subject, "RCL-2026-000042").Should().Be(expected);
+
     [Theory]
     [InlineData("CLIENT_NOT_FOUND", MailSendErrors.ClientNotReachable)]
     [InlineData("CLIENT_PROCESSING_RESTRICTED", MailSendErrors.ClientRestricted)]

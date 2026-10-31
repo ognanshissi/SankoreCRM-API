@@ -3912,6 +3912,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("lead_id");
 
+                    b.Property<DateTimeOffset?>("OptedOutAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opted_out_at");
+
                     b.Property<Guid?>("OwnerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
@@ -4085,6 +4089,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<string>("Body")
                         .HasColumnType("text")
                         .HasColumnName("body_enc");
+
+                    b.Property<Guid?>("ComplaintId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("complaint_id");
 
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid")

@@ -714,14 +714,6 @@ builder.Services.AddHangfire(cfg =>
 // PostgreSQL while writing it is this worker starting up.
 if (emitOpenApiTo is null)
 {
-    // Named queues for the Integration module (INT-06, INT-09). Until this module existed every
-    // job in the solution ran on "default" with the stock worker count, and that is exactly why
-    // "default" has to stay first in this list: passing Queues REPLACES the default set, so
-    // omitting it would silently stop every lead, KYC and customer job from being processed.
-    //
-    // The split matters because the three integration queues have different failure modes. A
-    // batch job holds a whole file in memory and runs for minutes; a write job is a short
-    // outbound call that must not queue behind it; a sync job is long but interruptible. One
     // shared pool lets a nightly batch starve the writes an agent is waiting on.
     builder.Services.AddHangfireServer(opts =>
     {
@@ -732,9 +724,6 @@ if (emitOpenApiTo is null)
             "integration-sync",
             "integration-batch",
         ];
-
-        // Left at the framework default (ProcessorCount * 5) rather than pinned: the figure is
-        // per host and this process also serves HTTP. Raise it deliberately, with a measurement.
     });
 }
 

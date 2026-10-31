@@ -109,7 +109,9 @@ public sealed record WhatsAppMessageDto(
     DateTimeOffset? FailedAt,
     string? ErrorCode,
     string? ErrorDetail,
-    bool MediaPurged = false);
+    bool MediaPurged = false,
+    // The client complaint it was written about, when sent from one (2026-10-31).
+    Guid? ComplaintId = null);
 
 /// <param name="Items">Newest first. The screen reverses them.</param>
 /// <param name="NextBefore">The cursor for older messages; null when there are none.</param>
@@ -220,9 +222,11 @@ internal sealed class GetWhatsAppPanelHandler(
             .ThenByDescending(c => c.LastMessageAt)
             .FirstOrDefault();
 
+        var lastTemplateFailed = await WhatsAppTemplateCooldown.LastTemplateFailedAsync(db, conversation, ct);
         var blockers = WhatsAppEligibility.Blockers(
             lead, state, phone, channel is not null, conversation, query.MayForce, now,
-            await Retention.ProcessingRestriction.IsRestrictedAsync(customers, tenantId, lead, ct));
+            await Retention.ProcessingRestriction.IsRestrictedAsync(customers, tenantId, lead, ct),
+            lastTemplateFailed);
 
         var people = conversation is null
             ? []
@@ -256,7 +260,7 @@ internal sealed class GetWhatsAppPanelHandler(
                 conversation.WindowExpiresAt,
                 conversation.LastInboundAt,
                 conversation.LastTemplateSentAt,
-                conversation.NextTemplateAllowedAt(now),
+                lastTemplateFailed ? null : conversation.NextTemplateAllowedAt(now),
                 conversation.UnreadCount,
                 conversation.AmbiguousMatch,
                 conversation.ContactName,
@@ -379,7 +383,8 @@ internal static class WhatsAppMessagePages
             m.FailedAt,
             m.ErrorCode,
             m.ErrorDetail,
-            MediaPurged: m.MediaPurgedAt is not null)).ToList();
+            MediaPurged: m.MediaPurgedAt is not null,
+            ComplaintId: m.ComplaintId)).ToList();
 
         return new WhatsAppMessagePageDto(items, hasMore ? page[^1].OccurredAt : null);
     }

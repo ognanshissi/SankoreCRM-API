@@ -182,6 +182,7 @@ internal sealed class ConnectedMailboxSync(
         if (known.Count == 0) return (0, updated, removed);
 
         var kept = 0;
+        var complaints = new Dictionary<string, ClientComplaintReference?>(StringComparer.OrdinalIgnoreCase);
         foreach (var header in candidates)
         {
             var links = header.Parties
@@ -192,6 +193,10 @@ internal sealed class ConnectedMailboxSync(
                 .ToList();
 
             if (links.Count == 0) continue;
+
+            // A complaint quoted in the subject (« Votre réclamation RCL-2026-000042 », kept by the
+            // client's reply), filed on it when ITS client is a party of the message (2026-10-31).
+            links.AddRange(await ComplaintLinksAsync(account.TenantId, header.Subject, links, complaints, ct));
 
             var content = await reader.ReadContentAsync(session, header.ExternalId, ct);
             if (content is null) continue;
@@ -227,6 +232,32 @@ internal sealed class ConnectedMailboxSync(
         }
 
         return (kept, updated, removed);
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex ComplaintReference =
+        new(@"\bRCL-\d{4}-\d{6}\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The complaints a subject quotes whose client is among the message's clients. A reference
+    /// quoted by a stranger, or about another client, files nothing. One read per reference per page.
+    /// </summary>
+    private async Task<List<(MailLinkEntity, Guid)>> ComplaintLinksAsync(
+        Guid tenantId, string? subject, List<(MailLinkEntity, Guid)> links,
+        Dictionary<string, ClientComplaintReference?> cache, CancellationToken ct)
+    {
+        if (customers is null || string.IsNullOrEmpty(subject)) return [];
+        var clients = links.Where(l => l.Item1 == MailLinkEntity.Client).Select(l => l.Item2).ToHashSet();
+        if (clients.Count == 0) return [];
+
+        var found = new List<(MailLinkEntity, Guid)>();
+        foreach (var reference in ComplaintReference.Matches(subject).Select(m => m.Value.ToUpperInvariant()).Distinct())
+        {
+            if (!cache.TryGetValue(reference, out var complaint))
+                cache[reference] = complaint = await customers.FindComplaintByReferenceAsync(tenantId, reference, ct);
+            if (complaint is not null && clients.Contains(complaint.ClientId))
+                found.Add((MailLinkEntity.Complaint, complaint.Id));
+        }
+        return found;
     }
 
     /// <summary>Address → the leads and clients holding it. A module that cannot answer answers nothing: no match, nothing kept.</summary>

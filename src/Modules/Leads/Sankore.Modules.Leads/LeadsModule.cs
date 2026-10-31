@@ -245,6 +245,7 @@ public static class LeadsModule
         services.AddScoped<Features.WhatsApp.WhatsAppTemplateSynchronizer>();
         services.AddScoped<Features.WhatsApp.SyncWhatsAppTemplatesJob>();
         services.AddScoped<Features.WhatsApp.WhatsAppConversationLoader>();
+        services.AddScoped<Features.WhatsApp.ClientWhatsAppContext>();
         services.AddScoped<Features.WhatsApp.WhatsAppTakeoverJob>();
         services.AddScoped<Features.WhatsApp.WhatsAppEscalation>();
         // Complaints taken on WhatsApp, question by question, no model (2026-10-26).
@@ -543,6 +544,7 @@ public static class LeadsModule
         group.MapGetMyAgenda();
         group.MapAppointmentsEndpoints();
         group.MapWhatsAppEndpoints();
+        Features.WhatsApp.ClientWhatsAppEndpoints.MapClientWhatsAppEndpoints(group);
         group.MapWhatsAppBotEndpoints();
         group.MapGetFunnelMetrics();
 

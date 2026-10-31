@@ -60,6 +60,8 @@ internal static class MailSendErrors
     public const string ClientNotReachable = "MAIL_CLIENT_NOT_REACHABLE";
     public const string ClientRestricted = "MAIL_CLIENT_RESTRICTED";
     public const string ClientEmailMissing = "MAIL_CLIENT_EMAIL_MISSING";
+    /// <summary>A complaint named by the send is not one of the client written to (or no client is named).</summary>
+    public const string ComplaintNotFound = "MAIL_COMPLAINT_NOT_FOUND";
     /// <summary>A scheduled time in less than a minute, or more than a year away.</summary>
     public const string ScheduleInvalid = "MAIL_SCHEDULE_INVALID";
     /// <summary>The tenant is in test mode and a recipient is not one of its users.</summary>
@@ -84,7 +86,8 @@ internal sealed record SendMailCommand(
     IReadOnlyList<string> ForwardAttachmentIds,
     [property: SensitiveData] IReadOnlyList<OutgoingAttachment> Attachments,
     Guid? ToClientId = null,
-    DateTimeOffset? SendAt = null)
+    DateTimeOffset? SendAt = null,
+    Guid? ComplaintId = null)
     : IRequest<Result<SendMailOutcome>>, ICommand, IResourceCommand
 {
     public string ResourceType => "ConnectedAccount";
@@ -130,6 +133,16 @@ internal sealed class SendMailHandler(
         return result;
     }
 
+    /// <summary>« Votre réclamation RCL-… » when empty; else the subject, the reference appended unless it is already there.</summary>
+    internal static string WithComplaintReference(string subject, string reference)
+    {
+        if (subject.Length == 0) return $"Votre réclamation {reference}";
+        if (subject.Contains(reference, StringComparison.OrdinalIgnoreCase)) return subject;
+        var suffix = $" [{reference}]";
+        var room = MailSendLimits.MaxSubject - suffix.Length;
+        return (subject.Length > room ? subject[..room].TrimEnd() : subject) + suffix;
+    }
+
     private async Task<Result<SendMailOutcome>> SendAsync(SendMailCommand cmd, CancellationToken ct)
     {
         var to = Parse(cmd.To);
@@ -157,6 +170,17 @@ internal sealed class SendMailHandler(
         }
 
         var subject = cmd.Subject?.Trim() ?? string.Empty;
+
+        // Written from a complaint (2026-10-31): it must be the client's, and its reference goes in
+        // the subject — the client's reply keeps it, and the sync files both on the complaint.
+        if (cmd.ComplaintId is { } complaintId)
+        {
+            var complaint = cmd.ToClientId is { } owner && customers is not null
+                ? await customers.GetComplaintReferenceAsync(me.TenantId, owner, complaintId, ct)
+                : null;
+            if (complaint is null) return Fail(MailSendErrors.ComplaintNotFound);
+            subject = WithComplaintReference(subject, complaint.Reference);
+        }
         if (subject.Length > MailSendLimits.MaxSubject || subject.Contains('\n') || subject.Contains('\r')) return Fail(MailSendErrors.SubjectInvalid);
         if ((cmd.Body?.Length ?? 0) > MailSendLimits.MaxBody) return Fail(MailSendErrors.BodyTooLarge);
 
@@ -791,7 +815,7 @@ internal static class ConnectedMailboxSendEndpoints
         var result = await sender.Send(new SendMailCommand(
             accountId, All(form["to"]), All(form["cc"]), All(form["bcc"]), form["subject"].ToString(), form["body"].ToString(),
             OptionalGuid(form["replyToMessageId"]), OptionalGuid(form["forwardMessageId"]), forwardIds, attachments,
-            OptionalGuid(form["toClientId"]), sendAt), ct);
+            OptionalGuid(form["toClientId"]), sendAt, OptionalGuid(form["complaintId"])), ct);
 
         return result.IsSuccess ? Results.Accepted(value: result.Value) : Problem(result.Error!);
     }
@@ -842,4 +866,10 @@ public sealed class SendMailForm
     /// a minute and a year from now; absent, it leaves now.
     /// </summary>
     public DateTimeOffset? SendAt { get; set; }
+
+    /// <summary>
+    /// Written from one of <see cref="ToClientId"/>'s complaints: its reference is put in the subject
+    /// and the message (and the client's reply) are filed on it by the sync.
+    /// </summary>
+    public Guid? ComplaintId { get; set; }
 }

@@ -1,6 +1,7 @@
 namespace Sankore.Modules.Leads.Features.WhatsApp;
 
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 
 /// <summary>
@@ -132,6 +133,26 @@ public enum WhatsAppConsentState
 }
 
 /// <summary>
+/// The 24 hours after a template protect against insisting on a customer's SILENCE — a template the
+/// provider refused (test mode, a rejected template, an invalid number…) never reached them, so it
+/// does not count (product owner, 2026-10-31). Read off the conversation's latest template rather
+/// than reset when the send fails: a refusal Meta reports later, by status callback, counts too.
+/// </summary>
+internal static class WhatsAppTemplateCooldown
+{
+    public static async Task<bool> LastTemplateFailedAsync(
+        Infrastructure.LeadsDbContext db, WhatsAppConversation? conversation, CancellationToken ct)
+        => conversation?.LastTemplateSentAt is not null
+           && await db.WhatsAppMessages
+                  .Where(m => m.ConversationId == conversation.Id
+                           && m.Kind == WhatsAppMessageKind.Template
+                           && m.Direction == WhatsAppDirection.Outbound)
+                  .OrderByDescending(m => m.OccurredAt)
+                  .Select(m => (WhatsAppMessageStatus?)m.Status)
+                  .FirstOrDefaultAsync(ct) == WhatsAppMessageStatus.Failed;
+}
+
+/// <summary>
 /// Why the « Contacter via WhatsApp » button is disabled, one code per obstacle (WA-FE-04).
 ///
 /// <para>
@@ -150,7 +171,8 @@ public static class WhatsAppEligibility
         WhatsAppConversation? conversation,
         bool mayForce,
         DateTimeOffset now,
-        bool processingRestricted = false)
+        bool processingRestricted = false,
+        bool lastTemplateFailed = false)
     {
         var blockers = new List<string>();
 
@@ -165,7 +187,7 @@ public static class WhatsAppEligibility
         if (phoneE164 is null) blockers.Add(WhatsAppErrors.PhoneInvalid);
         if (!channelActive) blockers.Add(WhatsAppErrors.ChannelInactive);
 
-        if (!mayForce && conversation?.NextTemplateAllowedAt(now) is not null)
+        if (!mayForce && !lastTemplateFailed && conversation?.NextTemplateAllowedAt(now) is not null)
             blockers.Add(WhatsAppErrors.TemplateCooldown);
 
         return blockers;

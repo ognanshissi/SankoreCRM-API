@@ -104,6 +104,15 @@ public sealed class WhatsAppMessage : ITenant
 
     public void ExcludeFromModel() => ExcludedFromModel = true;
 
+    /// <summary>
+    /// The client complaint this message was written about (2026-10-31): sent by an advisor from
+    /// the complaint, so the complaint lists its exchanges. An opaque M01 id, no foreign key; the
+    /// sender checked it belongs to the conversation's client.
+    /// </summary>
+    public Guid? ComplaintId { get; private set; }
+
+    public void LinkToComplaint(Guid complaintId) => ComplaintId = complaintId;
+
     private WhatsAppMessage() { } // EF Core
 
     public static WhatsAppMessage Inbound(

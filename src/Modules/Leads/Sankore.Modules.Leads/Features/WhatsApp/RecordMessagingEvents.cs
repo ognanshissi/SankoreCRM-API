@@ -307,6 +307,8 @@ internal sealed class RecordMessagingEventsHandler(
         if (!string.IsNullOrWhiteSpace(confirmation))
             await escalation.QueueAutomaticAsync(tenantId, conversation, WhatsAppAuthor.System, confirmation, now, ct);
 
+        // Kept on the conversation for a client, who has no consent row to withdraw.
+        conversation.RecordOptOut(now);
         conversation.Close("OPT_OUT", closedBy: null, now);
         await WhatsAppHandovers.EndAsync(db, conversation.Id, WhatsAppHandoverEnd.Closed, null, now, ct);
     }

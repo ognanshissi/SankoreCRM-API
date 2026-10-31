@@ -404,6 +404,43 @@ The lead header shows it (`lead-project-suggestion`) and opens the create-projec
 product. A SUGGESTION only: `ResolveProductLineAsync` stays exact — it decides the KYC tier and the
 conversion gates. `ProductSummary` now carries `Description`.
 
+**WhatsApp with a CLIENT, about a complaint (complaints lot 1, 2026-10-31, product owner).** Routes
+`leads/whatsapp/clients/{clientId}` (panel: conversation, window, blockers, templates for every
+product), `.../messages?complaintId=`, `.../send-template`, `.../takeover`, `.../messages` (POST, free
+reply) — `ClientWhatsApp.cs`. Before, only a lead could be written to. Access = M01's agency perimeter
+(`CanActorAccessClientAsync`, else `CLIENT_NOT_FOUND`) + the WhatsApp permission; the number comes
+from `ResolvePhoneForCallAsync` on the server (never shown, not a reveal). **No consent is asked**
+(product owner: following up the client's complaint is a service relationship); refused for a
+processing restriction, no usable number, a STOP (`WhatsAppConversation.OptedOutAt`, now recorded on
+every opt-out — a client has no consent row; a free reply is allowed again only after the client
+writes back) and the 24-h template cooldown. A send may name a complaint of THAT client
+(`ICustomersModule.GetComplaintReferenceAsync`, else `COMPLAINT_NOT_FOUND`): `WhatsAppMessage.ComplaintId`.
+One conversation per number: when the client's number already has its conversation on a LEAD or
+on ANOTHER client (a family phone), it is neither read, taken over nor written in from the client's
+routes — the send is refused `WHATSAPP_NUMBER_IN_ANOTHER_RECORD` (found by the security review);
+`AttachToClient` only files a conversation on nobody.
+
+**A refused template does not start the 24-h cooldown (2026-10-31, product owner).** The cooldown
+protects against insisting on a customer's silence; a template the provider refused (test mode,
+rejected template, invalid number — any `Failed` status, even reported later by callback) never
+reached them. `WhatsAppTemplateCooldown.LastTemplateFailedAsync` reads the conversation's latest
+outbound template and lifts the cooldown when it failed — leads (`WhatsAppEligibility.Blockers`,
+panel) and clients alike.
+
+**E-mails filed on a complaint (complaints lot 2, 2026-10-31).** `SendMailCommand.ComplaintId` (form
+field `complaintId`) must name a complaint of `ToClientId` (`GetComplaintReferenceAsync`, else
+`MAIL_COMPLAINT_NOT_FOUND`); its reference is put in the subject (« Votre réclamation RCL-… » when
+empty, else appended ` [RCL-…]` unless present — `SendMailHandler.WithComplaintReference`). Nothing is
+stored at send: the SYNC files a kept message on the complaint (`MailLinkEntity.Complaint`, stored
+« Complaint » — the column holds 10 chars) when its subject quotes `RCL-yyyy-nnnnnn`
+(`ICustomersModule.FindComplaintByReferenceAsync`) AND the complaint's client is one of the message's
+client links — a stranger quoting a reference files nothing. The client's reply keeps the reference,
+so it is filed too. `GET integration/clients/{clientId}/complaints/{complaintId}/mails`
+(`customers:complaints:read`, client perimeter) lists them: when, which way, whose mailbox for all;
+subject, preview and the message id (to open the thread) for the mailbox's owner only. The mailbox's
+own link chips ignore complaint links. The inbox perimeter is
+unchanged: an advisor reaches a client conversation through these routes, not the inbox.
+
 **Which rule applies is resolved from the lead**, by `DispatchingRuleResolver`: the rule pinned
 on the source the lead was ingested through (`LeadSourceConfig.DefaultDispatchingRuleId`, reached
 directly through `Lead.LeadSourceConfigId`), else the highest-priority active rule,

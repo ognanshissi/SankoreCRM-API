@@ -267,6 +267,23 @@ public interface ICustomersModule
     Task<Result<FiledClientComplaint>> FileComplaintAsync(FileClientComplaintRequest request, CancellationToken ct);
 
     /// <summary>
+    /// A complaint of THIS client, by id — its reference and whether it is still open — so a message
+    /// sent « about » it (WhatsApp, e-mail) cannot name a complaint of another client. Null when it
+    /// does not exist, belongs to another client or tenant, or was anonymised. No perimeter check:
+    /// the caller has already established that the actor may act on the client.
+    /// </summary>
+    Task<ClientComplaintReference?> GetComplaintReferenceAsync(
+        Guid tenantId, Guid clientId, Guid complaintId, CancellationToken ct);
+
+    /// <summary>
+    /// A complaint by the reference the client quotes (<c>RCL-2026-000042</c>, case ignored) — for
+    /// the mailbox sync to file an e-mail whose subject carries it. The caller must still check that
+    /// <see cref="ClientComplaintReference.ClientId"/> is a party of the message: a stranger quoting a
+    /// reference files nothing. Null when unknown or anonymised.
+    /// </summary>
+    Task<ClientComplaintReference?> FindComplaintByReferenceAsync(Guid tenantId, string reference, CancellationToken ct);
+
+    /// <summary>
     /// Whether the client has an active telephone number on file — a boolean, never the number.
     ///
     /// <para>
@@ -902,3 +919,6 @@ public sealed record FileClientComplaintRequest(
     Guid? SourceConversationId = null);
 
 public sealed record FiledClientComplaint(Guid ComplaintId, string Reference, DateTimeOffset ResolutionDueAt);
+
+/// <summary>A complaint as another module names it: its reference (<c>RCL-2026-000042</c>) and whether it is open.</summary>
+public sealed record ClientComplaintReference(Guid Id, string Reference, bool IsOpen, Guid ClientId = default);

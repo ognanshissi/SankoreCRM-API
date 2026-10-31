@@ -110,7 +110,8 @@ internal sealed class SendWhatsAppTemplateHandler(
 
         var blockers = WhatsAppEligibility.Blockers(
             lead, consent, phone, channel is not null, conversation, cmd.MayForce, now,
-            await Retention.ProcessingRestriction.IsRestrictedAsync(customers, tenantId, lead, ct));
+            await Retention.ProcessingRestriction.IsRestrictedAsync(customers, tenantId, lead, ct),
+            await WhatsAppTemplateCooldown.LastTemplateFailedAsync(db, conversation, ct));
 
         if (blockers.Count > 0) return Fail(blockers[0]);
 

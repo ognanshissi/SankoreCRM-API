@@ -311,6 +311,12 @@ public enum MailLinkEntity
 {
     Lead,
     Client,
+
+    /// <summary>
+    /// A client complaint (2026-10-31): the message's subject quotes its reference and the
+    /// complaint's client is a party of it. Stored as « Complaint » — the column holds 10 characters.
+    /// </summary>
+    Complaint,
 }
 
 /// <summary>

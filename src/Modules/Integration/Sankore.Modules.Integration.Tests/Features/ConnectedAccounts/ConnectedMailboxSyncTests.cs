@@ -108,6 +108,33 @@ public sealed class ConnectedMailboxSyncTests : IDisposable
         new(id, folder, thread, $"<{id}@mail>", new MailParty(from, null), [new MailParty(to, null)], [],
             new DateTimeOffset(2026, 10, 27, 9, 0, 0, TimeSpan.Zero).AddMinutes(-minutesAgo), isRead, subject, "Bonjour Awa");
 
+    // ── Complaints (2026-10-31) ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_message_quoting_a_complaint_of_its_client_is_filed_on_the_complaint()
+    {
+        var complaint = Guid.NewGuid();
+        var otherClientsComplaint = Guid.NewGuid();
+        _customers.FindComplaintByReferenceAsync(_tenant, "RCL-2026-000042", Arg.Any<CancellationToken>())
+            .Returns(new ClientComplaintReference(complaint, "RCL-2026-000042", true, _client));
+        _customers.FindComplaintByReferenceAsync(_tenant, "RCL-2026-000043", Arg.Any<CancellationToken>())
+            .Returns(new ClientComplaintReference(otherClientsComplaint, "RCL-2026-000043", true, Guid.NewGuid()));
+        var account = await AccountAsync();
+        _reader.Script("inbox", _ => new MailChangePage(
+        [
+            Header("m1", "boutique@example.ci", "awa@cabinet.ci", subject: "RE: Votre réclamation rcl-2026-000042"),
+            // A reference quoted about ANOTHER client's complaint, and one quoted by a stranger: nothing filed.
+            Header("m2", "boutique@example.ci", "awa@cabinet.ci", thread: "t2", subject: "Ma réclamation RCL-2026-000043"),
+            Header("m3", "aya@example.ci", "awa@cabinet.ci", thread: "t3", subject: "RCL-2026-000042"),
+        ], [], "inbox-1", HasMore: false));
+
+        await SyncAsync(account);
+
+        await using var db = _factory.CreateContext();
+        var filed = await db.ConnectedMailLinks.Where(l => l.EntityType == MailLinkEntity.Complaint).ToListAsync();
+        filed.Should().ContainSingle().Which.EntityId.Should().Be(complaint);
+    }
+
     // ── Keeping ────────────────────────────────────────────────────────────────
 
     [Fact]
