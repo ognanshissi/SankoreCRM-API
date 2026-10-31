@@ -67,6 +67,62 @@ public sealed class CustomersDbContext(DbContextOptions<CustomersDbContext> opti
     public DbSet<ClientImportJob> ClientImportJobs => Set<ClientImportJob>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
+    /// <summary>
+    /// A primary contact point that changes hands is written in two rounds. PostgreSQL checks
+    /// <c>ux_client_contact_points_primary</c> row by row and EF does not order the statements
+    /// around a filtered index: inserting (or promoting) the new primary before demoting the old
+    /// one failed with 23505 — adding a phone « principale », « Définir comme principale », and
+    /// closing the primary. Round one saves everything with the newcomers not yet primary, round
+    /// two promotes them; both run in the command's transaction.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var incoming = PrimariesChangingHands();
+        if (incoming.Count == 0)
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+
+        var ownTransaction = System.Transactions.Transaction.Current is null
+                             && Database.CurrentTransaction is null
+                             && Database.IsRelational()
+            ? await Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        await using (ownTransaction)
+        {
+            foreach (var cp in incoming) cp.SetPrimary(false);
+            var written = await base.SaveChangesAsync(true, cancellationToken);
+            foreach (var cp in incoming) cp.SetPrimary(true);
+            written += await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+
+            if (ownTransaction is not null) await ownTransaction.CommitAsync(cancellationToken);
+            return written;
+        }
+    }
+
+    /// <summary>The contact points becoming primary while another of their client and type stops being one.</summary>
+    private List<ClientContactPoint> PrimariesChangingHands()
+    {
+        var entries = ChangeTracker.Entries<ClientContactPoint>().ToList();
+
+        var leaving = entries
+            .Where(e => e.State == EntityState.Modified
+                        && e.Property(cp => cp.IsPrimary).OriginalValue
+                        && e.Property(cp => cp.ValidTo).OriginalValue is null
+                        && (!e.Entity.IsPrimary || !e.Entity.IsActive))
+            .Select(e => (e.Entity.ClientId, e.Entity.Type))
+            .ToHashSet();
+
+        if (leaving.Count == 0) return [];
+
+        return entries
+            .Where(e => e.Entity.IsPrimary && e.Entity.IsActive
+                        && (e.State == EntityState.Added
+                            || (e.State == EntityState.Modified && !e.Property(cp => cp.IsPrimary).OriginalValue))
+                        && leaving.Contains((e.Entity.ClientId, e.Entity.Type)))
+            .Select(e => e.Entity)
+            .ToList();
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);

@@ -322,6 +322,11 @@ Archived client updates `KycStatus` only.
 (`SELF_APPROVAL_FORBIDDEN`); an M12 `WorkflowInstance` is created for traceability but the M12
 engine enforces no self-approval rule of its own, so M01 owns that guarantee.
 
+**A primary contact point changing hands is saved in two rounds** (`CustomersDbContext.SaveChangesAsync`,
+2026-10-31): PostgreSQL checks `ux_client_contact_points_primary` row by row and EF does not order
+statements around a filtered index, so adding a primary, promoting one or closing the primary failed
+with 23505. Demotions first, promotions second, in the command's transaction.
+
 Concurrency uses the PostgreSQL `xmin` token (`Version`) with error `CONCURRENCY_CONFLICT`.
 No endpoint deletes a client: archiving is a status, anonymisation blanks encrypted fields.
 
