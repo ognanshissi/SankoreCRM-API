@@ -393,6 +393,32 @@ the temperature follows, the status never moves, and NO critical-change event is
 recency of interactions alone was worth 8 points, so before this a hot lead left for months stayed hot.
 Measured capture ceilings are unaffected (no penalty at capture).
 
+**Agents' monthly objectives (« Ma journée » redesign lot 1, 2026-10-31, product owner).**
+`AgentObjective` (`leads.agent_objectives`, one row per agent and month): first contacts within 24 h
+(%) and conversions of the month, set by the agent's manager. A month with no row reads the latest
+earlier one (`AgentObjectiveReader.EffectiveAsync`, `setFor` says which); null = no objective from that
+month on. `GET leads/agent-objectives?month=aaaa-mm` and `PUT leads/agent-objectives/{agentId}/{month}`
+(`lead:agent-objective:manage`, granted with lead supervision to sales and branch managers) cover the
+caller's team (`GetTeamAgentIdsAsync`) ∩ roles Agent / CommercialAgent — anyone else is
+`AGENT_OBJECTIVE_AGENT_NOT_FOUND` (404). A past month is closed (`AGENT_OBJECTIVE_MONTH_CLOSED`): it is what
+the agent was measured against. `GET leads/me/objective` is the agent's own. `GET leads/agent-objectives/{agentId}` (same right and team) gives one agent's current month and the two next as they will read, plus the months set (24 at most) — the « Objectifs » tab of the user record; the team-wide drawer opens from the users list (product owner, 2026-11-01), no longer from « Ma journée ». Kept by the test-tenant wipe.
+
+**The agent's « Ma journée » figures (redesign lot 2, 2026-10-31).** `GET leads/me/scorecard?period=week|month`
+(`GetMyScorecard.cs`, UTC bounds, ISO week from Monday / calendar month so far): leads assigned in the
+period counted once by their status NOW (« À contacter » = New, « Perdus » = Lost/Disqualified/Archived,
+« En cours » = the other open ones), leads received over the last 4 ISO weeks, first contact within 24 h
+(an uncontacted assignment younger than 24 h is neither on time nor late), conversions by conversion date
+to the holder, tasks due today done/total, and today's assignments still held (10 oldest + total).
+Same rule as the performance page: an assignment withdrawn before any contact does not count.
+Objectives come from `AgentObjectiveReader`; for the week, the conversions one is the month's share of seven days (`WeeklyShare`, rounded, at least 1: 12 → 3), and `dailyReceived` lists Monday–Friday plus a weekend day that received leads or is today (owner's mock-up, 2026-11-01). `ProductLabels`
+(catalogue name, else the typed label) is shared with `GetMyPerformance`.
+
+**`GET leads?ids=…` (2026-11-01).** Repeated `ids`, 100 at most (`ListLeadsQuery.MaxIds`, else 400), under
+the same visibility as the rest of the list — a lead the caller cannot see is absent, as `GET leads/{id}`
+would refuse it. « Ma journée » reads the leads of its tasks, agenda and scorecard through it in batches:
+one `GET leads/{id}` per lead put the team view (≈100 leads) over the 200-per-minute `api` rate limit,
+and the screen's next call answered 429.
+
 **An archived lead keeps no open task (2026-10-31, product owner).** `CloseLeadHandler` and
 `BulkCloseHandler`, when the reason is `Archived`, cancel the lead's Pending/InProgress tasks
 (`ArchivedLeadTasks`, same unit of work; a workflow « Tâche manuelle » task tells its step, as
@@ -1348,6 +1374,14 @@ gets `ScoreUnavailableCode`, rather than a score computed from a reconstruction.
 told us nothing — leave the file in `Verifying` and let Hangfire replay). Recording an outage as a
 rejection would reject an honest client over our own downtime. `FakeBiometryClient` is the double
 for every test; the Flask service is not in this repository.
+
+**A file in Validating takes a new image while no rung is signed (product owner, 2026-10-31).**
+The enrolment scores the file at the selfie, so it is in Validating before the agent submits.
+`POST kyc-files/{id}/documents` then accepts the image when no `KycApprovalStep` is `Approved`,
+moves the file to ComplementRequired in the same save (the next `/verify` re-scores it and reuses
+the steps), and cancels + unlinks the workflow mirror like a complement. A signed rung →
+409 `KYC_APPROVAL_ALREADY_SIGNED`: the validator asks for a complement. The endpoint answers
+`{ error }`, never `title` — the front's `kycUploadErrorMessage` translates the codes.
 
 How to take a file from creation to validated — the two accounts the four-eyes rule requires, the
 circuit per vigilance level, the degraded manual path and the cases pinning each of them — is in

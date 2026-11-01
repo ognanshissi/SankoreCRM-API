@@ -22,7 +22,7 @@ internal sealed class LeadsTenantDataWipe(
         typeof(TaskTypeConfig), typeof(PipelineStageConfig), typeof(SlaConfig), typeof(TaskGenerationRule),
         typeof(QualificationTemplate), typeof(QualificationSection), typeof(ProjectTemplate),
         typeof(NurturingSequence), typeof(NurturingStep), typeof(WhatsAppTemplate), typeof(WhatsAppBotProfile),
-        typeof(SdkVersion),
+        typeof(SdkVersion), typeof(AgentObjective),
     ];
 
     public string Module => "Leads";

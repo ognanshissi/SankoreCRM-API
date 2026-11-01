@@ -24,6 +24,51 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.AgentObjective", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_id");
+
+                    b.Property<int?>("Conversions")
+                        .HasColumnType("integer")
+                        .HasColumnName("conversions");
+
+                    b.Property<int?>("FirstContactWithin24hPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_contact_within24h_percent");
+
+                    b.Property<DateOnly>("Month")
+                        .HasColumnType("date")
+                        .HasColumnName("month");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_agent_objectives");
+
+                    b.HasIndex("TenantId", "AgentId", "Month")
+                        .IsUnique()
+                        .HasDatabaseName("ix_agent_objectives_tenant_id_agent_id_month");
+
+                    b.ToTable("agent_objectives", "leads");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.Appointment", b =>
                 {
                     b.Property<Guid>("Id")

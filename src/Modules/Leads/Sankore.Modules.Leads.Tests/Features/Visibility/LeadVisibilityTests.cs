@@ -93,6 +93,31 @@ public sealed class LeadVisibilityTests : IDisposable
     }
 
     [Fact]
+    public async Task Reading_leads_by_ids_keeps_the_agents_perimeter()
+    {
+        // « Ma journée » reads the leads of its tasks in one call (2026-11-01): a colleague's lead
+        // named among the ids stays out, exactly as GET leads/{id} would refuse it.
+        var mine = Seed("Assigné à moi", assignedTo: _me);
+        var other = Seed("Chez un collègue", assignedTo: _colleague);
+        Seed("Pas demandé", assignedTo: _me);
+        await _db.SaveChangesAsync();
+
+        var result = await new ListLeadsHandler(_db, visibility: new LeadVisibility(SignedIn(Roles.Agent.Code)))
+            .Handle(new ListLeadsQuery(PageSize: 100, Ids: [mine.Id, other.Id]), default);
+
+        result.Value!.Items.Select(l => l.FullName).Should().Equal("Assigné à moi");
+    }
+
+    [Fact]
+    public async Task More_than_a_hundred_ids_are_refused()
+    {
+        var result = await new ListLeadsHandler(_db)
+            .Handle(new ListLeadsQuery(Ids: Enumerable.Range(0, ListLeadsQuery.MaxIds + 1).Select(_ => Guid.NewGuid()).ToList()), default);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task The_collector_sees_a_lead_only_while_nobody_holds_it()
     {
         Seed("Collecté, en attente", collectedBy: _me);

@@ -153,6 +153,7 @@ internal static class RoleSeeder
         Permissions.CanImportLeads,
         Permissions.CanExportLeads,
         Permissions.CanViewLeadAnalytics,
+        Permissions.CanManageAgentObjectives,
         Permissions.CanReadDispatchingRules,
         Permissions.CanReadScoringConfigs,
         Permissions.CanReadSlaConfigs,

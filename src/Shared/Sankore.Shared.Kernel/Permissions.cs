@@ -301,6 +301,14 @@ public static class Permissions
         new("lead:analytics:view", "View Lead SLA, Funnel and Agent Performance Analytics", ApplicationModules.Leads, "analytics:view");
 
     /// <summary>
+    /// Setting the monthly objectives of the agents of one's team (« Ma journée » redesign, 2026-10-31):
+    /// first contacts within 24 h and conversions. Supervision, not configuration — granted with
+    /// <see cref="CanViewLeadAnalytics"/> to sales and branch managers.
+    /// </summary>
+    public static readonly PermissionItem CanManageAgentObjectives =
+        new("lead:agent-objective:manage", "Set the monthly objectives of one's agents", ApplicationModules.Leads, "agent-objective:manage");
+
+    /// <summary>
     /// The administrators' lead report (GET leads/reports/overview): the whole tenant, every agent,
     /// with no team scoping. Distinct from <see cref="CanViewLeadAnalytics"/>, which a manager holds
     /// to watch their own team — this one shows every team's figures, so it is granted to
@@ -1107,6 +1115,7 @@ public static class Permissions
         CanDismissDuplicate,
         CanExportLeads,
         CanViewLeadAnalytics,
+        CanManageAgentObjectives,
         CanViewLeadReports,
         CanManageQualificationTemplates,
         CanRecordConsent,

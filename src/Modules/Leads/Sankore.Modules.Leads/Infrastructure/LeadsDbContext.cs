@@ -61,6 +61,7 @@ public sealed class LeadsDbContext(
     public DbSet<LeadExternalEvent> LeadExternalEvents => Set<LeadExternalEvent>();
     public DbSet<ScoringConfig> ScoringConfigs => Set<ScoringConfig>();
     public DbSet<TaskTypeConfig> TaskTypeConfigs => Set<TaskTypeConfig>();
+    public DbSet<AgentObjective> AgentObjectives => Set<AgentObjective>();
     public DbSet<PipelineStageConfig> PipelineStageConfigs => Set<PipelineStageConfig>();
     public DbSet<SlaConfig> SlaConfigs => Set<SlaConfig>();
     public DbSet<Opportunity> Opportunities => Set<Opportunity>();
@@ -264,6 +265,7 @@ public sealed class LeadsDbContext(
         modelBuilder.Entity<LeadExternalEvent>().HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ScoringConfig>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<TaskTypeConfig>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<AgentObjective>().HasQueryFilter(o => o.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<PipelineStageConfig>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<SlaConfig>().HasQueryFilter(lc => lc.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<NurturingSequence>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);

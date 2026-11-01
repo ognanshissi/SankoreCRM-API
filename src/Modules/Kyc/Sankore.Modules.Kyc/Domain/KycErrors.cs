@@ -39,6 +39,12 @@ public static class KycErrors
     public const string DocumentNotCurrent = "KYC_DOCUMENT_NOT_CURRENT";
 
     /// <summary>
+    /// A document was uploaded to a file in validation on which a rung is already signed. Replacing
+    /// the evidence would change what that person signed for; the validator asks for a complement.
+    /// </summary>
+    public const string ApprovalAlreadySigned = "KYC_APPROVAL_ALREADY_SIGNED";
+
+    /// <summary>
     /// Validating a file's evidence by hand without a justification. The whole point of the manual
     /// route is that a human overrode the machine, so the record has to say on what grounds.
     /// </summary>

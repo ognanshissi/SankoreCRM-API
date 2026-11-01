@@ -63,6 +63,18 @@ public sealed class LeadTestBuilder
 
     private bool _fresh;
 
+    public LeadTestBuilder WithName(string fullName)
+    {
+        _fullName = fullName;
+        return this;
+    }
+
+    public LeadTestBuilder WithSource(LeadSource source)
+    {
+        _source = source;
+        return this;
+    }
+
     public LeadTestBuilder WithSourceConfig(Guid leadSourceConfigId)
     {
         _leadSourceConfigId = leadSourceConfigId;

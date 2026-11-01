@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.Infrastructure.Storage;
+using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
@@ -46,7 +47,9 @@ internal static class UploadKycDocumentEndpoint
                 + "of a REMOTE sale; pass `documentIssuedOn` with it, because the final KYC "
                 + "approval refuses a proof whose issue date is absent or older than the tenant's "
                 + "proof-of-address-max-age-days. A proof of address never enters the OCR or "
-                + "face-match chain. Requires permission: kyc:manage.")
+                + "face-match chain. A file in validation accepts an image only while no rung is "
+                + "signed, and goes back for verification (409 KYC_APPROVAL_ALREADY_SIGNED otherwise). "
+                + "Requires permission: kyc:manage.")
             .RequireAuthorization(Permissions.CanManageKycFile.Code)
             .Accepts<IFormFile>("multipart/form-data")
             .Produces<UploadKycDocumentResponse>(StatusCodes.Status201Created)
@@ -70,6 +73,7 @@ internal static class UploadKycDocumentEndpoint
         ICurrentUser currentUser,
         TimeProvider clock,
         ILoggerFactory loggerFactory,
+        IWorkflowModule workflow,
         CancellationToken ct)
     {
         if (file is null || file.Length == 0)
@@ -86,9 +90,30 @@ internal static class UploadKycDocumentEndpoint
         if (kycFile is null)
             return Results.NotFound(new { error = KycErrors.FileNotFound });
 
+        // Product owner, 2026-10-31: the enrolment screen scores the file at the selfie, which puts
+        // it in Validating BEFORE the agent submits — and the agent then could not change a
+        // document they had just noticed was wrong. Until a rung is signed nobody has looked at
+        // the evidence, so the new image sends the file back (moved in the SAME save as the
+        // document row) and the next verification re-scores it. Once a signature exists, a
+        // replaced image would change what that person signed for: refused, and the validator
+        // asks for a complement instead.
+        KycFile? reopened = null;
+        if (kycFile.Status == KycFileStatus.Validating)
+        {
+            var signed = await db.KycApprovalSteps
+                .AnyAsync(s => s.KycFileId == kycFileId && s.Decision == KycApprovalDecision.Approved, ct);
+
+            if (signed)
+                return Results.Conflict(new { error = KycErrors.ApprovalAlreadySigned, status = kycFile.Status.ToString() });
+
+            reopened = await db.KycFiles.AsTracking().FirstAsync(f => f.Id == kycFileId, ct);
+            var moved = reopened.RequestComplement(clock);
+            if (moved.IsFailure)
+                return Results.Conflict(new { error = moved.Error, status = kycFile.Status.ToString() });
+        }
         // Uploading to a file that is already decided would put an image in the store that no
         // verification will ever read, and leave evidence attached to a closed case.
-        if (!CanReceiveDocuments(kycFile.Status))
+        else if (!CanReceiveDocuments(kycFile.Status))
             return Results.Conflict(new { error = KycErrors.InvalidTransition, status = kycFile.Status.ToString() });
 
         var logger = loggerFactory.CreateLogger(typeof(UploadKycDocumentEndpoint));
@@ -160,6 +185,9 @@ internal static class UploadKycDocumentEndpoint
                 "KYC document stored for file {KycFileId}: {DocumentId}, {Kind}, {Bytes} bytes, {ContentType}",
                 kycFileId, document.Id, kind, stored.SizeBytes, stored.ContentType);
 
+            if (reopened is not null)
+                await CancelUnsignedCircuitAsync(reopened, db, workflow, currentUser, logger, ct);
+
             return Results.Created(
                 $"/api/v1/kyc-files/{kycFileId}/documents/{stored.StorageRef}",
                 new UploadKycDocumentResponse(
@@ -178,6 +206,56 @@ internal static class UploadKycDocumentEndpoint
     /// Collection, a file sent back for complement, and a verification in flight — the three
     /// states where another image can still change the outcome. Everything else is decided.
     /// </summary>
+    /// <summary>
+    /// The file left Validating, so its workflow mirror is cancelled and unlinked — what
+    /// <c>DecideKycApprovalHandler</c> does on a complement, so the next verification starts a
+    /// fresh instance. The steps themselves stay: they are reused on the way back, and none was
+    /// signed. A mirror that cannot be cancelled is logged, never fatal: M02 is the record.
+    /// </summary>
+    private static async Task CancelUnsignedCircuitAsync(
+        KycFile file, KycDbContext db, IWorkflowModule workflow, ICurrentUser currentUser,
+        ILogger logger, CancellationToken ct)
+    {
+        if (file.WorkflowInstanceId is not { } instanceId) return;
+
+        var levels = await db.KycApprovalSteps
+            .Where(s => s.KycFileId == file.Id && s.Decision == KycApprovalDecision.Pending)
+            .Select(s => s.Level)
+            .ToListAsync(ct);
+
+        if (levels.Count == 0) return;
+
+        try
+        {
+            var recorded = await workflow.RecordDecisionAsync(
+                new RecordWorkflowDecisionRequest(
+                    InstanceId: instanceId,
+                    TenantId: file.TenantId,
+                    StepOrder: (int)levels.Min(),
+                    Decision: WorkflowDecision.Cancelled,
+                    ActedByUserId: currentUser.Id,
+                    Comment: "Pièce remplacée avant toute signature : le dossier repart en vérification."),
+                ct);
+
+            if (recorded.IsFailure)
+            {
+                logger.LogWarning(
+                    "KYC file {KycFileId}: workflow instance {InstanceId} was not cancelled after a "
+                    + "document replacement: {Error}", file.Id, instanceId, recorded.Error);
+                return;
+            }
+
+            file.ClearWorkflowInstance();
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "KYC file {KycFileId}: cancelling workflow instance {InstanceId} after a document "
+                + "replacement failed", file.Id, instanceId);
+        }
+    }
+
     internal static bool CanReceiveDocuments(KycFileStatus status) =>
         status is KycFileStatus.Collecting
                or KycFileStatus.ComplementRequired

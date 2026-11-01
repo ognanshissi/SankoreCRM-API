@@ -541,6 +541,8 @@ public static class LeadsModule
         group.MapGetSlaBreaches();
         group.MapGetAgentPerformance();
         group.MapGetMyPerformance();
+        group.MapGetMyScorecard();
+        Features.AgentObjectives.AgentObjectivesEndpoints.MapAgentObjectivesEndpoints(group);
         group.MapGetMyAgenda();
         group.MapAppointmentsEndpoints();
         group.MapWhatsAppEndpoints();

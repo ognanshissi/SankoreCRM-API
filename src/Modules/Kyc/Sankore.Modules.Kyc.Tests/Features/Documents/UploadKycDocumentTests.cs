@@ -3,11 +3,13 @@ namespace Sankore.Modules.Kyc.Tests.Features.Documents;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Documents.UploadDocument;
 using Sankore.Modules.Kyc.Infrastructure.Storage;
+using Sankore.Modules.Workflow.PublicApi;
 using Sankore.Modules.Kyc.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
@@ -23,8 +25,14 @@ public sealed class UploadKycDocumentTests : IDisposable
 {
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly TestKycDbContextFactory _factory;
+    private readonly IWorkflowModule _workflow = Substitute.For<IWorkflowModule>();
 
-    public UploadKycDocumentTests() => _factory = new TestKycDbContextFactory(_tenantId);
+    public UploadKycDocumentTests()
+    {
+        _factory = new TestKycDbContextFactory(_tenantId);
+        _workflow.RecordDecisionAsync(Arg.Any<RecordWorkflowDecisionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Ok());
+    }
 
     public void Dispose() => _factory.Dispose();
 
@@ -83,7 +91,7 @@ public sealed class UploadKycDocumentTests : IDisposable
             kycFileId, kind, file, documentIssuedOn,
             _factory.CreateContext(),
             store ?? StoreReturning("k1.abc.def"),
-            User(), TimeProvider.System, NullLoggerFactory.Instance, CancellationToken.None);
+            User(), TimeProvider.System, NullLoggerFactory.Instance, _workflow, CancellationToken.None);
 
     private static IKycDocumentStore StoreReturning(string storageRef)
     {
@@ -254,4 +262,73 @@ public sealed class UploadKycDocumentTests : IDisposable
     // already stored). Driving it needs a context whose SaveChangesAsync fails, and KycDbContext is
     // sealed — unsealing production code to reach a catch block is a worse trade than saying so.
     // Verify it by hand against Postgres.
+
+    // ── a file in validation, before and after a signature (product owner, 2026-10-31) ──
+
+    private async Task<(KycFile File, Guid InstanceId)> SeedValidatingWithCircuitAsync(bool agentSigned)
+    {
+        var file = await SeedAsync(KycFileStatus.Validating);
+        var instanceId = Guid.NewGuid();
+
+        await using var db = _factory.CreateContext();
+        var tracked = db.KycFiles.AsTracking().Single(f => f.Id == file.Id);
+        tracked.LinkWorkflowInstance(instanceId);
+
+        var agent = KycApprovalStep.Pending(_tenantId, file.Id, KycApprovalLevel.Agent, TimeProvider.System);
+        if (agentSigned)
+            agent.Decide(KycApprovalDecision.Approved, Guid.NewGuid(), TimeProvider.System);
+        db.KycApprovalSteps.Add(agent);
+        db.KycApprovalSteps.Add(
+            KycApprovalStep.Pending(_tenantId, file.Id, KycApprovalLevel.BranchManager, TimeProvider.System));
+        await db.SaveChangesAsync();
+
+        return (file, instanceId);
+    }
+
+    [Fact]
+    public async Task A_file_in_validation_with_no_signature_takes_the_image_and_goes_back_for_verification()
+    {
+        // The enrolment scores the file at the selfie, before the agent submits: the agent must
+        // still be able to change a document nobody has signed for.
+        var (file, instanceId) = await SeedValidatingWithCircuitAsync(agentSigned: false);
+
+        var result = await UploadAsync(file.Id, Image());
+
+        StatusOf(result).Should().Be(StatusCodes.Status201Created);
+
+        await using var db = _factory.CreateContext();
+        var reloaded = db.KycFiles.Single(f => f.Id == file.Id);
+        reloaded.Status.Should().Be(KycFileStatus.ComplementRequired,
+            "the next verification may only start from a collecting state");
+        reloaded.WorkflowInstanceId.Should().BeNull("the next round starts a fresh mirror");
+        db.KycDocuments.Should().ContainSingle(d => d.KycFileId == file.Id);
+        db.KycApprovalSteps.Where(s => s.KycFileId == file.Id).Should().HaveCount(2,
+            "the steps are reused on the way back, never deleted");
+
+        await _workflow.Received(1).RecordDecisionAsync(
+            Arg.Is<RecordWorkflowDecisionRequest>(r => r.InstanceId == instanceId
+                && r.Decision == WorkflowDecision.Cancelled
+                && r.StepOrder == (int)KycApprovalLevel.Agent),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_file_in_validation_with_a_signed_rung_refuses_the_image()
+    {
+        // Replacing the evidence would change what the signatory signed for.
+        var (file, _) = await SeedValidatingWithCircuitAsync(agentSigned: true);
+        var store = StoreReturning("k1.x.y");
+
+        var result = await UploadAsync(file.Id, Image(), store);
+
+        StatusOf(result).Should().Be(StatusCodes.Status409Conflict);
+        result.Should().BeAssignableTo<IValueHttpResult>().Subject.Value!
+            .ToString().Should().Contain(KycErrors.ApprovalAlreadySigned);
+        await store.DidNotReceive().StoreAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<KycDocumentKind>(),
+            Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        await using var db = _factory.CreateContext();
+        db.KycFiles.Single(f => f.Id == file.Id).Status.Should().Be(KycFileStatus.Validating);
+    }
 }

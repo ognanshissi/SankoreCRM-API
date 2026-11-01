@@ -23,6 +23,13 @@ internal sealed class ListLeadsHandler(
         // Assigned-only for an agent; a test or a caller with lead:read:all keeps the whole tenant.
         var q = visibility?.Apply(db.Leads.AsNoTracking()) ?? db.Leads.AsNoTracking();
 
+        if (query.Ids is { Count: > 0 } ids)
+        {
+            if (ids.Count > ListLeadsQuery.MaxIds)
+                return Result.Fail<PagedResult<LeadDto>>($"{ListLeadsQuery.MaxIds} identifiants au plus par appel.");
+            q = q.Where(l => ids.Contains(l.Id));
+        }
+
         if (query.Status.HasValue)
             q = q.Where(l => l.Status == query.Status.Value);
 

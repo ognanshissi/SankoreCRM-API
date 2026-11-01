@@ -19,5 +19,13 @@ internal sealed record ListLeadsQuery(
     Guid? LeadSourceConfigId = null,
     bool? AwaitingDispatch = null,
     /// <summary>Custom-field filters, <c>key:value</c> — see <c>CustomFieldValues.FilterDocuments</c>.</summary>
-    IReadOnlyList<string>? CustomFilters = null
-) : IRequest<Result<PagedResult<LeadDto>>>;
+    IReadOnlyList<string>? CustomFilters = null,
+    /// <summary>
+    /// These leads only (at most <see cref="MaxIds"/>) — a screen that holds ids from tasks or an agenda
+    /// reads their leads in one call instead of one <c>GET leads/{id}</c> each.
+    /// </summary>
+    IReadOnlyList<Guid>? Ids = null
+) : IRequest<Result<PagedResult<LeadDto>>>
+{
+    public const int MaxIds = 100;
+}

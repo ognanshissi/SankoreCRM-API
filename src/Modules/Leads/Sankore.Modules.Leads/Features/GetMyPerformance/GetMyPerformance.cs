@@ -175,21 +175,8 @@ internal sealed class GetMyPerformanceHandler(
     {
         if (mine.Count == 0) return [];
 
-        // Le catalogue nomme le produit demandé quand il le reconnaît (par son code ou son nom) ;
-        // sinon le libellé capturé, et « Unknown » — la valeur par défaut des captures sans
-        // produit — n'est pas un produit. Le lead ne stocke plus de ligne produit.
-        var products = await admin.ListProductsAsync(tenantId, null, ct) ?? [];
-        var catalog = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in products.Where(p => p.Id != Guid.Empty))
-        {
-            catalog.TryAdd(p.Code.Trim(), p.Name);
-            catalog.TryAdd(p.Name.Trim(), p.Name);
-        }
-
-        string Label(AssignmentRow r) =>
-            string.IsNullOrWhiteSpace(r.InterestedProduct) || r.InterestedProduct == "Unknown" ? "Produit non précisé"
-            : catalog.TryGetValue(r.InterestedProduct.Trim(), out var name) ? name
-            : r.InterestedProduct.Trim();
+        var label = await ProductLabels.LoadAsync(admin, tenantId, ct);
+        string Label(AssignmentRow r) => label(r.InterestedProduct);
 
         return mine
             .GroupBy(r => r.LeadId)
@@ -212,6 +199,32 @@ internal sealed class GetMyPerformanceHandler(
 
     private static StepSlaDto Step(string name, int total, int onTime)
         => new(name, total, onTime, total == 0 ? null : Math.Round(100.0 * onTime / total, 1));
+}
+
+/// <summary>
+/// The product a lead asked for, as people read it. The catalogue names it when it recognises it
+/// (by its code or its name); otherwise the captured label, and « Unknown » — the default of a
+/// capture with no product — is not a product. The lead no longer stores a product line.
+/// </summary>
+internal static class ProductLabels
+{
+    public const string Unspecified = "Produit non précisé";
+
+    internal static async Task<Func<string?, string>> LoadAsync(IAdministrationModule admin, Guid tenantId, CancellationToken ct)
+    {
+        var products = await admin.ListProductsAsync(tenantId, null, ct) ?? [];
+        var catalog = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in products.Where(p => p.Id != Guid.Empty))
+        {
+            catalog.TryAdd(p.Code.Trim(), p.Name);
+            catalog.TryAdd(p.Name.Trim(), p.Name);
+        }
+
+        return interested =>
+            string.IsNullOrWhiteSpace(interested) || interested == "Unknown" ? Unspecified
+            : catalog.TryGetValue(interested.Trim(), out var name) ? name
+            : interested.Trim();
+    }
 }
 
 internal sealed record AssignmentRow(
