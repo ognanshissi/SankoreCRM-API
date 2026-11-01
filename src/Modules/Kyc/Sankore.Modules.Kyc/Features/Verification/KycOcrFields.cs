@@ -23,10 +23,14 @@ using System.Globalization;
 /// </summary>
 internal static class KycOcrFields
 {
-    /// <summary>Spellings of the document number, simplified.</summary>
+    /// <summary>
+    /// Spellings of the document number, simplified. <c>doc_number</c> is the one the biometry
+    /// service actually sends (its <c>REQUIRED_FIELDS</c>): missing here, every real reading —
+    /// passport read, MRZ checked — came back DOCUMENT_UNREADABLE (KYC recette, 2026-11-01).
+    /// </summary>
     private static readonly HashSet<string> DocumentNumberKeys =
     [
-        "documentnumber", "documentno", "idnumber", "number", "no", "cardnumber",
+        "documentnumber", "docnumber", "documentno", "idnumber", "number", "no", "cardnumber", "passportnumber",
     ];
 
     /// <summary>The surname, in the spellings the service has used.</summary>

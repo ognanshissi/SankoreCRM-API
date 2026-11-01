@@ -1765,6 +1765,15 @@ produce is not a document that agrees with the record, it is a document nobody c
 is `SearchKeyBuilder.NormalizeTerm`, which already defines "accent-free, upper-cased, punctuation
 collapsed" for client search — which is exactly what §3.2 asks for.
 
+**The service names the document number `doc_number`** (its `REQUIRED_FIELDS`; the MRZ block says
+`document_number`). `KycOcrFields.DocumentNumberKeys` lacked it until 2026-11-01, so every real
+reading — passport read, MRZ checked — ended DOCUMENT_UNREADABLE; only `FakeBiometryClient`, which
+says `document_number`, went through. Found in the full-KYC recette, with a second one behind it: the
+issuing country fell back to the VISUAL `nationality` (« BURKINABE ») into a 3-character column — a 500
+on PostgreSQL that InMemory never shows. Country and expiry now come from the MRZ first
+(`RunKycVerificationHandler.CountryCode` keeps only a 3-letter code); `FakeBiometryClient.MrzFields`
+lets a test give the MRZ its own values.
+
 **`KycOcrFields` was extracted so the field-name matching has one body.** The verification writes
 `OcrFieldsJson` and the routing reads it back; two private copies of `Simplify` would mean two
 opinions on whether `given_names` and `givenNames` are the same field, and the routing copy is the

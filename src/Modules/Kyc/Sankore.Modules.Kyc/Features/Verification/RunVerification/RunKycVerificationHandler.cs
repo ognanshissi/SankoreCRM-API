@@ -382,8 +382,15 @@ internal sealed class RunKycVerificationHandler(
             encryptedNumber: encryptor.Encrypt(number)!,
             numberBlindIndex: indexer.Compute(BlindIndexPurpose.IdentityDocument, number),
             clock: clock,
-            issuingCountry: FindFirst(ocr.Fields, "issuing_country", "nationality", "country"),
-            expiryDate: ParseDate(FindFirst(ocr.Fields, "expiry_date", "date_of_expiry", "expires_on")),
+            // The MRZ first: its issuing state is a clean ISO alpha-3 and its expiry an ISO date,
+            // where the visual zone may hold « BURKINABE » or a label read as the expiry. The
+            // column holds 3 characters: a nationality in words broke the save with a 500 on
+            // PostgreSQL (KYC recette, 2026-11-01) — InMemory let it through.
+            issuingCountry: CountryCode(
+                FindFirst(ocr.Mrz?.Fields ?? NoFields, "issuing_country"),
+                FindFirst(ocr.Fields, "issuing_country", "nationality", "country")),
+            expiryDate: ParseDate(FindFirst(ocr.Fields, "expiry_date", "date_of_expiry", "expires_on"))
+                ?? ParseDate(FindFirst(ocr.Mrz?.Fields ?? NoFields, "expiry_date")),
             // The number is REMOVED from both JSON blobs. They are plain jsonb columns, and
             // leaving it there would store in clear the exact value the column next to it exists
             // to encrypt — the encryption would be decorative. Same reason the MRZ is kept as its
@@ -520,6 +527,15 @@ internal sealed class RunKycVerificationHandler(
         => KycOcrFields.FindFirst(fields, candidates);
 
     private static DateOnly? ParseDate(string? raw) => KycOcrFields.ParseDate(raw);
+
+    private static readonly IReadOnlyDictionary<string, string> NoFields = new Dictionary<string, string>();
+
+    /// <summary>The first candidate that is a three-letter code, upper-cased; null rather than a word.</summary>
+    internal static string? CountryCode(params string?[] candidates)
+        => candidates
+            .Select(c => c?.Trim())
+            .FirstOrDefault(c => c is { Length: 3 } && c.All(char.IsAsciiLetter))
+            ?.ToUpperInvariant();
 }
 
 /// <summary>

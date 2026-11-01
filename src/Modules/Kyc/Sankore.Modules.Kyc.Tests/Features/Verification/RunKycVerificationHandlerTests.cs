@@ -163,6 +163,54 @@ public sealed class RunKycVerificationHandlerTests : IDisposable
 
     // ── Happy path ──────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// What the real service answered for a Burkinabè passport in the KYC recette (2026-11-01): its
+    /// own field names (<c>doc_number</c>, <c>last_name</c>…), a visual zone partly misread, the
+    /// composite MRZ check failed, a face match at 0.67. The file had been left in Verifying by an
+    /// earlier attempt the service did not answer.
+    /// </summary>
+    [Fact]
+    public async Task A_real_passport_reading_is_verified_from_a_file_left_in_verifying()
+    {
+        var file = await SeedFileAsync(KycFileStatus.Verifying);
+        var biometry = new FakeBiometryClient { DocumentType = "PASSPORT", MrzChecksumValid = false, Similarity = 0.6706, IsMatch = true, Score = 70 };
+        biometry.Fields.Clear();
+        foreach (var (k, v) in new Dictionary<string, string>
+        {
+            ["birth_date"] = "31 DEC/ DEC 1992",
+            ["birth_place"] = "L PLACE OF BIRTH",
+            ["doc_number"] = "A3247091",
+            ["expiry_date"] = "LIEU D'EMISSION/ PLACE OF ISSUE",
+            ["first_name"] = "AMBROISE",
+            ["last_name"] = "SUMNAME",
+            ["nationality"] = "BURKINABE",
+            ["sex"] = "M",
+        }) biometry.Fields[k] = v;
+        biometry.MrzFields = new()
+        {
+            ["document_number"] = "A3247091", ["issuing_country"] = "BFA", ["nationality"] = "BFA",
+            ["last_name"] = "BAZIE", ["first_name"] = "AMBROISE", ["birth_date"] = "1992-12-31", ["expiry_date"] = "2027-08-12",
+        };
+        biometry.MrzRaw = "P<BFABAZIE<<AMBROISE<<<<<<<<<<<<<<<<<<<<<<<<<\nA3247091<6BFA9212314M2708126<<<<<<<<<<<<<<00";
+
+        var result = await RunAsync(biometry, file.Id);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Outcome.Should().Be(RunKycVerificationOutcome.Scored);
+        var document = (await RowsAsync(file.Id, db => db.KycIdentityDocuments)).Should().ContainSingle().Subject;
+        // The column holds 3 characters: « BURKINABE » from the visual zone was a 500 on PostgreSQL.
+        document.IssuingCountry.Should().Be("BFA");
+        document.ExpiryDate.Should().Be(new DateOnly(2027, 8, 12), "the visual expiry was misread; the MRZ's is used");
+    }
+
+    [Theory]
+    [InlineData("BFA", "BURKINABE", "BFA")]
+    [InlineData(null, "civ", "CIV")]
+    [InlineData(null, "BURKINABE", null)]
+    [InlineData("B1A", null, null)]
+    public void Only_a_three_letter_code_is_kept_as_the_issuing_country(string? mrz, string? visual, string? expected)
+        => RunKycVerificationHandler.CountryCode(mrz, visual).Should().Be(expected);
+
     [Fact]
     public async Task A_scored_verification_persists_all_three_pieces_of_evidence_and_enters_the_circuit()
     {

@@ -65,6 +65,12 @@ internal sealed class FakeBiometryClient : IBiometryClient
     /// <summary>Confidence per field; any field absent from here is reported at 0.97.</summary>
     public Dictionary<string, double> FieldConfidences { get; } = [];
 
+    /// <summary>
+    /// The MRZ's own parsed fields, when they must differ from the visual zone (a real reading
+    /// often does); null repeats <see cref="Fields"/>.
+    /// </summary>
+    public Dictionary<string, string>? MrzFields { get; set; }
+
     /// <summary>Set to false to exercise the MRZ-checksum path without failing the call.</summary>
     public bool MrzChecksumValid { get; set; } = true;
 
@@ -127,7 +133,7 @@ internal sealed class FakeBiometryClient : IBiometryClient
                     key => FieldConfidences.TryGetValue(key, out var c) ? c : 0.97),
                 MrzRaw is null
                     ? null
-                    : new MrzReading(MrzRaw, MrzChecksumValid, new Dictionary<string, string>(Fields)),
+                    : new MrzReading(MrzRaw, MrzChecksumValid, new Dictionary<string, string>(MrzFields ?? Fields)),
                 ServiceVersion)));
     }
 
