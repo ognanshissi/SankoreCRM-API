@@ -107,11 +107,23 @@ public sealed class WorkflowEndActionConsumer(
         }
     }
 
-    /// <summary>The refusal in words; the code itself when it has none here.</summary>
+    /// <summary>
+    /// The refusal in words, for the circuit's history — the project gates in the sentences the
+    /// project screens use (<c>projectGateMessage</c>, front); the code itself when it has none here.
+    /// </summary>
     private static string Explain(string? error) => error switch
     {
         null or "" => "refus sans motif.",
-        var e when e.StartsWith("Étape bloquante", StringComparison.Ordinal) => e,
+        "PROJECT_QUESTIONNAIRES_INCOMPLETE" => "pour gagner ce projet, les questionnaires que ce produit demande doivent être remplis.",
+        "PROJECT_CLIENT_FILE_REQUIRED" => "pour gagner ce projet, son dossier client doit d'abord être ouvert.",
+        "PROJECT_KYC_NOT_APPROVED" => "pour gagner ce projet, le dossier KYC du client doit être validé.",
+        "PROJECT_KYC_TIER_INSUFFICIENT" => "pour gagner ce projet, le dossier KYC du client doit atteindre le niveau que ce produit exige.",
+        "PROJECT_AMOUNT_REQUIRED" => "pour gagner ce projet, son montant doit être renseigné.",
+        "PROJECT_CLOSE_DATE_REQUIRED" => "pour gagner ce projet, sa date de clôture prévue doit être renseignée.",
+        "PROJECT_CHECKLIST_INCOMPLETE" => "pour gagner ce projet, tous les points à vérifier de son étape en cours doivent être cochés.",
+        "PROJECT_FIELDS_REQUIRED" => "pour gagner ce projet, les champs que son étape exige doivent être renseignés.",
+        "PROJECT_WORKFLOW_PENDING" => "pour gagner ce projet, le circuit de validation de son étape doit être approuvé.",
+        "PROJECT_WORKFLOW_REJECTED" => "pour gagner ce projet, le circuit de validation de son étape a été refusé.",
         var e when e.Contains(' ') => e,
         var code => $"refusé ({code}).",
     };
