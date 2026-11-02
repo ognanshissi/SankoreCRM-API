@@ -444,6 +444,13 @@ The lead header shows it (`lead-project-suggestion`) and opens the create-projec
 product. A SUGGESTION only: `ResolveProductLineAsync` stays exact — it decides the KYC tier and the
 conversion gates. `ProductSummary` now carries `Description`.
 
+**A lead with a project is qualified (2026-11-02, product owner).** `Lead.QualifyByProject`, called when a
+project is opened for the lead (`CreateOpportunityHandler`, and `CreateOpportunityForCustomerHandler` when it
+names a lead), moves New/Open/Qualifying/Nurturing/Recycled to `Qualified` and the stage forward to
+`Qualified` — the score is not touched, and the status change is announced like any other. Already
+qualified, converted or closed leads are left alone; closing the project does not un-qualify the lead.
+Migration `QualifyLeadsWithProject` applied it to leads that had a project before (no event sent for them).
+
 **WhatsApp with a CLIENT, about a complaint (complaints lot 1, 2026-10-31, product owner).** Routes
 `leads/whatsapp/clients/{clientId}` (panel: conversation, window, blockers, templates for every
 product), `.../messages?complaintId=`, `.../send-template`, `.../takeover`, `.../messages` (POST, free

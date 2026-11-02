@@ -111,8 +111,10 @@ public sealed class OpportunityFollowUpTests : IDisposable
     public async Task Opening_a_project_qualifies_a_lead_still_in_an_early_status()
     {
         // Product owner, 2026-11-02: a lead with a project is qualified, not « à qualifier ».
+        // The builder qualifies its leads for the dispatch tests: put this one back to « Contacté ».
         var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
-        lead.RecordContactEstablished();
+        typeof(Lead).GetProperty(nameof(Lead.Status))!.SetValue(lead, LeadStatus.Open);
+        typeof(Lead).GetProperty(nameof(Lead.PipelineStage))!.SetValue(lead, PipelineStage.ContactEstablished);
         await using (var db = _factory.CreateContext())
         {
             db.Leads.Add(lead);

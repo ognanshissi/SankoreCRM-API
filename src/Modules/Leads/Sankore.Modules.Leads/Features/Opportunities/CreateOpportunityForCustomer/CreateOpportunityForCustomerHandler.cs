@@ -91,9 +91,13 @@ internal sealed class CreateOpportunityForCustomerHandler(
         await ProjectTemplates.ProjectFirstStep.PlaceAsync(templates, opp, clock.GetUtcNow(), ct);
 
         db.Opportunities.Add(opp);
-        // A project for a client may name the lead it comes from: that lead is qualified by it too.
+        // A project for a client may name the lead it comes from: that lead is qualified by it too —
+        // only when it IS that client's lead, so naming any lead id cannot change its status.
         if (cmd.LeadId is { } leadId
-            && await db.Leads.AsTracking().FirstOrDefaultAsync(l => l.Id == leadId, ct) is { } lead)
+            && await db.Leads.AsTracking().FirstOrDefaultAsync(
+                l => l.Id == leadId
+                     && (l.CustomerId == cmd.CustomerEntityId || l.ConvertedToCustomerId == cmd.CustomerEntityId),
+                ct) is { } lead)
             lead.QualifyByProject();
         history?.Created(opp);
         await db.SaveChangesAsync(ct);
