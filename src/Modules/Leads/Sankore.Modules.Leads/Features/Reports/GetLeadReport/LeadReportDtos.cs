@@ -30,7 +30,32 @@ public sealed record LeadReportDto(
     /// <param name="Forecast">
     /// What the open projects should bring in during the period — see <see cref="LeadReportForecast"/>.
     /// </param>
-    LeadReportForecast? Forecast = null);
+    LeadReportForecast? Forecast = null,
+    /// <param name="Previous">The period figures over the period of the same length just before.</param>
+    LeadReportPeriodKpis? Previous = null,
+    /// <param name="ByTemperature">The leads captured in the period by temperature today (reports lot 4).</param>
+    IReadOnlyList<LeadReportTemperature>? ByTemperature = null,
+    /// <param name="SourceCosts">
+    /// Cost per configured source, the « Sources » screen's own figures for the period. Null under an
+    /// agency filter: a source's cost is not split by agency.
+    /// </param>
+    IReadOnlyList<LeadSources.SourceQuality.SourceQualityDto>? SourceCosts = null);
+
+public sealed record LeadReportTemperature(LeadIntentLevel Level, int Captured, int Converted);
+
+/// <summary>
+/// The figures of <see cref="LeadReportKpis"/> that belong to a period, computed over the period of
+/// the same length just before — what each tile is compared with (reports lot 1, 2026-11-02). The
+/// « today » figures (open leads, open breaches) have no previous period and are not repeated.
+/// </summary>
+public sealed record LeadReportPeriodKpis(
+    int Captured,
+    int ConvertedInPeriod,
+    double CohortConversionRate,
+    int Lost,
+    double? AvgFirstContactMinutes,
+    double? SlaComplianceRate,
+    double ProjectRate = 0);
 
 /// <param name="Amounts">
 /// The estimated amounts, one line per kind of amount present — a loan and a deposit are not
@@ -98,7 +123,13 @@ public sealed record LeadReportKpis(
     int OpenLeads,
     double? AvgFirstContactMinutes,
     double? SlaComplianceRate,
-    int OpenSlaBreaches);
+    int OpenSlaBreaches,
+    /// <param name="ProjectRate">Share of the leads captured in the period that have a project, in percent.</param>
+    double ProjectRate = 0,
+    /// <param name="UntouchedOpenLeads">Open leads with no activity for <see cref="GetLeadReportHandler.UntouchedDays"/> days or more, today.</param>
+    int UntouchedOpenLeads = 0,
+    /// <param name="AvgOpenLeadAgeDays">Average days since capture of the open leads, today.</param>
+    double? AvgOpenLeadAgeDays = null);
 
 public sealed record LeadReportPoint(DateTimeOffset PeriodStart, int Captured, int Converted);
 

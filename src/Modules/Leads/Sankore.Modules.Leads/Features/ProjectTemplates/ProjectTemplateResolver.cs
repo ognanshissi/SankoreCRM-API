@@ -68,7 +68,7 @@ public sealed record ResolvedProjectTemplate(
 
         var phase = ProjectTemplate.OpenPhases.ToList().IndexOf(stage);
         return Steps.LastOrDefault(s => ProjectTemplate.OpenPhases.ToList().IndexOf(s.Phase) <= phase)
-            ?? Steps.FirstOrDefault();
+            ?? (Steps.Count > 0 ? Steps[0] : null);
     }
 }
 

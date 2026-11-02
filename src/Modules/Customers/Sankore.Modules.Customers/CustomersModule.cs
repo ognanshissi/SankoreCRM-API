@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Customers.Domain.Matching;
+using Sankore.Modules.Customers.Features.Reports.GetClientReport;
 using Sankore.Modules.Customers.Features.Clients;
 using Sankore.Modules.Customers.Features.Compliance;
 using Sankore.Modules.Customers.Features.ContactPoints;
@@ -190,6 +191,7 @@ public static class CustomersModule
     public static IEndpointRouteBuilder MapCustomersModuleEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapClientsEndpoints();
+        app.MapClientReportsEndpoints();
         app.MapContactPointsEndpoints();
         app.MapLifecycleEndpoints();
         app.MapLegalEntitiesEndpoints();

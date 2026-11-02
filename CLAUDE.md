@@ -336,6 +336,15 @@ client is its creator's. Lead conversion is unaffected (`advisor-from-converting
 setting, not the agent's choice). Front: the list's select, the bulk action, the « Réaffecter à un
 conseiller » menu entry and the wizards' `advisorUserId` field follow the permission.
 
+**The « Clients » tab of the reports (reports lot 3, 2026-11-02).** `GET clients/reports` (+ `/export`),
+`Features/Reports/GetClientReport`, under `lead:report:view` — the ONE permission of the reports page (product
+owner's choice), whole tenant, optional agency. Aggregates only, no client named; merged and anonymised
+records are left out. Period figures (new clients, complaints received/answered and average days to answer,
+clients moved to Suspended/Archived per `ClientStatusHistory`) are computed for the period and the one
+before; the « base » (Active + PendingKyc) gives active, without advisor, high risk, PPE, products per active
+client (active holdings ÷ active clients), segments and agencies today. Field names avoid `new`: the
+TypeScript generator renames it `_new` and the JSON would no longer match.
+
 Concurrency uses the PostgreSQL `xmin` token (`Version`) with error `CONCURRENCY_CONFLICT`.
 No endpoint deletes a client: archiving is a status, anonymisation blanks encrypted fields.
 
@@ -421,6 +430,34 @@ to the holder, tasks due today done/total, and today's assignments still held (1
 Same rule as the performance page: an assignment withdrawn before any contact does not count.
 Objectives come from `AgentObjectiveReader`; for the week, the conversions one is the month's share of seven days (`WeeklyShare`, rounded, at least 1: 12 → 3), and `dailyReceived` lists Monday–Friday plus a weekend day that received leads or is today (owner's mock-up, 2026-11-01). `ProductLabels`
 (catalogue name, else the typed label) is shared with `GetMyPerformance`.
+
+**Reports with tabs and comparisons (reports lot 1, 2026-11-02, product owner).** « Rapports »
+(`/leads/reports`) has tabs — Leads, Projets now; Clients (lot 3) and KYC (lot 5) to come — sharing period,
+agency and the `onglet` query param. `GET leads/reports/overview` adds `previous` (`LeadReportPeriodKpis`):
+the period figures over the window of the same length just before, computed by the SAME `PeriodKpis`
+as the current ones; « today » figures (open leads, open breaches) have none. Front: `report-kpi.ts`
+(`ReportKpiTiles`, `relativeDelta` in %, `pointsDelta` for rates, each knowing whether up is better) —
+reuse it for every tab. `lead:report:view` is now granted to SalesManager, BranchManager and
+RegulationManager (was administrator-only); agents still lack it.
+
+**Leads tab additions (reports lot 4, 2026-11-02).** The overview adds `ProjectRate` (share of the period's
+cohort with at least one project, also in `Previous`), `UntouchedOpenLeads` (open, `LastActivityAt ?? CapturedAt`
+older than `UntouchedDays` = 7) and `AvgOpenLeadAgeDays` (today), `ByTemperature` (cohort by `IntentLevel`
+today) and `SourceCosts` — `SourceQualityHandler` run as is, so the report and the sources screen give the
+same figures (ingestion-based, see its remarks); null under an agency filter, a source's cost not being split
+by agency. The workbook gains « Température » and « Coûts par source » sheets when present.
+
+**The « Projets » tab (reports lot 2, 2026-11-02).** `GET leads/reports/projects` (+ `/export`, an Excel
+workbook built from the same DTO with `LeadReportWorkbook`'s helpers), `lead:report:view`, whole tenant;
+a project's agency is its lead's, else its client's (as the forecast). Period figures — opened, won and
+lost (by `ClosedAt`), win rate won ÷ (won + lost), average cycle opening → won — are computed by one
+`PeriodKpis` for the period and the one before; open projects, overdue (open, `ExpectedCloseDate` past),
+the pipeline per `ProjectAmountKind` (weighted by `Probability`) are « today ». Loss reasons are the typed
+`CloseReason`, grouped case/space-insensitively, top 8. Time per step is read off `ProjectHistory`
+`StepChanged` lines (a step entered at the previous change or at creation, counted when LEFT in the
+period; open projects give the current wait), grouped by template name + step label. Overdue list: 200
+most late, with the owner's name. Front: `report-projects-tab.ts` loads by itself from the page's
+`ReportRange`; the old phase and forecast blocks stay below it.
 
 **`GET leads?ids=…` (2026-11-01).** Repeated `ids`, 100 at most (`ListLeadsQuery.MaxIds`, else 400), under
 the same visibility as the rest of the list — a lead the caller cannot see is absent, as `GET leads/{id}`
@@ -1405,6 +1442,16 @@ called by `DecideKycApprovalHandler` on the final rung (approver's name) and by 
 older retakes are left alone. Before, a validated file kept every piece « En attente » on the client
 record. `ListCustomerDocumentsAsync` reports an older retake nobody judged as `Superseded` (« Remplacé »).
 Migration `AcceptPiecesOfValidatedFiles` applied the rule to files validated before it.
+
+**The « KYC » tab of the reports (reports lot 5, 2026-11-02).** `GET kyc-files/reports`
+(`Features/Reports/GetKycReport.cs`), `lead:report:view`, whole tenant, optional agency (`KycFile.AgencyId`).
+Period figures (opened, validated by `ValidatedAt`, refused by a signed `Rejected` step, average days opening →
+validation, complement rate = decided files with a `ComplementRequired` step, first-pass rate, automatic
+validations) for the period and the one before; « today »: files in validation by the rung they wait for
+(lowest pending `LevelRank`, since the previous signature or the step's creation), the 20 waiting longest
+(client name via `ICustomersModule`, responsible via Administration), reviews due within 30 days or overdue.
+No Excel export: this module deliberately carries no spreadsheet engine (`Sankore.Shared.Spreadsheets` is
+for the three importers) — the front hides the button on that tab.
 
 How to take a file from creation to validated — the two accounts the four-eyes rule requires, the
 circuit per vigilance level, the degraded manual path and the cases pinning each of them — is in

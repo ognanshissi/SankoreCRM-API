@@ -24,8 +24,10 @@ internal static class ProjectFirstStep
         var template = await templates.ResolveAsync(project.Product, ct);
         project.FollowTemplateVersion(template.AttachableVersionId, now);
 
-        var first = template.Steps.FirstOrDefault();
-        if (first is not null)
+        if (template.Steps.Count > 0)
+        {
+            var first = template.Steps[0];
             project.MoveToStep(first.Id, first.Phase, first.Probability, now);
+        }
     }
 }

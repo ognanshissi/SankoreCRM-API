@@ -679,7 +679,7 @@ internal sealed class GmailMailboxReader(HttpClient http, ConnectedAccountTokens
             labels.Contains("SENT") ? MailFolderKind.Sent : MailFolderKind.Inbox,
             m.Value.String("threadId") ?? id,
             headers.GetValueOrDefault("Message-ID"),
-            MailAddresses.Parse(headers.GetValueOrDefault("From")).FirstOrDefault(),
+            MailAddresses.FirstOf(MailAddresses.Parse(headers.GetValueOrDefault("From"))),
             MailAddresses.Parse(headers.GetValueOrDefault("To")),
             MailAddresses.Parse(headers.GetValueOrDefault("Cc")),
             sentAt,
@@ -816,6 +816,8 @@ internal static class MailAddresses
         return From(list);
     }
 
+    public static MailParty? FirstOf(IReadOnlyList<MailParty> parties) => parties.Count > 0 ? parties[0] : null;
+
     public static IReadOnlyList<MailParty> From(InternetAddressList? list) =>
         list?.Mailboxes
             .Where(m => !string.IsNullOrWhiteSpace(m.Address) && m.Address.Contains('@'))
@@ -925,7 +927,7 @@ internal sealed class ImapMailboxReader(IntegrationDbContext db, ISecretsModule 
 
                 return new MailHeader(
                     externalId, kind, thread, envelope.MessageId,
-                    MailAddresses.From(envelope.From).FirstOrDefault(),
+                    MailAddresses.FirstOf(MailAddresses.From(envelope.From)),
                     MailAddresses.From(envelope.To),
                     MailAddresses.From(envelope.Cc),
                     envelope.Date ?? s.InternalDate ?? DateTimeOffset.UtcNow,

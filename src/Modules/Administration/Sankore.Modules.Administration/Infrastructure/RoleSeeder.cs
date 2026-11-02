@@ -209,6 +209,15 @@ internal static class RoleSeeder
         Permissions.CanReadAllKycFiles,
     ];
 
+    /// <summary>
+    /// The « Rapports » page — leads, projects, clients and KYC (product owner, 2026-11-02): for the
+    /// sales and branch managers and compliance. Was administrator-only.
+    /// </summary>
+    private static readonly PermissionItem[] Reports =
+    [
+        Permissions.CanViewLeadReports,
+    ];
+
     private static readonly PermissionItem[] TelephonyAgent =
     [
         Permissions.CanMakeTelephonyCall,
@@ -297,6 +306,7 @@ internal static class RoleSeeder
     [
         .. EveryBusinessRole,
         .. ReadEverythingInPerimeter,
+        .. Reports,
         Permissions.CanReadTerritory,
         .. LeadWork,
         .. LeadSupervision,
@@ -332,6 +342,7 @@ internal static class RoleSeeder
     [
         .. EveryBusinessRole,
         .. ReadEverythingInPerimeter,
+        .. Reports,
         Permissions.CanReadTerritory,
         .. LeadWork,
         .. LeadSupervision,
@@ -388,6 +399,7 @@ internal static class RoleSeeder
     [
         .. EveryBusinessRole,
         .. ReadEverythingInPerimeter,
+        .. Reports,
         Permissions.CanReadTerritory,
         Permissions.CanReadAudit,
         Permissions.CanManageDistributionCredentials,

@@ -22,9 +22,9 @@ public sealed record GetLeadReportQuery(
 ///
 /// <para>
 /// <b>Whole tenant, no team scoping</b> — unlike <c>agent-performance</c>, which narrows a manager
-/// to their team. The permission (<c>lead:report:view</c>) is what restricts who may see this, and
-/// it is granted to Administrator only by default: a report for the institution that silently
-/// showed one team would be a wrong report, not a smaller one.
+/// to their team. The permission (<c>lead:report:view</c>) is what restricts who may see this —
+/// granted by default to administrators, sales and branch managers and compliance (2026-11-02): a
+/// report for the institution that silently showed one team would be a wrong report, not a smaller one.
 /// </para>
 ///
 /// <para>
@@ -46,6 +46,9 @@ internal sealed class GetLeadReportHandler(
 
     public const int MaxRangeDays = 400;
 
+    /// <summary>An open lead nobody touched for this long is « sans activité » (reports lot 4).</summary>
+    public const int UntouchedDays = 7;
+
     public async Task<Result<LeadReportDto>> Handle(GetLeadReportQuery q, CancellationToken ct)
     {
         if (q.To <= q.From)
@@ -64,7 +67,11 @@ internal sealed class GetLeadReportHandler(
         var cohort = leads.Where(l => l.CapturedAt >= q.From && l.CapturedAt < q.To);
 
         var cohortRows = await cohort
-            .Select(l => new { l.CapturedAt, l.Status, l.PipelineStage, l.Source, l.AgencyId })
+            .Select(l => new
+            {
+                l.CapturedAt, l.Status, l.PipelineStage, l.Source, l.AgencyId, l.IntentLevel,
+                HasProject = db.Opportunities.Any(o => o.LeadId == l.Id),
+            })
             .ToListAsync(ct);
 
         // ── Activity: conversions that happened in the period, whatever the capture date ──
@@ -75,6 +82,13 @@ internal sealed class GetLeadReportHandler(
 
         var openLeads = await leads.CountAsync(l => !Terminal.Contains(l.Status), ct);
 
+        // Last touch = the latest activity, else the capture — what the cooling job reads too.
+        var openTouches = await leads
+            .Where(l => !Terminal.Contains(l.Status))
+            .Select(l => new { l.CapturedAt, LastTouch = l.LastActivityAt ?? l.CapturedAt })
+            .ToListAsync(ct);
+        var untouchedSince = now.AddDays(-UntouchedDays);
+
         var openByAgent = await leads
             .Where(l => !Terminal.Contains(l.Status) && l.CurrentAssignedId != null)
             .GroupBy(l => l.CurrentAssignedId!.Value)
@@ -82,19 +96,7 @@ internal sealed class GetLeadReportHandler(
             .ToDictionaryAsync(x => x.AgentId, x => x.Count, ct);
 
         // ── Assignments of the period, same rule as agent-performance ─────────────────────
-        var assignmentsQ = db.LeadAssignments.AsNoTracking()
-            .Where(a => a.CreatedAt >= q.From && a.CreatedAt < q.To)
-            // Taken away before any contact: not a missed contact (see GetAgentPerformanceHandler).
-            .Where(a => a.SupersededAt == null || a.FirstContactAt != null);
-        if (q.AgencyId is { } agency)
-        {
-            var agencyLeadIds = db.Leads.Where(l => l.AgencyId == agency).Select(l => l.Id);
-            assignmentsQ = assignmentsQ.Where(a => agencyLeadIds.Contains(a.LeadId));
-        }
-
-        var assignments = await assignmentsQ
-            .Select(a => new { a.AgentId, a.LeadId, a.CreatedAt, a.SlaDeadline, a.FirstContactAt })
-            .ToListAsync(ct);
+        var assignments = await AssignmentsAsync(q.From, q.To, q.AgencyId, ct);
 
         // Where each assigned lead stands today, for the per-agent cohort conversion rate.
         var assignedLeadIds = assignments.Select(a => a.LeadId).Distinct().ToList();
@@ -115,23 +117,31 @@ internal sealed class GetLeadReportHandler(
         var openBreaches = await breachQ.CountAsync(ct);
 
         // ── KPIs ──────────────────────────────────────────────────────────────────────────
-        var captured = cohortRows.Count;
-        var cohortConverted = cohortRows.Count(r => r.Status == LeadStatus.Converted);
-        var contacted = assignments.Where(a => a.FirstContactAt.HasValue).ToList();
-
+        // One definition for the period and the period before, which every tile is compared with.
+        var period = PeriodKpis([.. cohortRows.Select(r => (r.Status, r.HasProject))], conversions.Count, assignments);
         var kpis = new LeadReportKpis(
-            Captured: captured,
-            ConvertedInPeriod: conversions.Count,
-            CohortConversionRate: Rate(cohortConverted, captured),
-            Lost: cohortRows.Count(r => r.Status == LeadStatus.Lost),
+            Captured: period.Captured,
+            ConvertedInPeriod: period.ConvertedInPeriod,
+            CohortConversionRate: period.CohortConversionRate,
+            Lost: period.Lost,
             OpenLeads: openLeads,
-            AvgFirstContactMinutes: contacted.Count > 0
-                ? Math.Round(contacted.Average(a => (a.FirstContactAt!.Value - a.CreatedAt).TotalMinutes), 1)
-                : null,
-            SlaComplianceRate: assignments.Count > 0
-                ? Rate(assignments.Count(a => a.FirstContactAt.HasValue && a.FirstContactAt.Value <= a.SlaDeadline), assignments.Count)
-                : null,
-            OpenSlaBreaches: openBreaches);
+            AvgFirstContactMinutes: period.AvgFirstContactMinutes,
+            SlaComplianceRate: period.SlaComplianceRate,
+            OpenSlaBreaches: openBreaches,
+            ProjectRate: period.ProjectRate,
+            UntouchedOpenLeads: openTouches.Count(t => t.LastTouch < untouchedSince),
+            AvgOpenLeadAgeDays: openTouches.Count > 0
+                ? Math.Round(openTouches.Average(t => (now - t.CapturedAt).TotalDays), 1)
+                : null);
+
+        var previousFrom = q.From - (q.To - q.From);
+        var previous = PeriodKpis(
+            [.. (await leads.Where(l => l.CapturedAt >= previousFrom && l.CapturedAt < q.From)
+                    .Select(l => new { l.Status, HasProject = db.Opportunities.Any(o => o.LeadId == l.Id) })
+                    .ToListAsync(ct))
+                .Select(l => (l.Status, l.HasProject))],
+            await leads.CountAsync(l => l.ConvertedAt != null && l.ConvertedAt >= previousFrom && l.ConvertedAt < q.From, ct),
+            await AssignmentsAsync(previousFrom, q.From, q.AgencyId, ct));
 
         // ── Series: every bucket present, zeros included, so a quiet week reads as a dip ──
         var capturedByBucket = cohortRows.GroupBy(r => Bucket(r.CapturedAt, granularity)).ToDictionary(g => g.Key, g => g.Count());
@@ -258,9 +268,67 @@ internal sealed class GetLeadReportHandler(
             .OrderByDescending(a => a.Captured)
             .ToList();
 
+        // ── Temperature of the cohort today, hottest first ─────────────────────────────────
+        var byTemperature = new[] { LeadIntentLevel.Hot, LeadIntentLevel.Warm, LeadIntentLevel.Cold, LeadIntentLevel.Unknown }
+            .Select(level => new LeadReportTemperature(
+                level,
+                cohortRows.Count(r => r.IntentLevel == level),
+                cohortRows.Count(r => r.IntentLevel == level && r.Status == LeadStatus.Converted)))
+            .ToList();
+
+        // ── Cost per source: the « Sources » screen's own computation, so both agree ───────
+        IReadOnlyList<LeadSources.SourceQuality.SourceQualityDto>? sourceCosts = null;
+        if (q.AgencyId is null)
+        {
+            var quality = await new LeadSources.SourceQuality.SourceQualityHandler(db)
+                .Handle(new LeadSources.SourceQuality.SourceQualityQuery(q.From, q.To), ct);
+            sourceCosts = quality.IsSuccess ? quality.Value : null;
+        }
+
         return Result.Ok(new LeadReportDto(
             q.From, q.To, granularity, kpis, series, progression, byStatus, bySource, agents, agencies, projects,
-            forecast));
+            forecast, previous, byTemperature, sourceCosts));
+    }
+
+    private sealed record AssignmentRow(
+        Guid AgentId, Guid LeadId, DateTimeOffset CreatedAt, DateTimeOffset SlaDeadline, DateTimeOffset? FirstContactAt);
+
+    /// <summary>The assignments made in a window, same rule as agent-performance.</summary>
+    private async Task<List<AssignmentRow>> AssignmentsAsync(
+        DateTimeOffset from, DateTimeOffset to, Guid? agencyId, CancellationToken ct)
+    {
+        var query = db.LeadAssignments.AsNoTracking()
+            .Where(a => a.CreatedAt >= from && a.CreatedAt < to)
+            // Taken away before any contact: not a missed contact (see GetAgentPerformanceHandler).
+            .Where(a => a.SupersededAt == null || a.FirstContactAt != null);
+        if (agencyId is { } agency)
+        {
+            var agencyLeadIds = db.Leads.Where(l => l.AgencyId == agency).Select(l => l.Id);
+            query = query.Where(a => agencyLeadIds.Contains(a.LeadId));
+        }
+
+        return await query
+            .Select(a => new AssignmentRow(a.AgentId, a.LeadId, a.CreatedAt, a.SlaDeadline, a.FirstContactAt))
+            .ToListAsync(ct);
+    }
+
+    private static LeadReportPeriodKpis PeriodKpis(
+        IReadOnlyCollection<(LeadStatus Status, bool HasProject)> cohort, int conversions,
+        IReadOnlyCollection<AssignmentRow> assignments)
+    {
+        var contacted = assignments.Where(a => a.FirstContactAt.HasValue).ToList();
+        return new LeadReportPeriodKpis(
+            Captured: cohort.Count,
+            ConvertedInPeriod: conversions,
+            CohortConversionRate: Rate(cohort.Count(c => c.Status == LeadStatus.Converted), cohort.Count),
+            Lost: cohort.Count(c => c.Status == LeadStatus.Lost),
+            ProjectRate: Rate(cohort.Count(c => c.HasProject), cohort.Count),
+            AvgFirstContactMinutes: contacted.Count > 0
+                ? Math.Round(contacted.Average(a => (a.FirstContactAt!.Value - a.CreatedAt).TotalMinutes), 1)
+                : null,
+            SlaComplianceRate: assignments.Count > 0
+                ? Rate(assignments.Count(a => a.FirstContactAt.HasValue && a.FirstContactAt.Value <= a.SlaDeadline), assignments.Count)
+                : null);
     }
 
     /// <summary>

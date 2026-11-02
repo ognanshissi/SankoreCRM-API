@@ -18,6 +18,7 @@ using Sankore.Modules.Kyc.Features.Limits;
 using Sankore.Modules.Kyc.Features.PublicRemote;
 using Sankore.Modules.Kyc.Features.RemoteInvitations;
 using Sankore.Modules.Kyc.Features.Routing;
+using Sankore.Modules.Kyc.Features.Reports;
 using Sankore.Modules.Kyc.Features.Reviews;
 using Sankore.Modules.Kyc.Features.Settings;
 using Sankore.Modules.Kyc.Features.Verification;
@@ -347,6 +348,7 @@ public static class KycModule
         app.MapKycRemoteInvitationsEndpoints();
         app.MapKycRoutingEndpoints();
         app.MapKycSettingsEndpoints();
+        app.MapKycReportEndpoints();
         return app;
     }
 }

@@ -37,7 +37,6 @@ public sealed class RoleDefaultGrantsTests
         Permissions.CanConfigureWhatsAppBot,
         Permissions.CanManageLeadSourceCredentials,
         Permissions.CanManageInsuranceProduct,
-        Permissions.CanViewLeadReports,
         Permissions.CanReadLeadHealth,
     ];
 
@@ -139,5 +138,20 @@ public sealed class RoleDefaultGrantsTests
         // Product owner, 2026-11-02: an agent neither assigns a client nor takes one for themselves.
         RoleSeeder.DefaultGrants.Where(g => g.RoleCode == role).Select(g => g.PermissionCode)
             .Contains(Permissions.CanAssignCustomerAdvisor.Code).Should().Be(granted);
+    }
+
+    [Theory]
+    [InlineData("SalesManager", true)]
+    [InlineData("BranchManager", true)]
+    [InlineData("RegulationManager", true)]
+    [InlineData("Agent", false)]
+    [InlineData("CommercialAgent", false)]
+    [InlineData("Cashier", false)]
+    public void Managers_and_compliance_open_the_reports(string role, bool granted)
+    {
+        // Product owner, 2026-11-02: the reports (leads, projects, clients, KYC) are for managers and
+        // compliance; agents keep their own figures in « Ma journée ».
+        RoleSeeder.DefaultGrants.Where(g => g.RoleCode == role).Select(g => g.PermissionCode)
+            .Contains(Permissions.CanViewLeadReports.Code).Should().Be(granted);
     }
 }

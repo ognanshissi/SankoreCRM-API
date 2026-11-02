@@ -55,6 +55,48 @@ public sealed class GetLeadReportHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task The_period_figures_are_also_given_for_the_period_of_the_same_length_just_before()
+    {
+        // Reports lot 1 (2026-11-02): every tile shows its change against the previous period.
+        // The period is 14 days, so the previous one is the 14 days before From.
+        await AddLeadAsync(capturedAt: From.AddDays(-3), convertedAt: From.AddDays(-1));
+        await AddLeadAsync(capturedAt: From.AddDays(-10));
+        await AddLeadAsync(capturedAt: From.AddDays(-15));   // before the previous period
+        await AddLeadAsync(capturedAt: From.AddDays(2));
+
+        var report = await RunAsync(ReportGranularity.Day);
+
+        report.Kpis.Captured.Should().Be(1);
+        report.Previous!.Captured.Should().Be(2);
+        report.Previous.ConvertedInPeriod.Should().Be(1);
+        report.Previous.CohortConversionRate.Should().Be(50);
+    }
+
+    [Fact]
+    public async Task The_project_rate_and_the_untouched_open_leads_are_given()
+    {
+        // Reports lot 4 (2026-11-02). The period is in October; « today » is the machine's.
+        var withProject = await AddLeadAsync(capturedAt: From.AddDays(1));
+        await AddLeadAsync(capturedAt: From.AddDays(2));
+        var touched = await AddLeadAsync(capturedAt: From.AddDays(3));
+        await using (var db = _db.CreateContext())
+        {
+            db.Opportunities.Add(Opportunity.CreateFromLead(_tenantId, withProject.Id, "Crédit", "CREDCOM", null, TimeProvider.System));
+            var stored = await db.Leads.AsTracking().SingleAsync(l => l.Id == touched.Id);
+            SetPrivate(stored, nameof(Lead.LastActivityAt), (DateTimeOffset?)DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        var report = await RunAsync(ReportGranularity.Day);
+
+        report.Kpis.ProjectRate.Should().Be(33.3);
+        report.Kpis.UntouchedOpenLeads.Should().Be(2);
+        report.Kpis.AvgOpenLeadAgeDays.Should().BeGreaterThan(GetLeadReportHandler.UntouchedDays);
+        report.ByTemperature!.Sum(t => t.Captured).Should().Be(3);
+        report.SourceCosts.Should().NotBeNull("no agency filter: the sources' costs are given");
+    }
+
+    [Fact]
     public async Task Projects_opened_in_the_period_are_counted_by_their_phase_today()
     {
         // Projects, lot 4: the application stages left the lead pipeline for the projects.

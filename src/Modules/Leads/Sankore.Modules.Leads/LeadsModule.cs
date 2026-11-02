@@ -1,6 +1,7 @@
 using Sankore.Modules.Leads.Features.Reports.GetAgentReport;
 using Sankore.Modules.Leads.Features.Dispatching.GetDispatchOverview;
 using Sankore.Modules.Leads.Features.Reports.GetLeadReport;
+using Sankore.Modules.Leads.Features.Reports.GetProjectReport;
 using Microsoft.AspNetCore.Builder;
 
 namespace Sankore.Modules.Leads;
@@ -494,6 +495,7 @@ public static class LeadsModule
         // Phase 5 — Nurturing, Recycling & Lifecycle
         group.MapGetLeadStats();
         group.MapGetLeadReport();
+        group.MapGetProjectReport();
         group.MapGetAgentReport();
         group.MapGetDispatchOverview();
         group.MapReopenLead();

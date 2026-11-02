@@ -68,6 +68,15 @@ internal static class LeadReportWorkbook
             r.BySource.Select(s => new object?[] { Source(s.Source), s.Captured, s.Converted, s.ConversionRate / 100 }),
             percentColumns: [4]);
 
+        if (r.ByTemperature is { } temperatures)
+            Table(wb, "Température", ["Température aujourd'hui", "Leads captés", "Convertis à ce jour"],
+                temperatures.Select(t => new object?[] { Temperature(t.Level), t.Captured, t.Converted }));
+
+        if (r.SourceCosts is { } costs)
+            Table(wb, "Coûts par source",
+                ["Source", "Reçus", "Convertis", "Coût total", "Devise", "Coût par lead converti"],
+                costs.Select(c => new object?[] { c.Label, c.Received, c.Converted, c.TotalCost, c.CostCurrency, c.CostPerConvertedLead }));
+
         Table(wb, "Agents",
             ["Agent", "Affectations", "Contactés dans le délai", "Contactés en retard", "Sans contact",
              "Délai respecté", "Premier contact moyen (min)", "Conversions", "Taux de conversion", "Charge actuelle"],
@@ -124,6 +133,9 @@ internal static class LeadReportWorkbook
             ("Premier contact moyen (min)", k.AvgFirstContactMinutes, "0.0", "Délai moyen entre l'affectation et le premier contact, sur les affectations de la période."),
             ("Délai respecté", k.SlaComplianceRate / 100, "0.0%", "Premiers contacts réalisés avant l'échéance, sur les affectations de la période."),
             ("Délais dépassés en cours", k.OpenSlaBreaches, null, "Affectations dont l'échéance de premier contact est passée, à l'instant de l'export."),
+            ("Leads avec un projet", k.ProjectRate / 100, "0.0%", "Part des leads captés pendant la période qui ont au moins un projet."),
+            ("Leads sans activité", k.UntouchedOpenLeads, null, $"Leads ouverts sans activité depuis {GetLeadReportHandler.UntouchedDays} jours ou plus, à l'instant de l'export."),
+            ("Âge moyen des leads ouverts (j)", k.AvgOpenLeadAgeDays, "0.0", "Jours depuis la capture, en moyenne, des leads ouverts à l'instant de l'export."),
         };
         foreach (var (lbl, value, format, definition) in kpis)
         {
@@ -143,7 +155,7 @@ internal static class LeadReportWorkbook
         ws.Column(3).Width = 90;
     }
 
-    private static void Table(
+    internal static void Table(
         XLWorkbook wb, string name, string[] headers, IEnumerable<object?[]> rows,
         int[]? percentColumns = null, int[]? dateColumns = null, string dateFormat = "dd/mm/yyyy")
     {
@@ -171,7 +183,7 @@ internal static class LeadReportWorkbook
         ws.Row(1).Style.NumberFormat.Format = "@";
     }
 
-    private static void Header(IXLWorksheet ws, int row, string[] headers)
+    internal static void Header(IXLWorksheet ws, int row, string[] headers)
     {
         for (var c = 0; c < headers.Length; c++)
         {
@@ -183,7 +195,7 @@ internal static class LeadReportWorkbook
     }
 
     /// <summary>A null stays an EMPTY cell, never a 0: "no first contact yet" is not "0 minutes".</summary>
-    private static void SetValue(IXLCell cell, object? value)
+    internal static void SetValue(IXLCell cell, object? value)
     {
         switch (value)
         {
@@ -217,7 +229,7 @@ internal static class LeadReportWorkbook
         _ => s.ToString(),
     };
 
-    private static string AmountKind(ProjectAmountKind k) => k switch
+    internal static string AmountKind(ProjectAmountKind k) => k switch
     {
         ProjectAmountKind.Loan => "Décaissements (crédit)",
         ProjectAmountKind.Premium => "Primes (assurance)",
@@ -225,7 +237,7 @@ internal static class LeadReportWorkbook
         _ => "Montant estimé",
     };
 
-    private static string Phase(OpportunityStage s) => s switch
+    internal static string Phase(OpportunityStage s) => s switch
     {
         OpportunityStage.Prospecting => "Prospection",
         OpportunityStage.Qualification => "Qualification",
@@ -235,6 +247,14 @@ internal static class LeadReportWorkbook
         OpportunityStage.ClosedWon => "Gagné",
         OpportunityStage.ClosedLost => "Perdu",
         _ => s.ToString(),
+    };
+
+    private static string Temperature(LeadIntentLevel l) => l switch
+    {
+        LeadIntentLevel.Hot => "Chaud",
+        LeadIntentLevel.Warm => "Tiède",
+        LeadIntentLevel.Cold => "Froid",
+        _ => "Non évalué",
     };
 
     private static string Status(LeadStatus s) => s switch
