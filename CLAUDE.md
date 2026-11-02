@@ -4110,7 +4110,10 @@ Every write of a user-typed amount resolves its currency through
 `InstitutionCurrencies.Resolve`: none given → the institution's; the institution's or the one this
 amount ALREADY HAS (typed before a change — refusing it would block every edit) → kept; anything
 else → `CURRENCY_NOT_INSTITUTION`. Handlers take `IInstitutionCurrency? = null` (null = the default,
-for hand-built test handlers). Covered: lead capture/update/import, projects (3 handlers), household
+for hand-built test handlers). The read is suppressed out of the caller's ambient transaction
+inside `InstitutionCurrency` itself (2026-11-02): it shares the request's AdministrationDbContext
+with the facade, and a context that enlisted once is refused in a later suppressed read — a credit
+project with an amount answered 500. Covered: lead capture/update/import, projects (3 handlers), household
 resources, lead-source cost, client declared income, holding terms, the WhatsApp bot (an amount the
 customer names in another currency is no amount). Custom Money fields: `EntityFormDto.Currency`,
 filled by the facade and `ProductFormGate`, makes `CustomFieldValues.Apply` refuse
