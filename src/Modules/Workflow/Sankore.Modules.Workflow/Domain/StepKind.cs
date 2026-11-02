@@ -20,7 +20,12 @@ public enum StepKind
     Condition,
     Wait,
     Notification,
-    IntegrationAction
+    IntegrationAction,
+    /// <summary>
+    /// « Fin » : ends the circuit where it stands, validated or refused, and may ask the record's
+    /// module for an action (2026-11-02). Ends a branch, or the circuit on the main line.
+    /// </summary>
+    End
 }
 
 public static class StepKinds
@@ -29,7 +34,7 @@ public static class StepKinds
     /// A step nobody decides: the engine runs it on entry and moves on. Only the notification so far —
     /// it used to wait for an approval nobody was asked for (no role), and the instance stopped there.
     /// </summary>
-    public static bool RunsAutomatically(StepKind kind) => kind == StepKind.Notification;
+    public static bool RunsAutomatically(StepKind kind) => kind is StepKind.Notification or StepKind.End;
 
     /// <summary>
     /// Kinds the engine does not execute yet and that STOP a dossier when run as a validation: no
@@ -44,6 +49,7 @@ public static class StepKinds
         StepKind.Condition => "Condition",
         StepKind.Wait => "Attente",
         StepKind.IntegrationAction => "Action Integration",
+        StepKind.End => "Fin",
         _ => kind.ToString(),
     };
 }

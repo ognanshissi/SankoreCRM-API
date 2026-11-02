@@ -32,14 +32,57 @@ public sealed class WorkflowDbContext(
     {
         AnnounceNotificationSteps();
         AnnounceManualTaskSteps();
+        AnnounceEndActions(TemplateNames(EndActionsToAnnounce().Select(e => e.Instance.TemplateId)));
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         AnnounceNotificationSteps();
         AnnounceManualTaskSteps();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        var templateIds = EndActionsToAnnounce().Select(e => e.Instance.TemplateId).Distinct().ToList();
+        AnnounceEndActions(templateIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await WorkflowTemplates.IgnoreQueryFilters().Where(t => templateIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.Name, cancellationToken));
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// The « Fin » steps with an action that instances have just reached, not yet written. Their
+    /// circuit's name is read WITHOUT the tenant filter: a consumer (a condition settled, a wait
+    /// resumed) has no ambient tenant, the filter then throws, and the whole save — the instance
+    /// that just ended — failed with it. The ids are the instances' own templates.
+    /// </summary>
+    private List<(WorkflowInstance Instance, EndStepReachedEvent Event)> EndActionsToAnnounce() =>
+        ChangeTracker.Entries<WorkflowInstance>()
+            .Where(e => e.State != EntityState.Deleted && e.State != EntityState.Detached)
+            .SelectMany(e => e.Entity.DomainEvents.OfType<EndStepReachedEvent>().Select(ev => (e.Entity, ev)))
+            .Where(x => !_announced.Contains(x.ev))
+            .ToList();
+
+    private Dictionary<Guid, string> TemplateNames(IEnumerable<Guid> ids)
+    {
+        var list = ids.Distinct().ToList();
+        return list.Count == 0
+            ? []
+            : WorkflowTemplates.IgnoreQueryFilters().Where(t => list.Contains(t.Id)).ToDictionary(t => t.Id, t => t.Name);
+    }
+
+    /// <summary>
+    /// A « Fin » step with an action asks the record's module to run it
+    /// (<see cref="WorkflowEndActionRequested"/>), in the transaction that ended the instance — like the
+    /// notifications, so no path that moves an instance can forget it.
+    /// </summary>
+    private void AnnounceEndActions(IReadOnlyDictionary<Guid, string> templateNames)
+    {
+        foreach (var (instance, reached) in EndActionsToAnnounce())
+        {
+            if (!_announced.Add(reached)) continue;
+            AddToOutbox(new WorkflowEndActionRequested(
+                reached.TenantId, reached.InstanceId, reached.InstanceStepId, reached.EntityType, reached.EntityId,
+                reached.Action, reached.Approved, templateNames.GetValueOrDefault(instance.TemplateId)));
+        }
     }
 
     /// <summary>

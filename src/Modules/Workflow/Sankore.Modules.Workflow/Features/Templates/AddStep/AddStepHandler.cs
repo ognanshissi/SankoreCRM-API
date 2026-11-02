@@ -26,8 +26,11 @@ internal sealed class AddStepHandler(WorkflowDbContext db)
             var needsShift = request.InsertAt && template.Steps.Any(s => s.Order == request.Order);
 
             // Insertion au milieu : deux enregistrements dans une même transaction, l'index unique
-            // (TemplateId, Order) interdisant un décalage en une passe (voir ParkStepsFrom).
-            await using var tx = needsShift && db.Database.IsRelational()
+            // (TemplateId, Order) interdisant un décalage en une passe (voir ParkStepsFrom). La
+            // commande passe par TransactionBehavior, dont la TransactionScope couvre déjà les deux :
+            // ouvrir une transaction EF en plus était refusé par EF (« ambient transaction ») — toute
+            // insertion au milieu, dans une branche comprise, répondait 500 sur PostgreSQL.
+            await using var tx = needsShift && db.Database.IsRelational() && System.Transactions.Transaction.Current is null
                 ? await db.Database.BeginTransactionAsync(ct)
                 : null;
 

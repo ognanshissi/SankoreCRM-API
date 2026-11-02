@@ -587,6 +587,9 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Gates.IntegrationStepConsumer>();
     x.AddConsumer<Sankore.Modules.Leads.Features.WorkflowTasks.WorkflowTaskRequestedConsumer>();
     x.AddConsumer<Sankore.Modules.Leads.Features.WorkflowTasks.WorkflowTaskWithdrawnConsumer>();
+    // « Fin » steps: Leads runs the action on the lead or the project, Workflow writes what came of it.
+    x.AddConsumer<Sankore.Modules.Leads.Features.WorkflowEndActions.WorkflowEndActionConsumer>();
+    x.AddConsumer<Sankore.Modules.Workflow.Infrastructure.Branching.WorkflowEndActionOutcomeConsumer>();
 
     // TEL-B-19 : la qualification d'un appel rafraîchit le jour de cet appel dans le modèle de
     // lecture des indicateurs. Ce n'est PAS un incrément — l'événement dit quel jour a changé, et

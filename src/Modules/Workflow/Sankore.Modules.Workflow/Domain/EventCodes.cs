@@ -51,6 +51,13 @@ public static class EventCodes
     /// <summary>A « Condition » step was evaluated: which branch, on which value (history only).</summary>
     public const string ConditionResolved = "CONDITION_RESOLVED";
 
+    /// <summary>The circuit reached a « Fin » step: validated or refused there (history only).</summary>
+    public const string Ended = "ENDED";
+
+    /// <summary>What the record's module did with the action of a « Fin » step (history only).</summary>
+    public const string EndActionDone = "END_ACTION_DONE";
+    public const string EndActionNotDone = "END_ACTION_NOT_DONE";
+
     /// <summary>A « Vérification KYC » step passed: the client's KYC reached the level (history only).</summary>
     public const string KycValidated = "KYC_VALIDATED";
 

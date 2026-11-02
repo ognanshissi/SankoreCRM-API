@@ -271,6 +271,13 @@ public sealed class WorkflowInstance : AggregateRoot
     {
         while (Status == WorkflowStatus.InProgress && CurrentStep() is { RunsAutomatically: true } step)
         {
+            // A « Fin » has no way out: it ends the circuit, whatever transitions were generated after it.
+            if (step.Kind == StepKind.End)
+            {
+                ExecuteAutomatic(step);
+                return;
+            }
+
             var transition = SelectTransition(step, EventCodes.Auto, transitions, ctx, conditionEvaluator)
                           ?? SelectTransition(step, EventCodes.Approve, transitions, ctx, conditionEvaluator);
 
@@ -285,6 +292,11 @@ public sealed class WorkflowInstance : AggregateRoot
     private void ExecuteAutomatic(WorkflowInstanceStep step)
     {
         step.ExecuteAutomatically();
+        if (step.Kind == StepKind.End)
+        {
+            End(step);
+            return;
+        }
         if (step.Kind == StepKind.Notification)
             RaiseDomainEvent(new NotificationStepExecutedEvent(
                 Id, TenantId, EntityType, EntityId, step.Id, step.Name, step.ConfigJson));
@@ -447,11 +459,11 @@ public sealed class WorkflowInstance : AggregateRoot
 
         step.CompleteCondition();
 
-        // The branches are the contiguous steps right after the condition that carry one.
+        // The branch not taken goes whole, conditions nested in it included (StepTree).
         var losing = outcome ? StepBranch.No : StepBranch.Yes;
-        foreach (var branchStep in _steps.Where(s => s.Order > step.Order).OrderBy(s => s.Order)
-                     .TakeWhile(s => s.Branch is not null)
-                     .Where(s => s.Branch == losing && s.Status == StepStatus.Pending))
+        var chains = StepTree.Chains(_steps.Select(s => new StepTree.Step(s.Id, s.Order, s.Kind, s.ConfigJson)));
+        foreach (var branchStep in _steps.Where(s => s.Order > step.Order && s.Status == StepStatus.Pending
+                                                  && chains[s.Id].IsUnder(step.Id, losing)))
             branchStep.Skip();
 
         _pendingAuditEntries.Add(WorkflowAuditEntry.Create(
@@ -524,7 +536,7 @@ public sealed class WorkflowInstance : AggregateRoot
         }
 
         ExecuteAutomatic(step);
-        AdvanceToNextStep(rulesByStepDefId, context, evaluator);
+        if (!IsFinished) AdvanceToNextStep(rulesByStepDefId, context, evaluator);
         return true;
     }
 
@@ -673,6 +685,43 @@ public sealed class WorkflowInstance : AggregateRoot
         CompletedAt = DateTimeOffset.UtcNow;
     }
 
+    private bool IsFinished => Status is WorkflowStatus.Completed or WorkflowStatus.Rejected
+                                      or WorkflowStatus.Cancelled or WorkflowStatus.TimedOut;
+
+    /// <summary>
+    /// The circuit reached a « Fin » step: it ends here, validated or refused as the step says, and
+    /// what was still ahead — the other branches, the steps after them — will not run.
+    /// </summary>
+    private void End(WorkflowInstanceStep step)
+    {
+        var (approved, action) = EndStep.Read(step.ConfigJson);
+
+        foreach (var pending in _steps.Where(s => s.Status == StepStatus.Pending))
+            pending.Skip();
+
+        Status         = approved ? WorkflowStatus.Completed : WorkflowStatus.Rejected;
+        CompletedAt    = DateTimeOffset.UtcNow;
+        CurrentStateId = null;
+
+        _pendingAuditEntries.Add(WorkflowAuditEntry.Create(
+            tenantId:        TenantId,
+            instanceId:      Id,
+            fromStateId:     step.StepDefinitionId,
+            toStateId:       null,
+            eventCode:       EventCodes.Ended,
+            actedByUserId:   Guid.Empty,
+            comment:         EndStep.Describe(approved, action),
+            contextSnapshot: ContextJson));
+
+        if (action is not null)
+            RaiseDomainEvent(new EndStepReachedEvent(Id, TenantId, EntityType, EntityId, step.Id, action, approved));
+
+        if (approved)
+            RaiseDomainEvent(new WorkflowCompletedEvent(Id, TenantId, EntityType, EntityId));
+        else
+            RaiseDomainEvent(new WorkflowRejectedEvent(Id, TenantId, EntityType, EntityId));
+    }
+
     private WorkflowInstanceStep? CurrentStep() =>
         _steps.FirstOrDefault(s => s.Order == CurrentStepOrder &&
                                    s.Status == StepStatus.AwaitingApproval);
@@ -716,6 +765,7 @@ public sealed class WorkflowInstance : AggregateRoot
             if (step.RunsAutomatically)
             {
                 ExecuteAutomatic(step);
+                if (IsFinished) return;
                 continue;
             }
 

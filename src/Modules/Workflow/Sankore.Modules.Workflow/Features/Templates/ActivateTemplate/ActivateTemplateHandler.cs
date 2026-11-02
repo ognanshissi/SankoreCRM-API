@@ -49,6 +49,12 @@ internal sealed class ActivateTemplateHandler(
                 $"L'étape « {unsupported.Name} » ({StepKinds.Label(unsupported.Kind)}) n'est pas encore exécutée par le moteur : " +
                 "elle arrêterait le dossier. Retirez-la pour publier ce parcours.");
 
+        // Conditions at any depth, and « Fin » steps (2026-11-02): the tree must hold together.
+        if (StepTree.Problem(
+                template.Steps.Select(st => new StepTree.Step(st.Id, st.Order, st.Kind, st.ConfigJson, st.Name)).ToList(),
+                template.EntityType) is { } treeProblem)
+            return Result.Fail(treeProblem);
+
         var provider = (contextProviders ?? []).FirstOrDefault(p =>
             string.Equals(p.EntityType, template.EntityType, StringComparison.OrdinalIgnoreCase));
         foreach (var condition in template.Steps.Where(s => s.Kind == StepKind.Condition).OrderBy(s => s.Order))

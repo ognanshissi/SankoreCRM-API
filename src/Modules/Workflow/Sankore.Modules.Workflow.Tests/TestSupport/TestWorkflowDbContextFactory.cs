@@ -23,5 +23,15 @@ public sealed class TestWorkflowDbContextFactory(Guid tenantId) : IDisposable
         return new WorkflowDbContext(options, new FixedTenantContext(tenantId));
     }
 
+    /// <summary>The same database seen with another tenant context — a consumer's, which has none.</summary>
+    public WorkflowDbContext CreateContext(ITenantContext tenant)
+    {
+        var options = new DbContextOptionsBuilder<WorkflowDbContext>()
+            .UseInMemoryDatabase(_databaseName)
+            .Options;
+
+        return new WorkflowDbContext(options, tenant);
+    }
+
     public void Dispose() { /* InMemory — nothing to dispose */ }
 }
