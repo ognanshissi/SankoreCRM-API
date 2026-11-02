@@ -1,0 +1,88 @@
+name: Docker
+
+# Construit les images de la pile CRM ici plutôt que sur le serveur Dokploy, comme le front
+# (SankoreFront/.github/workflows/docker.yml) : le serveur fait tourner les conteneurs en service
+# pendant le build, et une compilation .NET en Release de tout le graphe des modules lui prend la
+# mémoire. Dokploy n'a plus qu'à tirer les images publiées sur GHCR (docker-compose.dokploy.yml).
+#
+# Le registre de tenants (Sankore.Admin, docker-compose.admin.yml) n'est pas dans la matrice :
+# il se déploie seul. S'il y entre, ne pas l'appeler `sankore-admin` — ce nom est déjà celui de
+# l'image de l'application Angular d'administration, publiée par le dépôt du front.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api
+            dockerfile: src/Bootstrapper/Sankore.Api/Dockerfile
+          - app: hangfire
+            dockerfile: src/Bootstrapper/Sankore.Hangfire/Dockerfile
+          # pgvector + PostGIS : l'image officielle ne porte pas les extensions que les
+          # migrations créent. Reconstruite à chaque passage, mais Dokploy ne la retire qu'à la
+          # demande (`pull_policy: missing`) — voir docker-compose.dokploy.yml.
+          - app: postgres
+            dockerfile: postgres.Dockerfile
+    steps:
+      - uses: actions/checkout@v5
+
+      # Actions tierces épinglées sur un SHA de commit et non sur un tag mobile : ce job a le droit
+      # d'écrire sur GHCR, un tag réécrit par un tiers publierait n'importe quoi sous nos images.
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR exige un nom en minuscules ; `github.repository_owner` peut contenir des majuscules.
+      - id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sankore-${{ matrix.app }}" >> "$GITHUB_OUTPUT"
+
+      # `linux/amd64` : l'architecture de la plupart des VPS. Si le serveur Dokploy est en ARM
+      # (Hetzner CAX, Oracle Ampere…), remplacer par `linux/arm64`.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.name.outputs.image }}:latest
+            ${{ steps.name.outputs.image }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  # Un seul redéploiement, une fois TOUTES les images poussées : le service Compose de Dokploy
+  # les tire ensemble. L'API et Hangfire partagent la base et ses migrations — un redéploiement
+  # par image pourrait faire tourner un Hangfire neuf contre un schéma pas encore migré.
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Redéployer sur Dokploy
+        env:
+          WEBHOOK: ${{ secrets.DOKPLOY_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "Pas de webhook Dokploy configuré (secret DOKPLOY_WEBHOOK), redéploiement manuel."
+            exit 0
+          fi
+          curl -fsS -X POST "$WEBHOOK"

@@ -1,0 +1,125 @@
+# Déploiement Dokploy de la pile CRM, à partir des images publiées sur GHCR par
+# .github/workflows/docker.yml — rien n'est construit sur le serveur. docker-compose.yml reste
+# celui du poste de développement, qui construit les images.
+#
+# Chaque service ÉTEND son homologue de docker-compose.yml au lieu d'en être une copie : la
+# liste des variables de l'API (une cinquantaine, et elle grandit à chaque lot) ne vit qu'à un
+# endroit. Ce fichier ne dit que ce qui change en production — l'image tirée de GHCR à la place
+# du `build:`, que `!reset` retire. Il ne suffisait pas de pointer Dokploy sur
+# docker-compose.yml avec `DOCKER_REGISTRY=ghcr.io/…/` : Dokploy lance `up --build`, qui
+# reconstruit tout service portant un `build:`.
+#
+# Dans Dokploy (service Compose) : Compose Path = ./docker-compose.dokploy.yml, Autodeploy
+# désactivé — c'est la CI qui redéploie, une fois les images poussées (sinon Dokploy
+# redéploierait au push, avant que les nouvelles images existent). Mêmes variables
+# d'environnement que pour docker-compose.yml (voir .env.example). Le dépôt est toujours
+# cloné sur le serveur : `extends` y lit docker-compose.yml, et Tempo, Prometheus et Grafana
+# leurs fichiers de `observability/`.
+#
+# Les images sont privées : le serveur doit être connecté à ghcr.io (Settings → Registry dans
+# Dokploy, ou `docker login ghcr.io` sur le serveur) avec un jeton classique `read:packages` —
+# le même que pour les images du front, si elles sont sous le même propriétaire.
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+    image: ghcr.io/ognanshissi/sankore-postgres:${POSTGRES_TAG:-latest}
+    build: !reset null
+    # `missing` et non `always`, à l'inverse de l'API : l'image de base (pgvector:pg16) suit
+    # les correctifs, donc chaque passage de la CI produit une nouvelle empreinte, et `always`
+    # redémarrerait la base de données à CHAQUE livraison applicative. Mettre à jour Postgres est
+    # un geste délibéré : `docker compose pull postgres` puis redéployer, ou poser POSTGRES_TAG.
+    pull_policy: missing
+
+  rabbitmq:
+    extends:
+      file: docker-compose.yml
+      service: rabbitmq
+
+  seq:
+    extends:
+      file: docker-compose.yml
+      service: seq
+
+  maildev:
+    extends:
+      file: docker-compose.yml
+      service: maildev
+
+  redis:
+    extends:
+      file: docker-compose.yml
+      service: redis
+
+  env-dashboard:
+    extends:
+      file: docker-compose.yml
+      service: env-dashboard
+
+  tempo:
+    extends:
+      file: docker-compose.yml
+      service: tempo
+
+  prometheus:
+    extends:
+      file: docker-compose.yml
+      service: prometheus
+
+  grafana:
+    extends:
+      file: docker-compose.yml
+      service: grafana
+
+  sankore-api:
+    extends:
+      file: docker-compose.yml
+      service: sankore-api
+    image: ghcr.io/ognanshissi/sankore-api:${API_TAG:-latest}
+    build: !reset null
+    # Sans ceci, `docker compose up` réutilise l'image `latest` déjà présente sur le serveur et
+    # un redéploiement ne change rien.
+    pull_policy: always
+
+  sankore-hangfire:
+    extends:
+      file: docker-compose.yml
+      service: sankore-hangfire
+    image: ghcr.io/ognanshissi/sankore-hangfire:${HANGFIRE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+# `extends` ne reprend que les services : réseaux et volumes de haut niveau sont redéclarés à
+# l'identique de docker-compose.yml. Garder les deux blocs alignés — un nom de volume différent
+# ici monterait une base VIDE en production.
+networks:
+  sankore-internal:
+    driver: "bridge"
+  dokploy-network:
+    external: true
+  # Créé par la pile du registre (docker-compose.admin.yml) : la déployer AVANT celle-ci.
+  sankore-shared:
+    external: true
+  aspire:
+    driver: "bridge"
+
+volumes:
+  sankore-postgres-data:
+    driver: "local"
+    name: "${POSTGRES_VOLUME:-sankore-postgres-data}"
+  sankore-kyc-storage:
+    driver: "local"
+  sankore-filestore:
+    driver: "local"
+  sankore-batch-storage:
+    driver: "local"
+  sankore-claim-storage:
+    driver: "local"
+  sankore-recordings:
+    driver: "local"
+  sankore-whatsapp-media:
+    driver: "local"
+  sankore-task-attachments:
+    driver: "local"
