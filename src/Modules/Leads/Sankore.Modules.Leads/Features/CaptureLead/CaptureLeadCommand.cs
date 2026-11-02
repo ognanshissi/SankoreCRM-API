@@ -98,7 +98,15 @@ public sealed record CaptureLeadCommand(
     /// required; an import or an ingest would otherwise lose every prospect a new form setting does
     /// not describe.
     /// </summary>
-    bool EnforceFormRequirements = false
+    bool EnforceFormRequirements = false,
+    string? Profession = null,
+    /// <summary>A <see cref="LeadMaritalStatus"/> name.</summary>
+    string? MaritalStatus = null,
+    string? AddressLine = null,
+    string? PostalCode = null,
+    string? City = null,
+    /// <summary>ISO 3166-1 alpha-2.</summary>
+    string? CountryCode = null
 ) : IRequest<Result<CaptureLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

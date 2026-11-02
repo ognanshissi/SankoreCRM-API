@@ -56,7 +56,9 @@ internal sealed record EnrichLeadCommand(
     DateTimeOffset? ExpectedUpdatedAt = null,
     string? Neighbourhood = null,
     string? Landmark = null,
-    bool NameVerified = false
+    bool NameVerified = false,
+    string? Profession = null,
+    string? MaritalStatus = null
 ) : IRequest<Result<LeadCompletenessDto>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

@@ -201,6 +201,23 @@ public sealed class CaptureLeadHandler(
         if (customFields.Value is not null)
             lead.SetCustomFields(customFields.Value);
 
+        // The address and the situation go through the same setters as the identity screen, so a
+        // capture and a later enrichment normalise them alike. Null leaves the field empty.
+        var situation = lead.EnrichSituation(cmd.Profession, cmd.MaritalStatus, clock.GetUtcNow());
+        if (situation.IsFailure)
+            return Result.Fail<CaptureLeadResult>(situation.Error!);
+
+        if (cmd.AddressLine is not null || cmd.PostalCode is not null || cmd.City is not null || cmd.CountryCode is not null)
+        {
+            var address = lead.EnrichPrincipalIdentity(
+                firstName: null, lastName: null, usageName: null, birthDate: null, gender: null,
+                addressLine: cmd.AddressLine, postalCode: cmd.PostalCode, city: cmd.City,
+                countryCode: string.IsNullOrWhiteSpace(cmd.CountryCode) ? null : cmd.CountryCode,
+                now: clock.GetUtcNow());
+            if (address.IsFailure)
+                return Result.Fail<CaptureLeadResult>(address.Error!);
+        }
+
         db.Leads.Add(lead);
 
         // ── The household and the questionnaires of v2 (BNF-B-18) ───────────
@@ -346,6 +363,12 @@ public sealed class CaptureLeadHandler(
             ["agencyId"]           = cmd.AgencyId?.ToString(),
             ["preferredAgencyId"]  = cmd.PreferredAgencyId?.ToString(),
             ["ownerId"]            = cmd.OwnerId?.ToString(),
+            ["profession"]         = cmd.Profession,
+            ["maritalStatus"]      = cmd.MaritalStatus,
+            ["addressLine"]        = cmd.AddressLine,
+            ["postalCode"]         = cmd.PostalCode,
+            ["city"]               = cmd.City,
+            ["countryCode"]        = cmd.CountryCode,
         };
 
 

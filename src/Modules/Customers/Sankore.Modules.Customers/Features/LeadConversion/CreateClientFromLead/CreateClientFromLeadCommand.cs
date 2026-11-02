@@ -2,6 +2,7 @@ namespace Sankore.Modules.Customers.Features.LeadConversion.CreateClientFromLead
 
 using System.Globalization;
 using MediatR;
+using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Modules.Customers.PublicApi;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
@@ -72,7 +73,9 @@ internal sealed record CreateClientFromLeadCommand(
     string? PreferredLanguage,
     Guid? RequestedClientId,
     string? CustomFieldsJson = null,
-    bool KycRequired = true
+    bool KycRequired = true,
+    string? MaritalStatus = null,
+    [property: SensitiveData] PostalAddressInput? Address = null
 ) : IRequest<Result<CreateFromLeadResult>>, ICommand, IResourceCommand
 {
     /// <summary>ISO-8601 date format used by <see cref="DateOfBirth"/>.</summary>
@@ -116,7 +119,14 @@ internal sealed record CreateClientFromLeadCommand(
         PreferredLanguage: request.PreferredLanguage,
         RequestedClientId: request.RequestedClientId,
         CustomFieldsJson: request.CustomFieldsJson,
-        KycRequired: request.KycRequired);
+        KycRequired: request.KycRequired,
+        MaritalStatus: request.MaritalStatus,
+        Address: new PostalAddressInput(
+            Street: request.AddressLine,
+            City: request.City,
+            State: null,
+            Country: request.CountryCode,
+            ZipCode: request.PostalCode));
 }
 
 /// <summary>

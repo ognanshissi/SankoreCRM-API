@@ -995,6 +995,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("loss_reason");
 
+                    b.Property<string>("MaritalStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("marital_status");
+
                     b.Property<DateTimeOffset?>("NameVerifiedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("name_verified_at");
@@ -1076,6 +1081,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("principal_usage_name");
+
+                    b.Property<string>("Profession")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("profession");
 
                     b.Property<string>("ProspectType")
                         .IsRequired()

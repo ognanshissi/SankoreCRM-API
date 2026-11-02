@@ -142,6 +142,7 @@ public static class NativeFormCatalog
     // ── Lead ─────────────────────────────────────────────────────────────
 
     private static readonly FormCondition Corporate = When("prospectType", "Corporate");
+    private static readonly FormCondition Individual = When("prospectType", "Individual");
 
     private static readonly Catalog Lead = new(
         Sections:
@@ -162,6 +163,11 @@ public static class NativeFormCatalog
             Native("gender", FormFieldType.SingleChoice, "Genre", "identity", 4, options: Genders),
             Native("dateOfBirth", FormFieldType.Date, "Date de naissance", "identity", 5),
             Native("nationalId", FormFieldType.Text, "Pièce d'identité", "identity", 6, quickAdd: true, sensitive: true),
+            // Asked as the client wizard asks it, and carried to the client at conversion.
+            Native("profession", FormFieldType.Text, "Profession", "identity", 7, quickAdd: true, maxLength: 150,
+                visibleWhen: Individual),
+            Native("maritalStatus", FormFieldType.SingleChoice, "Situation matrimoniale", "identity", 8, quickAdd: true,
+                options: MaritalStatuses, visibleWhen: Individual),
 
             Native("companyName", FormFieldType.Text, "Nom de l'entreprise", "company", 1, quickAdd: true),
             Native("companyEmail", FormFieldType.Email, "E-mail de l'entreprise", "company", 2),
@@ -172,10 +178,21 @@ public static class NativeFormCatalog
             Native("email", FormFieldType.Email, "E-mail", "contact", 2, quickAdd: true, sensitive: true),
             Native("preferredLanguage", FormFieldType.Reference, "Langue préférée", "contact", 3,
                 reference: FormReferenceTarget.Language, defaultValue: "fr"),
+            // The address the identity screen edits (POST leads/{id}/enrich). No default country: the
+            // score counts one, and a prefilled value would award it to every lead.
+            Native("addressLine", FormFieldType.Text, "Adresse", "contact", 4, quickAdd: true, maxLength: 300, sensitive: true),
+            Native("postalCode", FormFieldType.Text, "Code postal", "contact", 5, quickAdd: true, maxLength: 20),
+            Native("city", FormFieldType.Text, "Ville", "contact", 6, quickAdd: true, maxLength: 100),
+            Native("countryCode", FormFieldType.Reference, "Pays", "contact", 7, quickAdd: true,
+                reference: FormReferenceTarget.Country),
 
             Native("interestedProduct", FormFieldType.Reference, "Produit souhaité", "request", 1, quickAdd: true,
                 locked: true, reference: FormReferenceTarget.Product),
-            Native("desiredAmount", FormFieldType.Money, "Montant souhaité", "request", 2, quickAdd: true),
+            // Hidden (product owner, 2026-11-02): most products have no amount to ask for, and the
+            // project carries one where its template requires it. An institution that wants it back
+            // makes it visible in the form settings. Migration `DesiredAmountOffLeadQuickAdd` did the
+            // same to the layouts already saved.
+            Native("desiredAmount", FormFieldType.Money, "Montant souhaité", "request", 2, hidden: true),
             Native("comment", FormFieldType.LongText, "Commentaire", "request", 3, quickAdd: true),
 
             // Not locked although the contract always carries one: the capture screen never asked for
@@ -316,7 +333,8 @@ public static class NativeFormCatalog
         string? pattern = null,
         string? defaultValue = null,
         bool sensitive = false,
-        FormCondition? visibleWhen = null)
+        FormCondition? visibleWhen = null,
+        bool hidden = false)
         => new(
             Key: key,
             Type: type,
@@ -325,6 +343,7 @@ public static class NativeFormCatalog
             SectionKey: section,
             QuickAdd: quickAdd || locked,
             IsRequired: locked,
+            IsHidden: hidden && !locked,
             Options: options,
             MaxLength: maxLength,
             Pattern: pattern,

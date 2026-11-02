@@ -295,6 +295,11 @@ internal static class WhatsAppBotTools
                     ["type"] = "string",
                     ["enum"] = new JsonArray("Homme", "Femme"),
                 },
+                WhatsAppBotFields.MaritalStatus => new JsonObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JsonArray("Célibataire", "Marié(e)", "Divorcé(e)", "Veuf", "Veuve", "Union libre"),
+                },
                 _ => new JsonObject { ["type"] = "string" },
             };
 

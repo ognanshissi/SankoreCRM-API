@@ -308,12 +308,14 @@ internal sealed class WhatsAppBotEngine(
     /// </summary>
     private static bool CompletedThisTurn(WhatsAppBotProfile profile, WhatsAppConversation conversation, Lead? lead, BotRun run, BotFieldContext ctx)
     {
-        if (profile.FieldsRequiredForLead.Count == 0) return false;
+        // A field masked since the profile was saved is never asked for, so it cannot hold the lead back.
+        var required = profile.FieldsRequiredForLead.Where(ctx.IsOffered).ToList();
+        if (required.Count == 0) return false;
 
         var pending = conversation.PendingLeadFields();
-        var contributed = run.Collected.Concat(run.Pending.Keys).Any(profile.FieldsRequiredForLead.Contains);
+        var contributed = run.Collected.Concat(run.Pending.Keys).Any(required.Contains);
 
-        return contributed && profile.FieldsRequiredForLead.All(code => WhatsAppBotFieldValues.IsFilled(lead, pending, code, ctx));
+        return contributed && required.All(code => WhatsAppBotFieldValues.IsFilled(lead, pending, code, ctx));
     }
 
     /// <summary>What the agent who takes over reads: the minimum, collected, field by field.</summary>
@@ -321,6 +323,7 @@ internal sealed class WhatsAppBotEngine(
     {
         var pending = conversation.PendingLeadFields();
         var parts = profile.FieldsRequiredForLead
+            .Where(ctx.IsOffered)
             .Select(code => $"{ctx.LabelOf(code)} : {WhatsAppBotFieldValues.Display(lead, pending, code, ctx) ?? "—"}");
 
         return "Le bot a recueilli les informations indispensables. " + string.Join(" ; ", parts) + ".";
@@ -368,8 +371,7 @@ internal sealed class WhatsAppBotEngine(
                 .Where(code => code switch
                 {
                     WhatsAppBotFields.Product => productChoices.Count > 0 || WhatsAppBotFieldValues.IsFilled(lead, pending, code, ctx),
-                    _ when WhatsAppBotFields.IsCustom(code) => ctx.CustomField(code) is not null,
-                    _ => true,
+                    _ => ctx.IsOffered(code),
                 })
                 .ToList();
 

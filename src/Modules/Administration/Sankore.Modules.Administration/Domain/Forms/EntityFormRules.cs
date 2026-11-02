@@ -238,10 +238,12 @@ internal static partial class EntityFormRules
         };
 
         // A default the field's own validation would refuse is a creation that fails for a value
-        // nobody typed.
+        // nobody typed. Probed as a live field: an archived one accepts no value at all, so the probe
+        // refused every archive of a field that had a default.
         if (normalised.DefaultValue is not null)
         {
-            var probe = new EntityFormDto(FormEntity.Lead, 1, [], [normalised with { IsRequired = false, VisibleWhen = null }]);
+            var probe = new EntityFormDto(FormEntity.Lead, 1, [],
+                [normalised with { IsRequired = false, VisibleWhen = null, IsArchived = false }]);
             var check = CustomFieldValues.Apply(
                 probe, null,
                 new Dictionary<string, JsonElement> { [key] = JsonSerializer.SerializeToElement(normalised.DefaultValue) },

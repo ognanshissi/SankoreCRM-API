@@ -102,6 +102,8 @@ internal sealed class GetLeadHandler(
             QualificationThreshold:   settings.Value.QualificationThreshold,
             NextStep:                 nextSteps.GetValueOrDefault(lead.Id),
             Sla:                      sla,
-            CustomerId:               lead.CustomerId));
+            CustomerId:               lead.CustomerId,
+            Profession:               lead.Profession,
+            MaritalStatus:            lead.MaritalStatus?.ToString()));
     }
 }

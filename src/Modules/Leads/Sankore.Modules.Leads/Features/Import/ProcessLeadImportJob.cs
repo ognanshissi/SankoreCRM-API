@@ -105,6 +105,12 @@ public sealed class ProcessLeadImportJob(IServiceScopeFactory scopeFactory)
                         OwnerId:           row.OwnerId,
                         AgencyId:          row.AgencyId,
                         CompanyName:       row.CompanyName,
+                        Profession:        row.Profession,
+                        MaritalStatus:     row.MaritalStatus?.ToString(),
+                        AddressLine:       row.AddressLine,
+                        PostalCode:        row.PostalCode,
+                        City:              row.City,
+                        CountryCode:       row.CountryCode,
                         CustomFields:      raw.CustomFields.Count > 0
                                                ? Administration.PublicApi.Forms.CustomFieldValues.FromText(raw.CustomFields)
                                                : null));

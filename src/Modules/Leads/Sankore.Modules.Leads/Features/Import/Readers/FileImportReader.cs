@@ -111,6 +111,12 @@ public sealed class FileImportReader(IFileStore fileStore) : ILeadImportSourceRe
                 CompanyName       = Cell("CompanyName"),
                 OwnerId           = Cell("OwnerId"),
                 AgencyId          = Cell("AgencyId"),
+                Profession        = Cell("Profession"),
+                MaritalStatus     = Cell("MaritalStatus"),
+                AddressLine       = Cell("AddressLine"),
+                PostalCode        = Cell("PostalCode"),
+                City              = Cell("City"),
+                CountryCode       = Cell("CountryCode"),
                 CustomFields      = CustomCells(headers.Keys, Cell),
             });
         }

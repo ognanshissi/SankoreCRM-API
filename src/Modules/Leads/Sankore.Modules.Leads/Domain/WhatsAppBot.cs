@@ -262,6 +262,11 @@ public static class WhatsAppBotFields
     public const string Neighbourhood = "NEIGHBOURHOOD";
     public const string Product = "PRODUCT";
     public const string DesiredAmount = "DESIRED_AMOUNT";
+    public const string Profession = "PROFESSION";
+    public const string MaritalStatus = "MARITAL_STATUS";
+    public const string Address = "ADDRESS";
+    public const string PostalCode = "POSTAL_CODE";
+    public const string Country = "COUNTRY";
 
     /// <summary>Code → French label, in the order the settings screen lists them.</summary>
     public static readonly IReadOnlyList<(string Code, string Label)> All =
@@ -269,8 +274,13 @@ public static class WhatsAppBotFields
         (FirstName, "Prénom"),
         (LastName, "Nom"),
         (Gender, "Genre"),
+        (Profession, "Profession"),
+        (MaritalStatus, "Situation matrimoniale"),
         (Email, "Adresse e-mail"),
+        (Address, "Adresse"),
+        (PostalCode, "Code postal"),
         (City, "Ville"),
+        (Country, "Pays"),
         (Neighbourhood, "Quartier"),
         (Product, "Produit souhaité"),
         (DesiredAmount, "Montant souhaité"),
@@ -299,6 +309,27 @@ public static class WhatsAppBotFields
 
     public static bool IsKnown(string code) =>
         All.Any(f => f.Code == code) || (IsCustom(code) && CustomKey(code).Length > 0);
+
+    /// <summary>
+    /// The lead form's key for a native code, so a field the institution masked in the form settings
+    /// is not asked for either. Null for the quartier, which the lead form does not carry.
+    /// </summary>
+    public static string? FormKeyOf(string code) => code switch
+    {
+        FirstName => "firstName",
+        LastName => "lastName",
+        Gender => "gender",
+        Profession => "profession",
+        MaritalStatus => "maritalStatus",
+        Email => "email",
+        Address => "addressLine",
+        PostalCode => "postalCode",
+        City => "city",
+        Country => "countryCode",
+        Product => "interestedProduct",
+        DesiredAmount => "desiredAmount",
+        _ => null,
+    };
 
     /// <summary>The French label of a native code; a custom code's label is its form's, resolved by the caller.</summary>
     public static string LabelOf(string code) =>

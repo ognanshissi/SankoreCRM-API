@@ -109,7 +109,13 @@ public static class CaptureLeadEndpoint
             Household:          req.Household,
             Questionnaires:     req.Questionnaires,
             CustomFields:       req.CustomFields,
-            EnforceFormRequirements: true), ct);
+            EnforceFormRequirements: true,
+            Profession:         req.Profession,
+            MaritalStatus:      req.MaritalStatus,
+            AddressLine:        req.AddressLine,
+            PostalCode:         req.PostalCode,
+            City:               req.City,
+            CountryCode:        req.CountryCode), ct);
 
         if (!result.IsSuccess)
             return Results.Problem(title: "Lead capture failed", detail: result.Error, statusCode: 422);
@@ -235,7 +241,16 @@ public sealed record CaptureLeadRequest(
     /// Values of the tenant's custom lead fields (<c>GET forms/Lead</c>), keyed by field key. This
     /// endpoint also enforces the fields the tenant made required — native or custom.
     /// </summary>
-    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    string? Profession = null,
+    /// <summary>"Single" | "Married" | "Divorced" | "Widowed" | "FreeUnion".</summary>
+    string? MaritalStatus = null,
+    /// <summary>The principal's address — the fields <c>POST leads/{id}/enrich</c> also writes.</summary>
+    string? AddressLine = null,
+    string? PostalCode = null,
+    string? City = null,
+    /// <summary>ISO 3166-1 alpha-2.</summary>
+    string? CountryCode = null);
 
 /// <summary>
 /// One household member on a capture (BNF-B-18) — the same shape the household endpoints take, so

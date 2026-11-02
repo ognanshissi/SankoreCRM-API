@@ -429,11 +429,16 @@ internal sealed class ConvertLeadHandler(
             // M01 infers the type from the number being present.
             IdentityDocumentType:   null,
             IdentityDocumentNumber: lead.NationalId,
-            Profession:             null,
+            Profession:             lead.Profession,
             PreferredLanguage:      lead.PreferredLanguage,
             RequestedClientId:      null,
             CustomFieldsJson:       lead.CustomFieldsJson,
-            KycRequired:            kycRequired);
+            KycRequired:            kycRequired,
+            MaritalStatus:          lead.MaritalStatus?.ToString(),
+            AddressLine:            lead.PrincipalAddressLine,
+            PostalCode:             lead.PrincipalPostalCode,
+            City:                   lead.PrincipalCity,
+            CountryCode:            lead.PrincipalCountryCode);
 
         using var suppressed = new TransactionScope(
             TransactionScopeOption.Suppress,

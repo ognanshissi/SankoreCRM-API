@@ -22,6 +22,16 @@ public enum LeadGender
     Other
 }
 
+/// <summary>The names of the client's <c>MaritalStatus</c>, so a conversion carries it as is.</summary>
+public enum LeadMaritalStatus
+{
+    Single,
+    Married,
+    Divorced,
+    Widowed,
+    FreeUnion
+}
+
 public enum LeadChannel
 {
     Web,

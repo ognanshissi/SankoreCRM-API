@@ -876,7 +876,15 @@ public sealed record CreateFromLeadRequest(
     /// opened for it — see <see cref="Events.ClientCreatedEvent.KycRequired"/>. True everywhere
     /// else, which is the KYC-B-01 rule: every other client gets a file.
     /// </summary>
-    bool KycRequired = true);
+    bool KycRequired = true,
+    /// <summary>A <c>MaritalStatus</c> name (Single, Married, Divorced, Widowed, FreeUnion).</summary>
+    string? MaritalStatus = null,
+    /// <summary>The lead's postal address, kept as the client's primary address contact point.</summary>
+    string? AddressLine = null,
+    string? PostalCode = null,
+    string? City = null,
+    /// <summary>ISO 3166-1 alpha-2.</summary>
+    string? CountryCode = null);
 
 /// <summary>
 /// <c>AlreadyExisted</c> is true when the lead had already been converted — the

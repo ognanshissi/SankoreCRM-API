@@ -35,6 +35,16 @@ public sealed record ImportLeadRow
     public string? CompanyName { get; init; }
     public string? OwnerId { get; init; }
     public string? AgencyId { get; init; }
+    public string? Profession { get; init; }
+
+    /// <summary>A <c>LeadMaritalStatus</c> name or its French label (« Marié(e) », « Union libre »…).</summary>
+    public string? MaritalStatus { get; init; }
+    public string? AddressLine { get; init; }
+    public string? PostalCode { get; init; }
+    public string? City { get; init; }
+
+    /// <summary>ISO 3166-1 alpha-2 (« CI »).</summary>
+    public string? CountryCode { get; init; }
 
     /// <summary>
     /// The row's <c>custom.&lt;key&gt;</c> columns, by full header name (dynamic forms, lot 6). Read as

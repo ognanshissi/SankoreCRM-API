@@ -81,6 +81,8 @@ internal sealed class LeadConfiguration(IFieldEncryptor encryptor) : IEntityType
         builder.Property(l => l.PrincipalCity).HasMaxLength(100);
         builder.Property(l => l.PrincipalCountryCode).HasMaxLength(2).IsFixedLength(false);
         builder.Property(l => l.PrincipalNeighbourhood).HasMaxLength(100);
+        builder.Property(l => l.Profession).HasMaxLength(150);
+        builder.Property(l => l.MaritalStatus).HasConversion<string>().HasMaxLength(20);
 
         builder.Property(l => l.HouseholdMonthlyIncome).HasPrecision(18, 4);
         builder.Property(l => l.HouseholdHousingCost).HasPrecision(18, 4);

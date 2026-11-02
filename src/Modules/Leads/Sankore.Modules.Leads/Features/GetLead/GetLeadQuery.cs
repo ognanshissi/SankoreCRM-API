@@ -113,7 +113,11 @@ public sealed record LeadDto(
     /// lead. Not a conversion — the lead converts when one of its projects is approved. Filled by
     /// the single read only.
     /// </param>
-    Guid? CustomerId = null);
+    Guid? CustomerId = null,
+    /// <param name="Profession">The principal's profession. Detail read only.</param>
+    string? Profession = null,
+    /// <param name="MaritalStatus">A <c>LeadMaritalStatus</c> name. Detail read only.</param>
+    string? MaritalStatus = null);
 
 /// <summary>The principal's address, as the identity screen edits it.</summary>
 /// <param name="PostalCode">Also the boîte postale — the only postal code most of the network has.</param>

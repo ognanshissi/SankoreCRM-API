@@ -239,6 +239,13 @@ public sealed class Lead : AggregateRoot
 
     public DateTimeOffset? HouseholdResourcesDeclaredAt { get; private set; }
 
+    // ── The principal's situation (2026-11-02, product owner) ────────────────
+    //
+    // Asked at capture like the client wizard asks it, and carried to the client at conversion.
+
+    public string? Profession { get; private set; }
+    public LeadMaritalStatus? MaritalStatus { get; private set; }
+
     /// <summary>
     /// The principal's identity as a value object, or null while the structured names are missing.
     ///
@@ -1427,6 +1434,8 @@ public sealed class Lead : AggregateRoot
         PrincipalNeighbourhood = null;
         PrincipalLandmark      = null;
         NameVerifiedBy         = null;
+        Profession             = null;
+        MaritalStatus          = null;
 
         // What a household earns and owes is personal financial data, declared about a person.
         HouseholdMonthlyIncome       = null;
@@ -1543,6 +1552,33 @@ public sealed class Lead : AggregateRoot
         // Structured names win over the captured FullName, the same rule as Update() — see there.
         if (FirstName is not null && LastName is not null)
             FullName = $"{FirstName} {LastName}";
+
+        UpdatedAt = now;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// The principal's profession and marital status. Null leaves a field alone and blank clears it,
+    /// as in <see cref="EnrichPrincipalIdentity"/>; the marital status is one of
+    /// <see cref="LeadMaritalStatus"/>'s names, any case.
+    /// </summary>
+    /// <returns><c>LEAD_MARITAL_STATUS_INVALID</c>, or the closed-lead refusal.</returns>
+    public Result EnrichSituation(string? profession, string? maritalStatus, DateTimeOffset now)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+
+        LeadMaritalStatus? marital = null;
+        if (!string.IsNullOrWhiteSpace(maritalStatus))
+        {
+            if (!Enum.TryParse<LeadMaritalStatus>(maritalStatus.Trim(), ignoreCase: true, out var parsed)
+                || !Enum.IsDefined(parsed))
+                return Result.Fail("LEAD_MARITAL_STATUS_INVALID");
+            marital = parsed;
+        }
+
+        if (profession    is not null) Profession    = Blank(profession);
+        if (maritalStatus is not null) MaritalStatus = marital;
 
         UpdatedAt = now;
         return Result.Ok();
@@ -1780,7 +1816,10 @@ public sealed class Lead : AggregateRoot
         string? companyEmail      = null,
         string? companyPhone      = null,
         string? website           = null,
-        GeoPoint? location        = null)
+        GeoPoint? location        = null,
+        string? profession        = null,
+        LeadMaritalStatus? maritalStatus = null,
+        Lead? addressOf           = null)
     {
         // The pair moves together, as everywhere else. A merge that took the source's address
         // and left the target's old index behind would make the merged lead match the wrong
@@ -1803,6 +1842,20 @@ public sealed class Lead : AggregateRoot
         if (companyPhone      is not null) CompanyPhone      = companyPhone;
         if (website           is not null) Website           = website;
         if (location          is not null) Location          = location;
+        if (profession        is not null) Profession        = profession;
+        if (maritalStatus.HasValue)        MaritalStatus     = maritalStatus;
+
+        // The source's address as a whole, only when it has one: a street from one lead and a
+        // city from the other would locate nobody.
+        if (addressOf is not null
+            && (addressOf.PrincipalAddressLine ?? addressOf.PrincipalPostalCode
+                ?? addressOf.PrincipalCity ?? addressOf.PrincipalCountryCode) is not null)
+        {
+            PrincipalAddressLine = addressOf.PrincipalAddressLine;
+            PrincipalPostalCode  = addressOf.PrincipalPostalCode;
+            PrincipalCity        = addressOf.PrincipalCity;
+            PrincipalCountryCode = addressOf.PrincipalCountryCode;
+        }
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

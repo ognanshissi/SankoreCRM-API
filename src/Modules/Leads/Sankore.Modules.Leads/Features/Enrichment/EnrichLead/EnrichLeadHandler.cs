@@ -65,6 +65,13 @@ internal sealed class EnrichLeadHandler(
         if (enriched.IsFailure)
             return Result.Fail<LeadCompletenessDto>(enriched.Error!);
 
+        if (cmd.Profession is not null || cmd.MaritalStatus is not null)
+        {
+            var situation = lead.EnrichSituation(cmd.Profession, cmd.MaritalStatus, context.Clock.GetUtcNow());
+            if (situation.IsFailure)
+                return Result.Fail<LeadCompletenessDto>(situation.Error!);
+        }
+
         if (cmd.SourceActivityId is { } confirmedBy)
         {
             var attached = lead.AttachIdentitySource(confirmedBy, context.Clock.GetUtcNow());
@@ -142,6 +149,8 @@ internal sealed class EnrichLeadHandler(
         if (cmd.Neighbourhood is not null) names.Add(nameof(cmd.Neighbourhood));
         if (cmd.Landmark    is not null) names.Add(nameof(cmd.Landmark));
         if (cmd.NameVerified)            names.Add(nameof(cmd.NameVerified));
+        if (cmd.Profession  is not null) names.Add(nameof(cmd.Profession));
+        if (cmd.MaritalStatus is not null) names.Add(nameof(cmd.MaritalStatus));
 
         return names;
     }

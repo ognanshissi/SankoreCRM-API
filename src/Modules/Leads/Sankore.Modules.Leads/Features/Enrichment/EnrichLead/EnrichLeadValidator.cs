@@ -13,6 +13,9 @@ internal sealed class EnrichLeadValidator : AbstractValidator<EnrichLeadCommand>
     private static readonly string[] Genders =
         [.. Enum.GetNames<Sankore.Modules.Leads.Domain.LeadGender>()];
 
+    private static readonly string[] MaritalStatuses =
+        [.. Enum.GetNames<Sankore.Modules.Leads.Domain.LeadMaritalStatus>()];
+
     public EnrichLeadValidator()
     {
         RuleFor(x => x.LeadId).NotEmpty();
@@ -25,6 +28,11 @@ internal sealed class EnrichLeadValidator : AbstractValidator<EnrichLeadCommand>
         RuleFor(x => x.City).MaximumLength(100);
         RuleFor(x => x.Neighbourhood).MaximumLength(100);
         RuleFor(x => x.Landmark).MaximumLength(200);
+        RuleFor(x => x.Profession).MaximumLength(150);
+
+        RuleFor(x => x.MaritalStatus)
+            .Must(m => string.IsNullOrWhiteSpace(m) || MaritalStatuses.Contains(m.Trim(), StringComparer.OrdinalIgnoreCase))
+            .WithMessage("MaritalStatus must be one of: " + string.Join(", ", MaritalStatuses));
 
         RuleFor(x => x.Gender)
             .Must(g => g is null || Genders.Contains(g, StringComparer.OrdinalIgnoreCase))

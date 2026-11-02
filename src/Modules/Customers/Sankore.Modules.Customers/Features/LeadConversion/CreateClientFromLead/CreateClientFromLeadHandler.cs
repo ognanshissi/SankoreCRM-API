@@ -164,7 +164,8 @@ internal sealed class CreateClientFromLeadHandler(
                 dateOfBirthBlindIndex: dateOfBirthBlindIndex,
                 birthPlace: null,
                 nationality: cmd.Nationality,
-                maritalStatus: null,
+                maritalStatus: Enum.TryParse<MaritalStatus>(cmd.MaritalStatus, ignoreCase: true, out var marital)
+                    && Enum.IsDefined(marital) ? marital : null,
                 fatherName: null,
                 motherName: null,
                 profession: cmd.Profession,
@@ -249,6 +250,20 @@ internal sealed class CreateClientFromLeadHandler(
                 ContactPointType.Email,
                 encryptor.Encrypt(email)!,
                 indexer.Compute(BlindIndexPurpose.Email, SensitiveValueNormalizer.NormalizeEmail(email)),
+                label: null,
+                isPrimary: true,
+                validFrom: now,
+                actor: actor);
+        }
+
+        // 8a. The lead's address, as one encrypted contact point like the creation wizard's.
+        var addressLine = cmd.Address?.ToSingleLineOrNull();
+        if (addressLine is not null)
+        {
+            client.AddContactPoint(
+                ContactPointType.Address,
+                encryptor.Encrypt(addressLine)!,
+                indexer.Compute(BlindIndexPurpose.PostalAddress, addressLine),
                 label: null,
                 isPrimary: true,
                 validFrom: now,

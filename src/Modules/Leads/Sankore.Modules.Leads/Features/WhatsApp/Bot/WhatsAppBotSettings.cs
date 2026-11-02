@@ -170,7 +170,9 @@ internal sealed class GetWhatsAppBotOverviewHandler(
     /// form lists the native ones only.
     /// </summary>
     internal static IReadOnlyList<WhatsAppBotFieldDto> Fields(Sankore.Modules.Administration.PublicApi.Forms.EntityFormDto? leadForm) =>
-        WhatsAppBotFields.All.Select(f => new WhatsAppBotFieldDto(f.Code, f.Label))
+        WhatsAppBotFields.All
+            .Where(f => !BotFieldContext.IsMaskedNative(leadForm, f.Code))
+            .Select(f => new WhatsAppBotFieldDto(f.Code, f.Label))
             .Concat((leadForm?.Fields ?? [])
                 .Where(BotFieldContext.IsCollectable)
                 .OrderBy(f => f.Order)

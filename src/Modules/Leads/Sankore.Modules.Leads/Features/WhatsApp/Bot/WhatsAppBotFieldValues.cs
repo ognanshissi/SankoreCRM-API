@@ -35,6 +35,17 @@ internal sealed record BotFieldContext(
         !f.IsNative && !f.IsArchived && !f.IsSensitive && f.ReferenceTarget is null;
 
     public string LabelOf(string code) => CustomField(code)?.Label ?? WhatsAppBotFields.LabelOf(code);
+
+    /// <summary>
+    /// Whether the bot may ask for the field at all: a custom field the form still offers, or a
+    /// native one the institution has not masked. An unreadable form masks nothing.
+    /// </summary>
+    public bool IsOffered(string code) =>
+        WhatsAppBotFields.IsCustom(code) ? CustomField(code) is not null : !IsMaskedNative(LeadForm, code);
+
+    public static bool IsMaskedNative(EntityFormDto? form, string code) =>
+        WhatsAppBotFields.FormKeyOf(code) is { } key
+        && form?.Fields.FirstOrDefault(f => f.IsNative && f.Key == key) is { IsHidden: true };
 }
 
 /// <summary>
@@ -108,6 +119,22 @@ internal sealed class WhatsAppBotFieldValues(
             case WhatsAppBotFields.City:
             case WhatsAppBotFields.Neighbourhood:
                 return (value, null);
+
+            // Same bounds as the identity screen: a longer value would be refused at the write.
+            case WhatsAppBotFields.Profession:
+                return value.Length <= 150 ? (value, null) : (null, "Profession trop longue.");
+            case WhatsAppBotFields.Address:
+                return value.Length <= 300 ? (value, null) : (null, "Adresse trop longue.");
+            case WhatsAppBotFields.PostalCode:
+                return value.Length <= 20 ? (value, null) : (null, "Code postal trop long.");
+
+            case WhatsAppBotFields.MaritalStatus:
+                return MaritalStatusOf(value) is { } marital
+                    ? (marital.ToString(), null)
+                    : (null, "Situation attendue : célibataire, marié(e), divorcé(e), veuf / veuve ou union libre.");
+
+            case WhatsAppBotFields.Country:
+                return CountryCodeOf(value) is { } country ? (country, null) : (null, "Pays inconnu.");
 
             case WhatsAppBotFields.Email:
                 return System.Net.Mail.MailAddress.TryCreate(value, out var address) && address.Host.Contains('.')
@@ -189,6 +216,26 @@ internal sealed class WhatsAppBotFieldValues(
                 result = lead.EnrichPrincipalIdentity(null, null, null, null, null, null, null, null, null, clock.GetUtcNow(), neighbourhood: value);
                 break;
 
+            case WhatsAppBotFields.Address:
+                result = lead.EnrichPrincipalIdentity(null, null, null, null, null, addressLine: value, null, null, null, clock.GetUtcNow());
+                break;
+
+            case WhatsAppBotFields.PostalCode:
+                result = lead.EnrichPrincipalIdentity(null, null, null, null, null, null, postalCode: value, null, null, clock.GetUtcNow());
+                break;
+
+            case WhatsAppBotFields.Country:
+                result = lead.EnrichPrincipalIdentity(null, null, null, null, null, null, null, null, countryCode: value, clock.GetUtcNow());
+                break;
+
+            case WhatsAppBotFields.Profession:
+                result = lead.EnrichSituation(value, null, clock.GetUtcNow());
+                break;
+
+            case WhatsAppBotFields.MaritalStatus:
+                result = lead.EnrichSituation(null, value, clock.GetUtcNow());
+                break;
+
             case WhatsAppBotFields.DesiredAmount:
             {
                 var parts = value.Split(' ', 2);
@@ -267,6 +314,11 @@ internal sealed class WhatsAppBotFieldValues(
             WhatsAppBotFields.Email => !string.IsNullOrWhiteSpace(lead.Email),
             WhatsAppBotFields.City => !string.IsNullOrWhiteSpace(lead.PrincipalCity),
             WhatsAppBotFields.Neighbourhood => !string.IsNullOrWhiteSpace(lead.PrincipalNeighbourhood),
+            WhatsAppBotFields.Address => !string.IsNullOrWhiteSpace(lead.PrincipalAddressLine),
+            WhatsAppBotFields.PostalCode => !string.IsNullOrWhiteSpace(lead.PrincipalPostalCode),
+            WhatsAppBotFields.Country => !string.IsNullOrWhiteSpace(lead.PrincipalCountryCode),
+            WhatsAppBotFields.Profession => !string.IsNullOrWhiteSpace(lead.Profession),
+            WhatsAppBotFields.MaritalStatus => lead.MaritalStatus is not null,
             WhatsAppBotFields.Product => ctx is not null
                 ? LineOf(lead, ctx.Catalogue) is not null
                 : !string.IsNullOrWhiteSpace(lead.InterestedProduct) && lead.InterestedProduct != "Unknown",
@@ -295,6 +347,7 @@ internal sealed class WhatsAppBotFieldValues(
             {
                 WhatsAppBotFields.Gender => waiting == nameof(LeadGender.Male) ? "Homme" : waiting == nameof(LeadGender.Female) ? "Femme" : waiting,
                 WhatsAppBotFields.Product => ctx?.Catalogue.FirstOrDefault(p => p.Id.ToString() == waiting)?.Name,
+                WhatsAppBotFields.MaritalStatus => Enum.TryParse<LeadMaritalStatus>(waiting, out var m) ? MaritalLabel(m) : waiting,
                 _ => waiting,
             };
         }
@@ -313,6 +366,11 @@ internal sealed class WhatsAppBotFieldValues(
             WhatsAppBotFields.Email => lead.Email,
             WhatsAppBotFields.City => lead.PrincipalCity,
             WhatsAppBotFields.Neighbourhood => lead.PrincipalNeighbourhood,
+            WhatsAppBotFields.Address => lead.PrincipalAddressLine,
+            WhatsAppBotFields.PostalCode => lead.PrincipalPostalCode,
+            WhatsAppBotFields.Country => lead.PrincipalCountryCode,
+            WhatsAppBotFields.Profession => lead.Profession,
+            WhatsAppBotFields.MaritalStatus => lead.MaritalStatus is { } marital ? MaritalLabel(marital) : null,
             WhatsAppBotFields.Product => ctx is not null && LineOf(lead, ctx.Catalogue) is null ? null : lead.InterestedProduct,
             WhatsAppBotFields.DesiredAmount => lead.DesiredAmount is { } m
                 ? $"{m.Amount.ToString("N0", CultureInfo.GetCultureInfo("fr-FR"))} {m.Currency}"
@@ -323,6 +381,74 @@ internal sealed class WhatsAppBotFieldValues(
                     : null,
             _ => null,
         };
+    }
+
+    /// <summary>What a customer writes for each status, normalised as <see cref="WhatsAppBotText.Normalize"/> does.</summary>
+    private static readonly Dictionary<string, LeadMaritalStatus> MaritalWords = new(StringComparer.Ordinal)
+    {
+        ["celibataire"] = LeadMaritalStatus.Single,
+        ["single"] = LeadMaritalStatus.Single,
+        ["marie"] = LeadMaritalStatus.Married,
+        ["mariee"] = LeadMaritalStatus.Married,
+        ["marie e"] = LeadMaritalStatus.Married,
+        ["married"] = LeadMaritalStatus.Married,
+        ["divorce"] = LeadMaritalStatus.Divorced,
+        ["divorcee"] = LeadMaritalStatus.Divorced,
+        ["divorce e"] = LeadMaritalStatus.Divorced,
+        ["divorced"] = LeadMaritalStatus.Divorced,
+        ["veuf"] = LeadMaritalStatus.Widowed,
+        ["veuve"] = LeadMaritalStatus.Widowed,
+        ["widowed"] = LeadMaritalStatus.Widowed,
+        ["union libre"] = LeadMaritalStatus.FreeUnion,
+        ["concubinage"] = LeadMaritalStatus.FreeUnion,
+        ["freeunion"] = LeadMaritalStatus.FreeUnion,
+    };
+
+    internal static LeadMaritalStatus? MaritalStatusOf(string text) =>
+        MaritalWords.TryGetValue(WhatsAppBotText.Normalize(text), out var status) ? status : null;
+
+    private static string MaritalLabel(LeadMaritalStatus status) => status switch
+    {
+        LeadMaritalStatus.Single => "Célibataire",
+        LeadMaritalStatus.Married => "Marié(e)",
+        LeadMaritalStatus.Divorced => "Divorcé(e)",
+        LeadMaritalStatus.Widowed => "Veuf / veuve",
+        LeadMaritalStatus.FreeUnion => "Union libre",
+        _ => status.ToString(),
+    };
+
+    /// <summary>
+    /// The countries a customer names in French, as the screens list them, then any ISO code. A
+    /// name outside this list is not guessed: the field stays to ask, or for the agent.
+    /// </summary>
+    private static readonly Dictionary<string, string> CountryNames = new(StringComparer.Ordinal)
+    {
+        ["cote d ivoire"] = "CI",
+        ["cote divoire"] = "CI",
+        ["senegal"] = "SN",
+        ["burkina faso"] = "BF",
+        ["burkina"] = "BF",
+        ["mali"] = "ML",
+        ["benin"] = "BJ",
+        ["togo"] = "TG",
+        ["niger"] = "NE",
+        ["guinee bissau"] = "GW",
+        ["ghana"] = "GH",
+        ["guinee"] = "GN",
+        ["liberia"] = "LR",
+        ["nigeria"] = "NG",
+        ["cameroun"] = "CM",
+        ["maroc"] = "MA",
+        ["france"] = "FR",
+        ["etats unis"] = "US",
+    };
+
+    internal static string? CountryCodeOf(string text)
+    {
+        if (CountryNames.TryGetValue(WhatsAppBotText.Normalize(text), out var code)) return code;
+
+        var trimmed = text.Trim();
+        return IsoCountry.IsKnown(trimmed) ? trimmed.ToUpperInvariant() : null;
     }
 
     private static Dictionary<string, string?> NativeValues(Lead? lead) =>

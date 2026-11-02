@@ -60,6 +60,7 @@ public sealed class GoogleSheetsImportReader(IOptions<GoogleImportSettings> sett
                 LastName          = Cell("LastName"),
                 PhoneNumber       = Cell("PhoneNumber"),
                 Email             = Cell("Email"),
+                NationalId        = Cell("NationalId"),
                 Source            = Cell("Source"),
                 InterestedProduct = Cell("InterestedProduct"),
                 PreferredLanguage = Cell("PreferredLanguage"),
@@ -76,6 +77,12 @@ public sealed class GoogleSheetsImportReader(IOptions<GoogleImportSettings> sett
                 CompanyName       = Cell("CompanyName"),
                 OwnerId           = Cell("OwnerId"),
                 AgencyId          = Cell("AgencyId"),
+                Profession        = Cell("Profession"),
+                MaritalStatus     = Cell("MaritalStatus"),
+                AddressLine       = Cell("AddressLine"),
+                PostalCode        = Cell("PostalCode"),
+                City              = Cell("City"),
+                CountryCode       = Cell("CountryCode"),
                 CustomFields      = FileImportReader.CustomCells(headers.Keys, Cell),
             });
         }

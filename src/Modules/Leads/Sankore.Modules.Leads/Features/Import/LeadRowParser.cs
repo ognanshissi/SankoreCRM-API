@@ -2,6 +2,7 @@ namespace Sankore.Modules.Leads.Features.Import;
 
 using System.Globalization;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Shared.Kernel.ValueObject;
 
 /// <summary>Typed row ready to be dispatched as a <c>CaptureLeadCommand</c>.</summary>
 public sealed record ParsedLeadRow(
@@ -26,7 +27,13 @@ public sealed record ParsedLeadRow(
     string? ExternalReference,
     string? CompanyName,
     Guid? OwnerId,
-    Guid? AgencyId);
+    Guid? AgencyId,
+    string? Profession = null,
+    LeadMaritalStatus? MaritalStatus = null,
+    string? AddressLine = null,
+    string? PostalCode = null,
+    string? City = null,
+    string? CountryCode = null);
 
 public sealed record ParsedRowResult(ParsedLeadRow? Row, IReadOnlyList<string> Errors)
 {
@@ -133,6 +140,13 @@ public static class LeadRowParser
         // Optional: the capture gives an amount without one the institution's currency.
         var currency = Clean(raw.DesiredCurrency);
 
+        var maritalStatus = ParseMaritalStatus(raw.MaritalStatus, errors);
+
+        var rawCountry = Clean(raw.CountryCode);
+        var countryCode = rawCountry?.ToUpperInvariant();
+        if (countryCode is not null && !IsoCountry.IsKnown(countryCode))
+            errors.Add($"CountryCode '{rawCountry}' is not an ISO 3166-1 alpha-2 country code (e.g. CI).");
+
         var ownerId  = ParseGuid(raw.OwnerId, "OwnerId", errors);
         var agencyId = ParseGuid(raw.AgencyId, "AgencyId", errors);
 
@@ -162,7 +176,13 @@ public static class LeadRowParser
                 ExternalReference: Clean(raw.ExternalReference),
                 CompanyName:       Clean(raw.CompanyName),
                 OwnerId:           ownerId,
-                AgencyId:          agencyId),
+                AgencyId:          agencyId,
+                Profession:        Clean(raw.Profession),
+                MaritalStatus:     maritalStatus,
+                AddressLine:       Clean(raw.AddressLine),
+                PostalCode:        Clean(raw.PostalCode),
+                City:              Clean(raw.City),
+                CountryCode:       countryCode),
             []);
     }
 
@@ -188,6 +208,44 @@ public static class LeadRowParser
         }
 
         return parsed;
+    }
+
+    /// <summary>The enum name or the label the screens show, accents and case ignored.</summary>
+    private static readonly Dictionary<string, LeadMaritalStatus> MaritalLabels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["celibataire"] = LeadMaritalStatus.Single,
+        ["marie"] = LeadMaritalStatus.Married,
+        ["mariee"] = LeadMaritalStatus.Married,
+        ["marie(e)"] = LeadMaritalStatus.Married,
+        ["divorce"] = LeadMaritalStatus.Divorced,
+        ["divorcee"] = LeadMaritalStatus.Divorced,
+        ["divorce(e)"] = LeadMaritalStatus.Divorced,
+        ["veuf"] = LeadMaritalStatus.Widowed,
+        ["veuve"] = LeadMaritalStatus.Widowed,
+        ["veuf / veuve"] = LeadMaritalStatus.Widowed,
+        ["union libre"] = LeadMaritalStatus.FreeUnion,
+    };
+
+    private static LeadMaritalStatus? ParseMaritalStatus(string? value, List<string> errors)
+    {
+        var raw = Clean(value);
+        if (raw is null) return null;
+
+        if (Enum.TryParse<LeadMaritalStatus>(raw, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed))
+            return parsed;
+
+        if (MaritalLabels.TryGetValue(WithoutAccents(raw), out var labelled))
+            return labelled;
+
+        errors.Add($"MaritalStatus '{raw}' is not valid (Single, Married, Divorced, Widowed, FreeUnion).");
+        return null;
+    }
+
+    private static string WithoutAccents(string value)
+    {
+        var decomposed = value.Normalize(System.Text.NormalizationForm.FormD);
+        var kept = decomposed.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark);
+        return new string(kept.ToArray()).Normalize(System.Text.NormalizationForm.FormC);
     }
 
     private static Guid? ParseGuid(string? value, string field, List<string> errors)

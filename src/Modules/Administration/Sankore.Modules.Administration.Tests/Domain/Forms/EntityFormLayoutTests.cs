@@ -209,6 +209,19 @@ public sealed class EntityFormLayoutTests
             .Should().BeNull();
     }
 
+    [Fact]
+    public void A_field_with_a_default_can_be_archived()
+    {
+        var field = Custom("pays", FormFieldType.SingleChoice) with
+        {
+            Options = [new FormOption("ci", "Côte d'Ivoire")],
+            DefaultValue = "ci",
+        };
+        var saved = Saved(With(DefaultLead(), field));
+
+        SaveError(With(DefaultLead(), field with { IsArchived = true }), saved).Should().BeNull();
+    }
+
     // ── Write: conditions and versions ───────────────────────────────────
 
     [Fact]

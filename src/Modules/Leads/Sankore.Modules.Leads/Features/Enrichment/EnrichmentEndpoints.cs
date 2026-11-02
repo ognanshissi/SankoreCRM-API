@@ -68,7 +68,9 @@ internal static class EnrichmentEndpoints
             ExpectedUpdatedAt: req.ExpectedUpdatedAt,
             Neighbourhood:     req.Neighbourhood,
             Landmark:          req.Landmark,
-            NameVerified:      req.NameVerified), ct);
+            NameVerified:      req.NameVerified,
+            Profession:        req.Profession,
+            MaritalStatus:     req.MaritalStatus), ct);
 
         // 200 with the recomputed report, not 204: the screen that saved a field wants to know
         // what is still missing, and it must learn it from the same calculator the conversion uses.
@@ -116,4 +118,7 @@ public sealed record EnrichLeadRequest(
     /// <summary>Point de repère. Encrypted at rest.</summary>
     string? Landmark = null,
     /// <summary>True to record that an agent checked the spelling of the name.</summary>
-    bool NameVerified = false);
+    bool NameVerified = false,
+    string? Profession = null,
+    /// <summary>A <c>LeadMaritalStatus</c> name; blank clears it.</summary>
+    string? MaritalStatus = null);
