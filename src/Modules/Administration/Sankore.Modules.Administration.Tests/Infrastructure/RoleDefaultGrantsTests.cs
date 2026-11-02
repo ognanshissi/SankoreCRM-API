@@ -128,4 +128,16 @@ public sealed class RoleDefaultGrantsTests
 
         granted.Should().Contain(ReadAll.Select(p => p.Code));
     }
+
+    [Theory]
+    [InlineData("Agent", false)]
+    [InlineData("CommercialAgent", false)]
+    [InlineData("SalesManager", true)]
+    [InlineData("BranchManager", true)]
+    public void Only_managers_choose_a_clients_advisor(string role, bool granted)
+    {
+        // Product owner, 2026-11-02: an agent neither assigns a client nor takes one for themselves.
+        RoleSeeder.DefaultGrants.Where(g => g.RoleCode == role).Select(g => g.PermissionCode)
+            .Contains(Permissions.CanAssignCustomerAdvisor.Code).Should().Be(granted);
+    }
 }

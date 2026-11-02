@@ -52,6 +52,13 @@ internal sealed class CreateIndividualClientHandler(
         var actor = currentUser.Id;
         var now = DateTimeOffset.UtcNow;
 
+        // An Agent or a CommercialAgent does not choose the advisor, not even themselves (product
+        // owner, 2026-11-02); left empty, the client is theirs as its creator. SeesAll is « the
+        // permission, or System / Administrator » — an administrator's token older than the
+        // permission still carries the role.
+        if (cmd.AdvisorUserId is not null && !RecordVisibility.SeesAll(currentUser, Permissions.CanAssignCustomerAdvisor))
+            return Result.Fail<CreateClientResult>(CustomerErrors.AdvisorAssignForbidden);
+
         // ── 0. The tenant's client form (dynamic forms) ──────────────────────
         // First, so a malformed custom value is reported before any duplicate verdict.
         var customFields = await ClientFormGate.ApplyAsync(

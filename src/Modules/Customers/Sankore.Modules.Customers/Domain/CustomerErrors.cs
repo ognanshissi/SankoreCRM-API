@@ -48,6 +48,7 @@ public static class CustomerErrors
     // ── Scope & ownership ───────────────────────────────────────────────────
     public const string AgencyOutOfScope = "AGENCY_OUT_OF_SCOPE";
     public const string AdvisorNotEligible = "ADVISOR_NOT_ELIGIBLE";
+    public const string AdvisorAssignForbidden = "ADVISOR_ASSIGN_FORBIDDEN";
 
     // ── Legal entities ──────────────────────────────────────────────────────
     public const string OwnershipExceeds100 = "OWNERSHIP_EXCEEDS_100";

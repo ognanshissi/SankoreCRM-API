@@ -8,6 +8,8 @@ using Sankore.Modules.Customers.Features.Clients.Shared;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.PublicApi.Events;
 using Sankore.Modules.Customers.Tests.TestSupport;
+using NSubstitute;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Infrastructure.Crypto;
 using Sankore.Shared.Infrastructure.Outbox;
 using Sankore.Shared.Kernel;
@@ -318,6 +320,37 @@ public sealed class CreateIndividualClientHandlerTests : IDisposable
         result.Error.Should().Be(CustomerErrors.AgencyOutOfScope);
     }
 
+    [Fact]
+    public async Task An_agent_cannot_choose_the_advisor_not_even_themselves()
+    {
+        await using var db = _factory.CreateContext();
+        var agent = TestDoubles.CurrentUser(TenantId, ActorId, Roles.Agent.Code);
+        agent.Permissions.Returns([Permissions.CanCreateCustomer.Code, Permissions.CanUpdateCustomer.Code]);
+        var handler = BuildHandler(db, out _, agent);
+
+        var result = await handler.Handle(Command() with { AdvisorUserId = ActorId }, CancellationToken.None);
+
+        result.Error.Should().Be(CustomerErrors.AdvisorAssignForbidden);
+        await using var read = _factory.CreateContext();
+        (await read.Clients.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_manager_holding_the_permission_chooses_the_advisor()
+    {
+        await using var db = _factory.CreateContext();
+        var manager = TestDoubles.CurrentUser(TenantId, ActorId, Roles.BranchManager.Code);
+        manager.Permissions.Returns([Permissions.CanAssignCustomerAdvisor.Code]);
+        var advisor = Guid.NewGuid();
+        var handler = BuildHandler(db, out _, manager);
+
+        var result = await handler.Handle(Command() with { AdvisorUserId = advisor }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await using var read = _factory.CreateContext();
+        (await read.Clients.SingleAsync()).AdvisorUserId.Should().Be(advisor);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     private static CreateIndividualClientCommand Command(
@@ -352,13 +385,14 @@ public sealed class CreateIndividualClientHandlerTests : IDisposable
 
     private static CreateIndividualClientHandler BuildHandler(
         CustomersDbContext db,
-        out ClientsTestHarness.CountingFieldEncryptor encryptor)
+        out ClientsTestHarness.CountingFieldEncryptor encryptor,
+        ICurrentUser? user = null)
     {
         encryptor = new ClientsTestHarness.CountingFieldEncryptor(TestDoubles.Encryptor());
 
         return new CreateIndividualClientHandler(
             db,
-            TestDoubles.CurrentUser(TenantId, ActorId),
+            user ?? TestDoubles.CurrentUser(TenantId, ActorId),
             TestDoubles.Settings(TenantId),
             new DuplicateProbe(db),
             ClientsTestHarness.AgencyDirectory(TenantId, AgencyId),

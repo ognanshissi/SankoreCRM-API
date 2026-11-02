@@ -327,6 +327,15 @@ engine enforces no self-approval rule of its own, so M01 owns that guarantee.
 statements around a filtered index, so adding a primary, promoting one or closing the primary failed
 with 23505. Demotions first, promotions second, in the command's transaction.
 
+**Choosing a client's advisor is `customers:advisor:assign` (2026-11-02, product owner)**, no longer
+`customers:update`: an Agent or a CommercialAgent neither assigns a client nor takes one for themselves.
+Granted to SalesManager and BranchManager (the two that held `customers:update` besides the agents).
+`PUT clients/{id}/advisor` requires it; both creation handlers refuse a non-null `AdvisorUserId` without it
+(`ADVISOR_ASSIGN_FORBIDDEN`; System/Administrator pass, as in `RecordVisibility.SeesAll`). Left empty, the
+client is its creator's. Lead conversion is unaffected (`advisor-from-converting-agent` is a tenant
+setting, not the agent's choice). Front: the list's select, the bulk action, the « Réaffecter à un
+conseiller » menu entry and the wizards' `advisorUserId` field follow the permission.
+
 Concurrency uses the PostgreSQL `xmin` token (`Version`) with error `CONCURRENCY_CONFLICT`.
 No endpoint deletes a client: archiving is a status, anonymisation blanks encrypted fields.
 
@@ -1382,6 +1391,13 @@ moves the file to ComplementRequired in the same save (the next `/verify` re-sco
 the steps), and cancels + unlinks the workflow mirror like a complement. A signed rung →
 409 `KYC_APPROVAL_ALREADY_SIGNED`: the validator asks for a complement. The endpoint answers
 `{ error }`, never `title` — the front's `kycUploadErrorMessage` translates the codes.
+
+**The final approval accepts the current pieces (2026-11-02, product owner).** `CurrentKycDocuments.AcceptPendingAsync`,
+called by `DecideKycApprovalHandler` on the final rung (approver's name) and by the automatic approval
+(SYSTEM), reviews as Accepted the newest piece of each kind still Pending — a refused one stays refused,
+older retakes are left alone. Before, a validated file kept every piece « En attente » on the client
+record. `ListCustomerDocumentsAsync` reports an older retake nobody judged as `Superseded` (« Remplacé »).
+Migration `AcceptPiecesOfValidatedFiles` applied the rule to files validated before it.
 
 How to take a file from creation to validated — the two accounts the four-eyes rule requires, the
 circuit per vigilance level, the degraded manual path and the cases pinning each of them — is in

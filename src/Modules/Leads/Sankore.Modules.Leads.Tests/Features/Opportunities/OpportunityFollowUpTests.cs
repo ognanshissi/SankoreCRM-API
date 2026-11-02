@@ -108,6 +108,42 @@ public sealed class OpportunityFollowUpTests : IDisposable
     }
 
     [Fact]
+    public async Task Opening_a_project_qualifies_a_lead_still_in_an_early_status()
+    {
+        // Product owner, 2026-11-02: a lead with a project is qualified, not « à qualifier ».
+        var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+        lead.RecordContactEstablished();
+        await using (var db = _factory.CreateContext())
+        {
+            db.Leads.Add(lead);
+            await db.SaveChangesAsync(CancellationToken.None);
+            (await new CreateOpportunityHandler(db, new FixedTime(Now)).Handle(
+                new CreateOpportunityCommand(_tenantId, lead.Id, "Chantier", Product: "Crédit équipement"),
+                CancellationToken.None)).IsSuccess.Should().BeTrue();
+        }
+
+        await using var read = _factory.CreateContext();
+        var qualified = await read.Leads.FirstAsync(l => l.Id == lead.Id);
+        qualified.Status.Should().Be(LeadStatus.Qualified);
+        qualified.PipelineStage.Should().Be(PipelineStage.Qualified);
+    }
+
+    [Theory]
+    [InlineData(LeadStatus.New, true)]
+    [InlineData(LeadStatus.Recycled, true)]
+    [InlineData(LeadStatus.Qualified, false)]
+    [InlineData(LeadStatus.Converted, false)]
+    [InlineData(LeadStatus.Lost, false)]
+    public void Only_an_early_status_is_qualified_by_a_project(LeadStatus status, bool moves)
+    {
+        var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();
+        typeof(Lead).GetProperty(nameof(Lead.Status))!.SetValue(lead, status);
+
+        lead.QualifyByProject().Should().Be(moves);
+        lead.Status.Should().Be(moves ? LeadStatus.Qualified : status);
+    }
+
+    [Fact]
     public async Task The_next_step_is_set_with_its_date_and_cleared_with_it()
     {
         var id = await SeedAsync();

@@ -845,6 +845,34 @@ public sealed class Lead : AggregateRoot
     }
 
     /// <summary>
+    /// A project opened for the lead qualifies it (product owner, 2026-11-02): somebody judged it
+    /// worth a product, which is what « Qualifié » says — and « Qualifier le lead » stays the next
+    /// step otherwise. Only from an early status: a lead already qualified, converted or closed is
+    /// left alone. The stage moves forward to Qualified, never back.
+    /// </summary>
+    public bool QualifyByProject()
+    {
+        if (Status is not (LeadStatus.New or LeadStatus.Open or LeadStatus.Qualifying
+                          or LeadStatus.Nurturing or LeadStatus.Recycled))
+            return false;
+
+        var previous = Status;
+        Status = LeadStatus.Qualified;
+        RaiseDomainEvent(new LeadStatusChangedDomainEvent(Id, previous, Status));
+
+        if (PipelineStage is Domain.PipelineStage.New or Domain.PipelineStage.ContactAttempted
+                          or Domain.PipelineStage.ContactEstablished or Domain.PipelineStage.NeedIdentified)
+        {
+            var previousStage = PipelineStage;
+            PipelineStage = Domain.PipelineStage.Qualified;
+            RaiseDomainEvent(new LeadPipelineStageChangedDomainEvent(Id, previousStage, PipelineStage));
+        }
+
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return true;
+    }
+
+    /// <summary>
     /// Somebody tried and did not get through — an outbound call without answer, a voicemail. Only
     /// the stage moves, <see cref="PipelineStage.New"/> → <see cref="PipelineStage.ContactAttempted"/>:
     /// the status stays New, because nobody has been contacted yet. Forward only, like

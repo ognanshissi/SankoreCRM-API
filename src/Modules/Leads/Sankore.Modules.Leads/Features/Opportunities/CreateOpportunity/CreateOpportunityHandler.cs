@@ -21,15 +21,13 @@ internal sealed class CreateOpportunityHandler(
     public async Task<Result<Guid>> Handle(
         CreateOpportunityCommand cmd, CancellationToken ct)
     {
-        var lead = await db.Leads
-            .Where(l => l.Id == cmd.LeadId)
-            .Select(l => new { ClientId = l.ConvertedToCustomerId ?? l.CustomerId })
-            .FirstOrDefaultAsync(ct);
+        var lead = await db.Leads.AsTracking().FirstOrDefaultAsync(l => l.Id == cmd.LeadId, ct);
         if (lead is null)
             return Result.Fail<Guid>("LEAD_NOT_FOUND");
 
         // Data-purge lot 3: no prospection of a person who asked to be forgotten.
-        if (await Retention.ProcessingRestriction.IsRestrictedAsync(customers, cmd.TenantId, lead.ClientId, ct))
+        if (await Retention.ProcessingRestriction.IsRestrictedAsync(
+                customers, cmd.TenantId, lead.ConvertedToCustomerId ?? lead.CustomerId, ct))
             return Result.Fail<Guid>(Retention.ProcessingRestriction.Error);
 
         if (await ProjectTemplates.ProjectCloseDateRule.MissingAsync(templates, cmd.Product, cmd.ExpectedCloseDate, ct))
@@ -64,6 +62,7 @@ internal sealed class CreateOpportunityHandler(
         await ProjectTemplates.ProjectFirstStep.PlaceAsync(templates, opp, clock.GetUtcNow(), ct);
 
         db.Opportunities.Add(opp);
+        lead.QualifyByProject();
         history?.Created(opp);
         await db.SaveChangesAsync(ct);
 

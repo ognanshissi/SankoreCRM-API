@@ -19,8 +19,8 @@ public static class AssignAdvisorEndpoint
                 "The advisor must be an active user of the client's own agency, otherwise " +
                 "ADVISOR_NOT_ELIGIBLE (400). Returns 404 CLIENT_NOT_FOUND when the client is unknown or " +
                 "outside the caller's agency perimeter, and CLIENT_READ_ONLY (409) on an archived or " +
-                "merged record. Requires permission: customers:update.")
-            .RequireAuthorization(Permissions.CanUpdateCustomer.Code)
+                "merged record. Requires permission: customers:advisor:assign.")
+            .RequireAuthorization(Permissions.CanAssignCustomerAdvisor.Code)
             .Produces<ClientLifecycleStateDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)

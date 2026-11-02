@@ -47,6 +47,7 @@ public sealed class CustomerPermissionsTests
         "customers:complaints:read",    // client complaints register (product owner, 2026-10-26)
         "customers:complaints:manage",  // client complaints register (product owner, 2026-10-26)
         "customers:segments_manage",    // segmentation rules off update_sensitive (product owner, 2026-10-30)
+        "customers:advisor:assign",     // advisor choice off update, not for agents (product owner, 2026-11-02)
     ];
 
     private static readonly string[] ExpectedCodes = [.. OriginalCodes, .. EvolutionCodes];

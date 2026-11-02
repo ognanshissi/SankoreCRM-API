@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Features.Documents;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Shared.Kernel;
@@ -47,6 +48,10 @@ public sealed class KycModuleFacade(
             .OrderByDescending(d => d.UploadedAt)
             .ToListAsync(ct);
 
+        // An older retake nobody judged is « Superseded » (« Remplacé ») rather than « En attente »:
+        // it will never be reviewed — the newest image of its kind is the evidence (2026-11-02).
+        var current = CurrentKycDocuments.CurrentIds(rows);
+
         return [.. rows.Select(d => new CustomerDocumentEntry(
             Key: $"kyc:{d.Id}",
             Source: "Kyc",
@@ -57,7 +62,9 @@ public sealed class KycModuleFacade(
             ContentType: d.ContentType,
             SizeBytes: d.SizeBytes,
             At: d.UploadedAt,
-            Status: d.ReviewDecision.ToString(),
+            Status: !current.Contains(d.Id) && d.ReviewDecision == KycDocumentReviewDecision.Pending
+                ? "Superseded"
+                : d.ReviewDecision.ToString(),
             Detail: d.DeclaredDocumentType?.ToString(),
             OriginType: "KycFile",
             OriginId: d.KycFileId,

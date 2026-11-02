@@ -42,6 +42,10 @@ internal sealed class CreateLegalClientHandler(
         var tenantId = tenantContext.CurrentTenantId;
         var actor = currentUser.Id;
 
+        // Same rule as an individual client: an agent does not choose the advisor (2026-11-02).
+        if (cmd.AdvisorUserId is not null && !RecordVisibility.SeesAll(currentUser, Permissions.CanAssignCustomerAdvisor))
+            return Result.Fail<CreateLegalClientResult>(CustomerErrors.AdvisorAssignForbidden);
+
         // 0. The tenant's client form (dynamic forms) — first, so a malformed custom value is
         //    reported before any duplicate verdict.
         var customFields = await ClientFormGate.ApplyAsync(

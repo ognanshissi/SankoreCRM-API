@@ -10,6 +10,7 @@ using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Approval;
 using Sankore.Modules.Kyc.Features.Approval.StartApproval;
+using Sankore.Modules.Kyc.Features.Documents;
 using Sankore.Modules.Kyc.Features.PublicRemote;
 using Sankore.Modules.Kyc.Features.Verification;
 using Sankore.Modules.Kyc.Infrastructure;
@@ -375,6 +376,10 @@ internal sealed class RouteRemoteKycFileHandler(
             return Result.Fail<RouteRemoteKycFileResult>(decided.Error!);
 
         db.KycApprovalSteps.Add(step);
+
+        // As on a human final approval: the evidence the file was approved on is accepted — here
+        // by SYSTEM, the account that decided.
+        await CurrentKycDocuments.AcceptPendingAsync(db, file.Id, Guid.Empty, clock, ct);
 
         // KRM-B-11. In THIS unit of work, so the control row and the approval it is about commit
         // together — a crash between them would leave either an approval nobody will ever control

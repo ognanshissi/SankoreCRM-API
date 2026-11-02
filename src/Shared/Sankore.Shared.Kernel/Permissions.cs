@@ -512,6 +512,14 @@ public static class Permissions
     public static readonly PermissionItem CanUpdateCustomer =
         new("customers:update", "Update Non-Sensitive Customer Data", ApplicationModules.Customers, "update");
 
+    /// <summary>
+    /// Choosing who advises a client — at creation or afterwards. Off customers:update since
+    /// 2026-11-02 (product owner): an Agent or a CommercialAgent edits the clients they advise but
+    /// neither picks nor changes their advisor, themselves included.
+    /// </summary>
+    public static readonly PermissionItem CanAssignCustomerAdvisor =
+        new("customers:advisor:assign", "Assign a client's advisor", ApplicationModules.Customers, "advisor:assign");
+
     public static readonly PermissionItem CanUpdateCustomerSensitive =
         new("customers:update_sensitive", "Update Sensitive Customer Data (name, ID document, address)", ApplicationModules.Customers, "update_sensitive");
 
@@ -1143,6 +1151,7 @@ public static class Permissions
         CanReadAllCustomers,
         CanCreateCustomer,
         CanUpdateCustomer,
+        CanAssignCustomerAdvisor,
         CanUpdateCustomerSensitive,
         CanRevealCustomerSensitive,
         CanArchiveCustomer,

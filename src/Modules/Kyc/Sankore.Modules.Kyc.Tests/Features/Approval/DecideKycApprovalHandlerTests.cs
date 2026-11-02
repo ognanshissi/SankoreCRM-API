@@ -3,6 +3,8 @@ namespace Sankore.Modules.Kyc.Tests.Features.Approval;
 using Sankore.Modules.Administration.PublicApi;
 using MediatR;
 using FluentAssertions;
+using Sankore.Modules.Kyc.Tests.Features.Reviews;
+using Sankore.Modules.Kyc.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -300,6 +302,48 @@ public sealed class DecideKycApprovalHandlerTests : IDisposable
             Arg.Is<KycTierChangedEvent>(e =>
                 e.PreviousTier == nameof(KycTier.None) && e.CurrentTier == nameof(KycTier.Full)),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task The_final_approval_accepts_the_current_pieces_and_leaves_older_retakes_and_refusals()
+    {
+        // Product owner, 2026-11-02: a validated file whose pieces still read « En attente » told the
+        // client record the opposite of what the approver had just signed.
+        var file = await SeedAsync(fullEvidence: true);
+        var earlier = new FixedClock(DateTimeOffset.UtcNow.AddMinutes(-10));
+        var later = new FixedClock(DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        var oldSelfie = Piece(file.Id, KycDocumentKind.Selfie, "old.selfie", earlier);
+        var selfie = Piece(file.Id, KycDocumentKind.Selfie, "new.selfie", later);
+        var front = Piece(file.Id, KycDocumentKind.IdentityDocumentFront, "front", later);
+        var proof = Piece(file.Id, KycDocumentKind.ProofOfAddress, "proof", later);
+        proof.Review(KycDocumentReviewDecision.Refused, _approverId, _clock, "Illisible");
+        _db.KycDocuments.AddRange(oldSelfie, selfie, front, proof);
+        await _db.SaveChangesAsync();
+
+        await DecideAsync(file.Id, KycApprovalLevel.Agent, KycApprovalDecision.Approved);
+        (await ReloadPiecesAsync(file.Id))[selfie.Id].ReviewDecision
+            .Should().Be(KycDocumentReviewDecision.Pending, "an intermediate signature validates nothing");
+
+        (await DecideAsync(file.Id, KycApprovalLevel.BranchManager, KycApprovalDecision.Approved))
+            .IsSuccess.Should().BeTrue();
+
+        var pieces = await ReloadPiecesAsync(file.Id);
+        pieces[selfie.Id].ReviewDecision.Should().Be(KycDocumentReviewDecision.Accepted);
+        pieces[selfie.Id].ReviewedBy.Should().Be(_approverId);
+        pieces[front.Id].ReviewDecision.Should().Be(KycDocumentReviewDecision.Accepted);
+        pieces[oldSelfie.Id].ReviewDecision.Should().Be(KycDocumentReviewDecision.Pending);
+        pieces[proof.Id].ReviewDecision.Should().Be(KycDocumentReviewDecision.Refused);
+    }
+
+    private KycDocument Piece(Guid fileId, KycDocumentKind kind, string storageRef, TimeProvider uploadedAt)
+        => KycDocument.Register(_tenantId, fileId, kind, storageRef, "image/jpeg", 1024,
+            new string('a', 64), _submitterId, uploadedAt);
+
+    private async Task<Dictionary<Guid, KycDocument>> ReloadPiecesAsync(Guid fileId)
+    {
+        using var verify = _factory.CreateContext();
+        return await verify.KycDocuments.AsNoTracking().Where(d => d.KycFileId == fileId).ToDictionaryAsync(d => d.Id);
     }
 
     [Fact]

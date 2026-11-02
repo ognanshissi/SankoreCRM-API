@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Kyc.Domain;
+using Sankore.Modules.Kyc.Features.Documents;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Kyc.Features.PublicRemote;
 using Sankore.Modules.Kyc.Features.RemoteInvitations.IssueInvitation;
@@ -169,6 +170,9 @@ internal sealed class DecideKycApprovalHandler(
         var decided = step.Decide(cmd.Decision, currentUser.Id, clock, cmd.Comment);
         if (decided.IsFailure)
             return Result.Fail<DecideKycApprovalResult>(decided.Error!);
+
+        if (cmd.Decision == KycApprovalDecision.Approved && isFinalLevel)
+            await CurrentKycDocuments.AcceptPendingAsync(db, file.Id, currentUser.Id, clock, ct);
 
         await PublishOutcomeAsync(cmd, file, previousTier, isFinalLevel, ct);
 
