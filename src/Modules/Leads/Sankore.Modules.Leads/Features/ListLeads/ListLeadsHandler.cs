@@ -30,66 +30,10 @@ internal sealed class ListLeadsHandler(
             q = q.Where(l => ids.Contains(l.Id));
         }
 
-        if (query.Status.HasValue)
-            q = q.Where(l => l.Status == query.Status.Value);
-
-        if (query.PipelineStage.HasValue)
-            q = q.Where(l => l.PipelineStage == query.PipelineStage.Value);
-
-        if (query.Source.HasValue)
-            q = q.Where(l => l.Source == query.Source.Value);
-
-        // Narrows to one configured source, which the coarse Source enum cannot express.
-        if (query.LeadSourceConfigId.HasValue)
-            q = q.Where(l => l.LeadSourceConfigId == query.LeadSourceConfigId.Value);
-
-        if (query.OwnerId.HasValue)
-            q = q.Where(l => l.OwnerId == query.OwnerId.Value);
-
-        if (query.AgentId is { } agent)
-            q = q.Where(l => l.CurrentAssignedId == agent || (l.CurrentAssignedId == null && l.OwnerId == agent));
-
-        if (query.AgencyId.HasValue)
-            q = q.Where(l => l.AgencyId == query.AgencyId.Value);
-
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            var search = query.Search.Trim().ToLower();
-            q = q.Where(l =>
-                l.FullName.ToLower().Contains(search) ||
-                l.PhoneNumber.Contains(search));
-        }
-
-        // The dispatch queue: leads no agent could take yet, still unassigned. Assignment clears
-        // the mark, the second predicate only guards a row caught mid-write.
-        if (query.AwaitingDispatch == true)
-            q = q.Where(l => l.AwaitingDispatchSince != null && l.CurrentAssignmentId == null);
-
-        if (query.IntentLevel.HasValue)
-            q = q.Where(l => l.IntentLevel == query.IntentLevel.Value);
-
-        // Custom-field filters (dynamic forms, lot 6): a jsonb containment per filter, served by the
-        // GIN index on custom_fields. The form decides each value's shape — see FilterDocuments.
-        if (query.CustomFilters is { Count: > 0 })
-        {
-            if (administration is null || tenant is null)
-                return Result.Fail<PagedResult<LeadDto>>("CUSTOM_FILTERS_UNAVAILABLE");
-
-            var form = await administration.GetEntityFormAsync(
-                tenant.CurrentTenantId, Sankore.Modules.Administration.PublicApi.Forms.FormEntity.Lead, ct);
-            var documents = Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.FilterDocuments(form, query.CustomFilters);
-            if (documents.IsFailure)
-                return Result.Fail<PagedResult<LeadDto>>(documents.Error!);
-
-            foreach (var document in documents.Value)
-                q = q.Where(l => l.CustomFieldsJson != null && EF.Functions.JsonContains(l.CustomFieldsJson, document));
-        }
-
-        if (!string.IsNullOrWhiteSpace(query.Tag))
-        {
-            var tag = query.Tag.Trim().ToLowerInvariant();
-            q = q.Where(l => db.LeadTags.Any(t => t.LeadId == l.Id && t.Tag == tag));
-        }
+        var filtered = await query.Filter.ApplyAsync(q, db, administration, tenant, ct);
+        if (filtered.IsFailure)
+            return Result.Fail<PagedResult<LeadDto>>(filtered.Error!);
+        q = filtered.Value;
 
         var total = await q.CountAsync(ct);
 

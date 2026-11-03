@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.ListLeads;
 using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
@@ -31,64 +32,15 @@ internal sealed class ExportLeadsHandler(
     {
         var q = visibility?.Apply(db.Leads.AsNoTracking()) ?? db.Leads.AsNoTracking();
 
-        if (query.Status.HasValue)
-            q = q.Where(l => l.Status == query.Status.Value);
+        // Same filters as ListLeads, so exporting a filtered list exports what is on screen.
+        var filtered = await new LeadListFilter(
+                query.Status, query.PipelineStage, query.Source, query.OwnerId, query.AgencyId, query.Search, query.Tag,
+                query.IntentLevel, query.LeadSourceConfigId, query.AwaitingDispatch, query.CustomFilters, query.AgentId)
+            .ApplyAsync(q, db, administration, tenant, ct);
+        if (filtered.IsFailure)
+            return Result.Fail<byte[]>(filtered.Error!);
 
-        if (query.PipelineStage.HasValue)
-            q = q.Where(l => l.PipelineStage == query.PipelineStage.Value);
-
-        if (query.Source.HasValue)
-            q = q.Where(l => l.Source == query.Source.Value);
-
-        if (query.OwnerId.HasValue)
-            q = q.Where(l => l.OwnerId == query.OwnerId.Value);
-
-        if (query.AgentId is { } agent)
-            q = q.Where(l => l.CurrentAssignedId == agent || (l.CurrentAssignedId == null && l.OwnerId == agent));
-
-        if (query.AwaitingDispatch == true)
-            q = q.Where(l => l.AwaitingDispatchSince != null && l.CurrentAssignmentId == null);
-
-        if (query.IntentLevel.HasValue)
-            q = q.Where(l => l.IntentLevel == query.IntentLevel.Value);
-
-        if (query.CustomFilters is { Count: > 0 })
-        {
-            if (administration is null || tenant is null)
-                return Result.Fail<byte[]>("CUSTOM_FILTERS_UNAVAILABLE");
-
-            var form = await administration.GetEntityFormAsync(
-                tenant.CurrentTenantId, Sankore.Modules.Administration.PublicApi.Forms.FormEntity.Lead, ct);
-            var documents = Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.FilterDocuments(form, query.CustomFilters);
-            if (documents.IsFailure)
-                return Result.Fail<byte[]>(documents.Error!);
-
-            foreach (var document in documents.Value)
-                q = q.Where(l => l.CustomFieldsJson != null && EF.Functions.JsonContains(l.CustomFieldsJson, document));
-        }
-
-        if (query.AgencyId.HasValue)
-            q = q.Where(l => l.AgencyId == query.AgencyId.Value);
-
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            var search = query.Search.Trim().ToLowerInvariant();
-            q = q.Where(l =>
-                l.FullName.ToLower().Contains(search) ||
-                l.PhoneNumber.Contains(search));
-        }
-
-        if (!string.IsNullOrWhiteSpace(query.Tag))
-        {
-            var tag = query.Tag.Trim().ToLowerInvariant();
-            q = q.Where(l => db.LeadTags.Any(t => t.LeadId == l.Id && t.Tag == tag));
-        }
-
-        // Same filter as ListLeads, so exporting a filtered list exports what is on screen.
-        if (query.LeadSourceConfigId.HasValue)
-            q = q.Where(l => l.LeadSourceConfigId == query.LeadSourceConfigId.Value);
-
-        var leads = await q
+        var leads = await filtered.Value
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync(ct);
 

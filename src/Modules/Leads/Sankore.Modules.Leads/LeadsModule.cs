@@ -449,6 +449,7 @@ public static class LeadsModule
 
         // Phase 1 — Core CRUD & Lifecycle
         group.MapListLeads();
+        group.MapGetLeadViewCounts();
         group.MapCaptureLead();
         group.MapSystemCaptureLead();
         group.MapGetLead();

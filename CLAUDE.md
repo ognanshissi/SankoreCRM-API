@@ -459,6 +459,11 @@ period; open projects give the current wait), grouped by template name + step la
 most late, with the owner's name. Front: `report-projects-tab.ts` loads by itself from the page's
 `ReportRange`; the old phase and forecast blocks stay below it.
 
+**Lead list tab counts (2026-11-03).** `GET leads/view-counts?agencyId&search&leadSourceConfigId&cf` answers
+`total`, `mine` (assigned to the caller, or theirs unassigned), `awaitingDispatch`, `byStatus`, `byIntent` under the
+list's visibility; the front reads each view (`LeadView` in `lead-homepage.ts`) off those axes. List, export and counts
+share ONE filter, `LeadListFilter` (`Features/ListLeads`) — a new list filter goes there, not in a handler.
+
 **`GET leads?ids=…` (2026-11-01).** Repeated `ids`, 100 at most (`ListLeadsQuery.MaxIds`, else 400), under
 the same visibility as the rest of the list — a lead the caller cannot see is absent, as `GET leads/{id}`
 would refuse it. « Ma journée » reads the leads of its tasks, agenda and scorecard through it in batches:

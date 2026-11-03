@@ -34,4 +34,8 @@ internal sealed record ListLeadsQuery(
 ) : IRequest<Result<PagedResult<LeadDto>>>
 {
     public const int MaxIds = 100;
+
+    public LeadListFilter Filter => new(
+        Status, PipelineStage, Source, OwnerId, AgencyId, Search, Tag, IntentLevel, LeadSourceConfigId,
+        AwaitingDispatch, CustomFilters, AgentId);
 }
