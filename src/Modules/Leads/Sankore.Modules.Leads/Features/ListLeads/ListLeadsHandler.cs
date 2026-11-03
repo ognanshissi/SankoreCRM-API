@@ -46,6 +46,9 @@ internal sealed class ListLeadsHandler(
         if (query.OwnerId.HasValue)
             q = q.Where(l => l.OwnerId == query.OwnerId.Value);
 
+        if (query.AgentId is { } agent)
+            q = q.Where(l => l.CurrentAssignedId == agent || (l.CurrentAssignedId == null && l.OwnerId == agent));
+
         if (query.AgencyId.HasValue)
             q = q.Where(l => l.AgencyId == query.AgencyId.Value);
 

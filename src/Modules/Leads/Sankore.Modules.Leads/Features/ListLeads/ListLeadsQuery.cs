@@ -24,7 +24,13 @@ internal sealed record ListLeadsQuery(
     /// These leads only (at most <see cref="MaxIds"/>) — a screen that holds ids from tasks or an agenda
     /// reads their leads in one call instead of one <c>GET leads/{id}</c> each.
     /// </summary>
-    IReadOnlyList<Guid>? Ids = null
+    IReadOnlyList<Guid>? Ids = null,
+    /// <summary>
+    /// The leads this agent holds: assigned to them, or theirs as owner while nobody is assigned —
+    /// the « Agent » column's reading. <see cref="OwnerId"/> alone missed every lead dispatched to an
+    /// agent who is not its owner (« Mes leads », 2026-11-03).
+    /// </summary>
+    Guid? AgentId = null
 ) : IRequest<Result<PagedResult<LeadDto>>>
 {
     public const int MaxIds = 100;

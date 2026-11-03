@@ -40,12 +40,13 @@ public static class ListLeadsEndpoint
         // Repeated: `cf=segment:Commercant&cf=vip:oui`. Custom-field filters, all of which must hold.
         [Microsoft.AspNetCore.Mvc.FromQuery(Name = "cf")] string[]? customFilters = null,
         // Repeated: `ids=…&ids=…`, 100 at most. Leads the caller cannot see are simply absent.
-        [Microsoft.AspNetCore.Mvc.FromQuery(Name = "ids")] Guid[]? ids = null)
+        [Microsoft.AspNetCore.Mvc.FromQuery(Name = "ids")] Guid[]? ids = null,
+        Guid? agentId = null)
     {
         // Appended last, like the query record's own member: this call is positional.
         var result = await sender.Send(
             new ListLeadsQuery(page, pageSize, status, pipelineStage, source, ownerId, agencyId, search, tag, intentLevel, leadSourceConfigId, awaitingDispatch,
-                customFilters, ids), ct);
+                customFilters, ids, agentId), ct);
 
         // A refused filter answers 400 rather than an unfiltered page under a filtered heading.
         return result.IsSuccess
