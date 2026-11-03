@@ -54,6 +54,13 @@ public interface INotificationsModule
     Task<Result<Guid>> NotifyInAppAsync(InAppNotificationRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// Whether this user already has the notification of that idempotency key — for a caller that must
+    /// say how many people it really told, since <see cref="NotifyInAppAsync"/> answers the same for a
+    /// first send and for a repeat it swallowed.
+    /// </summary>
+    Task<bool> HasInAppNotificationAsync(Guid tenantId, Guid userId, string idempotencyKey, CancellationToken ct = default);
+
+    /// <summary>
     /// The e-mails and SMS queued for a client, newest first — for the client record's « Documents »
     /// tab (2026-10-26). Past the technical retention the recipient and the content are gone and the
     /// trace stays (channel, template, dates, status), until the client is anonymised.

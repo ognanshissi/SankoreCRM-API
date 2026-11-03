@@ -993,7 +993,8 @@ Lot 6 — custom values from outside the screens, and in lists:
   `FilterDocuments` into jsonb containments served by a GIN `jsonb_path_ops` index on `custom_fields`.
   A sensitive field cannot be filtered on; an unknown key or value is a 400, never an ignored filter.
   `EF.Functions.JsonContains` does not run on InMemory — `CustomFieldsInboundAndListTests` checks the
-  SQL translation instead. The lead export does not take `cf` yet. `Client` has no legal-identity update endpoint, so a legal entity's native identity
+  SQL translation instead. `GET leads/export` takes the same `cf`, `intentLevel`, `awaitingDispatch` and
+  `agentId` as the list (2026-11-03), so an exported view is the one on screen. `Client` has no legal-identity update endpoint, so a legal entity's native identity
 fields are not editable after creation whatever the layout says.
 
 ### Language codes

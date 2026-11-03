@@ -50,6 +50,11 @@ internal sealed class NotificationsModuleFacade(
         ];
     }
 
+    public Task<bool> HasInAppNotificationAsync(Guid tenantId, Guid userId, string idempotencyKey, CancellationToken ct = default) =>
+        db.UserNotifications
+            .IgnoreQueryFilters()
+            .AnyAsync(n => n.TenantId == tenantId && n.UserId == userId && n.IdempotencyKey == idempotencyKey, ct);
+
     public async Task<Result<Guid>> NotifyInAppAsync(InAppNotificationRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);

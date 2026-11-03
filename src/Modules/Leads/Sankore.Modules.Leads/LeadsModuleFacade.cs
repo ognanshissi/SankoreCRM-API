@@ -135,6 +135,45 @@ public sealed class LeadsModuleFacade(
             link);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, LeadNotificationFacts>> GetNotificationFactsManyAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> leadIds, IReadOnlyCollection<Guid> projectIds, CancellationToken ct)
+    {
+        var result = new Dictionary<Guid, LeadNotificationFacts>();
+        var projectList = projectIds.Distinct().ToList();
+        var projects = projectList.Count == 0
+            ? []
+            : await db.Opportunities
+                .IgnoreQueryFilters()
+                .Where(o => o.TenantId == tenantId && projectList.Contains(o.Id))
+                .Select(o => new { o.Id, o.LeadId, o.OwnerId, o.Product })
+                .ToListAsync(ct);
+
+        var wanted = leadIds.Concat(projects.Where(p => p.LeadId.HasValue).Select(p => p.LeadId!.Value)).Distinct().ToList();
+        var leads = wanted.Count == 0
+            ? new Dictionary<Guid, (Guid? AgencyId, Guid? Agent, string? FirstName, string? LastName, string? Product)>()
+            : (await db.Leads
+                .IgnoreQueryFilters()
+                .Where(l => l.TenantId == tenantId && wanted.Contains(l.Id))
+                .Select(l => new { l.Id, l.AgencyId, l.CurrentAssignedId, l.OwnerId, l.FirstName, l.LastName, l.FullName, l.InterestedProduct })
+                .ToListAsync(ct))
+                .ToDictionary(l => l.Id, l => (AgencyId: l.AgencyId, Agent: l.CurrentAssignedId ?? l.OwnerId, FirstName: l.FirstName,
+                    LastName: l.LastName ?? (l.FirstName is null ? l.FullName : null),
+                    Product: Features.WorkflowNotifications.LeadNotificationValues.Product(l.InterestedProduct)));
+
+        // Same composition as the single read: a project's owner and product win over its lead's.
+        foreach (var id in leadIds.Distinct())
+            if (leads.TryGetValue(id, out var l))
+                result[id] = new LeadNotificationFacts(l.AgencyId, l.Agent, l.FirstName, l.LastName, l.Product, $"/leads/{id}");
+        foreach (var p in projects)
+        {
+            var link = $"/leads/projets/{p.Id}";
+            result[p.Id] = p.LeadId is { } lid && leads.TryGetValue(lid, out var l)
+                ? new LeadNotificationFacts(l.AgencyId, p.OwnerId ?? l.Agent, l.FirstName, l.LastName, p.Product ?? l.Product, link)
+                : new LeadNotificationFacts(null, p.OwnerId, null, null, p.Product, link);
+        }
+        return result;
+    }
+
     public async Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)
     {
         var lead = await db.Leads

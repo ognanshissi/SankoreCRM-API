@@ -30,6 +30,14 @@ public interface ILeadsModule
         Guid tenantId, string workflowEntityType, Guid entityId, CancellationToken ct);
 
     /// <summary>
+    /// <see cref="GetNotificationFactsAsync"/> for a page of leads and projects in two reads, keyed by
+    /// entity id; a record that does not exist is absent. For a screen naming many records at once
+    /// (« Santé des workflows »), which paid one round trip per row.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, LeadNotificationFacts>> GetNotificationFactsManyAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> leadIds, IReadOnlyCollection<Guid> projectIds, CancellationToken ct);
+
+    /// <summary>
     /// The names of several leads in one read (connected mailbox: a page of conversations, or a
     /// search over them). Ambient tenant, like <see cref="GetLeadAsync"/>; an unknown id is simply
     /// absent from the answer.

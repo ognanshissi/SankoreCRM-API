@@ -31,15 +31,21 @@ public static class ExportLeadsEndpoint
         Guid? agencyId = null,
         string? search = null,
         string? tag = null,
-        Guid? leadSourceConfigId = null)
+        Guid? leadSourceConfigId = null,
+        LeadIntentLevel? intentLevel = null,
+        bool? awaitingDispatch = null,
+        [Microsoft.AspNetCore.Mvc.FromQuery(Name = "cf")] string[]? customFilters = null,
+        Guid? agentId = null)
     {
         // Appended last: the query record is positional.
         var result = await sender.Send(
             new ExportLeadsQuery(
-                status, pipelineStage, source, ownerId, agencyId, search, tag, leadSourceConfigId), ct);
+                status, pipelineStage, source, ownerId, agencyId, search, tag, leadSourceConfigId,
+                intentLevel, awaitingDispatch, customFilters, agentId), ct);
 
+        // A refused filter answers 400, as on the list, rather than a file of unfiltered leads.
         return result.IsSuccess
             ? Results.File(result.Value, "text/csv; charset=utf-8", "leads.csv")
-            : Results.Problem(title: "Export failed", detail: result.Error, statusCode: 500);
+            : Results.Problem(title: "Invalid filter", detail: result.Error, statusCode: StatusCodes.Status400BadRequest);
     }
 }

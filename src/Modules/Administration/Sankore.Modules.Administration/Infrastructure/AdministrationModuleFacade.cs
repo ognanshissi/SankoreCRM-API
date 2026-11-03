@@ -827,11 +827,7 @@ internal sealed class AdministrationModuleFacade(
         Guid tenantId, IReadOnlyCollection<string> roleCodes, Guid? agencyId, CancellationToken ct)
     {
         tenantId = await TeamAsync(tenantId, ct);
-        var normalized = roleCodes
-            .Where(c => !string.IsNullOrWhiteSpace(c))
-            .Select(c => c.Trim().ToUpperInvariant())
-            .Distinct()
-            .ToList();
+        var normalized = NormalizedRoles(roleCodes);
         if (normalized.Count == 0) return [];
 
         // The agency and its parents, walked in memory: a tenant's tree is a few dozen rows and a
@@ -850,19 +846,32 @@ internal sealed class AdministrationModuleFacade(
                 perimeter.Add(id);
         }
 
-        return await db.UserRoles
-            .IgnoreQueryFilters()
-            .Where(ur => ur.TenantId == tenantId && ur.IsActive)
-            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.NormalizedName })
-            .Where(x => x.NormalizedName != null && normalized.Contains(x.NormalizedName))
-            .Join(db.Users.IgnoreQueryFilters(), x => x.UserId, u => u.Id, (x, u) => u)
-            .Where(u => u.TenantId == tenantId
-                     && u.Status == UserStatus.Active
-                     && (perimeter == null || (u.AgencyId != null && perimeter.Contains(u.AgencyId.Value))))
+        return await ActiveHoldersOf(tenantId, normalized, perimeter)
             .Select(u => u.Id)
             .Distinct()
             .ToListAsync(ct);
     }
+
+    private static List<string> NormalizedRoles(IReadOnlyCollection<string> roleCodes) => roleCodes
+        .Where(c => !string.IsNullOrWhiteSpace(c))
+        .Select(c => c.Trim().ToUpperInvariant())
+        .Distinct()
+        .ToList();
+
+    /// <summary>
+    /// The one reading of « an active holder of these roles », in these agencies (null = anywhere):
+    /// shared by the workflow recipients and the « Ma journée » roster so the two never disagree.
+    /// </summary>
+    private IQueryable<AppUser> ActiveHoldersOf(Guid tenantId, List<string> normalizedRoles, List<Guid>? agencyIds) =>
+        db.UserRoles
+            .IgnoreQueryFilters()
+            .Where(ur => ur.TenantId == tenantId && ur.IsActive)
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.NormalizedName })
+            .Where(x => x.NormalizedName != null && normalizedRoles.Contains(x.NormalizedName))
+            .Join(db.Users.IgnoreQueryFilters(), x => x.UserId, u => u.Id, (x, u) => u)
+            .Where(u => u.TenantId == tenantId
+                     && u.Status == UserStatus.Active
+                     && (agencyIds == null || (u.AgencyId != null && agencyIds.Contains(u.AgencyId.Value))));
 
     public async Task<TeamRoster> GetTeamRosterAsync(
         Guid tenantId, IReadOnlyCollection<Guid>? agencyIds, IReadOnlyCollection<string> roleCodes, CancellationToken ct)
@@ -876,22 +885,10 @@ internal sealed class AdministrationModuleFacade(
             .Select(a => new AgencySummary(a.Id, a.Code, a.Name, a.ParentAgencyId, a.IsActive))
             .ToListAsync(ct);
 
-        var normalized = roleCodes
-            .Where(c => !string.IsNullOrWhiteSpace(c))
-            .Select(c => c.Trim().ToUpperInvariant())
-            .Distinct()
-            .ToList();
+        var normalized = NormalizedRoles(roleCodes);
         if (normalized.Count == 0) return new TeamRoster(agencies, []);
 
-        var members = await db.UserRoles
-            .IgnoreQueryFilters()
-            .Where(ur => ur.TenantId == tenantId && ur.IsActive)
-            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.NormalizedName })
-            .Where(x => x.NormalizedName != null && normalized.Contains(x.NormalizedName))
-            .Join(db.Users.IgnoreQueryFilters(), x => x.UserId, u => u.Id, (x, u) => u)
-            .Where(u => u.TenantId == tenantId
-                     && u.Status == UserStatus.Active
-                     && (ids == null || (u.AgencyId != null && ids.Contains(u.AgencyId.Value))))
+        var members = await ActiveHoldersOf(tenantId, normalized, ids)
             .Select(u => new { u.Id, u.FullName, u.AgencyId })
             .Distinct()
             .ToListAsync(ct);

@@ -67,6 +67,23 @@ public sealed class HealthActionsTests : IDisposable
     }
 
     [Fact]
+    public async Task A_second_reminder_within_the_hour_tells_nobody_and_says_so()
+    {
+        var (instanceId, stepId) = await SeedAsync();
+        _notifications.HasInAppNotificationAsync(_tenantId, _manager, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var result = await new RemindStepHandler(_factory.CreateContext(), _currentUser,
+                new RecordFactsReader(_leads, Substitute.For<ICustomersModule>(), Substitute.For<IKycModule>()),
+                _administration, _notifications, TimeProvider.System)
+            .Handle(new RemindStepCommand(instanceId, stepId), default);
+
+        result.Value.Should().Be(new RemindStepResult(0, 1));
+        await _notifications.DidNotReceiveWithAnyArgs().NotifyInAppAsync(default!, default);
+        (await HistoryAsync(instanceId)).Should().NotContain(h => h.Item1 == "REMINDED");
+    }
+
+    [Fact]
     public async Task A_step_handed_over_names_its_new_holder_who_is_told()
     {
         var (instanceId, stepId) = await SeedAsync();

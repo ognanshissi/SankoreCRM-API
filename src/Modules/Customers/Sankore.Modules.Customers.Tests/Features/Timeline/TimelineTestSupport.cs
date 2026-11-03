@@ -92,6 +92,10 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
         Guid tenantId, string workflowEntityType, Guid entityId, CancellationToken ct)
         => Task.FromResult<LeadNotificationFacts?>(null);
 
+    public Task<IReadOnlyDictionary<Guid, LeadNotificationFacts>> GetNotificationFactsManyAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> leadIds, IReadOnlyCollection<Guid> projectIds, CancellationToken ct)
+        => Task.FromResult<IReadOnlyDictionary<Guid, LeadNotificationFacts>>(new Dictionary<Guid, LeadNotificationFacts>());
+
     public Task<IReadOnlyDictionary<Guid, string>> GetLeadNamesAsync(IReadOnlyCollection<Guid> leadIds, CancellationToken ct)
         => Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
 

@@ -8,7 +8,11 @@ using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Shared.Kernel;
 
-internal sealed class ExportLeadsHandler(LeadsDbContext db, LeadVisibility? visibility = null)
+internal sealed class ExportLeadsHandler(
+    LeadsDbContext db,
+    LeadVisibility? visibility = null,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
+    ITenantContext? tenant = null)
     : IRequestHandler<ExportLeadsQuery, Result<byte[]>>
 {
     private static readonly string[] Headers =
@@ -38,6 +42,30 @@ internal sealed class ExportLeadsHandler(LeadsDbContext db, LeadVisibility? visi
 
         if (query.OwnerId.HasValue)
             q = q.Where(l => l.OwnerId == query.OwnerId.Value);
+
+        if (query.AgentId is { } agent)
+            q = q.Where(l => l.CurrentAssignedId == agent || (l.CurrentAssignedId == null && l.OwnerId == agent));
+
+        if (query.AwaitingDispatch == true)
+            q = q.Where(l => l.AwaitingDispatchSince != null && l.CurrentAssignmentId == null);
+
+        if (query.IntentLevel.HasValue)
+            q = q.Where(l => l.IntentLevel == query.IntentLevel.Value);
+
+        if (query.CustomFilters is { Count: > 0 })
+        {
+            if (administration is null || tenant is null)
+                return Result.Fail<byte[]>("CUSTOM_FILTERS_UNAVAILABLE");
+
+            var form = await administration.GetEntityFormAsync(
+                tenant.CurrentTenantId, Sankore.Modules.Administration.PublicApi.Forms.FormEntity.Lead, ct);
+            var documents = Sankore.Modules.Administration.PublicApi.Forms.CustomFieldValues.FilterDocuments(form, query.CustomFilters);
+            if (documents.IsFailure)
+                return Result.Fail<byte[]>(documents.Error!);
+
+            foreach (var document in documents.Value)
+                q = q.Where(l => l.CustomFieldsJson != null && EF.Functions.JsonContains(l.CustomFieldsJson, document));
+        }
 
         if (query.AgencyId.HasValue)
             q = q.Where(l => l.AgencyId == query.AgencyId.Value);

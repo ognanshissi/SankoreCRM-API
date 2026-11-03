@@ -72,6 +72,10 @@ public interface IKycModule
     /// </summary>
     Task<KycFileSummary?> GetKycFileSummaryAsync(Guid tenantId, Guid kycFileId, CancellationToken ct);
 
+    /// <summary><see cref="GetKycFileSummaryAsync"/> for a page of files in one read; an unknown id is absent.</summary>
+    Task<IReadOnlyDictionary<Guid, KycFileSummary>> GetKycFileSummariesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> kycFileIds, CancellationToken ct);
+
     /// <summary>
     /// Whether this user may act on the file: the agency perimeter of <c>KycFileAccess</c>, for a
     /// caller that is not the current HTTP user's. False when the file does not exist — the two

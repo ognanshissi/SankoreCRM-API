@@ -141,37 +141,45 @@ internal sealed class GetTeamScorecardHandler(
         // ── Captured: by agency (the lead's, else the one it prefers), or typed in by the agent chosen ──
         var agencyList = agencies?.ToList();
         var capturedQ = db.Leads.Where(l => l.CapturedAt >= from && l.CapturedAt < to);
+        // Counted per agent in SQL: every captured lead, held lead and pending task of the perimeter used
+        // to be loaded, then rescanned once per agent.
         var captured = await (query.AgentId is { } capturer
                 ? capturedQ.Where(l => l.OwnerId == capturer)
                 : capturedQ.Where(l => agencyList == null
                     || (l.AgencyId != null && agencyList.Contains(l.AgencyId.Value))
                     || (l.AgencyId == null && l.PreferredAgencyId != null && agencyList.Contains(l.PreferredAgencyId.Value))))
-            .Select(l => new { l.OwnerId })
-            .ToListAsync(ct);
+            .GroupBy(l => l.OwnerId)
+            .Select(g => new { OwnerId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.OwnerId ?? Guid.Empty, g => g.Count, ct);
+        var capturedTotal = captured.Values.Sum();
 
         // ── Now: held leads, late first contacts, tasks nobody started ───────────────────
         var held = await db.Leads
             .Where(l => l.CurrentAssignedId != null && agentIds.Contains(l.CurrentAssignedId.Value) && l.Status == LeadStatus.New)
-            .Select(l => l.CurrentAssignedId!.Value)
-            .ToListAsync(ct);
+            .GroupBy(l => l.CurrentAssignedId!.Value)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Key, g => g.Count, ct);
 
         var late = await db.LeadAssignments
             .Where(a => agentIds.Contains(a.AgentId) && a.SupersededAt == null && a.FirstContactAt == null && a.SlaDeadline < now)
             .Join(db.Leads, a => a.LeadId, l => l.Id, (a, l) => new { a.AgentId, l.Status, l.CurrentAssignmentId, AssignmentId = a.Id })
             .Where(x => x.CurrentAssignmentId == x.AssignmentId && !NotOpen.Contains(x.Status))
-            .Select(x => x.AgentId)
-            .ToListAsync(ct);
+            .GroupBy(x => x.AgentId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Key, g => g.Count, ct);
 
         var notStarted = await db.CrmTasks
             .Where(t => t.AssignedAgentId != null && agentIds.Contains(t.AssignedAgentId.Value) && t.Status == CrmTaskStatus.Pending)
-            .Select(t => new { AgentId = t.AssignedAgentId!.Value, t.DueAt })
-            .ToListAsync(ct);
+            .GroupBy(t => t.AssignedAgentId!.Value)
+            .Select(g => new { g.Key, Count = g.Count(), Overdue = g.Count(t => t.DueAt < now) })
+            .ToDictionaryAsync(g => g.Key, g => (g.Count, g.Overdue), ct);
 
         var conversions = await db.Leads
             .Where(l => l.CurrentAssignedId != null && agentIds.Contains(l.CurrentAssignedId.Value)
                      && l.Status == LeadStatus.Converted && l.ConvertedAt >= from && l.ConvertedAt < to)
-            .Select(l => l.CurrentAssignedId!.Value)
-            .ToListAsync(ct);
+            .GroupBy(l => l.CurrentAssignedId!.Value)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Key, g => g.Count, ct);
 
         // An agent's own objectives when one is chosen; a team has none of its own.
         var objective = query.AgentId is { } one
@@ -192,14 +200,14 @@ internal sealed class GetTeamScorecardHandler(
                     m.UserId,
                     m.FullName,
                     m.AgencyId is { } a ? agencyNames.GetValueOrDefault(a) : null,
-                    captured.Count(c => c.OwnerId == m.UserId),
+                    captured.GetValueOrDefault(m.UserId),
                     mine.Select(r => r.LeadId).Distinct().Count(),
-                    held.Count(id => id == m.UserId),
-                    notStarted.Count(t => t.AgentId == m.UserId),
-                    notStarted.Count(t => t.AgentId == m.UserId && t.DueAt < now),
+                    held.GetValueOrDefault(m.UserId),
+                    notStarted.GetValueOrDefault(m.UserId).Count,
+                    notStarted.GetValueOrDefault(m.UserId).Overdue,
                     firstContact.Rate,
-                    late.Count(id => id == m.UserId),
-                    conversions.Count(id => id == m.UserId));
+                    late.GetValueOrDefault(m.UserId),
+                    conversions.GetValueOrDefault(m.UserId));
             })
             .ToList();
 
@@ -212,14 +220,14 @@ internal sealed class GetTeamScorecardHandler(
             accessible is null,
             roster.Agencies.Select(a => new TeamAgencyOptionDto(a.Id, a.Name, a.ParentAgencyId)).ToList(),
             roster.Members.Select(m => new TeamAgentOptionDto(m.UserId, m.FullName, m.AgencyId)).ToList(),
-            captured.Count,
+            capturedTotal,
             GetMyScorecardHandler.Assigned(inPeriod),
             GetMyScorecardHandler.Weeks(weeksFrom, rows),
             period == "month" ? [] : GetMyScorecardHandler.Days(monday, today, rows),
             GetMyScorecardHandler.FirstContact(inPeriod, now, objective?.FirstContactWithin24hPercent),
-            new ScorecardConversionsDto(conversions.Count, conversionsObjective),
-            new TeamTasksDto(notStarted.Count, notStarted.Count(t => t.DueAt < now)),
-            late.Count,
+            new ScorecardConversionsDto(conversions.Values.Sum(), conversionsObjective),
+            new TeamTasksDto(notStarted.Values.Sum(t => t.Count), notStarted.Values.Sum(t => t.Overdue)),
+            late.Values.Sum(),
             agentRows));
     }
 

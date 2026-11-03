@@ -22,8 +22,9 @@ namespace Sankore.Modules.Workflow.Features.Instances.RemindStep;
 /// </summary>
 public sealed record RemindStepCommand(Guid InstanceId, Guid StepId) : IRequest<Result<RemindStepResult>>, ICommand;
 
-/// <param name="Reminded">How many people were told; 0 when nobody holds the step.</param>
-public sealed record RemindStepResult(int Reminded);
+/// <param name="Reminded">How many people were told now; 0 when nobody holds the step.</param>
+/// <param name="AlreadyReminded">Holders already reminded within the hour, told nothing this time.</param>
+public sealed record RemindStepResult(int Reminded, int AlreadyReminded = 0);
 
 internal sealed class RemindStepHandler(
     WorkflowDbContext db,
@@ -59,25 +60,38 @@ internal sealed class RemindStepHandler(
         var late = step.DueAt is { } due && due < now
             ? $" Elle est en retard de {Math.Round((now - due).TotalHours)} h."
             : "";
-        var who = record is null ? "" : $" ({string.Join(" ", new[] { record.FirstName, record.LastName }.Where(n => !string.IsNullOrWhiteSpace(n)))})";
+        // A record with no name (an entity the facts reader does not know) read « cette étape (). ».
+        var name = record is null ? "" : string.Join(" ", new[] { record.FirstName, record.LastName }.Where(n => !string.IsNullOrWhiteSpace(n)));
+        var who = name.Length == 0 ? "" : $" ({name})";
+
+        // Only the people actually told count, and only they are written in the history: the hourly key
+        // silences a second click, which used to answer « 2 personnes prévenues » all the same.
+        var told = new List<Guid>();
         foreach (var person in people)
-            await notifications.NotifyInAppAsync(new InAppNotificationRequest(
+        {
+            var key = $"workflow.reminder:{step.Id}:{person}:{now:yyyyMMddHH}";
+            if (await notifications.HasInAppNotificationAsync(instance.TenantId, person, key, ct)) continue;
+            var sent = await notifications.NotifyInAppAsync(new InAppNotificationRequest(
                 instance.TenantId, person, Category,
                 $"Relance : « {step.Name} »",
                 $"Une décision est attendue de votre part sur cette étape{who}.{late}",
                 $"/settings/workflows/instances/{instance.Id}",
-                $"workflow.reminder:{step.Id}:{person}:{now:yyyyMMddHH}"), ct);
+                key), ct);
+            if (sent.IsSuccess) told.Add(person);
+        }
+        var already = people.Count - told.Count;
+        if (told.Count == 0) return Result.Ok(new RemindStepResult(0, already));
 
-        var names = await administration.GetUserNamesAsync(instance.TenantId, people, ct);
-        var listed = people.Count <= 3
-            ? string.Join(", ", people.Select(p => names.GetValueOrDefault(p) ?? "un utilisateur"))
-            : $"{people.Count} personnes";
+        var names = await administration.GetUserNamesAsync(instance.TenantId, told, ct);
+        var listed = told.Count <= 3
+            ? string.Join(", ", told.Select(p => names.GetValueOrDefault(p) ?? "un utilisateur"))
+            : $"{told.Count} personnes";
         db.WorkflowAuditEntries.Add(WorkflowAuditEntry.Create(
             instance.TenantId, instance.Id, step.StepDefinitionId, step.StepDefinitionId,
             EventCodes.Reminded, currentUser.Id, $"Relance envoyée à {listed}.", instance.ContextJson));
         await db.SaveChangesAsync(ct);
 
-        return Result.Ok(new RemindStepResult(people.Count));
+        return Result.Ok(new RemindStepResult(told.Count, already));
     }
 }
 

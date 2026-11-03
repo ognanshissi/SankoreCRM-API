@@ -111,17 +111,17 @@ internal sealed class GetWorkflowHealthHandler(
             .Where(i => i.Status == WorkflowStatus.InProgress || i.Status == WorkflowStatus.WaitingForChild)
             .ToListAsync(ct);
 
-        // Steps with a delay, decided in the period or still open.
+        // Steps with a delay, decided in the period or still open on a running circuit. The instance's
+        // status is joined in SQL: a cancelled circuit leaves its open step AwaitingApproval for good,
+        // and every one of those used to be loaded and dropped in memory, on every read.
         var slaSteps = await db.WorkflowInstanceSteps
-            .Where(s => s.DueAt != null
-                     && ((s.CompletedAt != null && s.CompletedAt >= from) || s.Status == StepStatus.AwaitingApproval))
-            .Select(s => new { s.Id, s.InstanceId, s.StepDefinitionId, s.Status, s.DueAt, s.CompletedAt })
+            .Where(s => s.DueAt != null)
+            .Join(db.WorkflowInstances, s => s.InstanceId, i => i.Id, (s, i) => new { Step = s, i.TemplateId, InstanceStatus = i.Status })
+            .Where(x => (x.Step.CompletedAt != null && x.Step.CompletedAt >= from)
+                     || (x.Step.Status == StepStatus.AwaitingApproval && x.InstanceStatus == WorkflowStatus.InProgress))
+            .Select(x => new { x.Step.Id, x.Step.InstanceId, x.Step.StepDefinitionId, x.Step.Status, x.Step.DueAt, x.Step.CompletedAt, x.TemplateId })
             .ToListAsync(ct);
         var slaInstanceIds = slaSteps.Select(s => s.InstanceId).Distinct().ToList();
-        var slaTemplateOf = await db.WorkflowInstances
-            .Where(i => slaInstanceIds.Contains(i.Id))
-            .Select(i => new { i.Id, i.TemplateId, i.Status })
-            .ToDictionaryAsync(i => i.Id, ct);
 
         var auditInstanceIds = slaInstanceIds.Union(running.Select(i => i.Id)).ToList();
         var escalations = (await db.WorkflowAuditEntries
@@ -138,13 +138,10 @@ internal sealed class GetWorkflowHealthHandler(
             || (status == StepStatus.AwaitingApproval && due < now)
             || escalations.ContainsKey((instanceId, definitionId));
 
-        // Only steps still open count for a running circuit that was cancelled meanwhile: none.
         var slaRows = slaSteps
-            .Where(s => s.Status != StepStatus.AwaitingApproval
-                     || (slaTemplateOf.TryGetValue(s.InstanceId, out var i) && i.Status is WorkflowStatus.InProgress))
             .Select(s => new
             {
-                Circuit = slaTemplateOf.TryGetValue(s.InstanceId, out var i) && circuitOf.TryGetValue(i.TemplateId, out var c) ? c : default,
+                Circuit = circuitOf.TryGetValue(s.TemplateId, out var c) ? c : default,
                 Breached = Breached(s.Status, s.DueAt!.Value, s.CompletedAt, s.InstanceId, s.StepDefinitionId),
             })
             .Where(r => r.Circuit != default)
@@ -154,10 +151,15 @@ internal sealed class GetWorkflowHealthHandler(
         var raw = new List<(AttentionItemDto Item, (string, string, string) Circuit)>();
         foreach (var instance in running.Where(i => i.Status == WorkflowStatus.InProgress))
         {
-            var open = instance.Steps.Where(s => s.Status == StepStatus.AwaitingApproval).OrderBy(s => s.Order).FirstOrDefault();
+            // The engine's own current step, as `StepEscalator` reads it. The lowest open Order was a
+            // different step once a transition routed backwards (Order 5 → 4).
+            var open = instance.Steps.FirstOrDefault(s => s.Order == instance.CurrentStepOrder && s.Status == StepStatus.AwaitingApproval)
+                ?? instance.Steps.Where(s => s.Status == StepStatus.AwaitingApproval).OrderBy(s => s.Order).FirstOrDefault();
             if (open is null) continue;
+            // Waiting since the last step closed, whatever its Order: a step closed yesterday at Order 5
+            // before routing back to Order 4 was ignored, and the wait read from an older one.
             var since = instance.Steps
-                .Where(s => s.Order < open.Order && s.CompletedAt != null)
+                .Where(s => s.Id != open.Id && s.CompletedAt != null && s.CompletedAt <= now)
                 .Select(s => s.CompletedAt)
                 .Max() ?? instance.StartedAt;
             var overdue = open.DueAt is { } due && due < now;
@@ -236,10 +238,15 @@ internal sealed class GetWorkflowHealthHandler(
             : await administration.GetUserNamesAsync(tenantId,
                 items.Select(i => i.AssignedToUserId).OfType<Guid>().Distinct().ToList(), ct);
 
+        // One batched read per owning module, not one or two round trips per row.
+        var records = facts is null
+            ? new Dictionary<(string, Guid), RecordFacts>()
+            : await facts.ReadManyAsync(tenantId, items.Select(i => (i.EntityType, i.EntityId)).ToList(), ct);
+
         var named = new List<AttentionItemDto>(items.Count);
         foreach (var item in items)
         {
-            var record = facts is null ? null : await facts.ReadAsync(tenantId, item.EntityType, item.EntityId, ct);
+            var record = records.GetValueOrDefault((item.EntityType, item.EntityId));
             var name = record is null ? null
                 : string.Join(" ", new[] { record.FirstName, record.LastName }.Where(n => !string.IsNullOrWhiteSpace(n)));
             named.Add(item with

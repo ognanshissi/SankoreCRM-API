@@ -37,6 +37,18 @@ public sealed class KycModuleFacade(
             .Select(f => new KycFileSummary(f.Id, f.CustomerId, f.AgencyId, f.Status.ToString()))
             .FirstOrDefaultAsync(ct);
 
+    public async Task<IReadOnlyDictionary<Guid, KycFileSummary>> GetKycFileSummariesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> kycFileIds, CancellationToken ct)
+    {
+        var ids = kycFileIds.Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, KycFileSummary>();
+        return await db.KycFiles
+            .IgnoreQueryFilters()
+            .Where(f => f.TenantId == tenantId && ids.Contains(f.Id))
+            .Select(f => new KycFileSummary(f.Id, f.CustomerId, f.AgencyId, f.Status.ToString()))
+            .ToDictionaryAsync(f => f.Id, ct);
+    }
+
     public async Task<IReadOnlyList<CustomerDocumentEntry>> ListCustomerDocumentsAsync(
         Guid tenantId, Guid customerId, CancellationToken ct)
     {

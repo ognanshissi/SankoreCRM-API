@@ -144,4 +144,47 @@ public sealed class RecordFactsReader(ILeadsModule leads, ICustomersModule custo
         }
     }
 
+    /// <summary>
+    /// <see cref="ReadAsync"/> for many records, a few reads in all instead of one or two per record.
+    /// A record that does not exist is absent; an entity type nobody owns reads as empty facts.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<(string EntityType, Guid EntityId), RecordFacts>> ReadManyAsync(
+        Guid tenantId, IReadOnlyCollection<(string EntityType, Guid EntityId)> records, CancellationToken ct)
+    {
+        var result = new Dictionary<(string, Guid), RecordFacts>();
+        var byKind = records.Distinct().ToLookup(r => r.EntityType.ToLowerInvariant());
+
+        var leadIds = byKind["lead"].Select(r => r.EntityId).ToList();
+        var projectIds = byKind["opportunity"].Select(r => r.EntityId).ToList();
+        if (leadIds.Count + projectIds.Count > 0)
+        {
+            var found = await leads.GetNotificationFactsManyAsync(tenantId, leadIds, projectIds, ct);
+            foreach (var r in byKind["lead"].Concat(byKind["opportunity"]))
+                if (found.TryGetValue(r.EntityId, out var f))
+                    result[r] = new RecordFacts(f.AgencyId, f.AssignedUserId, f.FirstName, f.LastName, f.Product, f.Link);
+        }
+
+        var files = byKind["kycfile"].Any()
+            ? await kyc.GetKycFileSummariesAsync(tenantId, byKind["kycfile"].Select(r => r.EntityId).ToList(), ct)
+            : new Dictionary<Guid, KycFileSummary>();
+        var clientIds = byKind["account"].Select(r => r.EntityId).Concat(files.Values.Select(f => f.CustomerId)).Distinct().ToList();
+        var clients = clientIds.Count == 0
+            ? new Dictionary<Guid, ClientSummary>()
+            : await customers.GetClientSummariesAsync(tenantId, clientIds, ct);
+
+        foreach (var r in byKind["account"])
+            if (clients.TryGetValue(r.EntityId, out var client))
+                result[r] = new RecordFacts(client.AgencyId, client.AdvisorUserId, null, client.DisplayName, null, $"/customers/{client.Id}");
+        foreach (var r in byKind["kycfile"])
+            if (files.TryGetValue(r.EntityId, out var file))
+            {
+                var client = clients.GetValueOrDefault(file.CustomerId);
+                result[r] = new RecordFacts(file.AgencyId ?? client?.AgencyId, null, null, client?.DisplayName, null, $"/kyc/{file.Id}");
+            }
+
+        foreach (var r in records.Where(r => r.EntityType.ToLowerInvariant() is not ("lead" or "opportunity" or "account" or "kycfile")))
+            result[r] = new RecordFacts(null, null, null, null, null, null);
+        return result;
+    }
+
 }
