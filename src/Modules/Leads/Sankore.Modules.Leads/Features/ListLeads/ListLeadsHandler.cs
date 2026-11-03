@@ -186,7 +186,7 @@ internal sealed class ListLeadsHandler(
         var facts = items
             .Select(i => new LeadFacts(
                 i.Id, Enum.Parse<LeadStatus>(i.Status), i.Score, i.QualificationCompleteness,
-                i.LastActivityAt, i.CurrentAssignmentId, i.CurrentAssignedId))
+                i.LastActivityAt, i.CurrentAssignmentId, i.CurrentAssignedId, i.OwnerId))
             .ToList();
         var nextSteps = await LeadNextSteps.ForLeadsAsync(db, facts, DateTimeOffset.UtcNow, ct);
         for (var i = 0; i < items.Count; i++)

@@ -400,6 +400,14 @@ public interface IAdministrationModule
         Guid tenantId, string permissionCode, CancellationToken ct);
 
     /// <summary>
+    /// The active agencies — all of them, or those of <paramref name="agencyIds"/> — and the active users
+    /// holding one of <paramref name="roleCodes"/> in them, named. For a manager's « Ma journée »
+    /// (2026-11-03): the agency and agent pickers, and whose figures make up the team.
+    /// </summary>
+    Task<TeamRoster> GetTeamRosterAsync(
+        Guid tenantId, IReadOnlyCollection<Guid>? agencyIds, IReadOnlyCollection<string> roleCodes, CancellationToken ct);
+
+    /// <summary>
     /// The beneficiary policy of a product line (BNF-B-06) — what it asks of the household and of
     /// the people designated on it. Read by M13 (a lead's completeness and the household gate) and
     /// by M01 (designations).
@@ -638,6 +646,10 @@ public sealed record AgencySummary(
     string Name,
     Guid? ParentAgencyId,
     bool IsActive);
+
+public sealed record TeamRoster(IReadOnlyList<AgencySummary> Agencies, IReadOnlyList<TeamMember> Members);
+
+public sealed record TeamMember(Guid UserId, string FullName, Guid? AgencyId);
 
 /// <summary>
 /// Read-only projection of an agent, safe to hand to other modules.

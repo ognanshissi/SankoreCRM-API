@@ -75,4 +75,7 @@ public static class EventCodes
 
     /// <summary>An overdue step stayed where it was and its people were reminded.</summary>
     public const string SlaReminder = "SLA_REMINDER";
+
+    /// <summary>Someone reminded the people of an open step by hand, from « Santé des workflows » (history only).</summary>
+    public const string Reminded = "REMINDED";
 }

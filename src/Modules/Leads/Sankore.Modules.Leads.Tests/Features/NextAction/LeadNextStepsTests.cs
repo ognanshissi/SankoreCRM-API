@@ -144,9 +144,48 @@ public sealed class LeadNextStepsTests : IDisposable
         steps[unplanned.Id].Kind.Should().Be(NextStepKind.Suggestion);
     }
 
+    [Fact]
+    public async Task A_qualified_lead_its_agent_owns_is_not_sent_to_dispatch_but_to_a_project()
+    {
+        // 2026-11-03: an agent's own qualified lead read « Dispatcher le lead à un agent ».
+        var owned = Facts(LeadStatus.Qualified, assigned: null, owner: _agent);
+
+        (await NextStepOf(owned)).ActionType.Should().Be(NextActionType.CreateProject);
+    }
+
+    [Fact]
+    public async Task A_qualified_lead_with_an_open_project_is_followed_in_the_project()
+    {
+        var lead = Facts(LeadStatus.Qualified, assigned: _agent, owner: null);
+        await using (var db = _db.CreateContext())
+        {
+            var won = Opportunity.CreateFromLead(_tenantId, lead.Id, "Crédit soldé", null, _agent, TimeProvider.System);
+            won.Close(OpportunityStage.ClosedWon, Now);
+            db.Opportunities.AddRange(
+                Opportunity.CreateFromLead(_tenantId, lead.Id, "Crédit habitat", null, _agent, TimeProvider.System), won);
+            await db.SaveChangesAsync();
+        }
+
+        var step = await NextStepOf(lead);
+
+        step.ActionType.Should().Be(NextActionType.AdvanceProject);
+        step.Title.Should().Be("Faire avancer le projet", "the won project is not open any more");
+    }
+
+    [Fact]
+    public async Task Only_a_qualified_lead_nobody_works_is_to_dispatch()
+    {
+        var orphan = Facts(LeadStatus.Qualified, assigned: null, owner: null);
+
+        (await NextStepOf(orphan)).ActionType.Should().Be(NextActionType.Dispatch);
+    }
+
     private LeadFacts Facts(
         Guid? id = null, int score = 50, LeadStatus status = LeadStatus.Open, Guid? assignmentId = null) =>
         new(id ?? Guid.NewGuid(), status, score, 0, Now.AddDays(-1), assignmentId, _agent);
+
+    private static LeadFacts Facts(LeadStatus status, Guid? assigned, Guid? owner) =>
+        new(Guid.NewGuid(), status, 85, 0, Now.AddDays(-1), null, assigned, owner);
 
     private async Task<LeadNextStepDto> NextStepOf(LeadFacts lead)
     {

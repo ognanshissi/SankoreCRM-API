@@ -5,7 +5,7 @@ public enum NextActionType
 {
     /// <summary>Lead has never been scored — run the qualification form.</summary>
     Qualify,
-    /// <summary>Score ≥ 60 and lead is not yet assigned to an agent.</summary>
+    /// <summary>Qualified and nobody works it — neither assigned nor owned.</summary>
     Dispatch,
     /// <summary>Score 40-59 — gather missing information before dispatching.</summary>
     CollectMoreData,
@@ -18,5 +18,9 @@ public enum NextActionType
     /// <summary>Lead in Nurturing state — maintain regular touchpoints.</summary>
     Nurture,
     /// <summary>Score too low for conversion — consider disqualification.</summary>
-    Disqualify
+    Disqualify,
+    /// <summary>Qualified, worked by an agent, no open project — open the project of the product sought.</summary>
+    CreateProject,
+    /// <summary>Qualified with an open project — what comes next happens in the project.</summary>
+    AdvanceProject
 }

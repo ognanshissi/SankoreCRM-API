@@ -12,6 +12,7 @@ using Sankore.Modules.Workflow.Features.Instances.GetInstanceRequirements;
 using Sankore.Modules.Workflow.Features.Instances.ListInstances;
 using Sankore.Modules.Workflow.Features.Instances.ListMySteps;
 using Sankore.Modules.Workflow.Features.Instances.RejectStep;
+using Sankore.Modules.Workflow.Features.Instances.RemindStep;
 using Sankore.Modules.Workflow.Features.Instances.StartInstance;
 
 namespace Sankore.Modules.Workflow.Features.Instances;
@@ -35,6 +36,7 @@ public static class InstancesEndpoints
             .MapCancelInstance()
             .MapGetInstanceAudit()
             .MapAssignStep()
+            .MapRemindStep()
             .MapDelegateStep();
     }
 }

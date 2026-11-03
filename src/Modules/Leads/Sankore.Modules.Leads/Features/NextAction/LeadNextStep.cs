@@ -42,6 +42,8 @@ public sealed record LeadNextStepDto(
     string? Urgency = null);
 
 /// <summary>What the next-step rules read from a lead — enough to build it from a list row.</summary>
+/// <param name="OwnerId">A lead typed in by an agent is theirs without any assignment: it is worked.</param>
+/// <param name="OpenProjects">Filled by <see cref="LeadNextSteps.ForLeadsAsync"/>, not by the caller.</param>
 internal sealed record LeadFacts(
     Guid Id,
     LeadStatus Status,
@@ -49,7 +51,9 @@ internal sealed record LeadFacts(
     double QualificationCompleteness,
     DateTimeOffset? LastActivityAt,
     Guid? CurrentAssignmentId,
-    Guid? CurrentAssignedId);
+    Guid? CurrentAssignedId,
+    Guid? OwnerId = null,
+    int OpenProjects = 0);
 
 internal sealed record NextActionSuggestion(
     NextActionType Type,
@@ -74,7 +78,7 @@ internal static class NextActionRules
         if (lead.QualificationCompleteness is > 0 and < 0.5 && lead.Status is not LeadStatus.Qualified)
             return new(NextActionType.CompleteQualification,
                 "Compléter le formulaire de qualification",
-                $"Formulaire complété à {lead.QualificationCompleteness:P0} — au moins 50 % requis pour le dispatch.",
+                $"Formulaire complété à {lead.QualificationCompleteness:P0}.",
                 "Medium", TimeSpan.FromHours(48));
 
         // Not yet qualified. Read off the status, not a zero score: a lead is scored at its capture
@@ -85,18 +89,36 @@ internal static class NextActionRules
                 "Le lead n'a pas encore été qualifié. Lancer le formulaire de qualification.",
                 "Medium", TimeSpan.FromHours(48));
 
-        // Qualified but not yet dispatched
-        if (lead.Status == LeadStatus.Qualified && lead.CurrentAssignmentId is null)
-            return new(NextActionType.Dispatch,
-                "Dispatcher le lead à un agent",
-                $"Score {lead.Score}/100 — le lead est éligible au dispatch.",
-                "High", TimeSpan.FromHours(24));
+        // Qualified: the work moves to a project (2026-11-03, product owner). « Dispatcher » was
+        // suggested to every qualified lead without an assignment — including the ones their agent
+        // typed in and owns, who read it on their own lead with no way to act on it.
+        if (lead.Status == LeadStatus.Qualified)
+        {
+            if (lead.CurrentAssignedId is null && lead.OwnerId is null)
+                return new(NextActionType.Dispatch,
+                    "Attribuer le lead à un agent",
+                    "Lead qualifié que personne ne suit encore.",
+                    "High", TimeSpan.FromHours(24));
+
+            if (lead.OpenProjects == 0)
+                return new(NextActionType.CreateProject,
+                    "Ouvrir un projet",
+                    "Lead qualifié : ouvrir le projet du produit souhaité pour avancer vers la souscription.",
+                    "High", TimeSpan.FromHours(48));
+
+            return new(NextActionType.AdvanceProject,
+                lead.OpenProjects == 1 ? "Faire avancer le projet" : "Faire avancer les projets",
+                lead.OpenProjects == 1
+                    ? "Le lead est qualifié : la suite se passe dans son projet."
+                    : $"Le lead est qualifié : la suite se passe dans ses {lead.OpenProjects} projets en cours.",
+                "Medium", TimeSpan.FromHours(48));
+        }
 
         // Qualifying: score 40-59 — collect more data
         if (lead.Score is >= 40 and < 60)
             return new(NextActionType.CollectMoreData,
                 "Compléter les informations manquantes",
-                $"Score actuel : {lead.Score}/100 — atteindre 60 pour être éligible au dispatch.",
+                $"Score actuel : {lead.Score}/100 — une fiche plus complète fait monter le score.",
                 "Medium", TimeSpan.FromHours(48));
 
         // No recent activity (> 14 days)
@@ -171,6 +193,11 @@ internal static class LeadNextSteps
                 .Select(a => new { a.LeadId, a.AgentId, a.SlaDeadline })
                 .ToListAsync(ct);
 
+        var qualifiedIds = open.Where(l => l.Status == LeadStatus.Qualified).Select(l => l.Id).ToList();
+        var openProjects = qualifiedIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await OpenProjectCountsAsync(db, qualifiedIds, ct);
+
         var tasksByLead = tasks.ToLookup(t => t.LeadId);
         var remindersByLead = reminders.ToLookup(r => r.LeadId);
         var firstContactByLead = owedFirstContacts.ToDictionary(a => a.LeadId);
@@ -210,7 +237,8 @@ internal static class LeadNextSteps
                 continue;
             }
 
-            var suggestion = NextActionRules.Suggest(lead, now);
+            var suggestion = NextActionRules.Suggest(
+                lead with { OpenProjects = openProjects.GetValueOrDefault(lead.Id) }, now);
             result[lead.Id] = new LeadNextStepDto(
                 NextStepKind.Suggestion, suggestion.Title, suggestion.Detail, DueAt: null, IsOverdue: false,
                 AssigneeId: lead.CurrentAssignedId,
@@ -222,5 +250,16 @@ internal static class LeadNextSteps
 
     public static LeadFacts FactsOf(Lead lead) => new(
         lead.Id, lead.Status, lead.Score, lead.QualificationCompleteness,
-        lead.LastActivityAt, lead.CurrentAssignmentId, lead.CurrentAssignedId);
+        lead.LastActivityAt, lead.CurrentAssignmentId, lead.CurrentAssignedId, lead.OwnerId);
+
+    /// <summary>Projects still open (neither won nor lost) per lead.</summary>
+    public static async Task<Dictionary<Guid, int>> OpenProjectCountsAsync(
+        LeadsDbContext db, List<Guid> leadIds, CancellationToken ct) =>
+        await db.Opportunities
+            .AsNoTracking()
+            .Where(o => o.LeadId != null && leadIds.Contains(o.LeadId.Value)
+                        && o.Stage != OpportunityStage.ClosedWon && o.Stage != OpportunityStage.ClosedLost)
+            .GroupBy(o => o.LeadId!.Value)
+            .Select(g => new { LeadId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.LeadId, x => x.Count, ct);
 }

@@ -5,6 +5,7 @@ using Sankore.Modules.Workflow.Features.Analytics.GetBottlenecks;
 using Sankore.Modules.Workflow.Features.Analytics.GetExecutionMonitor;
 using Sankore.Modules.Workflow.Features.Analytics.GetSlaDashboard;
 using Sankore.Modules.Workflow.Features.Analytics.GetTemplateStats;
+using Sankore.Modules.Workflow.Features.Analytics.GetWorkflowHealth;
 
 namespace Sankore.Modules.Workflow.Features.Analytics;
 
@@ -18,6 +19,7 @@ public static class AnalyticsEndpoints
         group.MapGetBottlenecks();
         group.MapGetSlaDashboard();
         group.MapGetExecutionMonitor();
+        group.MapGetWorkflowHealth();
 
         return app;
     }

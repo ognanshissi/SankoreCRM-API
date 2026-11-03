@@ -57,7 +57,13 @@ internal sealed class GetNextActionHandler(LeadsDbContext db)
                 "High", now.AddHours(24)));
 
         // 3–10. Rules that read the lead alone — shared with the next step of the lead list.
-        var suggestion = NextActionRules.Suggest(LeadNextSteps.FactsOf(lead), now);
+        var facts = LeadNextSteps.FactsOf(lead);
+        if (lead.Status == LeadStatus.Qualified)
+            facts = facts with
+            {
+                OpenProjects = (await LeadNextSteps.OpenProjectCountsAsync(db, [lead.Id], ct)).GetValueOrDefault(lead.Id),
+            };
+        var suggestion = NextActionRules.Suggest(facts, now);
         return Result.Ok(Build(lead.Id, suggestion.Type, suggestion.Title, suggestion.Detail,
             suggestion.Urgency, now.Add(suggestion.SuggestedDelay)));
     }

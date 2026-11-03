@@ -864,6 +864,44 @@ internal sealed class AdministrationModuleFacade(
             .ToListAsync(ct);
     }
 
+    public async Task<TeamRoster> GetTeamRosterAsync(
+        Guid tenantId, IReadOnlyCollection<Guid>? agencyIds, IReadOnlyCollection<string> roleCodes, CancellationToken ct)
+    {
+        tenantId = await TeamAsync(tenantId, ct);
+        var ids = agencyIds?.ToList();
+        var agencies = await db.Agencies
+            .IgnoreQueryFilters()
+            .Where(a => a.TenantId == tenantId && a.IsActive && !a.IsDeleted && (ids == null || ids.Contains(a.Id)))
+            .OrderBy(a => a.Name)
+            .Select(a => new AgencySummary(a.Id, a.Code, a.Name, a.ParentAgencyId, a.IsActive))
+            .ToListAsync(ct);
+
+        var normalized = roleCodes
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim().ToUpperInvariant())
+            .Distinct()
+            .ToList();
+        if (normalized.Count == 0) return new TeamRoster(agencies, []);
+
+        var members = await db.UserRoles
+            .IgnoreQueryFilters()
+            .Where(ur => ur.TenantId == tenantId && ur.IsActive)
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.NormalizedName })
+            .Where(x => x.NormalizedName != null && normalized.Contains(x.NormalizedName))
+            .Join(db.Users.IgnoreQueryFilters(), x => x.UserId, u => u.Id, (x, u) => u)
+            .Where(u => u.TenantId == tenantId
+                     && u.Status == UserStatus.Active
+                     && (ids == null || (u.AgencyId != null && ids.Contains(u.AgencyId.Value))))
+            .Select(u => new { u.Id, u.FullName, u.AgencyId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        return new TeamRoster(agencies, members
+            .Select(m => new TeamMember(m.Id, m.FullName, m.AgencyId))
+            .OrderBy(m => m.FullName, StringComparer.Create(new System.Globalization.CultureInfo("fr-FR"), true))
+            .ToList());
+    }
+
     public async Task<IReadOnlyList<Guid>> ListUsersWithPermissionAsync(
         Guid tenantId, string permissionCode, CancellationToken ct)
     {

@@ -18,7 +18,7 @@ internal static class AssignStepEndpoint
             CancellationToken ct) =>
         {
             var result = await sender.Send(
-                new AssignStepCommand(instanceId, stepId, body.AssignedToUserId), ct);
+                new AssignStepCommand(instanceId, stepId, body.AssignedToUserId, body.Reason), ct);
 
             return result.IsSuccess
                 ? Results.NoContent()
@@ -35,5 +35,5 @@ internal static class AssignStepEndpoint
         return app;
     }
 
-    private sealed record AssignRequest(Guid AssignedToUserId);
+    public sealed record AssignRequest(Guid AssignedToUserId, string? Reason = null);
 }

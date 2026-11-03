@@ -25,11 +25,14 @@ internal static class CancelInstanceEndpoint
     }
 
     private static async Task<IResult> Handle(
-        Guid id, ISender sender, CancellationToken ct)
+        Guid id, ISender sender, CancellationToken ct, CancelRequest? body = null)
     {
-        var result = await sender.Send(new CancelInstanceCommand(id), ct);
+        var result = await sender.Send(new CancelInstanceCommand(id, body?.Reason), ct);
         return result.IsSuccess
             ? Results.NoContent()
             : Results.Problem(result.Error, statusCode: StatusCodes.Status400BadRequest);
     }
+
+    /// <summary>The body is optional: the instance screen cancels without one.</summary>
+    public sealed record CancelRequest(string? Reason);
 }
