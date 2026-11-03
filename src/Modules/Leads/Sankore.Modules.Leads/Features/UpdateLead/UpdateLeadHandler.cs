@@ -65,6 +65,13 @@ internal sealed class UpdateLeadHandler(
         if (result.IsFailure)
             return result;
 
+        if (cmd.CompanyName is not null || cmd.CompanyEmail is not null || cmd.CompanyPhone is not null || cmd.Website is not null)
+        {
+            var company = lead.UpdateCompany(cmd.CompanyName, cmd.CompanyEmail, cmd.CompanyPhone, cmd.Website);
+            if (company.IsFailure)
+                return company;
+        }
+
         // The e-mail goes through its own setter so the blind index is rewritten with it — see
         // Lead.SetEmail. A null cmd.Email means "not supplied" here, as for every other field of
         // this command, so it leaves the stored address alone rather than clearing it.

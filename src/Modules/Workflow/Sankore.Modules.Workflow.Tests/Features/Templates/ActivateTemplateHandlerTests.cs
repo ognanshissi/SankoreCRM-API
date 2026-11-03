@@ -180,7 +180,7 @@ public sealed class ActivateTemplateHandlerTests : IDisposable
             new ActivateTemplateCommand(t2.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("already exists");
+        result.Error.Should().Contain("déjà active");
     }
 
     // ── S5: Not found ─────────────────────────────────────────────────────

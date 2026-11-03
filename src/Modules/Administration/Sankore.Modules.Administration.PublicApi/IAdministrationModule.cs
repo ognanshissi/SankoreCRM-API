@@ -133,6 +133,13 @@ public interface IAdministrationModule
         Guid tenantId, IReadOnlyCollection<Guid> userIds, CancellationToken ct);
 
     /// <summary>
+    /// The displayed label of each role code asked (« Chef d'agence » for <c>BranchManager</c>),
+    /// keyed case-insensitively — a workflow step names its approver by code. Unknown codes are absent.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetRoleLabelsAsync(
+        Guid tenantId, IReadOnlyCollection<string> roleCodes, CancellationToken ct);
+
+    /// <summary>
     /// The tenant's users whose address is one of these — the reverse of
     /// <see cref="GetUserNamesAsync"/>, for pairing an external directory against CRM accounts
     /// (TEL-B-05).

@@ -251,6 +251,48 @@ public sealed class OpportunityLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task The_project_read_says_who_decides_the_open_step_and_which_task_passes_it()
+    {
+        // 2026-11-02: the banner named the step, not where to go. A « Tâche manuelle » step passes
+        // when its task is done; a cancelled task leaves it to the role's decision.
+        var id = await Seed();
+        var stepId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+        await using (var seed = _factory.CreateContext())
+        {
+            var task = CrmTask.Create(_tenantId, "Generic", CrmTaskPriority.Medium, "Compléter le dossier",
+                _clock.GetUtcNow().AddDays(1), assignedAgentId: _agentId,
+                triggerEventType: "workflow.step", triggerEventId: stepId);
+            seed.CrmTasks.Add(task);
+            await seed.SaveChangesAsync();
+        }
+        var workflow = Substitute.For<Sankore.Modules.Workflow.PublicApi.IWorkflowModule>();
+        workflow.GetBlockingCircuitsAsync(_tenantId, "Opportunity", id, Arg.Any<CancellationToken>())
+            .Returns(new List<Sankore.Modules.Workflow.PublicApi.BlockingCircuit>
+            {
+                new(instanceId, "Recette parcours", ["Compléter le dossier"], new(
+                    stepId, "Compléter le dossier", "ManualTask", "BranchManager", null, null, [], null, null)),
+            });
+        _administration.GetRoleLabelsAsync(_tenantId, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["BranchManager"] = "Chef d'agence" });
+        _administration.GetUserNamesAsync(_tenantId, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, string> { [_agentId] = "Awa Agent" });
+        _currentUser.Id.Returns(_agentId);
+        _currentUser.Roles.Returns(["Agent"]);
+        _currentUser.Permissions.Returns(["workflow:approve"]);
+
+        await using var db = _factory.CreateContext();
+        var result = await new GetOpportunityHandler(db, workflow: workflow, administration: _administration, currentUser: _currentUser)
+            .Handle(new GetOpportunityQuery(id), CancellationToken.None);
+
+        var circuit = result.Value!.BlockingCircuits.Should().ContainSingle().Subject;
+        circuit.InstanceId.Should().Be(instanceId);
+        circuit.OpenStep!.ApproverRole.Should().Be("Chef d'agence");
+        circuit.OpenStep.CanAct.Should().BeFalse("an agent does not hold the branch manager's role");
+        circuit.OpenStep.Task.Should().BeEquivalentTo(new { Title = "Compléter le dossier", Status = "Pending", AssignedTo = "Awa Agent" });
+    }
+
+    [Fact]
     public async Task A_closed_project_is_not_asked_for_its_blocking_steps()
     {
         var id = await Seed();

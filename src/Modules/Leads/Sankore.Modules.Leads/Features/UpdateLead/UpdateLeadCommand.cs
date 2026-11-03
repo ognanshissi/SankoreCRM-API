@@ -26,7 +26,11 @@ internal sealed record UpdateLeadCommand(
     /// <summary>UpdatedAt the caller last read; null skips the staleness check.</summary>
     DateTimeOffset? ExpectedUpdatedAt = null,
     /// <summary>Custom-field changes, merged — see <c>UpdateLeadRequest.CustomFields</c>.</summary>
-    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    string? CompanyName = null,
+    string? CompanyEmail = null,
+    string? CompanyPhone = null,
+    string? Website = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

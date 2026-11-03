@@ -79,6 +79,9 @@ internal sealed class ProjectRecordGate(LeadsDbContext db, IAdministrationModule
             : null;
     }
 
+    public async Task<RecordRef?> FieldsRecordAsync(Guid tenantId, Guid entityId, CancellationToken ct)
+        => await LeadOfAsync(tenantId, entityId, ct) is { } leadId ? new RecordRef("Lead", leadId) : null;
+
     private Task<Guid?> LeadOfAsync(Guid tenantId, Guid projectId, CancellationToken ct)
         => db.Opportunities.IgnoreQueryFilters()
             .Where(o => o.TenantId == tenantId && o.Id == projectId)
@@ -111,7 +114,17 @@ internal static class LeadFormPresence
         ["externalReference"] = l => !string.IsNullOrWhiteSpace(l.ExternalReference),
         ["customerReference"] = l => !string.IsNullOrWhiteSpace(l.CustomerReference),
         ["preferredAgencyId"] = l => l.PreferredAgencyId.HasValue,
+        // Situation and address (2026-11-02): added to the lead's form without being added here, so a
+        // « Formulaire » step could not require them.
+        ["profession"]        = l => !string.IsNullOrWhiteSpace(l.Profession),
+        ["maritalStatus"]     = l => l.MaritalStatus.HasValue,
+        ["addressLine"]       = l => !string.IsNullOrWhiteSpace(l.PrincipalAddressLine),
+        ["postalCode"]        = l => !string.IsNullOrWhiteSpace(l.PrincipalPostalCode),
+        ["city"]              = l => !string.IsNullOrWhiteSpace(l.PrincipalCity),
+        ["countryCode"]       = l => !string.IsNullOrWhiteSpace(l.PrincipalCountryCode),
     };
+
+    internal static IReadOnlyCollection<string> NativeKeys => Natives.Keys;
 
     public static async Task<IReadOnlyList<RecordFormField>> FieldsAsync(IAdministrationModule administration, Guid tenantId, CancellationToken ct)
     {

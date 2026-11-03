@@ -8,6 +8,7 @@ using Sankore.Modules.Workflow.Features.Instances.DelegateStep;
 using Sankore.Modules.Workflow.Features.Instances.GetInstance;
 using Sankore.Modules.Workflow.Features.Instances.GetCompletedTasks;
 using Sankore.Modules.Workflow.Features.Instances.GetInstanceAudit;
+using Sankore.Modules.Workflow.Features.Instances.GetInstanceRequirements;
 using Sankore.Modules.Workflow.Features.Instances.ListInstances;
 using Sankore.Modules.Workflow.Features.Instances.ListMySteps;
 using Sankore.Modules.Workflow.Features.Instances.RejectStep;
@@ -28,6 +29,7 @@ public static class InstancesEndpoints
             .MapStartInstance()
             .MapListInstances()
             .MapGetInstance()
+            .MapGetInstanceRequirements()
             .MapApproveStep()
             .MapRejectStep()
             .MapCancelInstance()

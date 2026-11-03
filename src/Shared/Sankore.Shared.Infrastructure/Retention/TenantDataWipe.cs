@@ -66,7 +66,8 @@ public static class TenantRows
         var entities = model.GetEntityTypes()
             // The outbox is every module's plumbing, without a tenant column: never part of a wipe.
             .Where(e => !e.IsOwned() && e.GetTableName() is not null && e.GetViewName() is null
-                        && e.BaseType is null && !keep.Contains(e.ClrType) && e.ClrType != typeof(Outbox.OutboxMessage))
+                        && e.BaseType is null && !keep.Contains(e.ClrType) && e.ClrType != typeof(Outbox.OutboxMessage)
+                        && !IsKeptChild(e, keep))
             .GroupBy(e => (e.GetSchema(), e.GetTableName()!))
             .Select(g => g.First())
             .ToList();
@@ -117,6 +118,22 @@ public static class TenantRows
                     problems.Add($"{table.Name} is deleted after {fk.PrincipalEntityType.GetTableName()}, which it points at");
 
         return problems;
+    }
+
+    /// <summary>
+    /// A table without a tenant column whose tenant-scoped parents are ALL kept is part of that
+    /// configuration. The questions of a questionnaire are the case that showed it (2026-11-02): the
+    /// questionnaire and its sections were kept, its questions — no column of their own, a foreign key
+    /// to it — were wiped as « rows hanging from a tenant's table », leaving published forms empty.
+    /// </summary>
+    private static bool IsKeptChild(IEntityType entity, IReadOnlyCollection<Type> keep)
+    {
+        if (entity.FindProperty("TenantId") is not null) return false;
+        var parents = entity.GetForeignKeys()
+            .Select(fk => fk.PrincipalEntityType.GetRootType())
+            .Where(p => p != entity && p.FindProperty("TenantId") is not null)
+            .ToList();
+        return parents.Count > 0 && parents.All(p => keep.Contains(p.ClrType));
     }
 
     private static string? SqlFor(IEntityType entity)

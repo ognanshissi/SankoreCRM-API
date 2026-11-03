@@ -48,7 +48,11 @@ public static class UpdateLeadEndpoint
             Longitude:        req.Longitude,
             PreferredAgencyId: req.PreferredAgencyId,
             ExpectedUpdatedAt: req.ExpectedUpdatedAt,
-            CustomFields:     req.CustomFields), ct);
+            CustomFields:     req.CustomFields,
+            CompanyName:      req.CompanyName,
+            CompanyEmail:     req.CompanyEmail,
+            CompanyPhone:     req.CompanyPhone,
+            Website:          req.Website), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -83,4 +87,9 @@ public sealed record UpdateLeadRequest(
     /// Custom-field values to change, merged into the stored ones: a key with a value overwrites,
     /// a key with null clears, an absent key is left alone.
     /// </summary>
-    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    /// <summary>The prospect's company. Null leaves a field alone, an empty string clears it.</summary>
+    string? CompanyName = null,
+    string? CompanyEmail = null,
+    string? CompanyPhone = null,
+    string? Website = null);

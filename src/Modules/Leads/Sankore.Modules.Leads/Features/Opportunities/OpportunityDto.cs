@@ -73,7 +73,30 @@ public sealed record OpportunityDto(
     /// The « bloquante » steps not yet passed of the circuits running on it, as « Step (Circuit) » —
     /// what holds the win. Read on the single-project read only; null on a list and once closed.
     /// </param>
-    IReadOnlyList<string>? BlockingSteps = null);
+    IReadOnlyList<string>? BlockingSteps = null,
+    /// <param name="BlockingCircuits">
+    /// The same, one per circuit, with what its open step waits for and who must act — the banner
+    /// tells the agent where to go instead of naming a step (2026-11-02). Same reads as BlockingSteps.
+    /// </param>
+    IReadOnlyList<ProjectBlockingCircuitDto>? BlockingCircuits = null);
+
+public sealed record ProjectBlockingCircuitDto(
+    Guid InstanceId, string Circuit, IReadOnlyList<string> BlockingSteps, ProjectBlockingStepDto? OpenStep);
+
+/// <param name="Kind">The workflow <c>StepKind</c> name (Validation, ManualTask, Form…).</param>
+/// <param name="ApproverRole">The label of the role that decides it; null when anyone with the right may.</param>
+/// <param name="AssignedTo">The person it was handed to (an escalation), by name.</param>
+/// <param name="CanAct">The caller may approve it now (their role, or handed to them, and the approval right).</param>
+/// <param name="Task">For a « Tâche manuelle » step: the CRM task it created, whose completion passes it.</param>
+public sealed record ProjectBlockingStepDto(
+    string Name, string Kind, string? ApproverRole, string? AssignedTo, bool CanAct, DateTimeOffset? DueAt,
+    IReadOnlyList<ProjectBlockingRequirementDto> Requirements,
+    string? CompleteOnEntityType, Guid? CompleteOnEntityId,
+    ProjectStepTaskDto? Task);
+
+public sealed record ProjectBlockingRequirementDto(string Label, bool Satisfied, string? FieldKey);
+
+public sealed record ProjectStepTaskDto(Guid Id, string Title, string Status, string? AssignedTo);
 
 /// <param name="State">NotStarted, InProgress, Approved, Refused or Unknown — null when not read.</param>
 public sealed record ProjectWorkflowRunDto(

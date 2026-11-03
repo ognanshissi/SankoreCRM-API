@@ -23,14 +23,16 @@ internal sealed class StartInstanceHandler(
                 .ThenInclude(s => s.Rules)
             .Include(t => t.Transitions)
             .Where(t => t.EntityType == request.EntityType && t.IsActive)
+            .Where(t => request.TemplateId == null || t.Id == request.TemplateId)
             // Several project circuits can be active; started by hand without one, the empty
             // (historic) circuit comes first, then the others in a stable order.
             .OrderBy(t => t.Circuit)
             .FirstOrDefaultAsync(ct);
 
         if (template is null)
-            return Result.Fail<Guid>(
-                $"No active workflow template found for entity type '{request.EntityType}'.");
+            return Result.Fail<Guid>(request.TemplateId is null
+                ? $"No active workflow template found for entity type '{request.EntityType}'."
+                : "Ce circuit n'est pas actif pour ce type de dossier : publiez-le avant de démarrer une instance.");
 
         if (!template.Steps.Any())
             return Result.Fail<Guid>("The active template has no steps configured.");

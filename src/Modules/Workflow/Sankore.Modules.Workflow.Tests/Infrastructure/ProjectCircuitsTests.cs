@@ -68,6 +68,29 @@ public sealed class ProjectCircuitsTests : IDisposable
     }
 
     [Fact]
+    public async Task A_cancelled_instance_leaves_the_approvers_queue()
+    {
+        var template = await SeedAsync("Comité crédit PME", approverRole: "Administrator");
+        (await ActivateAsync(template)).IsSuccess.Should().BeTrue();
+        var started = await new WorkflowModuleFacade(_factory.CreateContext()).StartWorkflowAsync(new WorkflowStartRequest(
+            WorkflowTemplate.ProjectEntityType, Guid.NewGuid(), Guid.NewGuid(), _tenantId, Circuit: "comite-credit-pme"));
+        await using (var db = _factory.CreateContext())
+        {
+            var instance = db.WorkflowInstances.AsTracking().Single(i => i.Id == started.Value);
+            instance.Cancel();
+            await db.SaveChangesAsync();
+        }
+
+        var approver = Substitute.For<Sankore.Shared.Infrastructure.Auth.ICurrentUser>();
+        approver.Id.Returns(Guid.NewGuid());
+        approver.Roles.Returns(["Administrator"]);
+        var mine = (await new Sankore.Modules.Workflow.Features.Instances.ListMySteps.ListMyStepsHandler(_factory.CreateContext(), approver)
+            .Handle(new Sankore.Modules.Workflow.Features.Instances.ListMySteps.ListMyStepsQuery(), default)).Value!;
+
+        mine.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task An_approver_sees_what_they_validate_and_the_starter_reads_the_decisions()
     {
         // The queue used to show « Validation » and nothing else: of which project, for how much?

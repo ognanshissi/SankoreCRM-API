@@ -27,7 +27,7 @@ internal static class StartInstanceEndpoint
         StartInstanceRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(
-            new StartInstanceCommand(req.EntityType, req.EntityId), ct);
+            new StartInstanceCommand(req.EntityType, req.EntityId, TemplateId: req.TemplateId), ct);
 
         return result.IsSuccess
             ? Results.Created($"/api/v1/workflow/instances/{result.Value}", result.Value)
@@ -35,4 +35,8 @@ internal static class StartInstanceEndpoint
     }
 }
 
-public sealed record StartInstanceRequest(string EntityType, Guid EntityId);
+/// <param name="TemplateId">
+/// The circuit to start — « Démarrer » on a circuit's Instances tab. Absent, the first active circuit of
+/// the entity type, as before; with several project circuits that started another one than the screen's.
+/// </param>
+public sealed record StartInstanceRequest(string EntityType, Guid EntityId, Guid? TemplateId = null);

@@ -979,6 +979,31 @@ internal sealed class AdministrationModuleFacade(
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> GetRoleLabelsAsync(
+        Guid tenantId, IReadOnlyCollection<string> roleCodes, CancellationToken ct)
+    {
+        tenantId = await TeamAsync(tenantId, ct);
+        var normalized = roleCodes
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim().ToUpperInvariant())
+            .Distinct()
+            .ToList();
+        if (normalized.Count == 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // System roles carry no tenant; a custom role of this tenant wins over a system one of the same code.
+        var roles = await db.Roles
+            .IgnoreQueryFilters()
+            .Where(r => (r.TenantId == null || r.TenantId == tenantId)
+                     && r.NormalizedName != null && normalized.Contains(r.NormalizedName))
+            .Select(r => new { r.Name, r.Label, r.TenantId })
+            .ToListAsync(ct);
+        return roles
+            .OrderBy(r => r.TenantId == null)
+            .GroupBy(r => r.Name!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => string.IsNullOrWhiteSpace(g.First().Label) ? g.Key : g.First().Label,
+                StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// Normalised on BOTH sides. <c>AppUser.Email</c> is Identity's column and holds the address

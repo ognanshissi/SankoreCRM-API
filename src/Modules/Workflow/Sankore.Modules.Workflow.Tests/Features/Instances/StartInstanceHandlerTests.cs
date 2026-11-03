@@ -68,6 +68,30 @@ public sealed class StartInstanceHandlerTests : IDisposable
             .Should().HaveCount(2);
     }
 
+    // « Démarrer » on a circuit's Instances tab started the FIRST active circuit of the entity type:
+    // with several project circuits, another one than the screen's (2026-11-02).
+    [Fact]
+    public async Task Starts_the_named_circuit_among_several_active_ones()
+    {
+        await SeedActiveTemplate("Opportunity");
+        var named = WorkflowTemplate.Create(_tenantId, "Opportunity", "Recette", Guid.NewGuid(), circuit: "recette");
+        named.AddStep(1, "Formulaire", approverRoleCode: "administrator");
+        named.Activate();
+        await using (var seed = _factory.CreateContext())
+        {
+            seed.WorkflowTemplates.Add(named);
+            seed.WorkflowStepDefinitions.AddRange(named.Steps);
+            seed.WorkflowTransitions.AddRange(named.Transitions);
+            await seed.SaveChangesAsync();
+        }
+
+        var result = await BuildHandler().Handle(
+            new StartInstanceCommand("Opportunity", Guid.NewGuid(), TemplateId: named.Id), CancellationToken.None);
+
+        await using var verify = _factory.CreateContext();
+        verify.WorkflowInstances.Single(i => i.Id == result.Value).TemplateId.Should().Be(named.Id);
+    }
+
     // ── S2: No active template for entity type ────────────────────────────
 
     [Fact]

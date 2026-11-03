@@ -11,7 +11,9 @@ internal sealed class GetOpportunityHandler(
     LeadVisibility? visibility = null,
     ProjectTemplates.ProjectTemplateResolver? templates = null,
     ProjectTemplates.ProjectWorkflows? workflows = null,
-    Sankore.Modules.Workflow.PublicApi.IWorkflowModule? workflow = null)
+    Sankore.Modules.Workflow.PublicApi.IWorkflowModule? workflow = null,
+    Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
+    Sankore.Shared.Infrastructure.Auth.ICurrentUser? currentUser = null)
     : IRequestHandler<GetOpportunityQuery, Result<OpportunityDto>>
 {
     public async Task<Result<OpportunityDto>> Handle(
@@ -41,6 +43,9 @@ internal sealed class GetOpportunityHandler(
             opp = opp with
             {
                 BlockingSteps = await workflow.GetBlockingStepsAsync(row.TenantId, "Opportunity", opp.Id, ct),
+                BlockingCircuits = await ProjectBlockingCircuits.ReadAsync(
+                    await workflow.GetBlockingCircuitsAsync(row.TenantId, "Opportunity", opp.Id, ct),
+                    row.TenantId, db, administration, currentUser, ct),
             };
 
         IReadOnlyList<OpportunityDto> one = templates is null ? [opp] : await new[] { opp }.WithStepsAsync(templates, ct);

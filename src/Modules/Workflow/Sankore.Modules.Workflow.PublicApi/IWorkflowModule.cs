@@ -83,7 +83,31 @@ public interface IWorkflowModule
     /// </summary>
     Task<IReadOnlyList<string>> GetBlockingStepsAsync(
         Guid tenantId, string entityType, Guid entityId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The same blocking circuits, one per instance, with the step open in each now — who must act
+    /// and what it waits for on the record (2026-11-02, product owner: the project page named the
+    /// step and nothing else, so nobody knew where to go). Empty when nothing blocks.
+    /// </summary>
+    Task<IReadOnlyList<BlockingCircuit>> GetBlockingCircuitsAsync(
+        Guid tenantId, string entityType, Guid entityId, CancellationToken ct = default);
 }
+
+/// <param name="BlockingSteps">The « bloquante » steps not yet passed in this instance.</param>
+/// <param name="OpenStep">The step the instance waits on now (it may come before them); null while none is open.</param>
+public sealed record BlockingCircuit(
+    Guid InstanceId, string Circuit, IReadOnlyList<string> BlockingSteps, BlockingOpenStep? OpenStep);
+
+/// <param name="Kind">The <c>StepKind</c> name: Validation, ManualTask, Form, QualificationForm, KycCheck…</param>
+/// <param name="Requirements">What it checks on the record, item by item; empty for a plain decision.</param>
+/// <param name="CompleteOnEntityType">The record where those are completed — a project's form is its lead's.</param>
+public sealed record BlockingOpenStep(
+    Guid InstanceStepId, string Name, string Kind,
+    string? ApproverRoleCode, Guid? AssignedToUserId, DateTimeOffset? DueAt,
+    IReadOnlyList<BlockingRequirement> Requirements,
+    string? CompleteOnEntityType, Guid? CompleteOnEntityId);
+
+public sealed record BlockingRequirement(string Label, bool Satisfied, string? FieldKey);
 
 /// <param name="StepName">Le nom de l'étape tel que le parcours le définit.</param>
 /// <param name="Total">Étapes closes sur la période.</param>

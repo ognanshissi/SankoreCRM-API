@@ -29,6 +29,9 @@ internal sealed class ListMyStepsHandler(
                              && roles.Contains(s.ApproverRoleCode))))
             .OrderBy(s => s.DueAt)
             .Join(db.WorkflowInstances, s => s.InstanceId, i => i.Id, (s, i) => new { s, i })
+            // Cancelling an instance leaves its open step « en attente »: it stayed in the queue,
+            // approvable in appearance, for a circuit nobody runs any more (found 2026-11-02).
+            .Where(x => x.i.Status == WorkflowStatus.InProgress)
             .Select(x => new MyStepDto(
                 x.s.Id,
                 x.s.InstanceId,

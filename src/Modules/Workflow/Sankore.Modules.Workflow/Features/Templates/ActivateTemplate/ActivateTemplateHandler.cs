@@ -41,8 +41,7 @@ internal sealed class ActivateTemplateHandler(
 
         if (conflictExists)
             return Result.Fail(
-                $"Another active template for entity type '{template.EntityType}' already exists. " +
-                "Deactivate it first.");
+                "Une autre version de ce circuit est déjà active : désactivez-la avant d'activer celle-ci.");
 
         if (template.Steps.OrderBy(s => s.Order).FirstOrDefault(s => StepKinds.BlocksActivation(s.Kind)) is { } unsupported)
             return Result.Fail(

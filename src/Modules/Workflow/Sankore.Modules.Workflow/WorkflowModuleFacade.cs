@@ -10,7 +10,8 @@ namespace Sankore.Modules.Workflow;
 /// Internal implementation of <see cref="IWorkflowModule"/>.
 /// Exposed to the DI container as the concrete type behind the public contract.
 /// </summary>
-internal sealed class WorkflowModuleFacade(WorkflowDbContext db) : IWorkflowModule
+internal sealed class WorkflowModuleFacade(
+    WorkflowDbContext db, Infrastructure.Gates.RecordStepGates? gates = null) : IWorkflowModule
 {
     public async Task<Result<Guid>> StartWorkflowAsync(
         WorkflowStartRequest request,
@@ -257,6 +258,63 @@ internal sealed class WorkflowModuleFacade(WorkflowDbContext db) : IWorkflowModu
             .ToListAsync(ct);
 
         return blocking.Select(b => $"{b.Name} ({b.Circuit})").ToList();
+    }
+
+    public async Task<IReadOnlyList<BlockingCircuit>> GetBlockingCircuitsAsync(
+        Guid tenantId, string entityType, Guid entityId, CancellationToken ct = default)
+    {
+        var instances = await db.WorkflowInstances
+            .IgnoreQueryFilters()
+            .Include(i => i.Steps)
+            .Where(i => i.TenantId == tenantId && i.EntityType == entityType && i.EntityId == entityId
+                     && (i.Status == WorkflowStatus.InProgress || i.Status == WorkflowStatus.Pending
+                         || i.Status == WorkflowStatus.WaitingForChild))
+            .ToListAsync(ct);
+        if (instances.Count == 0) return [];
+
+        var definitionIds = instances.SelectMany(i => i.Steps).Select(s => s.StepDefinitionId).Distinct().ToList();
+        var blockingDefinitions = await db.WorkflowStepDefinitions
+            .IgnoreQueryFilters()
+            .Where(d => d.IsBlocking && definitionIds.Contains(d.Id))
+            .Select(d => d.Id)
+            .ToListAsync(ct);
+        var templateIds = instances.Select(i => i.TemplateId).Distinct().ToList();
+        var circuits = await db.WorkflowTemplates
+            .IgnoreQueryFilters()
+            .Where(t => templateIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+
+        var result = new List<BlockingCircuit>();
+        foreach (var instance in instances)
+        {
+            var blocking = instance.Steps
+                .Where(s => (s.Status == StepStatus.Pending || s.Status == StepStatus.AwaitingApproval)
+                         && blockingDefinitions.Contains(s.StepDefinitionId))
+                .OrderBy(s => s.Order)
+                .Select(s => s.Name)
+                .ToList();
+            if (blocking.Count == 0) continue;
+
+            var open = instance.Steps
+                .Where(s => s.Status == StepStatus.AwaitingApproval)
+                .OrderBy(s => s.Order)
+                .FirstOrDefault();
+            BlockingOpenStep? openStep = null;
+            if (open is not null)
+            {
+                var requirements = gates is null ? null : await gates.RequirementsAsync(
+                    tenantId, instance.EntityType, instance.EntityId, open.Kind, open.ConfigJson, ct);
+                openStep = new BlockingOpenStep(
+                    open.Id, open.Name, open.Kind.ToString(), open.ApproverRoleCode, open.AssignedToUserId, open.DueAt,
+                    requirements?.Items.Select(r => new BlockingRequirement(r.Label, r.Satisfied, r.Key)).ToList() ?? [],
+                    requirements?.CompleteOn?.EntityType, requirements?.CompleteOn?.Id);
+            }
+
+            result.Add(new BlockingCircuit(
+                instance.Id, circuits.GetValueOrDefault(instance.TemplateId) ?? "", blocking, openStep));
+        }
+
+        return result.OrderBy(c => c.Circuit).ToList();
     }
 
     public async Task<IReadOnlyList<StepSlaStat>> GetStepSlaStatsAsync(

@@ -29,6 +29,11 @@ public sealed class TenantDataWipePlanTests
 
         TenantRows.Problems(db.Model, LeadsTenantDataWipe.Keep).Should().BeEmpty();
 
+        // A questionnaire was kept and its questions wiped, which left published forms empty and
+        // projects unable to save them (2026-11-02): a configuration's children stay with it.
+        TenantRows.PlanFor(db.Model, LeadsTenantDataWipe.Keep).Select(t => t.Entity.ClrType)
+            .Should().NotContain(typeof(Sankore.Modules.Leads.Domain.QualificationQuestion));
+
         if (Environment.GetEnvironmentVariable("TENANT_WIPE_SQL_OUT") is { Length: > 0 } path)
             File.AppendAllLines(path, TenantRows.PlanFor(db.Model, LeadsTenantDataWipe.Keep)
                 .Where(t => t.Sql is not null).Select(t => t.Sql! + ";"));

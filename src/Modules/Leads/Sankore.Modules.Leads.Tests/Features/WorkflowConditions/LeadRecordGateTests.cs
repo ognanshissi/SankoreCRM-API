@@ -56,6 +56,18 @@ public sealed class LeadRecordGateTests : IDisposable
     }
 
     [Fact]
+    public void Every_native_lead_field_a_person_fills_can_be_required_by_a_step()
+    {
+        // Profession, situation and address joined the lead's form on 2026-11-02 without joining the
+        // gate: a « Formulaire » step could not offer them. A new native field now fails here until
+        // it is given a presence check — or listed below as set by the system, not by a person.
+        string[] setBySystem = ["agencyId", "channel", "leadSourceConfigId", "ownerId", "prospectType", "source"];
+
+        NativeFormCatalog.For(FormEntity.Lead).Fields.Select(f => f.Key).Except(setBySystem)
+            .Should().BeSubsetOf(Sankore.Modules.Leads.Infrastructure.LeadFormPresence.NativeKeys);
+    }
+
+    [Fact]
     public async Task A_project_counts_its_questionnaires_and_its_leads_own()
     {
         var lead = LeadTestBuilder.Create().WithTenant(_tenantId).Build();

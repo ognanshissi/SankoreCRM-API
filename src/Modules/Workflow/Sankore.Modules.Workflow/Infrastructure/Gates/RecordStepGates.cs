@@ -70,6 +70,59 @@ internal sealed class RecordStepGates(
 
     public sealed record KycVerdict(bool Passed, string Reason);
 
+    /// <param name="Key">The form field (« Formulaire »), so a screen knows a native field from a custom one.</param>
+    public sealed record Requirement(string Label, bool Satisfied, string? Key = null);
+
+    /// <summary>What the open step needs of the record, item by item, and where a person completes it.</summary>
+    public sealed record StepRequirements(IReadOnlyList<Requirement> Items, RecordRef? CompleteOn);
+
+    /// <summary>
+    /// What <see cref="ApprovalRefusalAsync"/> checks, said BEFORE anyone clicks « Approuver »: the
+    /// person who must act sees what is missing and opens the right record (2026-11-02 — a project
+    /// step blocked on a lead field nobody knew where to fill). Null for a step that waits on nothing.
+    /// </summary>
+    public async Task<StepRequirements?> RequirementsAsync(
+        Guid tenantId, string entityType, Guid entityId, StepKind kind, string? configJson, CancellationToken ct)
+    {
+        switch (kind)
+        {
+            case StepKind.Form:
+            {
+                var keys = Fields(configJson);
+                if (keys.Count == 0 || Gate(entityType) is not { } gate) return null;
+                var labels = (await gate.FieldsAsync(tenantId, ct)).ToDictionary(f => f.Key, f => f.Label, StringComparer.OrdinalIgnoreCase);
+                var missing = (await gate.MissingFieldsAsync(tenantId, entityId, keys, ct)).ToHashSet(StringComparer.Ordinal);
+                var items = keys.Where(labels.ContainsKey)
+                    .Select(k => new Requirement(labels[k], !missing.Contains(labels[k]), k))
+                    .ToList();
+                return new StepRequirements(items, await gate.FieldsRecordAsync(tenantId, entityId, ct));
+            }
+            case StepKind.QualificationForm:
+            {
+                if (Gate(entityType) is not { } gate) return null;
+                var pending = await gate.PendingQuestionnairesAsync(tenantId, entityId, ct);
+                var label = pending is > 0
+                    ? $"{pending} questionnaire{(pending > 1 ? "s" : "")} à compléter"
+                    : "Questionnaires du dossier complétés";
+                return new StepRequirements([new Requirement(label, pending is not > 0)], new RecordRef(entityType, entityId));
+            }
+            case StepKind.KycCheck:
+            {
+                var verdict = await KycAsync(tenantId, entityType, entityId, configJson, ct);
+                var client = await ClientIdAsync(tenantId, entityType, entityId, ct);
+                return new StepRequirements([new Requirement(verdict.Reason, verdict.Passed)],
+                    client is { } id ? new RecordRef("Account", id) : null);
+            }
+            case StepKind.IntegrationAction:
+            {
+                var verdict = await IntegrationAsync(tenantId, entityType, entityId, configJson, ct);
+                return new StepRequirements([new Requirement(verdict.Reason, verdict.Passed)], null);
+            }
+            default:
+                return null;
+        }
+    }
+
     public async Task<KycVerdict> KycAsync(Guid tenantId, string entityType, Guid entityId, string? configJson, CancellationToken ct)
     {
         var full = !string.Equals(KycLevel(configJson), "Simplified", StringComparison.OrdinalIgnoreCase);

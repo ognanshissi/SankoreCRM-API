@@ -27,6 +27,16 @@ public interface IWorkflowRecordGate
 
     /// <summary>The client whose KYC the record depends on; null while there is none (a lead not converted yet).</summary>
     Task<Guid?> ClientIdAsync(Guid tenantId, Guid entityId, CancellationToken ct);
+
+    /// <summary>
+    /// The record whose fields a « Formulaire » step reads — where a person completes them. The record
+    /// itself by default; a project's form is its lead's.
+    /// </summary>
+    Task<RecordRef?> FieldsRecordAsync(Guid tenantId, Guid entityId, CancellationToken ct)
+        => Task.FromResult<RecordRef?>(new RecordRef(EntityType, entityId));
 }
 
 public sealed record RecordFormField(string Key, string Label);
+
+/// <summary>A record of the CRM, as a workflow names it (<c>Lead</c>, <c>Opportunity</c>, <c>Account</c>).</summary>
+public sealed record RecordRef(string EntityType, Guid Id);

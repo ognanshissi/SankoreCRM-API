@@ -9,6 +9,7 @@ using NSubstitute;
 using Sankore.Modules.Kyc.PublicApi;
 using Sankore.Modules.Workflow.Domain;
 using Sankore.Modules.Workflow.Features.Instances.ApproveStep;
+using Sankore.Modules.Workflow.Features.Instances.GetInstanceRequirements;
 using Sankore.Modules.Workflow.Features.Templates.ActivateTemplate;
 using Sankore.Modules.Workflow.Infrastructure.Conditions;
 using Sankore.Modules.Workflow.Infrastructure.Gates;
@@ -103,6 +104,87 @@ public sealed class RecordGateStepTests : IDisposable
         (await CurrentOrderAsync(instanceId)).Should().Be(1);
         await using var db = _factory.CreateContext();
         db.WorkflowAuditEntries.Should().Contain(a => a.Comment == "Pas encore de fiche client : l'étape attend un KYC simplifié validé.");
+    }
+
+    [Fact]
+    public async Task The_open_step_lists_what_it_waits_for_and_where_to_complete_it()
+    {
+        // « Avant d'approuver » (2026-11-02): a project step blocked on a lead field nobody knew where
+        // to fill. Each required field with its state, and the record that holds them.
+        var instanceId = await SeedAsync(StepKind.Form, """{"fields":["email","website","custom.unknown"]}""");
+        _gate.FieldsAsync(_tenantId, Arg.Any<CancellationToken>())
+            .Returns(new List<RecordFormField> { new("email", "E-mail"), new("website", "Site web") });
+        _gate.MissingFieldsAsync(_tenantId, _leadId, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<string> { "Site web" });
+        var holder = Guid.NewGuid();
+        _gate.FieldsRecordAsync(_tenantId, _leadId, Arg.Any<CancellationToken>()).Returns(new RecordRef("Lead", holder));
+
+        var result = await new GetInstanceRequirementsHandler(_factory.CreateContext(), new RecordStepGates([_gate], _kyc))
+            .Handle(new GetInstanceRequirementsQuery(instanceId), default);
+
+        result.Value.StepName.Should().Be("Étape vérifiée");
+        result.Value.Items.Should().Equal(new InstanceRequirementDto("E-mail", true, "email"), new InstanceRequirementDto("Site web", false, "website"));
+        result.Value.CompleteOnEntityType.Should().Be("Lead");
+        result.Value.CompleteOnEntityId.Should().Be(holder);
+    }
+
+    [Fact]
+    public async Task A_blocking_circuit_says_which_step_is_open_who_decides_it_and_what_it_waits_for()
+    {
+        // The project banner named « Compléter le dossier (Recette parcours) » and nothing else
+        // (2026-11-02): the step open now may come before the blocking one, and it is what to act on.
+        var template = WorkflowTemplate.Create(_tenantId, "Lead", "Recette parcours", Guid.NewGuid());
+        template.AddStep(1, "Pièces du dossier", approverRoleCode: "BranchManager", kind: StepKind.Form,
+            configJson: """{"fields":["email"]}""");
+        template.AddStep(2, "Compléter le dossier", approverRoleCode: "agent", isBlocking: true);
+        template.Activate();
+        await using (var seed = _factory.CreateContext())
+        {
+            seed.WorkflowTemplates.Add(template);
+            seed.WorkflowStepDefinitions.AddRange(template.Steps);
+            seed.WorkflowTransitions.AddRange(template.Transitions);
+            await seed.SaveChangesAsync();
+        }
+        var instance = WorkflowInstance.Start(template, _leadId, Guid.NewGuid());
+        await using (var seed = _factory.CreateContext())
+        {
+            seed.WorkflowInstances.Add(instance);
+            seed.WorkflowInstanceSteps.AddRange(instance.Steps);
+            await seed.SaveChangesAsync();
+        }
+        _gate.FieldsAsync(_tenantId, Arg.Any<CancellationToken>()).Returns(new List<RecordFormField> { new("email", "E-mail") });
+        _gate.MissingFieldsAsync(_tenantId, _leadId, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<string> { "E-mail" });
+        _gate.FieldsRecordAsync(_tenantId, _leadId, Arg.Any<CancellationToken>()).Returns(new RecordRef("Lead", _leadId));
+
+        var circuits = await new Sankore.Modules.Workflow.WorkflowModuleFacade(
+                _factory.CreateContext(), new RecordStepGates([_gate], _kyc))
+            .GetBlockingCircuitsAsync(_tenantId, "Lead", _leadId);
+
+        var circuit = circuits.Should().ContainSingle().Subject;
+        circuit.InstanceId.Should().Be(instance.Id);
+        circuit.Circuit.Should().Be("Recette parcours");
+        circuit.BlockingSteps.Should().Equal("Compléter le dossier");
+        circuit.OpenStep!.Name.Should().Be("Pièces du dossier");
+        circuit.OpenStep.Kind.Should().Be("Form");
+        circuit.OpenStep.ApproverRoleCode.Should().Be("BranchManager");
+        circuit.OpenStep.Requirements.Should().Equal(new Sankore.Modules.Workflow.PublicApi.BlockingRequirement("E-mail", false, "email"));
+        circuit.OpenStep.CompleteOnEntityType.Should().Be("Lead");
+        (await new Sankore.Modules.Workflow.WorkflowModuleFacade(_factory.CreateContext())
+            .GetBlockingCircuitsAsync(_tenantId, "Lead", Guid.NewGuid())).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_plain_approval_waits_for_nothing()
+    {
+        var instanceId = await SeedAsync(StepKind.Validation, null);
+
+        var result = await new GetInstanceRequirementsHandler(_factory.CreateContext(), new RecordStepGates([_gate], _kyc))
+            .Handle(new GetInstanceRequirementsQuery(instanceId), default);
+
+        result.Value.StepName.Should().Be("Étape vérifiée");
+        result.Value.Items.Should().BeEmpty();
+        result.Value.CompleteOnEntityId.Should().BeNull();
     }
 
     [Theory]

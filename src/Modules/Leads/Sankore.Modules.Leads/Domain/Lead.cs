@@ -998,6 +998,27 @@ public sealed class Lead : AggregateRoot
     }
 
     /// <summary>
+    /// The company of the prospect: name, e-mail, telephone, website. Null leaves a field alone and
+    /// blank clears it. They could only be typed at capture, so a workflow « Formulaire » step that
+    /// required one (« Site web ») stayed refused on every existing lead (2026-11-02).
+    /// </summary>
+    public Result UpdateCompany(string? companyName, string? companyEmail, string? companyPhone, string? website)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+
+        // Name, e-mail and phone are NOT NULL columns (an empty string, as a capture writes them):
+        // clearing one to null answered 500. The website column is nullable.
+        if (companyName  is not null) CompanyName  = companyName.Trim();
+        if (companyEmail is not null) CompanyEmail = companyEmail.Trim();
+        if (companyPhone is not null) CompanyPhone = companyPhone.Trim();
+        if (website      is not null) Website      = Blank(website);
+
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return Result.Ok();
+    }
+
+    /// <summary>
     /// Updates the score in-place without changing lead status.
     /// Used for background auto-recalculations triggered by activity or data changes.
     /// </summary>

@@ -14,6 +14,12 @@ internal sealed class UpdateLeadValidator : AbstractValidator<UpdateLeadCommand>
         When(x => x.Email is not null, () =>
             RuleFor(x => x.Email).EmailAddress().MaximumLength(200));
 
+        RuleFor(x => x.CompanyName).MaximumLength(200);
+        RuleFor(x => x.CompanyPhone).MaximumLength(30);
+        RuleFor(x => x.Website).MaximumLength(300);
+        When(x => !string.IsNullOrWhiteSpace(x.CompanyEmail), () =>
+            RuleFor(x => x.CompanyEmail).EmailAddress().MaximumLength(200));
+
         When(x => x.Latitude.HasValue, () =>
             RuleFor(x => x.Latitude).InclusiveBetween(-90, 90));
 

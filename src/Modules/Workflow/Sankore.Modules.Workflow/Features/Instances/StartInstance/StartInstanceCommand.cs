@@ -7,5 +7,6 @@ namespace Sankore.Modules.Workflow.Features.Instances.StartInstance;
 public sealed record StartInstanceCommand(
     string EntityType,
     Guid EntityId,
-    Dictionary<string, object>? Context = null
+    Dictionary<string, object>? Context = null,
+    Guid? TemplateId = null
 ) : IRequest<Result<Guid>>, ICommand;
