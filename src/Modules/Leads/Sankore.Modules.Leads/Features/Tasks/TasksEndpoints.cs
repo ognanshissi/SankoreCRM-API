@@ -35,6 +35,14 @@ public static class TasksEndpoints
             .Produces<IReadOnlyList<CrmTaskDto>>()
             .WithOpenApi();
 
+        // GET /tasks/page — « Toutes les tâches »
+        group.MapGet("page", GetTaskPage)
+            .WithName("GetCrmTaskPage")
+            .WithTags("Tasks")
+            .RequireAuthorization(Permissions.CanReadCrmTasks.Code)
+            .Produces<CrmTaskPageDto>()
+            .WithOpenApi();
+
         // POST /tasks
         group.MapPost("", CreateTask)
             .WithName("CreateCrmTask")
@@ -154,6 +162,15 @@ public static class TasksEndpoints
         var result = await sender.Send(new ListTasksQuery(
             leadId, agentId, status, type,
             currentUser.Id, currentUser.Roles), ct);
+        return Results.Ok(result.Value);
+    }
+
+    private static async Task<IResult> GetTaskPage(
+        ISender sender, CancellationToken ct,
+        TaskPageView view = TaskPageView.Open, Guid? agentId = null, string? search = null,
+        int page = 1, int pageSize = 25)
+    {
+        var result = await sender.Send(new GetTaskPageQuery(view, agentId, search, page, pageSize), ct);
         return Results.Ok(result.Value);
     }
 

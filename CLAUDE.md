@@ -459,6 +459,11 @@ period; open projects give the current wait), grouped by template name + step la
 most late, with the owner's name. Front: `report-projects-tab.ts` loads by itself from the page's
 `ReportRange`; the old phase and forecast blocks stay below it.
 
+**« Toutes les tâches » (2026-11-05, product owner).** `GET tasks/page?view=Open|Overdue|Done|Cancelled|All&agentId&search&page&pageSize`
+(`Features/Tasks/ListTasks/GetTaskPage.cs`, `lead:task:read`), with the count of each tab. An agent gets their own whatever they ask;
+a manager their team and themselves, and an `agentId` outside it reads empty; System/Administrator/SalesManager also get the tasks nobody
+holds. Overdue = open past `SlaDeadline ?? DueAt`, as « Ma journée ». Front: `/tasks`, entry « Tâches » of the sidebar.
+
 **Lead list tab counts (2026-11-03).** `GET leads/view-counts?agencyId&search&leadSourceConfigId&cf` answers
 `total`, `mine` (assigned to the caller, or theirs unassigned), `awaitingDispatch`, `byStatus`, `byIntent` under the
 list's visibility; the front reads each view (`LeadView` in `lead-homepage.ts`) off those axes. List, export and counts

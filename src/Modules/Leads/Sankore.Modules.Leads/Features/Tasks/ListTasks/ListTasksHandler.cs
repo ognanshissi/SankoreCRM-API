@@ -15,9 +15,6 @@ internal sealed class ListTasksHandler(
     TaskTypeCatalog taskTypes)
     : IRequestHandler<ListTasksQuery, Result<IReadOnlyList<CrmTaskDto>>>
 {
-    private static readonly HashSet<string> SupervisorRoles =
-        ["System", "Administrator", "SalesManager", "BranchManager"];
-
     public async Task<Result<IReadOnlyList<CrmTaskDto>>> Handle(
         ListTasksQuery query, CancellationToken ct)
     {
@@ -27,7 +24,7 @@ internal sealed class ListTasksHandler(
         // Supervisors see their team; agents see only their own tasks.
         if (query.CurrentUserId.HasValue && query.CurrentUserRoles is not null)
         {
-            var isSupervisor = query.CurrentUserRoles.Any(r => SupervisorRoles.Contains(r));
+            var isSupervisor = TaskScope.IsSupervisor(query.CurrentUserRoles);
 
             if (!isSupervisor)
             {
@@ -37,17 +34,7 @@ internal sealed class ListTasksHandler(
             else if (query.AssignedAgentId is null)
             {
                 // Supervisor without explicit agent filter: scope to team
-                var teamIds = await admin.GetTeamAgentIdsAsync(
-                    tenant.CurrentTenantId, query.CurrentUserId.Value, ct);
-
-                // An empty team means nobody to supervise, not "everyone": the filter used to be
-                // skipped then, and a branch manager alone in their agency saw every task of the
-                // tenant. A super-user's team is already the whole tenant (GetTeamAgentIdsAsync).
-                //
-                // The supervisor is added back: GetTeamAgentIdsAsync answers "whom do I manage" and
-                // leaves the caller out, so a manager never saw the tasks assigned to THEM — on the
-                // lead's Tâches tab, which lists by lead only, their own first-contact task vanished.
-                var team = teamIds.Append(query.CurrentUserId.Value).Distinct().ToList();
+                var team = await TaskScope.TeamAsync(admin, tenant.CurrentTenantId, query.CurrentUserId.Value, ct);
                 q = q.Where(t => t.AssignedAgentId != null && team.Contains(t.AssignedAgentId.Value));
             }
         }
@@ -60,12 +47,7 @@ internal sealed class ListTasksHandler(
 
         var tasks = await q
             .OrderByDescending(t => t.DueAt)
-            .Select(t => new CrmTaskDto(
-                t.Id, t.TenantId, t.Type, t.Priority, t.Title,
-                t.Description, t.LeadId, t.AssignedAgentId, t.Status,
-                t.DueAt, t.SlaDeadline, t.CreatedAt, t.StartedAt,
-                t.CompletedAt, t.TriggerEventType, t.TriggerEventId,
-                t.EntityType, t.EntityId, t.CreatedBy))
+            .Select(TaskScope.ToDto)
             .ToListAsync(ct);
 
         var labels = await taskTypes.LabelsAsync(ct);
