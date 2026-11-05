@@ -19,6 +19,13 @@ public interface INotificationsModule
     Task<Result<Guid>> QueueEmailAsync(QueueEmailRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// Whether a message queued with this key and locale would find an active template. It is the
+    /// renderer's own search: without a template it sends the message's raw JSON, so a caller whose
+    /// key was chosen by an administrator asks first.
+    /// </summary>
+    Task<bool> HasActiveEmailTemplateAsync(Guid tenantId, string templateKey, string locale, CancellationToken ct = default);
+
+    /// <summary>
     /// Enqueues a transactional text message for asynchronous delivery. Returns the id of the
     /// created outbox row.
     ///

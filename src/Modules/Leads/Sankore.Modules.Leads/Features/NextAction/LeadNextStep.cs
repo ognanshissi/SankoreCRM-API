@@ -86,7 +86,7 @@ internal static class NextActionRules
         if (lead.Status is LeadStatus.New or LeadStatus.Open or LeadStatus.Recycled)
             return new(NextActionType.Qualify,
                 "Qualifier le lead",
-                "Le lead n'a pas encore été qualifié. Lancer le formulaire de qualification.",
+                "Ouvrez un projet pour le produit souhaité : le lead passe en qualifié, et son questionnaire, s'il y en a un, se remplit dans le projet.",
                 "Medium", TimeSpan.FromHours(48));
 
         // Qualified: the work moves to a project (2026-11-03, product owner). « Dispatcher » was

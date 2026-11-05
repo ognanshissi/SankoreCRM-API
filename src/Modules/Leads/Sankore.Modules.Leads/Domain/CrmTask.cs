@@ -220,6 +220,9 @@ public sealed class CrmTask : ITenant
     /// </summary>
     public void AssignTo(Guid agentId) => AssignedAgentId = agentId;
 
+    /// <summary>The lead this task is about was merged into another one: the task follows it.</summary>
+    internal void MoveToLead(Guid leadId) => LeadId = leadId;
+
     /// <summary>
     /// Scored dispatch — assigns the task to the best-ranked agent and
     /// stores the compatibility breakdown for post-hoc auditability

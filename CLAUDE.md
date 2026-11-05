@@ -399,8 +399,9 @@ is the one reading of a score: Hot ≥ `intent-hot-threshold` (80), Warm ≥ `in
 the open scored leads from their stored score (`ExecuteUpdate`, a loop on InMemory). A dispatching rule
 may carry `FirstContactSlaHot/Warm/Cold` (null = `FirstContactSla`); `DispatchLeadHandler` uses
 `FirstContactSlaFor(lead.IntentLevel)` on its three assignment paths, so the « Premier contact » task is
-due at it too. The old `ScoringConfig` / `SlaConfig` screens are read by NOTHING — do not wire new
-behaviour there. Front: the lead list read `intentLevel` as « 0 »…« 3 » (always « — ») and its
+due at it too. The `ScoringConfig` / `SlaConfig` endpoints and tables are read by NOTHING; their screens were
+removed on 2026-11-05 (owner) and their old addresses lead to the Dispatching screen. Their permissions stay:
+`lead:scoring-config:read` also opens a lead's score tab. Do not wire new behaviour there. Front: the lead list read `intentLevel` as « 0 »…« 3 » (always « — ») and its
 « Température » filter sent numbers one step off (« Froid » filtered Unknown) — both now use the names.
 
 **A lead nobody touches cools (lot 4, 2026-10-31).** The calculator subtracts an inactivity penalty
@@ -487,8 +488,27 @@ and the screen's next call answered 429.
 `BulkCloseHandler`, when the reason is `Archived`, cancel the lead's Pending/InProgress tasks
 (`ArchivedLeadTasks`, same unit of work; a workflow « Tâche manuelle » task tells its step, as
 `CancelTaskHandler` does). Only tasks whose `LeadId` is the lead — not its project's or client's.
-Lost and Disqualified leads keep their tasks. A merge (`MergeInto`, which archives the duplicate)
-does NOT go through it: its tasks stay open, pending a decision.
+Lost and Disqualified leads keep their tasks. A merge does NOT go through it: **the duplicate's open
+tasks follow the person to the kept lead (2026-11-05, product owner)**, `MergedLeadTasks` — handed to the
+kept lead's holder with a `TaskReassignment` line and the same deadlines (kept lead held by nobody: they
+stay with their agent). An assignment task the kept lead already has is cancelled, not doubled; a
+« Premier contact » too once the kept lead was contacted; a « dispatch by hand » task only moves when the
+kept lead still waits for an agent. Tested on the helper: the merge handler's `ExecuteUpdate` calls do not
+run on InMemory.
+
+**Nurturing sequences (2026-11-05, product owner).** `/settings/nurturing-sequences` (`lead:nurturing-sequence:read`
+/ `:manage`) lists and edits them; the lead's « Nurturing / Recycler » drawer now REQUIRES one
+(`SEQUENCE_REQUIRED`). Before, no screen could create a sequence, the drawer sent none, and it looked for a
+consent status (« Granted ») the API never returns, so it refused every lead. `PUT nurturing-sequences/{id}`
+replaces the steps (`ReplaceSteps`, new rows marked Added by hand: a step reached through the collection with
+its id set would be taken for an existing row); enrollments keep their POSITION in the list. Every step is an
+e-mail: a lead needs an active Marketing consent and an address (`LEAD_HAS_NO_EMAIL`). A step must name a
+template with an active French version (`INotificationsModule.HasActiveEmailTemplateAsync`, the renderer's own
+search, `NURTURING_TEMPLATE_NOT_FOUND`): **for a key it cannot find the renderer mails the message's raw JSON**,
+so `ExecuteNurturingJob` asks too and the step waits rather than sends. The job also cancels the enrollment of a
+lead no longer in `Nurturing` (`LEAD_LEFT_NURTURING`), whose Marketing consent is not active or whose client is
+restricted, and tries the lead's language then French. Templates receive `first_name` and `lead_name`.
+`NurturingStep.Subject` is still NOT used: a mail's subject is its template's, so the screen does not offer it.
 
 **« Créer un projet pour ce produit ? » (2026-10-31, product owner).** `GET leads/{id}/project-suggestion`
 ranks the ACTIVE catalogue products the lead's `InterestedProduct` looks like (`ProductMatcher`: code,
@@ -581,7 +601,9 @@ tenant that has no rule at all**: a tenant which configured its own has made its
 re-adding a default after a deliberate deletion would be a startup undoing an administrator's
 decision. Dispatching still works with an empty table, and a test pins that.
 
-**Auto-dispatch on capture** is off by default (`Leads:AutoDispatchOnCapture`). When on,
+**Auto-dispatch on capture** is ON in `appsettings.json` since 2026-11-05 (`Leads:AutoDispatchOnCapture`,
+product owner; it was on in development only, so a deployment silently dispatched nothing — the class
+default stays false for the tests; `Leads__AutoDispatchOnCapture=false` turns it off). When on,
 `CaptureLeadHandler` publishes `LeadCapturedEvent` **through the outbox**, in the lead's own
 transaction, and `LeadAutoDispatchConsumer` dispatches out of band — **without qualifying the
 lead**, which reaches its agent in its capture status (qualifying it is the agent's work). The
@@ -592,6 +614,29 @@ a suspected duplicate, and anything already assigned — its idempotency is `Cur
 not an inbox table. It establishes `BackgroundJobContext.SetScope` **before** creating its DI
 scope, because `ITenantContext` and `ICurrentUser` are built from it and a consumer has no HTTP
 context.
+
+**A lead captured with an owner gets its « Premier contact » too (2026-11-05).** It is never dispatched, and the
+task was born of a dispatch: `OwnedLeadFirstContactConsumer` (on `LeadCapturedEvent` with `HasExplicitOwner`, status
+still New, no assignment) runs `AssignmentTasks.SyncOnAssignedAsync` for the owner, due at the rule's delay for its
+temperature. A contact recorded on such a lead — declared, wrapped up by telephony, logged as reached — closes it
+(`CompleteFirstContactOfOwnedLeadAsync`); a later dispatch transfers it. An owner changed by hand does not move it.
+
+**Declaring a first contact writes a note (2026-11-05).** A system-generated `Note` « Premier contact déclaré » and
+`LastActivityAt`: the record said « Contacté, mais aucune activité » right after the button. A note, not a call: the
+agent says it happened, not how. It counts as one activity at the next rescore, like any other.
+
+**Recycling carries a day and a reason (2026-11-05).** `POST leads/{id}/recycle` takes `reason` and `reactivateOn`
+(after today, else `REACTIVATION_DATE_NOT_IN_FUTURE`); `Lead.RecycledUntil` (null for a bulk recycle: the job's
+`RecycledLeadReactivationDays` from the last update) is what `ReactivateRecycledLeadsJob` reads, and a Generic task
+due that day goes to the holder with the reason. Only Lost, Disqualified and Nurturing leads recycle: the drawer now
+says so instead of failing. The reason has no column: it lives on the task and in the audit.
+
+**A lead set aside owes nobody a first call (2026-11-05, product owner).** `AssignmentTasks.SetAsideAsync`, from
+`NurtureLeadHandler`, `RecycleLeadHandler` and `BulkRecycleHandler`: cancels the open « Premier contact » and
+« dispatch by hand » tasks, supersedes the current assignment unless a contact was recorded (no more SLA warning,
+breach or escalation, agenda line or team figure; the lead's holder and `CurrentAssignmentId` stay, `FirstContactAt`
+is untouched) and leaves the queue. Consequence, accepted knowingly: like a lead taken off an agent, such an
+assignment no longer counts in their first-contact rate. Other tasks stay. Leaving nurturing does not reopen a wait.
 
 **Dispatch queue.** A dispatch that finds no agent (no one available, all at the task ceiling,
 all excluded, no licensed agent, anti-monopoly) puts the lead in the queue

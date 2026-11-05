@@ -3,14 +3,18 @@ namespace Sankore.Modules.Leads.Features.NurturingSequences.CreateNurturingSeque
 using MediatR;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Notifications.PublicApi;
 using Sankore.Shared.Kernel;
 
-internal sealed class CreateNurturingSequenceHandler(LeadsDbContext db)
+internal sealed class CreateNurturingSequenceHandler(LeadsDbContext db, INotificationsModule notifications)
     : IRequestHandler<CreateNurturingSequenceCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(
         CreateNurturingSequenceCommand cmd, CancellationToken ct)
     {
+        if (!await NurturingStepTemplates.AllExistAsync(notifications, cmd.TenantId, cmd.Steps, ct))
+            return Result.Fail<Guid>(NurturingStepTemplates.NotFound);
+
         var sequence = NurturingSequence.Create(
             tenantId:    cmd.TenantId,
             name:        cmd.Name,

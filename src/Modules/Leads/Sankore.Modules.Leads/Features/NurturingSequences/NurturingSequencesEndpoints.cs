@@ -117,7 +117,8 @@ public static class NurturingSequencesEndpoints
         var result = await sender.Send(new UpdateNurturingSequenceCommand(
             SequenceId:  id,
             Name:        req.Name,
-            Description: req.Description), ct);
+            Description: req.Description,
+            Steps:       req.Steps), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -148,4 +149,5 @@ public sealed record CreateNurturingSequenceRequest(
 
 public sealed record UpdateNurturingSequenceRequest(
     string Name,
-    string? Description = null);
+    string? Description,
+    IReadOnlyList<StepInput> Steps);

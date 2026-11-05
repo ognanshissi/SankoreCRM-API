@@ -176,6 +176,31 @@ public sealed class LeadContactProgressionTests : IDisposable
         (await ReloadAsync(lead.Id)).Status.Should().Be(LeadStatus.New);
     }
 
+    [Fact]
+    public async Task Declaring_the_first_contact_leaves_a_note_and_closes_the_owners_task()
+    {
+        var owner = Guid.NewGuid();
+        var lead = await SeedOwnedAsync(owner);
+        await using (var db = _db.CreateContext())
+        {
+            db.CrmTasks.Add(CrmTask.Create(_tenantId, CrmTaskType.FirstContact, CrmTaskPriority.High, "Premier contact",
+                DateTimeOffset.UtcNow.AddHours(4), leadId: lead.Id, assignedAgentId: owner,
+                triggerEventType: TaskTriggerEvents.LeadDispatched, triggerEventId: lead.Id));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _db.CreateContext())
+            (await FirstContact(db, owner).Handle(new RecordFirstContactCommand(lead.Id), default)).IsSuccess.Should().BeTrue();
+
+        await using var read = _db.CreateContext();
+        (await read.Leads.SingleAsync(l => l.Id == lead.Id)).LastActivityAt.Should().NotBeNull(
+            "the record said « Contacté, mais aucune activité » right after the button");
+        var note = await read.LeadActivities.SingleAsync(a => a.LeadId == lead.Id);
+        note.Type.Should().Be(ActivityType.Note);
+        note.PerformedBy.Should().Be(owner);
+        (await read.CrmTasks.SingleAsync(t => t.LeadId == lead.Id)).Status.Should().Be(CrmTaskStatus.Completed);
+    }
+
     // ── Harness ─────────────────────────────────────────────────────────────
 
     private RecordFirstContactHandler FirstContact(Infrastructure.LeadsDbContext db, Guid userId)

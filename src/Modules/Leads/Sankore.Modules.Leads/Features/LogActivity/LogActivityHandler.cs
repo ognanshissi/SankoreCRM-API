@@ -80,7 +80,10 @@ internal sealed class LogActivityHandler(
         // wrap-up does: reached → "Contacté", no answer → contact attempted.
         switch (Lead.IsContactOutcome(cmd.Type, cmd.Outcome))
         {
-            case true: lead.RecordContactEstablished(); break;
+            case true:
+                lead.RecordContactEstablished();
+                await Features.Tasks.AssignmentTasks.CompleteFirstContactOfOwnedLeadAsync(db, lead, ct);
+                break;
             case false: lead.RecordContactAttempt(); break;
         }
 

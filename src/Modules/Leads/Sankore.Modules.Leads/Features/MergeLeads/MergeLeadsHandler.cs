@@ -3,13 +3,15 @@ namespace Sankore.Modules.Leads.Features.MergeLeads;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.DispatchLead;
 using Sankore.Modules.Leads.Features.FindDuplicates;
+using Sankore.Modules.Leads.Features.Tasks;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 using Sankore.Shared.Kernel.ValueObject;
 
 internal sealed class MergeLeadsHandler(
-    LeadsDbContext db, TimeProvider clock, ILeadEmailIndexer emailIndexer)
+    LeadsDbContext db, TimeProvider clock, ILeadEmailIndexer emailIndexer, AgentCapacityService? capacity = null)
     : IRequestHandler<MergeLeadsCommand, Result<MergeLeadResult>>
 {
     public async Task<Result<MergeLeadResult>> Handle(MergeLeadsCommand cmd, CancellationToken ct)
@@ -112,6 +114,9 @@ internal sealed class MergeLeadsHandler(
             .Where(t => t.LeadId == cmd.SourceLeadId)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.LeadId, cmd.TargetLeadId), ct);
 
+        // ── Open tasks follow the person to the lead that is kept ─────────────
+        var agentsWhoseLoadChanged = await MergedLeadTasks.MoveOpenAsync(db, source, target, cmd.MergedBy, clock.GetUtcNow(), ct);
+
         // ── Archive the source and raise LeadMergedDomainEvent ────────────────
         var mergeResult = source.MergeInto(cmd.TargetLeadId, cmd.MergedBy);
         if (mergeResult.IsFailure)
@@ -128,6 +133,10 @@ internal sealed class MergeLeadsHandler(
 
         db.LeadMerges.Add(auditRecord);
         await db.SaveChangesAsync(ct);
+
+        if (capacity is not null)
+            foreach (var agentId in agentsWhoseLoadChanged)
+                await capacity.InvalidateAsync(target.TenantId, agentId, ct);
 
         return Result.Ok(new MergeLeadResult(
             MergeId:          auditRecord.Id,

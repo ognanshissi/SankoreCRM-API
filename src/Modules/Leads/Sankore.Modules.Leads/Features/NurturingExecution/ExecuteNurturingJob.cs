@@ -3,10 +3,13 @@ namespace Sankore.Modules.Leads.Features.NurturingExecution;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.Retention;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Notifications.PublicApi;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Hangfire recurring job — runs per-tenant on a cron schedule (US-M13-151).
@@ -26,6 +29,7 @@ public sealed class ExecuteNurturingJob(IServiceScopeFactory scopeFactory)
         var sp     = scope.ServiceProvider;
         var db     = sp.GetRequiredService<LeadsDbContext>();
         var notif  = sp.GetRequiredService<INotificationsModule>();
+        var customers = sp.GetService<ICustomersModule>();
         var clock  = sp.GetRequiredService<TimeProvider>();
         var logger = sp.GetRequiredService<ILogger<ExecuteNurturingJob>>();
 
@@ -55,8 +59,20 @@ public sealed class ExecuteNurturingJob(IServiceScopeFactory scopeFactory)
         var leads = await db.Leads
             .IgnoreQueryFilters()
             .Where(l => leadIds.Contains(l.Id))
-            .Select(l => new { l.Id, l.PreferredLanguage, l.Email, l.FullName })
+            .Select(l => new { l.Id, l.Status, l.PreferredLanguage, l.Email, l.FullName, l.FirstName, ClientId = l.ConvertedToCustomerId ?? l.CustomerId })
             .ToDictionaryAsync(l => l.Id);
+
+        // Read at each run: a consent can also expire, and that announces nothing.
+        var consenting = (await db.LeadConsents
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId
+                     && leadIds.Contains(c.LeadId)
+                     && c.Type == ConsentType.Marketing
+                     && c.Status == ConsentStatus.Active)
+            .Select(c => c.LeadId)
+            .ToListAsync()).ToHashSet();
+
+        var templates = new Dictionary<(string Key, string Locale), bool>();
 
         int sent = 0, completed = 0, skipped = 0;
 
@@ -82,9 +98,46 @@ public sealed class ExecuteNurturingJob(IServiceScopeFactory scopeFactory)
 
             var step = steps[nextStepIndex];
 
-            // Resolve lead email — skip if no email available
-            if (!leads.TryGetValue(enrollment.LeadId, out var lead) || lead.Email is null)
+            // The lead left nurturing (reopened, converted, closed, merged, erased): nothing changed
+            // the enrollment, and a commercial e-mail must not reach them for all that.
+            if (!leads.TryGetValue(enrollment.LeadId, out var lead) || lead.Status != LeadStatus.Nurturing)
             {
+                enrollment.Cancel("LEAD_LEFT_NURTURING", clock);
+                skipped++;
+                continue;
+            }
+
+            if (!consenting.Contains(enrollment.LeadId))
+            {
+                enrollment.Cancel("MARKETING_CONSENT_WITHDRAWN", clock);
+                skipped++;
+                continue;
+            }
+
+            if (await ProcessingRestriction.IsRestrictedAsync(customers, tenantId, lead.ClientId, CancellationToken.None))
+            {
+                enrollment.Cancel(ProcessingRestriction.Error, clock);
+                skipped++;
+                continue;
+            }
+
+            // Resolve lead email — skip if no email available
+            if (lead.Email is null)
+            {
+                skipped++;
+                continue;
+            }
+
+            // The lead's language, else French. With no template at all the step waits: the renderer
+            // would send the message's raw JSON to the prospect.
+            var locale = LanguageCode.Normalize(lead.PreferredLanguage);
+            if (!await HasTemplateAsync(step.EmailTemplateKey, locale))
+                locale = LanguageCode.Default;
+            if (!await HasTemplateAsync(step.EmailTemplateKey, locale))
+            {
+                logger.LogWarning(
+                    "Nurturing step {StepIndex} of sequence {SequenceId} waits: no active template {TemplateKey}",
+                    nextStepIndex, sequence.Id, step.EmailTemplateKey);
                 skipped++;
                 continue;
             }
@@ -97,13 +150,14 @@ public sealed class ExecuteNurturingJob(IServiceScopeFactory scopeFactory)
                     RecipientEmail: lead.Email,
                     RecipientName:  lead.FullName,
                     Module:         "Leads",
-                    Locale:         lead.PreferredLanguage ?? "fr",
+                    Locale:         locale,
                     TemplateData: new Dictionary<string, object>
                     {
                         ["leadId"]   = enrollment.LeadId.ToString(),
                         ["stepOrder"] = step.Order,
+                        ["lead_name"] = lead.FullName ?? string.Empty,
+                        ["first_name"] = lead.FirstName ?? lead.FullName ?? string.Empty,
                     },
-                    // Opaque payload: only IDs, never PII in job arguments
                     IdempotencyKey: $"nurture-{enrollment.Id}-step-{nextStepIndex}",
                     TenantId:       tenantId));
 
@@ -135,5 +189,11 @@ public sealed class ExecuteNurturingJob(IServiceScopeFactory scopeFactory)
         logger.LogInformation(
             "Nurturing execution for tenant {TenantId}: {Sent} sent, {Completed} completed, {Skipped} skipped",
             tenantId, sent, completed, skipped);
+
+        async Task<bool> HasTemplateAsync(string key, string locale)
+        {
+            if (templates.TryGetValue((key, locale), out var known)) return known;
+            return templates[(key, locale)] = await notif.HasActiveEmailTemplateAsync(tenantId, key, locale);
+        }
     }
 }

@@ -110,6 +110,12 @@ public sealed class Lead : AggregateRoot
 
     public LeadChannel? Channel { get; private set; }
     public string? Campaign { get; private set; }
+
+    /// <summary>
+    /// The day a recycled lead comes back, as the agent chose it. Null (bulk recycle, older leads):
+    /// the job's <c>RecycledLeadReactivationDays</c> counted from the last update.
+    /// </summary>
+    public DateOnly? RecycledUntil { get; private set; }
     public string? ExternalReference { get; private set; }
     public string? NationalId { get; private set; }
     public string? CustomerReference { get; private set; }
@@ -670,6 +676,11 @@ public sealed class Lead : AggregateRoot
     /// A lead can be dispatched unless it has reached a terminal status. One predicate, so the
     /// domain and <c>DispatchLeadHandler</c> cannot disagree on what "dispatchable" means.
     /// </summary>
+    /// <summary>
+    /// Set aside (nurturing, recycling): the queue must not hand it to an agent as a lead to call.
+    /// </summary>
+    internal void LeaveDispatchQueue() => AwaitingDispatchSince = null;
+
     public bool IsDispatchable =>
         Status is not (LeadStatus.Converted or LeadStatus.Lost
                     or LeadStatus.Disqualified or LeadStatus.Archived);
@@ -1975,7 +1986,7 @@ public sealed class Lead : AggregateRoot
     /// Recycles a closed or nurturing lead back into the active pipeline.
     /// Resets the score to 0 so the lead must be re-qualified.
     /// </summary>
-    public Result Recycle(LeadSource? newSource = null, string? newCampaign = null)
+    public Result Recycle(LeadSource? newSource = null, string? newCampaign = null, DateOnly? until = null)
     {
         if (Status is not (LeadStatus.Lost or LeadStatus.Disqualified or LeadStatus.Nurturing))
             return Result.Fail("Only Lost, Disqualified or Nurturing leads can be recycled.");
@@ -1985,6 +1996,7 @@ public sealed class Lead : AggregateRoot
 
         if (newSource.HasValue) Source = newSource.Value;
         if (newCampaign is not null) Campaign = newCampaign.Trim();
+        RecycledUntil = until;
 
         // Reset score: the lead must go through qualification again.
         Score     = 0;
@@ -2001,6 +2013,8 @@ public sealed class Lead : AggregateRoot
     {
         if (Status != LeadStatus.Recycled)
             return Result.Fail("ONLY_RECYCLED_LEADS_CAN_BE_REACTIVATED");
+
+        RecycledUntil = null;
 
         var previous = Status;
         Status    = LeadStatus.Open;

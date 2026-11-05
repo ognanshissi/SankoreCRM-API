@@ -136,6 +136,9 @@ public sealed class LeadAssignment
     /// Called by <c>Lead.AssignTo</c> and <c>Lead.ReturnToQueue</c>, which is the only reason the
     /// invariant holds — those are the only two methods that move
     /// <c>Lead.CurrentAssignmentId</c>, so a row cannot stop being current without passing here.
+    /// The reverse is not true: <c>AssignmentTasks.SetAsideAsync</c> supersedes the current row of a
+    /// lead put in nurturing or recycled before any contact — nobody owes it a first call any more —
+    /// and the lead's pointer and holder stay.
     /// </para>
     /// </summary>
     public void Supersede(DateTimeOffset at) => SupersededAt ??= at;

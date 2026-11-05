@@ -190,6 +190,55 @@ internal static class AssignmentTasks
     }
 
     /// <summary>
+    /// The lead is set aside — placed in nurturing or recycled (product owner, 2026-11-05): nobody owes
+    /// it a first call any more. Its « Premier contact » and « dispatch by hand » tasks are cancelled,
+    /// the current assignment stops being waited on (no more SLA warning, breach or escalation, nor a
+    /// wait in the agenda and the team's figures, whose readers all skip a superseded row), and it leaves
+    /// the queue. A contact already recorded stays as it is, and other tasks are the agent's own. The
+    /// caller saves; returns the agents whose load changed, for the capacity cache AFTER the save.
+    /// </summary>
+    public static async Task<IReadOnlyCollection<Guid>> SetAsideAsync(
+        LeadsDbContext db, Lead lead, DateTimeOffset now, CancellationToken ct)
+    {
+        var tasks = await db.CrmTasks
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .Where(t => t.TenantId == lead.TenantId
+                     && t.LeadId == lead.Id
+                     && Open.Contains(t.Status)
+                     && ((t.TriggerEventType == TaskTriggerEvents.LeadDispatched && t.Type == CrmTaskType.FirstContact)
+                         || t.TriggerEventType == TaskTriggerEvents.LeadDispatchingFailed))
+            .ToListAsync(ct);
+
+        foreach (var task in tasks)
+            task.Cancel();
+
+        if (lead.CurrentAssignmentId is { } assignmentId)
+        {
+            var assignment = await db.LeadAssignments
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync(a => a.TenantId == lead.TenantId && a.Id == assignmentId, ct);
+            if (assignment is { FirstContactAt: null })
+                assignment.Supersede(now);
+        }
+
+        lead.LeaveDispatchQueue();
+
+        return tasks.Where(t => t.AssignedAgentId.HasValue).Select(t => t.AssignedAgentId!.Value).Distinct().ToList();
+    }
+
+    /// <summary>
+    /// A contact on a lead its owner holds without an assignment: their first-contact task is done,
+    /// whichever path recorded the contact. An assigned lead is left to the paths that also stop its
+    /// SLA. The caller saves.
+    /// </summary>
+    public static Task CompleteFirstContactOfOwnedLeadAsync(LeadsDbContext db, Lead lead, CancellationToken ct)
+        => lead.CurrentAssignmentId is null && lead.OwnerId is { } owner
+            ? CompleteFirstContactAsync(db, lead.TenantId, lead.Id, owner, ct)
+            : Task.CompletedTask;
+
+    /// <summary>
     /// The lead's first-contact SLA was escalated: the agent keeps their open assignment tasks, and
     /// those whose deadline has passed take the escalated one. Each extension is recorded in the
     /// task's attribution history with both deadlines. The caller saves; returns how many tasks

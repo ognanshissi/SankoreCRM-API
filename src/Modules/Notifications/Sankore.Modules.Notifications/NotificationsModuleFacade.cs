@@ -155,6 +155,11 @@ internal sealed class NotificationsModuleFacade(
         return Result<Guid>.Ok(message.Id);
     }
 
+    public async Task<bool> HasActiveEmailTemplateAsync(
+        Guid tenantId, string templateKey, string locale, CancellationToken ct = default)
+        => await Infrastructure.Rendering.EmailTemplateLookup.FindAsync(
+            db, tenantId, templateKey, LanguageCode.Normalize(locale), ct) is not null;
+
     public async Task<Result<Guid>> QueueSmsAsync(
         QueueSmsRequest request,
         CancellationToken ct = default)

@@ -43,6 +43,20 @@ public sealed class NurturingSequence : ITenant
     public void Activate()   => IsActive = true;
     public void Deactivate() => IsActive = false;
 
+    /// <summary>
+    /// The steps as the administrator now wants them. Enrollments keep their position: a lead that
+    /// has received two e-mails receives the third of the new list next, and is done if there is none.
+    /// </summary>
+    public IReadOnlyList<NurturingStep> ReplaceSteps(
+        IEnumerable<(TimeSpan Delay, string EmailTemplateKey, string? Subject)> steps)
+    {
+        _steps.Clear();
+        var order = 0;
+        foreach (var (delay, key, subject) in steps)
+            AddStep(order++, delay, key, subject);
+        return Steps;
+    }
+
     public NurturingStep AddStep(
         int order,
         TimeSpan delayFromPrevious,

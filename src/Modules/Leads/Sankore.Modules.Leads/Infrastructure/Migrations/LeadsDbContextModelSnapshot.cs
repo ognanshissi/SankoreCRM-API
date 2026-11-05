@@ -1097,6 +1097,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("qualification_completeness");
 
+                    b.Property<DateOnly?>("RecycledUntil")
+                        .HasColumnType("date")
+                        .HasColumnName("recycled_until");
+
                     b.Property<string>("Referrer")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")

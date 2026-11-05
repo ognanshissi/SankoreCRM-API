@@ -12,7 +12,9 @@ using Sankore.Shared.Kernel;
 internal sealed record RecycleLeadCommand(
     Guid LeadId,
     LeadSource? NewSource = null,
-    string? NewCampaign = null
+    string? NewCampaign = null,
+    string? Reason = null,
+    DateOnly? ReactivateOn = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

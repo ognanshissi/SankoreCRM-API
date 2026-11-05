@@ -34,6 +34,8 @@ internal sealed class RecordFirstContactHandler(LeadsDbContext db, LeadAccessGua
                 return Result.Fail("LEAD_HAS_NO_ACTIVE_ASSIGNMENT");
             if (!lead.RecordContactEstablished())
                 return Result.Fail("FIRST_CONTACT_ALREADY_RECORDED");
+            await Tasks.AssignmentTasks.CompleteFirstContactOfOwnedLeadAsync(db, lead, ct);
+            LeaveATrace(lead);
             await db.SaveChangesAsync(ct);
             return Result.Ok();
         }
@@ -59,10 +61,28 @@ internal sealed class RecordFirstContactHandler(LeadsDbContext db, LeadAccessGua
         await Tasks.AssignmentTasks.CompleteFirstContactAsync(db, lead.TenantId, lead.Id, assignment.AgentId, ct);
         // And the lead itself is now contacted: "Contacté", stage "Contact établi".
         lead.RecordContactEstablished();
+        LeaveATrace(lead);
         // No db.Leads.Update(lead): the lead is already tracked, and calling Update marks the
         // OWNED PrincipalPep's identifying key as modified — EF then refuses the save with
         // "part of a key and so cannot be modified".
         await db.SaveChangesAsync(ct);
         return Result.Ok();
+    }
+
+    /// <summary>
+    /// The declaration wrote nothing on the lead, so the record said « Contacté, mais aucune
+    /// activité » right after the button. A note and not a call: the agent says the contact
+    /// happened, not how, and a false « appel joint » would count in the contact rates.
+    /// </summary>
+    private void LeaveATrace(Domain.Lead lead)
+    {
+        db.LeadActivities.Add(Domain.LeadActivity.Create(
+            tenantId:          lead.TenantId,
+            leadId:            lead.Id,
+            type:              Domain.ActivityType.Note,
+            subject:           "Premier contact déclaré",
+            performedBy:       accessGuard.CurrentUserId,
+            isSystemGenerated: true));
+        lead.RecordActivity();
     }
 }

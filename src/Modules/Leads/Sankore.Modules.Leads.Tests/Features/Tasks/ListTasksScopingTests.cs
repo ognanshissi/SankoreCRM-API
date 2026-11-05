@@ -80,6 +80,24 @@ public sealed class ListTasksScopingTests : IDisposable
         tasks.Should().OnlyContain(t => t.AssignedAgentId == _awa).And.NotBeEmpty();
     }
 
+    [Fact]
+    public async Task A_supervisor_naming_an_agent_outside_their_team_reads_nothing()
+    {
+        await AddTasksAsync();
+        Team(_awa);
+
+        await using var db = _db.CreateContext();
+        var outside = await new ListTasksHandler(db, new FixedTenantContext(_tenantId), _admin, new TaskTypeCatalog(db, new FixedTenantContext(_tenantId))).Handle(
+            new ListTasksQuery(AssignedAgentId: _outsider, CurrentUserId: _manager, CurrentUserRoles: ["BranchManager"],
+                CurrentUserPermissions: ["lead:team:supervise"]), default);
+        var inside = await new ListTasksHandler(db, new FixedTenantContext(_tenantId), _admin, new TaskTypeCatalog(db, new FixedTenantContext(_tenantId))).Handle(
+            new ListTasksQuery(AssignedAgentId: _awa, CurrentUserId: _manager, CurrentUserRoles: ["BranchManager"],
+                CurrentUserPermissions: ["lead:team:supervise"]), default);
+
+        outside.Value.Should().BeEmpty();
+        inside.Value.Should().ContainSingle();
+    }
+
     private void Team(params Guid[] agents) =>
         _admin.GetTeamAgentIdsAsync(_tenantId, _manager, Arg.Any<CancellationToken>())
             .Returns(agents.ToList());

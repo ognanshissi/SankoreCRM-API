@@ -6,7 +6,8 @@ public sealed record NurturingSequenceDto(
     string? Description,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<NurturingStepDto> Steps);
+    IReadOnlyList<NurturingStepDto> Steps,
+    int ActiveEnrollments = 0);
 
 public sealed record NurturingStepDto(
     Guid Id,

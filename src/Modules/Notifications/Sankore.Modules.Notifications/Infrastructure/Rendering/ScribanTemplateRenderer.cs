@@ -76,40 +76,9 @@ internal sealed class ScribanTemplateRenderer(
 
     // ─── Private helpers ────────────────────────────────────────────────────
 
-    private async Task<EmailTemplate?> ResolveTemplateAsync(
+    private Task<EmailTemplate?> ResolveTemplateAsync(
         Guid tenantId, string key, string locale, CancellationToken ct)
-    {
-        // 1. Tenant-specific + requested locale
-        var found = await db.EmailTemplates
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(
-                t => t.TenantId == tenantId && t.TemplateKey == key && t.Locale == locale && t.IsActive,
-                ct);
-
-        if (found is not null) return found;
-
-        // 2. Platform default + requested locale
-        found = await db.EmailTemplates
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(
-                t => t.TenantId == null && t.TemplateKey == key && t.Locale == locale && t.IsActive,
-                ct);
-
-        if (found is not null) return found;
-
-        // 3. Platform default + "fr" fallback (system default locale). The caller's locale is
-        //    already normalised, so this comparison and the two above agree on what matches.
-        if (locale != DefaultLocale)
-        {
-            found = await db.EmailTemplates
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(
-                    t => t.TenantId == null && t.TemplateKey == key && t.Locale == DefaultLocale && t.IsActive,
-                    ct);
-        }
-
-        return found;
-    }
+        => EmailTemplateLookup.FindAsync(db, tenantId, key, locale, ct);
 
     private static ScriptObject BuildScriptObject(string templateDataJson)
     {

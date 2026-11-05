@@ -31,6 +31,9 @@ using Sankore.Shared.Kernel;
 /// </remarks>
 public sealed class LeadAccessGuard(ICurrentUser currentUser, IAdministrationModule administration)
 {
+    /// <summary>Who the guard is judging, for the handler that then writes in their name.</summary>
+    public Guid CurrentUserId => currentUser.Id;
+
     public const string Forbidden = "LEAD_NOT_YOURS";
 
     /// <summary>

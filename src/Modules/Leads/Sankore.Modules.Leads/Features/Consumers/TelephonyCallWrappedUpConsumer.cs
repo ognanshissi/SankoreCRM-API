@@ -193,7 +193,10 @@ public sealed class TelephonyCallWrappedUpConsumer(
         // An outcome the tenant counts as a contact makes the lead "Contacté", assignment or not:
         // somebody spoke to them. An outbound call that did not count is an attempt.
         if (evt.CountsAsContact)
+        {
             lead.RecordContactEstablished();
+            await Features.Tasks.AssignmentTasks.CompleteFirstContactOfOwnedLeadAsync(db, lead, ct);
+        }
         else if (string.Equals(evt.Direction, "Outbound", StringComparison.OrdinalIgnoreCase))
             lead.RecordContactAttempt();
 

@@ -527,6 +527,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumer,
         Sankore.Modules.Leads.Features.Consumers.LeadAutoDispatchConsumerDefinition>();
     x.AddConsumer<LeadDispatchedTaskConsumer>();
+    x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.OwnedLeadFirstContactConsumer>();
     x.AddConsumer<LeadDispatchingFailedTaskConsumer>();
     // Absence déclarée par un agent (M12) : ses tâches ouvertes passent au remplaçant (M13).
     x.AddConsumer<Sankore.Modules.Leads.Features.Consumers.AgentAbsenceTaskTransferConsumer>();

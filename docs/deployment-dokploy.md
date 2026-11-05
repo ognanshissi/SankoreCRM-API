@@ -445,6 +445,11 @@ Notifications__Smtp__UseStartTls=true
 Notifications__Smtp__FromEmail=noreply@example.com
 Notifications__Smtp__FromName=Sankore
 
+# ── lead dispatching ────────────────────────────────────────────────────
+# Default true (appsettings.json): a captured lead goes to an agent by itself, for every channel and
+# tenant of this deployment. false = managers dispatch by hand; nothing else warns that leads wait.
+# Leads__AutoDispatchOnCapture=false
+
 # ── file storage (must be on the volumes from the next step) ────────────
 FileStore__BasePath=/data/imports
 Leads__SdkStoragePath=/data/sdk

@@ -34,6 +34,7 @@ public sealed class ReactivateRecycledLeadsJob(IServiceScopeFactory scopeFactory
 
         var now = clock.GetUtcNow();
         var reactivationCutoff = now.AddDays(-settings.RecycledLeadReactivationDays);
+        var today              = DateOnly.FromDateTime(now.UtcDateTime);
         var dormancyCutoff     = now.AddDays(-settings.ConsentReverificationDormancyDays);
 
         // ── Find recycled leads past the reactivation threshold ─────────
@@ -42,7 +43,9 @@ public sealed class ReactivateRecycledLeadsJob(IServiceScopeFactory scopeFactory
             .IgnoreQueryFilters()
             .Where(l => l.TenantId == tenantId
                      && l.Status == LeadStatus.Recycled
-                     && l.UpdatedAt <= reactivationCutoff)
+                     && (l.RecycledUntil != null
+                         ? l.RecycledUntil <= today
+                         : l.UpdatedAt <= reactivationCutoff))
             .ToListAsync();
 
         if (candidates.Count == 0) return;

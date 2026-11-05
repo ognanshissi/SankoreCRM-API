@@ -30,7 +30,7 @@ public static class RecycleLeadEndpoint
         CancellationToken ct)
     {
         var result = await sender.Send(
-            new RecycleLeadCommand(leadId, req.NewSource, req.NewCampaign), ct);
+            new RecycleLeadCommand(leadId, req.NewSource, req.NewCampaign, req.Reason, req.ReactivateOn), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -42,6 +42,10 @@ public static class RecycleLeadEndpoint
 
 /// <param name="NewSource">Optional new acquisition source to stamp on the recycled lead.</param>
 /// <param name="NewCampaign">Optional new campaign to associate with the recycled lead.</param>
+/// <param name="Reason">Why it is set aside: written on the resumption task.</param>
+/// <param name="ReactivateOn">The day it comes back, after today. Omitted: the job's default delay, and no task.</param>
 public sealed record RecycleLeadRequest(
     LeadSource? NewSource = null,
-    string? NewCampaign = null);
+    string? NewCampaign = null,
+    string? Reason = null,
+    DateOnly? ReactivateOn = null);

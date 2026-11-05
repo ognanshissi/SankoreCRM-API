@@ -32,9 +32,10 @@ internal sealed class ListTasksHandler(
                 // Agent: restrict to own tasks only
                 q = q.Where(t => t.AssignedAgentId == query.CurrentUserId.Value);
             }
-            else if (query.AssignedAgentId is null)
+            else
             {
-                // Supervisor without explicit agent filter: scope to team
+                // Scoped to the team with or without an explicit agent: naming one outside it used
+                // to read that agent's tasks, in any agency. It now reads empty, as GET tasks/page.
                 var team = await TaskScope.TeamAsync(admin, tenant.CurrentTenantId, query.CurrentUserId.Value, ct);
                 q = q.Where(t => t.AssignedAgentId != null && team.Contains(t.AssignedAgentId.Value));
             }
