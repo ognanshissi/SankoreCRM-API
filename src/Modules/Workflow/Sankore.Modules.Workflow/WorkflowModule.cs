@@ -106,6 +106,7 @@ public static class WorkflowModule
 
         // What Formulaire / Formulaire de qualification / Vérification KYC steps require of the record.
         services.AddScoped<Infrastructure.Gates.RecordStepGates>();
+        services.AddScoped<Infrastructure.Gates.SigningGuard>();
         services.AddScoped<Infrastructure.Gates.KycStepRunner>();
         services.AddScoped<Infrastructure.Gates.IntegrationStepRunner>();
 

@@ -34,7 +34,22 @@ public interface IWorkflowRecordGate
     /// </summary>
     Task<RecordRef?> FieldsRecordAsync(Guid tenantId, Guid entityId, CancellationToken ct)
         => Task.FromResult<RecordRef?>(new RecordRef(EntityType, entityId));
+
+    /// <summary>
+    /// The records among <paramref name="entityIds"/> whose steps need separate signers inside their
+    /// agency's perimeter — a credit file. Absent means the engine's usual rule, the step's role: an
+    /// agent signing a step on their own lead is a choice of the product owner (2026-10-30).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, RecordSigningRule>> SigningRulesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> entityIds, CancellationToken ct)
+        => Task.FromResult<IReadOnlyDictionary<Guid, RecordSigningRule>>(new Dictionary<Guid, RecordSigningRule>());
 }
+
+/// <summary>Who may not sign a record's steps, and where it belongs.</summary>
+/// <param name="PreparedBy">Whoever works the file: they do not sign their own.</param>
+/// <param name="AgencyId">The record's own agency, used when it has no client yet.</param>
+/// <param name="ClientId">The record's client, whose agency decides who can read the file.</param>
+public sealed record RecordSigningRule(Guid? PreparedBy, Guid? AgencyId, Guid? ClientId);
 
 public sealed record RecordFormField(string Key, string Label);
 

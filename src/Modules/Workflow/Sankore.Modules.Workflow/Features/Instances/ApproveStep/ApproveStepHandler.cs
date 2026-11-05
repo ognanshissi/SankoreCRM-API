@@ -17,7 +17,8 @@ internal sealed class ApproveStepHandler(
     IRuleEvaluator evaluator,
     IConditionEvaluator conditionEvaluator,
     IActionExecutorDispatcher actionDispatcher,
-    Infrastructure.Gates.RecordStepGates? stepGates = null
+    Infrastructure.Gates.RecordStepGates? stepGates = null,
+    Infrastructure.Gates.SigningGuard? signingGuard = null
 ) : IRequestHandler<ApproveStepCommand, Result>
 {
     public async Task<Result> Handle(ApproveStepCommand request, CancellationToken ct)
@@ -47,6 +48,10 @@ internal sealed class ApproveStepHandler(
                 $"Step {instance.CurrentStepOrder} requires role '{requiredRole}'. " +
                 "You do not have the required role.");
         }
+
+        if (currentStep is not null && signingGuard is not null
+            && await signingGuard.RefusalAsync(instance, ct) is { } signingRefusal)
+            return Result.Fail(signingRefusal);
 
         // A step waiting on the record (form, questionnaires, KYC) is not approved while the record
         // does not meet it — product owner, 2026-10-29: an incomplete form must not be approved.

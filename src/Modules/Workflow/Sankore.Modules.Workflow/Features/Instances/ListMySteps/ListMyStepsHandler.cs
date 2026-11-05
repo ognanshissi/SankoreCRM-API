@@ -9,7 +9,8 @@ namespace Sankore.Modules.Workflow.Features.Instances.ListMySteps;
 
 internal sealed class ListMyStepsHandler(
     WorkflowDbContext db,
-    ICurrentUser currentUser
+    ICurrentUser currentUser,
+    Infrastructure.Gates.SigningGuard? signingGuard = null
 ) : IRequestHandler<ListMyStepsQuery, Result<IReadOnlyList<MyStepDto>>>
 {
     public async Task<Result<IReadOnlyList<MyStepDto>>> Handle(
@@ -48,6 +49,18 @@ internal sealed class ListMyStepsHandler(
                 x.i.SubjectLink))
             .ToListAsync(ct);
 
-        return Result.Ok<IReadOnlyList<MyStepDto>>(steps);
+        if (signingGuard is null) return Result.Ok<IReadOnlyList<MyStepDto>>(steps);
+
+        // A step reaching me through my role, that I could only be refused on, is not mine to do.
+        // One handed to me by name stays: I have to see it to say it must go to someone else.
+        var refusals = await signingGuard.RefusalsAsync(
+            currentUser.TenantId,
+            steps.Where(s => s.AssignedToUserId is null)
+                .Select(s => new Infrastructure.Gates.SigningGuard.Candidate(s.InstanceId, s.EntityType!, s.EntityId!.Value))
+                .ToList(),
+            ct);
+
+        return Result.Ok<IReadOnlyList<MyStepDto>>(
+            steps.Where(s => s.AssignedToUserId is not null || !refusals.ContainsKey(s.InstanceId)).ToList());
     }
 }

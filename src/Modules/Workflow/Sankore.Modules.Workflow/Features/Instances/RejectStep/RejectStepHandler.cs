@@ -12,7 +12,8 @@ internal sealed class RejectStepHandler(
     WorkflowDbContext db,
     ICurrentUser currentUser,
     IConditionEvaluator conditionEvaluator,
-    IActionExecutorDispatcher actionDispatcher) : IRequestHandler<RejectStepCommand, Result>
+    IActionExecutorDispatcher actionDispatcher,
+    Infrastructure.Gates.SigningGuard? signingGuard = null) : IRequestHandler<RejectStepCommand, Result>
 {
     public async Task<Result> Handle(RejectStepCommand request, CancellationToken ct)
     {
@@ -42,6 +43,11 @@ internal sealed class RejectStepHandler(
                 $"Step {instance.CurrentStepOrder} requires role '{requiredRole}'. " +
                 "You do not have the required role.");
         }
+
+        // Refusing is a decision too: whoever cannot approve a credit file cannot turn it down.
+        if (currentStep is not null && signingGuard is not null
+            && await signingGuard.RefusalAsync(instance, ct) is { } signingRefusal)
+            return Result.Fail(signingRefusal);
 
         var transitions = await db.WorkflowTransitions
             .Where(t => t.TemplateId == instance.TemplateId)

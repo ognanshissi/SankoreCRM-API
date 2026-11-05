@@ -39,9 +39,57 @@ internal sealed class LeadRecordGate(LeadsDbContext db, IAdministrationModule ad
 /// A project's answers: its form is its lead's (the person being sold to), its questionnaires are its
 /// own plus the lead's not tied to a project, its client the one it was opened for — else its lead's.
 /// </summary>
-internal sealed class ProjectRecordGate(LeadsDbContext db, IAdministrationModule administration) : IWorkflowRecordGate
+internal sealed class ProjectRecordGate(
+    LeadsDbContext db,
+    IAdministrationModule administration,
+    Features.ProjectTemplates.ProjectTemplateResolver? templates = null) : IWorkflowRecordGate
 {
     public string EntityType => "Opportunity";
+
+    /// <summary>
+    /// A credit file, read off the version of the template the project follows: so circuits already
+    /// running and circuits an institution drew by hand are held to it, and no setting can drop it.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, RecordSigningRule>> SigningRulesAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> entityIds, CancellationToken ct)
+    {
+        var rules = new Dictionary<Guid, RecordSigningRule>();
+        if (templates is null || entityIds.Count == 0) return rules;
+
+        var ids = entityIds.Distinct().ToList();
+        var projects = await db.Opportunities.IgnoreQueryFilters()
+            .Where(o => o.TenantId == tenantId && ids.Contains(o.Id))
+            .Select(o => new { o.Id, o.LeadId, o.OwnerId, o.CustomerEntityId, o.TemplateVersionId, o.Product })
+            .ToListAsync(ct);
+
+        var credit = new List<(Guid Id, Guid? LeadId, Guid? OwnerId, Guid? ClientId)>();
+        foreach (var project in projects)
+        {
+            var template = await templates.ForProjectAsync(project.TemplateVersionId, project.Product, ct);
+            if (Features.ProjectTemplates.CreditFileTemplate.IsCreditFile(template))
+                credit.Add((project.Id, project.LeadId, project.OwnerId, project.CustomerEntityId));
+        }
+        if (credit.Count == 0) return rules;
+
+        var leadIds = credit.Where(c => c.LeadId.HasValue).Select(c => c.LeadId!.Value).Distinct().ToList();
+        var leads = await db.Leads.IgnoreQueryFilters()
+            .Where(l => l.TenantId == tenantId && leadIds.Contains(l.Id))
+            .Select(l => new
+            {
+                l.Id,
+                l.AgencyId,
+                Agent = l.CurrentAssignedId ?? l.OwnerId,
+                ClientId = l.ConvertedToCustomerId ?? l.CustomerId,
+            })
+            .ToDictionaryAsync(l => l.Id, ct);
+
+        foreach (var (id, leadId, ownerId, clientId) in credit)
+        {
+            var lead = leadId is { } known ? leads.GetValueOrDefault(known) : null;
+            rules[id] = new RecordSigningRule(ownerId ?? lead?.Agent, lead?.AgencyId, clientId ?? lead?.ClientId);
+        }
+        return rules;
+    }
 
     public Task<IReadOnlyList<RecordFormField>> FieldsAsync(Guid tenantId, CancellationToken ct)
         => LeadFormPresence.FieldsAsync(administration, tenantId, ct);

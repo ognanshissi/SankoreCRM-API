@@ -5,7 +5,10 @@ using NSubstitute;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Administration.PublicApi.Forms;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Modules.Leads.Features.ProjectTemplates;
 using Sankore.Modules.Leads.Tests.TestSupport;
+using Sankore.Shared.Infrastructure.Workflow;
+using Sankore.Shared.Kernel;
 using Xunit;
 using LeadRecordGate = Sankore.Modules.Leads.Infrastructure.LeadRecordGate;
 using ProjectRecordGate = Sankore.Modules.Leads.Infrastructure.ProjectRecordGate;
@@ -88,6 +91,64 @@ public sealed class LeadRecordGateTests : IDisposable
             .PendingQuestionnairesAsync(_tenantId, project.Id, default)).Should().Be(2);
         (await new LeadRecordGate(_factory.CreateContext(), _administration)
             .PendingQuestionnairesAsync(_tenantId, lead.Id, default)).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Only_a_credit_file_holds_its_signers_apart()
+    {
+        var agent = Guid.NewGuid();
+        var owner = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var agency = Guid.NewGuid();
+        var lead = Lead.Capture(_tenantId, "Awa Koné", "+2250700000000", LeadSource.Agency, "PRET", "fr", new(14.6928, -17.4467), null,
+            TimeProvider.System, agencyId: agency);
+        lead.SetOwner(agent).IsSuccess.Should().BeTrue();
+        var owned = Opportunity.CreateFromLead(_tenantId, lead.Id, "Crédit", "", owner, TimeProvider.System);
+        var byLead = Opportunity.CreateFromLead(_tenantId, lead.Id, "Crédit bis", "", null, TimeProvider.System);
+        var forClient = Opportunity.CreateForCustomer(_tenantId, clientId, "Crédit client", "", owner, TimeProvider.System);
+        var template = ProjectTemplate.Create(_tenantId, CreditFileTemplate.Name, null, null,
+            CreditFileTemplate.Steps("analyse"), DateTimeOffset.UtcNow, CreditFileTemplate.Forecast, CreditFileTemplate.Fields);
+        template.IsSuccess.Should().BeTrue(template.Error);
+        await using (var db = _factory.CreateContext())
+        {
+            db.Leads.Add(lead);
+            db.Opportunities.AddRange(owned, byLead, forClient);
+            db.ProjectTemplates.Add(template.Value!);
+            await db.SaveChangesAsync();
+        }
+
+        var rules = await GateWithTemplates().SigningRulesAsync(
+            _tenantId, [owned.Id, byLead.Id, forClient.Id, Guid.NewGuid()], default);
+
+        rules.Should().HaveCount(3);
+        rules[owned.Id].Should().Be(new RecordSigningRule(owner, agency, null));
+        rules[byLead.Id].Should().Be(new RecordSigningRule(agent, agency, null));
+        rules[forClient.Id].Should().Be(new RecordSigningRule(owner, null, clientId));
+    }
+
+    [Fact]
+    public async Task A_loan_without_a_duration_is_not_a_credit_file_and_keeps_the_usual_rule()
+    {
+        var project = Opportunity.CreateForCustomer(_tenantId, Guid.NewGuid(), "Crédit", "", Guid.NewGuid(), TimeProvider.System);
+        var template = ProjectTemplate.Create(_tenantId, "Ancien prêt", null, null,
+            CreditFileTemplate.Steps("analyse").Select(s => s with { RequiredFieldKeys = null }).ToList(),
+            DateTimeOffset.UtcNow, CreditFileTemplate.Forecast);
+        template.IsSuccess.Should().BeTrue(template.Error);
+        await using (var db = _factory.CreateContext())
+        {
+            db.Opportunities.Add(project);
+            db.ProjectTemplates.Add(template.Value!);
+            await db.SaveChangesAsync();
+        }
+
+        (await GateWithTemplates().SigningRulesAsync(_tenantId, [project.Id], default)).Should().BeEmpty();
+    }
+
+    private ProjectRecordGate GateWithTemplates()
+    {
+        var db = _factory.CreateContext();
+        return new ProjectRecordGate(db, _administration,
+            new ProjectTemplateResolver(db, _administration, new FixedTenantContext(_tenantId)));
     }
 
     private QualificationResponse Expected(Guid leadId, Guid? projectId)
