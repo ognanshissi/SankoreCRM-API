@@ -176,6 +176,15 @@ public interface ICoreBankingGateway
 
     Task<IntegrationCommandId> RequestAccountOpeningAsync(Guid crmCustomerId, string productCode, CancellationToken ct);
 
+    /// <summary>Queues a credit file's application, once per project. The caller saves.</summary>
+    Task<IntegrationCommandId> RequestLoanApplicationAsync(LoanApplicationRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// Where a project's application stands, read from the commands and the connection, never by
+    /// calling the core banking.
+    /// </summary>
+    Task<LoanApplicationStatus> GetLoanApplicationStatusAsync(Guid projectId, CancellationToken ct);
+
     /// <summary>
     /// Queues the debit of an insurance premium against a customer's account — the FIRST step of
     /// the ASS-05 chain, before anything is asked of the insurer.
@@ -444,3 +453,27 @@ public sealed record InstalmentDebitRequest(
     string Currency,
     int Attempt,
     string Label);
+
+public sealed record LoanApplicationRequest(
+    Guid ProjectId, Guid ClientId, string ProductCode, decimal Amount, string Currency, int TermMonths, string? Purpose);
+
+public enum LoanApplicationState
+{
+    /// <summary>The tenant has no active core banking connection.</summary>
+    NoConnection,
+    /// <summary>The connection's core banking does not declare loan applications.</summary>
+    NotSupported,
+    /// <summary>No application queued for this project.</summary>
+    NotRequested,
+    InProgress,
+    /// <summary>Deposited in a file, waiting for its acknowledgement.</summary>
+    Batched,
+    Accepted,
+    Rejected,
+    Cancelled,
+}
+
+/// <param name="Reference">What the core banking answered, once it has.</param>
+/// <param name="Message">Its refusal or the last failure, as it worded it.</param>
+public sealed record LoanApplicationStatus(
+    LoanApplicationState State, string? Reference = null, string? Message = null, DateTimeOffset? At = null);

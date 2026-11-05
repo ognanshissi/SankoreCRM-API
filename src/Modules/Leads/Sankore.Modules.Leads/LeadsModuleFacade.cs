@@ -174,6 +174,28 @@ public sealed class LeadsModuleFacade(
         return result;
     }
 
+    public async Task<CreditApplicationFacts?> GetCreditApplicationAsync(Guid tenantId, Guid projectId, CancellationToken ct)
+    {
+        var project = await db.Opportunities
+            .IgnoreQueryFilters()
+            .Where(o => o.TenantId == tenantId && o.Id == projectId)
+            .Select(o => new { o.LeadId, o.CustomerEntityId, o.ProductLineId, o.EstimatedAmount, o.CustomFieldsJson })
+            .FirstOrDefaultAsync(ct);
+        if (project is null) return null;
+
+        var clientId = project.CustomerEntityId;
+        if (clientId is null && project.LeadId is { } leadId)
+            clientId = await db.Leads.IgnoreQueryFilters()
+                .Where(l => l.TenantId == tenantId && l.Id == leadId)
+                .Select(l => l.CustomerId)
+                .FirstOrDefaultAsync(ct);
+
+        var (term, purpose) = Features.ProjectTemplates.CreditFileTemplate.ReadFields(project.CustomFieldsJson);
+        return new CreditApplicationFacts(
+            projectId, clientId, project.ProductLineId,
+            project.EstimatedAmount?.Amount, project.EstimatedAmount?.Currency, term, purpose);
+    }
+
     public async Task<LeadSummary?> GetLeadAsync(Guid leadId, CancellationToken ct)
     {
         var lead = await db.Leads

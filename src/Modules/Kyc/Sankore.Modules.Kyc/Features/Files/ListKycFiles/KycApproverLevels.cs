@@ -46,7 +46,8 @@ internal static class KycApproverLevels
                 continue;
             }
 
-            if (Is(role, Roles.Agent) || Is(role, Roles.CommercialAgent))
+            if (Is(role, Roles.Agent) || Is(role, Roles.CommercialAgent)
+                || Is(role, Roles.AccountManager) || Is(role, Roles.CreditManager))
                 ranks.Add((int)KycApprovalLevel.Agent);
 
             // The branch manager also signs the AGENT rung: an agent sees only their own files

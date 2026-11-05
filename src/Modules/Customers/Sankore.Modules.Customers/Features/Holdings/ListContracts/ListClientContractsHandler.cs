@@ -211,7 +211,9 @@ internal sealed class ListClientContractsHandler(
             Insurer: policy?.Insurer,
             PremiumOutstanding: policy?.PremiumOutstanding ?? false,
             DesignationsToReview: holding.CurrentDesignations.Count(d => d.Status == DesignationStatus.ToReview),
-            SignedAt: holding.SignedAt);
+            SignedAt: holding.SignedAt,
+            EndDate: policy?.ExpiryDate ?? loan?.MaturityOn,
+            DaysInArrears: loan?.DaysInArrears);
     }
 
     /// <summary>The figure the agent typed, before any back office answered.</summary>
@@ -240,7 +242,8 @@ internal sealed class ListClientContractsHandler(
         AccountRef: null,
         LoanRef: null,
         Insurer: policy.Insurer,
-        PremiumOutstanding: policy.PremiumOutstanding);
+        PremiumOutstanding: policy.PremiumOutstanding,
+        EndDate: policy.ExpiryDate);
 
     private static ClientContractDto FromAccount(CbsAccount account) => new(
         Key: $"account:{account.AccountId.Value}",
@@ -282,7 +285,9 @@ internal sealed class ListClientContractsHandler(
         AccountRef: null,
         LoanRef: loan.LoanId.Value,
         Insurer: null,
-        PremiumOutstanding: false);
+        PremiumOutstanding: false,
+        EndDate: loan.MaturityOn,
+        DaysInArrears: loan.DaysInArrears);
 
     /// <summary>What the line is, for the screen to pick its detail — from the category snapshot.</summary>
     internal static string NatureOf(string? category)

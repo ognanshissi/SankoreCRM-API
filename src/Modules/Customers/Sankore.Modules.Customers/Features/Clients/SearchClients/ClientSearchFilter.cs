@@ -24,6 +24,9 @@ public enum ClientQuickFilter
     HighRisk,
 
     WithoutAdvisor,
+
+    /// <summary>Le portefeuille de l'appelant : les clients dont il est le conseiller.</summary>
+    Mine,
 }
 
 /// <summary>Les critères de recherche, hors pagination et hors raccourci.</summary>
@@ -137,7 +140,7 @@ internal static class ClientSearchFilter
         return query;
     }
 
-    public static IQueryable<Client> Quick(IQueryable<Client> query, ClientQuickFilter quick) => quick switch
+    public static IQueryable<Client> Quick(IQueryable<Client> query, ClientQuickFilter quick, Guid me) => quick switch
     {
         ClientQuickFilter.KycToStart => query.Where(x => x.KycStatus == Kyc.PublicApi.KycStatus.NotStarted),
         ClientQuickFilter.KycInProgress => query.Where(x =>
@@ -145,6 +148,8 @@ internal static class ClientSearchFilter
         ClientQuickFilter.HighRisk => query.Where(x => x.RiskLevel == RiskLevel.High),
         // Un client archivé ou fusionné n'a plus à être suivi : il n'est pas « sans conseiller ».
         ClientQuickFilter.WithoutAdvisor => query.Where(x => x.AdvisorUserId == null
+            && x.Status != ClientStatus.Archived && x.Status != ClientStatus.Merged),
+        ClientQuickFilter.Mine => query.Where(x => x.AdvisorUserId == me
             && x.Status != ClientStatus.Archived && x.Status != ClientStatus.Merged),
         _ => query,
     };

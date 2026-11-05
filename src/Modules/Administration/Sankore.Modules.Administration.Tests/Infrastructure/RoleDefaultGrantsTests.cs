@@ -73,6 +73,8 @@ public sealed class RoleDefaultGrantsTests
     [Theory]
     [InlineData("Agent")]
     [InlineData("CommercialAgent")]
+    [InlineData("AccountManager")]
+    [InlineData("CreditManager")]
     [InlineData("BranchManager")]
     [InlineData("RegulationManager")]
     public void Every_role_on_the_KYC_ladder_can_sign_its_rung(string roleCode)
@@ -105,8 +107,46 @@ public sealed class RoleDefaultGrantsTests
     ];
 
     [Theory]
+    [InlineData("SalesManager")]
+    [InlineData("BranchManager")]
+    public void The_two_managers_supervise_a_team(string role)
+    {
+        Granted(role).Should().Contain(Permissions.CanSuperviseTeam.Code);
+    }
+
+    [Fact]
+    public void Only_the_sales_manager_covers_every_agency_by_default()
+    {
+        RoleSeeder.DefaultGrants.Where(g => g.PermissionCode == Permissions.CanCoverAllAgencies.Code)
+            .Select(g => g.RoleCode).Should().Equal(Roles.SalesManager.Code);
+    }
+
+    [Theory]
     [InlineData("Agent")]
     [InlineData("CommercialAgent")]
+    [InlineData("AccountManager")]
+    [InlineData("CreditManager")]
+    [InlineData("CreditAnalyst")]
+    public void The_front_line_roles_do_not_open_the_settings(string role)
+    {
+        Granted(role).Should().NotContain(Permissions.CanAccessSettings.Code);
+    }
+
+    [Fact]
+    public void The_credit_analyst_reads_the_perimeter_and_edits_nothing()
+    {
+        Granted(Roles.CreditAnalyst.Code).Should().Contain(ReadAll.Select(p => p.Code));
+        Granted(Roles.CreditAnalyst.Code).Should().Contain(Permissions.CanApproveWorkflow.Code);
+        Granted(Roles.CreditAnalyst.Code).Should().NotContain(
+            [Permissions.CanUpdateLead.Code, Permissions.CanUpdateCustomer.Code, Permissions.CanManageOpportunities.Code,
+             Permissions.CanManageKycFile.Code, Permissions.CanSuperviseTeam.Code]);
+    }
+
+    [Theory]
+    [InlineData("Agent")]
+    [InlineData("CommercialAgent")]
+    [InlineData("AccountManager")]
+    [InlineData("CreditManager")]
     public void The_two_agent_roles_read_only_what_is_assigned_to_them(string role)
     {
         // Product owner, 2026-10-23. A grant here would reach every existing tenant on the next

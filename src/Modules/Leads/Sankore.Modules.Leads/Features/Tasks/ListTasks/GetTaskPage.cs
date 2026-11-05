@@ -108,14 +108,14 @@ internal sealed class GetTaskPageHandler(
     {
         var q = db.CrmTasks.AsNoTracking();
         var me = currentUser.Id;
-        if (!TaskScope.IsSupervisor(currentUser.Roles))
+        if (!TeamSupervision.Supervises(currentUser))
             return q.Where(t => t.AssignedAgentId == me);
 
         var team = await TaskScope.TeamAsync(admin, tenant.CurrentTenantId, me, ct);
         if (agentId is { } agent)
             return team.Contains(agent) ? q.Where(t => t.AssignedAgentId == agent) : q.Where(_ => false);
 
-        return TaskScope.SeesEveryAgency(currentUser.Roles)
+        return TeamSupervision.CoversAllAgencies(currentUser)
             ? q.Where(t => t.AssignedAgentId == null || team.Contains(t.AssignedAgentId.Value))
             : q.Where(t => t.AssignedAgentId != null && team.Contains(t.AssignedAgentId.Value));
     }

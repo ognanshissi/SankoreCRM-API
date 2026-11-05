@@ -28,6 +28,7 @@ public static class OpportunitiesEndpoints
         var group = app.MapGroup("opportunities");
 
         group.MapProjectQuestionnaireEndpoints();
+        Sankore.Modules.Leads.Features.Opportunities.CreditSubmission.CreditFiles.MapCreditSubmission(group);
 
         // GET opportunities
         group.MapGet("", ListOpportunities)
@@ -35,6 +36,14 @@ public static class OpportunitiesEndpoints
             .WithTags("Opportunities")
             .RequireAuthorization(Permissions.CanReadOpportunities.Code)
             .Produces<IReadOnlyList<OpportunityDto>>()
+            .WithOpenApi();
+
+        // GET opportunities/overdue-count — open projects past their expected close date (« Ma journée »)
+        group.MapGet("overdue-count", GetOverdueCount)
+            .WithName("GetOverdueProjectCount")
+            .WithTags("Opportunities")
+            .RequireAuthorization(Permissions.CanReadOpportunities.Code)
+            .Produces<int>()
             .WithOpenApi();
 
         // GET opportunities/template?product= — what a NEW project on this product will follow
@@ -379,6 +388,12 @@ public static class OpportunitiesEndpoints
                 _ => Results.Problem(
                         title: "Update failed", detail: result.Error, statusCode: 422),
             };
+    }
+
+    private static async Task<IResult> GetOverdueCount(ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetOverdueProjectCountQuery(), ct);
+        return Results.Ok(result.Value);
     }
 
     private static async Task<IResult> ListOpportunities(

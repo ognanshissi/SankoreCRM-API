@@ -38,6 +38,12 @@ public interface ILeadsModule
         Guid tenantId, IReadOnlyCollection<Guid> leadIds, IReadOnlyCollection<Guid> projectIds, CancellationToken ct);
 
     /// <summary>
+    /// What a credit file's project asks for, for the core banking: read at the moment of sending,
+    /// the event carrying ids only. Null when the project does not exist in that tenant.
+    /// </summary>
+    Task<CreditApplicationFacts?> GetCreditApplicationAsync(Guid tenantId, Guid projectId, CancellationToken ct);
+
+    /// <summary>
     /// The names of several leads in one read (connected mailbox: a page of conversations, or a
     /// search over them). Ambient tenant, like <see cref="GetLeadAsync"/>; an unknown id is simply
     /// absent from the answer.

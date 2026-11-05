@@ -363,6 +363,59 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
                 ct);
         }
 
+        public async Task<IntegrationCommandId> RequestLoanApplicationAsync(
+            LoanApplicationRequest request, CancellationToken ct)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+
+            var tenantId = facade.TenantId;
+            var connection = await facade.RequireCoreBankingAsync(tenantId, ct);
+
+            return await facade.EnqueueAsync(
+                tenantId,
+                connection,
+                CommandType.SubmitLoanApplication,
+                IntegrationEntityTypes.Loan,
+                request.ProjectId,
+                IdempotencyKeyFactory.ForLoanApplication(tenantId, connection.Id, request.ProjectId),
+                facade._protector.Protect(new SubmitLoanApplicationPayload(
+                    request.ProductCode, request.Amount, request.Currency, request.TermMonths, request.Purpose, request.ClientId)),
+                ct);
+        }
+
+        public async Task<LoanApplicationStatus> GetLoanApplicationStatusAsync(Guid projectId, CancellationToken ct)
+        {
+            var tenantId = facade.TenantId;
+            var connection = await facade._resolver.ResolveConnectionAsync(tenantId, IntegrationFamily.CoreBanking, ct);
+            if (connection.IsFailure) return new LoanApplicationStatus(LoanApplicationState.NoConnection);
+
+            var key = IdempotencyKeyFactory.ForLoanApplication(tenantId, connection.Value.Id, projectId).Value;
+            var command = await facade._db.Commands
+                .IgnoreQueryFilters()
+                .Where(c => c.TenantId == tenantId && c.IdempotencyKey == key)
+                .Select(c => new { c.Status, c.ExternalResponseRef, c.LastErrorMessage, c.CompletedAt, c.CreatedAt })
+                .FirstOrDefaultAsync(ct);
+
+            if (command is null)
+            {
+                var adapter = facade._resolver.ResolveFor(connection.Value);
+                return adapter.IsFailure || !adapter.Value.Capabilities.Supports(IntegrationCapability.SubmitLoanApplication)
+                    ? new LoanApplicationStatus(LoanApplicationState.NotSupported)
+                    : new LoanApplicationStatus(LoanApplicationState.NotRequested);
+            }
+
+            var state = command.Status switch
+            {
+                CommandStatus.Succeeded => LoanApplicationState.Accepted,
+                CommandStatus.Rejected => LoanApplicationState.Rejected,
+                CommandStatus.Cancelled => LoanApplicationState.Cancelled,
+                CommandStatus.Batched => LoanApplicationState.Batched,
+                _ => LoanApplicationState.InProgress,
+            };
+            return new LoanApplicationStatus(
+                state, command.ExternalResponseRef, command.LastErrorMessage, command.CompletedAt ?? command.CreatedAt);
+        }
+
         /// <summary>
         /// The premium debit of ASS-05's first step. The connection is the tenant's core banking
         /// one — a premium is collected from the customer's own account, whichever insurer the

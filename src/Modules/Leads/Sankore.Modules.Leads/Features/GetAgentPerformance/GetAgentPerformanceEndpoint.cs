@@ -32,7 +32,7 @@ public static class GetAgentPerformanceEndpoint
     {
         var result = await sender.Send(new GetAgentPerformanceQuery(
             from, to, agentId, agencyId,
-            currentUser.Id, currentUser.Roles), ct);
+            currentUser.Id, currentUser.Roles, currentUser.Permissions), ct);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)

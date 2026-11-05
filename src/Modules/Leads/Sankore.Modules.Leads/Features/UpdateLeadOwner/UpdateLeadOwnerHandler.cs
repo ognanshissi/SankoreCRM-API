@@ -18,9 +18,6 @@ internal sealed class UpdateLeadOwnerHandler(
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher)
     : IRequestHandler<UpdateLeadOwnerCommand, Result>
 {
-    private static readonly HashSet<string> SupervisorRoles =
-        ["System", "Administrator", "SalesManager", "BranchManager"];
-
     public async Task<Result> Handle(UpdateLeadOwnerCommand cmd, CancellationToken ct)
     {
         var lead = await db.Leads.AsTracking().FirstOrDefaultAsync(l => l.Id == cmd.LeadId, ct);
@@ -30,7 +27,7 @@ internal sealed class UpdateLeadOwnerHandler(
 
         // ── US-M13-173: PermissionAttribution scope check ───────────────
         // Only supervisors or the current owner can reassign.
-        var isSupervisor = currentUser.Roles.Any(r => SupervisorRoles.Contains(r));
+        var isSupervisor = TeamSupervision.Supervises(currentUser);
 
         if (!isSupervisor && lead.OwnerId.HasValue && lead.OwnerId.Value != currentUser.Id)
             return Result.Fail("NOT_AUTHORIZED_TO_TRANSFER");

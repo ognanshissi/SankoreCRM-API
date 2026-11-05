@@ -16,7 +16,7 @@ namespace Sankore.Modules.Customers.Features.Clients.SearchClients;
 
 /// <param name="DuplicatesToReview">Paires de doublons à examiner, quel que soit le filtre.</param>
 public sealed record ClientQuickCountsDto(
-    int All, int KycToStart, int KycInProgress, int HighRisk, int WithoutAdvisor, int DuplicatesToReview);
+    int All, int KycToStart, int KycInProgress, int HighRisk, int WithoutAdvisor, int DuplicatesToReview, int Mine);
 
 /// <summary>
 /// Les compteurs des raccourcis de la liste, sous les mêmes critères que la recherche (agence,
@@ -37,7 +37,7 @@ internal sealed class GetClientQuickCountsHandler(
         var query = await ClientSearchFilter.ApplyAsync(
             db, visibility?.Apply(db.Clients) ?? db.Clients, request.Criteria, currentUser.TenantId, currentUser.Id, agencyScope, indexer, ct);
 
-        async Task<int> Count(ClientQuickFilter quick) => await ClientSearchFilter.Quick(query, quick).CountAsync(ct);
+        async Task<int> Count(ClientQuickFilter quick) => await ClientSearchFilter.Quick(query, quick, currentUser.Id).CountAsync(ct);
 
         return Result.Ok(new ClientQuickCountsDto(
             await Count(ClientQuickFilter.All),
@@ -45,7 +45,8 @@ internal sealed class GetClientQuickCountsHandler(
             await Count(ClientQuickFilter.KycInProgress),
             await Count(ClientQuickFilter.HighRisk),
             await Count(ClientQuickFilter.WithoutAdvisor),
-            await db.DuplicateCandidates.CountAsync(d => d.Status == DuplicateCandidateStatus.ToReview, ct)));
+            await db.DuplicateCandidates.CountAsync(d => d.Status == DuplicateCandidateStatus.ToReview, ct),
+            await Count(ClientQuickFilter.Mine)));
     }
 }
 

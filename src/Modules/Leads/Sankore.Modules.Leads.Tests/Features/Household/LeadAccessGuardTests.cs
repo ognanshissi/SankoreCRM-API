@@ -19,6 +19,17 @@ public sealed class LeadAccessGuardTests
     private readonly Guid _me = Guid.NewGuid();
     private readonly Guid _holder = Guid.NewGuid();
     private readonly IAdministrationModule _admin = Substitute.For<IAdministrationModule>();
+    private string[] _permissions = [];
+
+    [Fact]
+    public async Task Covering_every_agency_reaches_any_lead_whatever_the_role_is_called()
+    {
+        _permissions = [Permissions.CanCoverAllAgencies.Code];
+        var guard = Guard(callerId: Guid.NewGuid(), roles: "DirecteurReseau");
+
+        (await guard.EnsureCanWorkAsync(MakeLead(assignedId: _holder), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+    }
 
     private LeadAccessGuard Guard(Guid? callerId = null, params string[] roles)
     {
@@ -26,6 +37,7 @@ public sealed class LeadAccessGuardTests
         user.Id.Returns(callerId ?? _me);
         user.TenantId.Returns(Tenant);
         user.Roles.Returns(roles.Length == 0 ? [Roles.CommercialAgent.Code] : roles);
+        user.Permissions.Returns(_permissions);
 
         return new LeadAccessGuard(user, _admin);
     }
@@ -92,7 +104,6 @@ public sealed class LeadAccessGuardTests
     [Theory]
     [InlineData("System")]
     [InlineData("Administrator")]
-    [InlineData("SalesManager")]
     public async Task The_bypass_roles_reach_any_lead_without_a_team_lookup(string role)
     {
         // A manager whose team comes back empty — a one-agency tenant — would otherwise be locked

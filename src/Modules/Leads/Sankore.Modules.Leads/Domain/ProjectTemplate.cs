@@ -519,6 +519,7 @@ public static class ProjectTemplateErrors
     public const string ScopeTaken = "PROJECT_TEMPLATE_SCOPE_TAKEN";
     public const string ScopeInvalid = "PROJECT_TEMPLATE_SCOPE_INVALID";
     public const string UnknownProduct = "PROJECT_TEMPLATE_UNKNOWN_PRODUCT";
+    public const string NotCreditProduct = "PROJECT_TEMPLATE_NOT_CREDIT_PRODUCT";
     public const string NameRequired = "PROJECT_TEMPLATE_NAME_REQUIRED";
     public const string NameTooLong = "PROJECT_TEMPLATE_NAME_TOO_LONG";
     public const string NoStep = "PROJECT_TEMPLATE_NO_STEP";

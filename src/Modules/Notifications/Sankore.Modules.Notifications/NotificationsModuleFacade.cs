@@ -55,6 +55,19 @@ internal sealed class NotificationsModuleFacade(
             .IgnoreQueryFilters()
             .AnyAsync(n => n.TenantId == tenantId && n.UserId == userId && n.IdempotencyKey == idempotencyKey, ct);
 
+    public async Task<IReadOnlySet<string>> FindInAppKeysAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> userIds, IReadOnlyCollection<string> idempotencyKeys, CancellationToken ct = default)
+    {
+        var users = userIds.ToList();
+        var keys = idempotencyKeys.ToList();
+        var found = await db.UserNotifications
+            .IgnoreQueryFilters()
+            .Where(n => n.TenantId == tenantId && users.Contains(n.UserId) && keys.Contains(n.IdempotencyKey))
+            .Select(n => n.IdempotencyKey)
+            .ToListAsync(ct);
+        return found.ToHashSet();
+    }
+
     public async Task<Result<Guid>> NotifyInAppAsync(InAppNotificationRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);

@@ -37,6 +37,32 @@ public sealed class ListKycFilesSqlTranslationTests
         return new KycDbContext(options, new FixedTenantContext(Guid.NewGuid()));
     }
 
+    [Fact]
+    public void The_expiry_alert_query_translates()
+    {
+        using var db = NpgsqlContext();
+
+        var sql = Sankore.Modules.Kyc.Features.Reviews.KycAlerts
+            .ExpiringFiles(db, Guid.NewGuid(), new DateOnly(2026, 10, 1), new DateOnly(2026, 11, 30))
+            .ToQueryString();
+
+        sql.Should().Contain("max(").And.Contain("GROUP BY");
+    }
+
+    [Fact]
+    public void The_expiring_documents_filter_translates()
+    {
+        using var db = NpgsqlContext();
+        var limit = new DateOnly(2026, 11, 30);
+
+        var sql = db.KycFiles
+            .Where(f => Sankore.Modules.Kyc.Features.Reviews.KycAlerts.LiveStatuses.Contains(f.Status)
+                && db.KycIdentityDocuments.Where(d => d.KycFileId == f.Id).Max(d => d.ExpiryDate) <= limit)
+            .ToQueryString();
+
+        sql.Should().Contain("max(");
+    }
+
     /// <summary>The exact shape <c>ListKycFilesHandler</c> builds, kept in step with it by hand.</summary>
     private static string RenderSql(List<Guid> perimeter, List<int> myRanks)
     {

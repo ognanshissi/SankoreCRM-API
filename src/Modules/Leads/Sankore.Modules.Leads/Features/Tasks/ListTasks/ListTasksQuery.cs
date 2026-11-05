@@ -11,5 +11,6 @@ internal sealed record ListTasksQuery(
     CrmTaskStatus? Status = null,
     string? Type = null,
     Guid? CurrentUserId = null,
-    IReadOnlyList<string>? CurrentUserRoles = null
+    IReadOnlyList<string>? CurrentUserRoles = null,
+    IReadOnlyList<string>? CurrentUserPermissions = null
 ) : IRequest<Result<IReadOnlyList<CrmTaskDto>>>;

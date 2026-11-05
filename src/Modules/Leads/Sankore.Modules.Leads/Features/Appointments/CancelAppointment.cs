@@ -50,6 +50,5 @@ internal sealed class CancelAppointmentHandler(
         return Result.Ok();
     }
 
-    private bool IsSupervisor() =>
-        currentUser.Roles.Any(r => r is "System" or "Administrator" or "SalesManager" or "BranchManager");
+    private bool IsSupervisor() => TeamSupervision.Supervises(currentUser);
 }

@@ -75,6 +75,17 @@ public sealed class TaskPageTests : IDisposable
     }
 
     [Fact]
+    public async Task A_role_the_institution_created_supervises_through_the_permission()
+    {
+        await SeedAsync(Task(_awa, "Awa"), Task(_outsider, "Hors équipe"));
+
+        (await PageAsync(_manager, "ChefDeSecteur", TaskPageView.All)).Items.Should().BeEmpty("it has not been granted the right");
+
+        var page = await PageAsync(_manager, "ChefDeSecteur", TaskPageView.All, permissions: ["lead:team:supervise"]);
+        page.Items.Should().ContainSingle().Which.AssignedAgentId.Should().Be(_awa);
+    }
+
+    [Fact]
     public async Task The_search_reads_the_title()
     {
         await SeedAsync(Task(_awa, "Rappeler Madame Koné"), Task(_awa, "Relancer le dossier"));
@@ -97,11 +108,12 @@ public sealed class TaskPageTests : IDisposable
     }
 
     private async Task<CrmTaskPageDto> PageAsync(
-        Guid userId, string role, TaskPageView view, Guid? agentId = null, string? search = null)
+        Guid userId, string role, TaskPageView view, Guid? agentId = null, string? search = null, string[]? permissions = null)
     {
         var currentUser = Substitute.For<ICurrentUser>();
         currentUser.Id.Returns(userId);
         currentUser.Roles.Returns([role]);
+        currentUser.Permissions.Returns(permissions ?? (role == "BranchManager" ? ["lead:team:supervise"] : []));
         await using var db = _db.CreateContext();
         var tenant = new FixedTenantContext(_tenantId);
         var result = await new GetTaskPageHandler(db, tenant, currentUser, _admin, new TaskTypeCatalog(db, tenant), TimeProvider.System)

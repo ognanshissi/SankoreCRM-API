@@ -161,7 +161,7 @@ public static class TasksEndpoints
     {
         var result = await sender.Send(new ListTasksQuery(
             leadId, agentId, status, type,
-            currentUser.Id, currentUser.Roles), ct);
+            currentUser.Id, currentUser.Roles, currentUser.Permissions), ct);
         return Results.Ok(result.Value);
     }
 

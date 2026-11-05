@@ -91,7 +91,5 @@ internal sealed class CompleteTaskHandler(
             lead.RecordContactEstablished();
     }
 
-    private bool IsSupervisor() =>
-        currentUser.Roles.Any(r =>
-            r is "System" or "Administrator" or "SalesManager" or "BranchManager");
+    private bool IsSupervisor() => TeamSupervision.Supervises(currentUser);
 }

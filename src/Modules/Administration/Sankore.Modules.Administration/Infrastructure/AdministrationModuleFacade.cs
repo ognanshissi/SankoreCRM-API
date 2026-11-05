@@ -858,10 +858,6 @@ internal sealed class AdministrationModuleFacade(
         .Distinct()
         .ToList();
 
-    /// <summary>
-    /// The one reading of « an active holder of these roles », in these agencies (null = anywhere):
-    /// shared by the workflow recipients and the « Ma journée » roster so the two never disagree.
-    /// </summary>
     private IQueryable<AppUser> ActiveHoldersOf(Guid tenantId, List<string> normalizedRoles, List<Guid>? agencyIds) =>
         db.UserRoles
             .IgnoreQueryFilters()
@@ -874,7 +870,7 @@ internal sealed class AdministrationModuleFacade(
                      && (agencyIds == null || (u.AgencyId != null && agencyIds.Contains(u.AgencyId.Value))));
 
     public async Task<TeamRoster> GetTeamRosterAsync(
-        Guid tenantId, IReadOnlyCollection<Guid>? agencyIds, IReadOnlyCollection<string> roleCodes, CancellationToken ct)
+        Guid tenantId, IReadOnlyCollection<Guid>? agencyIds, CancellationToken ct)
     {
         tenantId = await TeamAsync(tenantId, ct);
         var ids = agencyIds?.ToList();
@@ -885,12 +881,24 @@ internal sealed class AdministrationModuleFacade(
             .Select(a => new AgencySummary(a.Id, a.Code, a.Name, a.ParentAgencyId, a.IsActive))
             .ToListAsync(ct);
 
-        var normalized = NormalizedRoles(roleCodes);
-        if (normalized.Count == 0) return new TeamRoster(agencies, []);
+        // Whoever holds the right through an active role supervises, and is not part of a team.
+        var supervisors = db.UserRoles
+            .IgnoreQueryFilters()
+            .Where(ur => ur.TenantId == tenantId && ur.IsActive)
+            .Join(db.RolePermissions, ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => new { ur.UserId, rp.PermissionId })
+            .Join(db.Permissions, x => x.PermissionId, p => p.Id, (x, p) => new { x.UserId, p.Code })
+            .Where(x => x.Code == Permissions.CanSuperviseTeam.Code)
+            .Select(x => x.UserId);
 
-        var members = await ActiveHoldersOf(tenantId, normalized, ids)
+        var members = await db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.TenantId == tenantId
+                     && u.Status == UserStatus.Active
+                     && !u.IsSuperUser
+                     && u.AccountType == UserAccountType.Standard
+                     && (ids == null || (u.AgencyId != null && ids.Contains(u.AgencyId.Value)))
+                     && !supervisors.Contains(u.Id))
             .Select(u => new { u.Id, u.FullName, u.AgencyId })
-            .Distinct()
             .ToListAsync(ct);
 
         return new TeamRoster(agencies, members

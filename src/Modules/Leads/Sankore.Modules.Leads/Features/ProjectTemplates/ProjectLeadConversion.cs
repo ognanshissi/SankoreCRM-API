@@ -6,6 +6,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.ConvertLead;
 using Sankore.Modules.Leads.Features.ConvertLead.Events;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.PublicApi;
 using Sankore.Shared.Infrastructure.Messaging;
 
 /// <summary>
@@ -36,6 +37,18 @@ internal sealed class ProjectLeadConversion(
     {
         var approval = template.Steps.ToList().FindIndex(s => s.IsApproval);
         return targetIndex >= template.Steps.Count || (approval >= 0 && targetIndex >= approval);
+    }
+
+    /// <summary>
+    /// Tells the Integration module a credit file was approved, through the outbox and in the
+    /// transaction of the move. Reaching « Accord » and then winning announce it twice: the command
+    /// is idempotent on the project, so it leaves once.
+    /// </summary>
+    public async Task AnnounceCreditFileIfApprovedAsync(
+        Opportunity project, ResolvedProjectTemplate template, int targetIndex, CancellationToken ct)
+    {
+        if (Approves(template, targetIndex) && CreditFileTemplate.IsCreditFile(template))
+            await publisher.PublishAsync(new CreditFileApprovedEvent(project.TenantId, project.Id), ct);
     }
 
     /// <summary>

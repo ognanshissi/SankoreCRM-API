@@ -244,6 +244,24 @@ internal sealed class OnboardingTestContext : IDisposable
     }
 
     /// <summary>Drains the queue, the way a dispatcher pass does.</summary>
+    /// <summary>A read of the core banking gateway, in the tenant's scope.</summary>
+    internal async Task<T> LoanGatewayAsync<T>(Func<ICoreBankingGateway, Task<T>> read)
+    {
+        using var bg = BackgroundJobContext.SetScope(TenantId, Guid.Empty, "SYSTEM");
+        using var scope = _provider.CreateScope();
+        return await read(scope.ServiceProvider.GetRequiredService<IIntegrationModule>().CoreBanking);
+    }
+
+    /// <summary>Queues an application as a consumer does: the gateway enlists, the caller saves.</summary>
+    internal async Task RequestLoanAsync(LoanApplicationRequest request)
+    {
+        using var bg = BackgroundJobContext.SetScope(TenantId, Guid.Empty, "SYSTEM");
+        using var scope = _provider.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IIntegrationModule>().CoreBanking
+            .RequestLoanApplicationAsync(request, default);
+        await scope.ServiceProvider.GetRequiredService<IntegrationDbContext>().SaveChangesAsync();
+    }
+
     internal async Task<int> ExecutePendingCommandsAsync()
     {
         var executed = 0;

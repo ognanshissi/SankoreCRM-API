@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 internal sealed class GetAgentPerformanceHandler(
@@ -13,9 +14,6 @@ internal sealed class GetAgentPerformanceHandler(
     IAdministrationModule admin)
     : IRequestHandler<GetAgentPerformanceQuery, Result<IReadOnlyList<AgentPerformanceDto>>>
 {
-    private static readonly HashSet<string> SupervisorRoles =
-        ["System", "Administrator", "SalesManager", "BranchManager"];
-
     public async Task<Result<IReadOnlyList<AgentPerformanceDto>>> Handle(
         GetAgentPerformanceQuery query, CancellationToken ct)
     {
@@ -40,7 +38,7 @@ internal sealed class GetAgentPerformanceHandler(
         // ── PermissionAttribution scoping (US-M13-182) ──────────────────
         if (query.CurrentUserId.HasValue && query.CurrentUserRoles is not null)
         {
-            var isSupervisor = query.CurrentUserRoles.Any(r => SupervisorRoles.Contains(r));
+            var isSupervisor = TeamSupervision.Holds(query.CurrentUserRoles, query.CurrentUserPermissions, Permissions.CanSuperviseTeam);
 
             if (!isSupervisor)
             {

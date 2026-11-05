@@ -8,15 +8,6 @@ using Sankore.Modules.Leads.Features.Tasks.GetTask;
 /// <summary>Who sees which tasks and how a row reads, for the task list and its paged page.</summary>
 internal static class TaskScope
 {
-    private static readonly HashSet<string> SupervisorRoles =
-        ["System", "Administrator", "SalesManager", "BranchManager"];
-
-    private static readonly HashSet<string> EveryAgencyRoles = ["System", "Administrator", "SalesManager"];
-
-    public static bool IsSupervisor(IEnumerable<string> roles) => roles.Any(SupervisorRoles.Contains);
-
-    public static bool SeesEveryAgency(IEnumerable<string> roles) => roles.Any(EveryAgencyRoles.Contains);
-
     /// <summary>
     /// An empty team means nobody to supervise, not "everyone": the filter used to be skipped then, and
     /// a branch manager alone in their agency saw every task of the tenant. A super-user's team is

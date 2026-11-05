@@ -27,7 +27,9 @@ internal sealed record ListKycFilesQuery(
     DateTimeOffset? To,
     int Page,
     int PageSize,
-    bool Mine = false) : IRequest<Result<KycFileListPage>>;
+    bool Mine = false,
+    /// <summary>Validated files whose latest piece has expired or expires within <see cref="Reviews.KycAlerts.ExpiryWindowDays"/> days.</summary>
+    bool DocumentsExpiring = false) : IRequest<Result<KycFileListPage>>;
 
 /// <param name="AwaitingMeCount">
 /// Files anywhere in the caller's perimeter whose next pending rung is one their ROLES can sign —

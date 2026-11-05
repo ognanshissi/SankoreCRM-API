@@ -6,6 +6,7 @@ using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Features.Tasks.GetTask;
 using Sankore.Modules.Leads.Features.TaskTypes;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Shared.Infrastructure.Auth;
 using Sankore.Shared.Kernel;
 
 internal sealed class ListTasksHandler(
@@ -24,7 +25,7 @@ internal sealed class ListTasksHandler(
         // Supervisors see their team; agents see only their own tasks.
         if (query.CurrentUserId.HasValue && query.CurrentUserRoles is not null)
         {
-            var isSupervisor = TaskScope.IsSupervisor(query.CurrentUserRoles);
+            var isSupervisor = TeamSupervision.Holds(query.CurrentUserRoles, query.CurrentUserPermissions, Permissions.CanSuperviseTeam);
 
             if (!isSupervisor)
             {

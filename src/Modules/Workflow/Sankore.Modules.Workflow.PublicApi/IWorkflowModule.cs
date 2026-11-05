@@ -17,6 +17,13 @@ public interface IWorkflowModule
     Task<Result<Guid>> StartWorkflowAsync(WorkflowStartRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// A ready-made project circuit, created and activated unless one of that name exists, which is
+    /// left as it stands. Returns the circuit's key, what a project template's step names.
+    /// </summary>
+    Task<Result<string>> EnsureProjectCircuitAsync(
+        string name, string? description, IReadOnlyList<ProjectCircuitStep> steps, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the current status of a workflow instance.
     /// Returns a failure result when the instance does not exist or belongs to a
     /// different tenant than <paramref name="tenantId"/>.
@@ -213,3 +220,6 @@ public sealed record WorkflowInstanceStatus(
     int CurrentStepOrder,
     int TotalSteps,
     bool IsCompleted);
+
+/// <summary>One validation step of a ready-made project circuit.</summary>
+public sealed record ProjectCircuitStep(string Name, string ApproverRoleCode, int? TimeoutHours);

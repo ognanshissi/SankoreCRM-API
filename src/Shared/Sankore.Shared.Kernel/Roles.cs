@@ -13,6 +13,9 @@ public static class Roles
     public static readonly RoleItem BranchManager = new RoleItem("BranchManager", "Compte Branch Manager");
     public static readonly RoleItem CommercialAgent = new RoleItem("CommercialAgent", "Compte Commercial Agent");
     public static readonly RoleItem RegulationManager = new RoleItem("RegulationManager", "Compte Regulation Manager");
+    public static readonly RoleItem AccountManager = new RoleItem("AccountManager", "Compte Gestionnaire de comptes");
+    public static readonly RoleItem CreditManager = new RoleItem("CreditManager", "Compte Gestionnaire de crédit");
+    public static readonly RoleItem CreditAnalyst = new RoleItem("CreditAnalyst", "Compte Analyste crédit");
 
     public static readonly RoleItem[] All =
     [
@@ -24,5 +27,8 @@ public static class Roles
         CommercialAgent,
         Cashier,
         RegulationManager,
+        AccountManager,
+        CreditManager,
+        CreditAnalyst,
     ];
 }

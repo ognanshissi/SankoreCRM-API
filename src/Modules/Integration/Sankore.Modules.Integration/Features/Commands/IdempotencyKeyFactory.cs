@@ -94,6 +94,10 @@ internal static class IdempotencyKeyFactory
     /// The PRODUCT CODE discriminates: a customer opening a savings account and a current account
     /// owes two openings, and a double click on one product owes one.
     /// </summary>
+    /// <summary>One application per project, whatever is corrected on it afterwards.</summary>
+    internal static IdempotencyKey ForLoanApplication(Guid tenantId, Guid connectionId, Guid projectId)
+        => For(tenantId, connectionId, CommandType.SubmitLoanApplication, IntegrationEntityTypes.Loan, projectId);
+
     internal static IdempotencyKey ForAccountOpening(
         Guid tenantId, Guid connectionId, Guid crmCustomerId, string productCode)
         => For(tenantId, connectionId, CommandType.OpenAccount,

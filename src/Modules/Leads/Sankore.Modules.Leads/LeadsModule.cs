@@ -357,6 +357,7 @@ public static class LeadsModule
         services.AddTransient<ReactivateRecycledLeadsJob>();
         services.AddTransient<Features.RecalculateLeadScore.CoolDownLeadsJob>();
         services.AddTransient<Features.ProjectTemplates.ProjectCloseDateOverdueJob>();
+        services.AddTransient<Features.Tasks.WorkAlerts.WorkAlertsJob>();
         services.AddTransient<Features.DispatchQueue.DispatchWaitingLeadsJob>();
 
         // Health questionnaire retention purge — Hangfire recurring job (BNF-B-09)

@@ -146,6 +146,7 @@ internal static class RoleSeeder
     /// <summary>Watching and steering a team's leads, on top of working them.</summary>
     private static readonly PermissionItem[] LeadSupervision =
     [
+        Permissions.CanSuperviseTeam,
         Permissions.CanAssignLead,
         Permissions.CanRecycleLead,
         Permissions.CanMergeLeads,
@@ -299,12 +300,43 @@ internal static class RoleSeeder
     ];
 
     /// <summary>
+    /// Account manager (2026-11-05, product owner): front-line work like a counter agent's, on the
+    /// clients of their own portfolio. No read of the whole perimeter, no settings; not in the pool
+    /// the dispatcher routes leads to (<c>DispatchableRoleCodes</c>).
+    /// </summary>
+    private static readonly PermissionItem[] AccountManagerPermissions = [.. AgentPermissions];
+
+    /// <summary>Credit manager: builds and follows the files of their own clients, as an account manager does.</summary>
+    private static readonly PermissionItem[] CreditManagerPermissions = [.. AgentPermissions];
+
+    /// <summary>
+    /// Credit analyst: reads the files of the perimeter and gives an opinion on the steps that target
+    /// them. Works no lead and edits no customer: the file stays with whoever builds it. Reading
+    /// leads also opens their agenda, and logging an activity their appointments.
+    /// </summary>
+    private static readonly PermissionItem[] CreditAnalystPermissions =
+    [
+        .. EveryBusinessRole,
+        .. ReadEverythingInPerimeter,
+        Permissions.CanReadLead,
+        Permissions.CanLogLeadActivity,
+        Permissions.CanReadOpportunities,
+        Permissions.CanReadCustomer,
+        Permissions.CanRevealCustomerSensitive,
+        Permissions.CanReadKycFile,
+        Permissions.CanViewLiveBalance,
+        Permissions.CanApproveWorkflow,
+    ];
+
+    /// <summary>
     /// Sales supervisor: the team's pipeline and its commercial rules — dispatching, nurturing, task
     /// generation, qualification templates. Scoring, stages and SLA stay the administrator's.
     /// </summary>
     private static readonly PermissionItem[] SalesManagerPermissions =
     [
         .. EveryBusinessRole,
+        Permissions.CanCoverAllAgencies,
+        Permissions.CanAccessSettings,
         .. ReadEverythingInPerimeter,
         .. Reports,
         Permissions.CanReadTerritory,
@@ -341,6 +373,7 @@ internal static class RoleSeeder
     private static readonly PermissionItem[] BranchManagerPermissions =
     [
         .. EveryBusinessRole,
+        Permissions.CanAccessSettings,
         .. ReadEverythingInPerimeter,
         .. Reports,
         Permissions.CanReadTerritory,
@@ -378,6 +411,7 @@ internal static class RoleSeeder
     private static readonly PermissionItem[] CashierPermissions =
     [
         .. EveryBusinessRole,
+        Permissions.CanAccessSettings,
         .. ReadEverythingInPerimeter,
         Permissions.CanCaptureLead,
         Permissions.CanReadLead,
@@ -398,6 +432,7 @@ internal static class RoleSeeder
     private static readonly PermissionItem[] RegulationManagerPermissions =
     [
         .. EveryBusinessRole,
+        Permissions.CanAccessSettings,
         .. ReadEverythingInPerimeter,
         .. Reports,
         Permissions.CanReadTerritory,
@@ -466,6 +501,9 @@ internal static class RoleSeeder
         .. Grant(Roles.BranchManager, BranchManagerPermissions),
         .. Grant(Roles.Cashier, CashierPermissions),
         .. Grant(Roles.RegulationManager, RegulationManagerPermissions),
+        .. Grant(Roles.AccountManager, AccountManagerPermissions),
+        .. Grant(Roles.CreditManager, CreditManagerPermissions),
+        .. Grant(Roles.CreditAnalyst, CreditAnalystPermissions),
     ];
 
     private static IEnumerable<(string RoleCode, string PermissionCode)> Grant(

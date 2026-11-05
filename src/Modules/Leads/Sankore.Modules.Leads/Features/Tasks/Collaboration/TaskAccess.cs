@@ -35,9 +35,7 @@ internal sealed class TaskAccess(
 {
     public const string NotFound = "TASK_NOT_FOUND";
 
-    private static readonly string[] BypassRoles = [Roles.System.Code, Roles.Administrator.Code, Roles.SalesManager.Code];
-
-    public bool HasBypassRole => me.Roles.Any(r => BypassRoles.Contains(r, StringComparer.Ordinal));
+    public bool HasBypassRole => TeamSupervision.CoversAllAgencies(me);
 
     /// <summary>The task when the caller may work in it, <see cref="NotFound"/> otherwise.</summary>
     public async Task<Result<CrmTask>> LoadAsync(Guid taskId, bool tracking, CancellationToken ct)
@@ -68,7 +66,7 @@ internal sealed class TaskAccess(
             var supervisors = await administration.GetUserSupervisorsAsync(task.TenantId, holderId, ct);
             if (supervisors.LineManagerId == userId || supervisors.AgencyManagerId == userId) return true;
 
-            if (me.Roles.Contains(Roles.BranchManager.Code, StringComparer.Ordinal))
+            if (TeamSupervision.Supervises(me))
             {
                 var team = await administration.GetTeamAgentIdsAsync(task.TenantId, userId, ct);
                 if (team.Contains(holderId)) return true;

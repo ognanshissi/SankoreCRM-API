@@ -34,28 +34,16 @@ public sealed class LeadAccessGuard(ICurrentUser currentUser, IAdministrationMod
     public const string Forbidden = "LEAD_NOT_YOURS";
 
     /// <summary>
-    /// Roles that reach every lead of their tenant without an ownership check. Deliberately short:
-    /// <c>BranchManager</c> is NOT here, because a branch manager's reach is their branch and that
-    /// is exactly what <c>GetTeamAgentIdsAsync</c> computes — adding them would replace a real
-    /// perimeter with a blanket one.
-    /// </summary>
-    private static readonly string[] BypassRoles =
-    [
-        Roles.System.Code,
-        Roles.Administrator.Code,
-        Roles.SalesManager.Code,
-    ];
-
-    /// <summary>
     /// Ok when the caller is the lead's current assignee, its owner, the agent who collected it,
     /// or the supervisor of whoever holds it.
     /// </summary>
     /// <remarks>
-    /// The SYSTEM role and the two management roles pass unconditionally. <c>System</c> because
-    /// that is what <c>SystemCurrentUser</c> carries and a Hangfire job has no team;
-    /// <c>Administrator</c> and <c>SalesManager</c> because a supervisor whose team is empty — a
-    /// manager in a one-agency tenant, say — would otherwise be locked out of every lead by a
-    /// contract that answers "nobody reports to you".
+    /// Whoever covers every agency passes unconditionally (<see cref="TeamSupervision.CoversAllAgencies"/>):
+    /// <c>System</c> because that is what <c>SystemCurrentUser</c> carries and a Hangfire job has no
+    /// team; the others because a supervisor whose team is empty — a manager in a one-agency tenant,
+    /// say — would otherwise be locked out of every lead by a contract that answers "nobody reports
+    /// to you". A branch manager does NOT cover every agency: their reach is their branch, which is
+    /// exactly what <c>GetTeamAgentIdsAsync</c> computes.
     ///
     /// <para>
     /// A lead held by NOBODY — no assignment, no owner — is refused rather than open to all. It
@@ -66,16 +54,15 @@ public sealed class LeadAccessGuard(ICurrentUser currentUser, IAdministrationMod
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Whether the user holds one of the roles that reach every lead of the tenant — the same
-    /// list this guard applies, for a caller that asks a different question with the same answer
+    /// Whether the user reaches every lead of the tenant — the same test this guard applies, for a
+    /// caller that asks a different question with the same answer
     /// (a WhatsApp reassignment reaching beyond a supervisor's own team).
     /// </summary>
-    public static bool HasBypassRole(ICurrentUser user)
-        => user.Roles.Intersect(BypassRoles, StringComparer.OrdinalIgnoreCase).Any();
+    public static bool HasBypassRole(ICurrentUser user) => TeamSupervision.CoversAllAgencies(user);
 
     public async Task<Result> EnsureCanWorkAsync(Lead lead, CancellationToken ct)
     {
-        if (currentUser.Roles.Intersect(BypassRoles, StringComparer.OrdinalIgnoreCase).Any())
+        if (TeamSupervision.CoversAllAgencies(currentUser))
             return Result.Ok();
 
         var me = currentUser.Id;

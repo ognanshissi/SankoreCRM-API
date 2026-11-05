@@ -3,10 +3,13 @@ namespace Sankore.Modules.Kyc.Features.Reviews;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Sankore.Modules.Administration.PublicApi;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Infrastructure;
 using Sankore.Modules.Kyc.Infrastructure.Settings;
 using Sankore.Modules.Kyc.PublicApi;
+using Sankore.Modules.Notifications.PublicApi;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
 using Sankore.Shared.Infrastructure.Messaging;
 
@@ -62,6 +65,24 @@ public sealed class ProcessTenantKycReviewsJob(IServiceScopeFactory scopeFactory
             "KYC review sweep for tenant {TenantId}: {Downgraded} downgraded, {MarkedDue} due, "
             + "{Expired} expired, {Failed} failed.",
             tenantId, report.Downgraded, report.MarkedDue, report.Expired, report.Failed);
+
+        // Après le balayage, et jamais au prix de celui-ci : ces alertes n'annoncent que ce qui est déjà vrai.
+        try
+        {
+            var alerted = await KycAlerts.SendExpiryAlertsAsync(
+                sp.GetRequiredService<KycDbContext>(),
+                sp.GetRequiredService<INotificationsModule>(),
+                sp.GetRequiredService<IAdministrationModule>(),
+                sp.GetRequiredService<ICustomersModule>(),
+                tenantId,
+                DateOnly.FromDateTime(sp.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime),
+                CancellationToken.None);
+            if (alerted > 0) logger.LogInformation("{Count} KYC document expiry alert(s) for tenant {TenantId}.", alerted, tenantId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "KYC document expiry alerts failed for tenant {TenantId}.", tenantId);
+        }
     }
 
     /// <summary>

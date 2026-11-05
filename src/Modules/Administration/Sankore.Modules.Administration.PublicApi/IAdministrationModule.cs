@@ -400,12 +400,13 @@ public interface IAdministrationModule
         Guid tenantId, string permissionCode, CancellationToken ct);
 
     /// <summary>
-    /// The active agencies — all of them, or those of <paramref name="agencyIds"/> — and the active users
-    /// holding one of <paramref name="roleCodes"/> in them, named. For a manager's « Ma journée »
-    /// (2026-11-03): the agency and agent pickers, and whose figures make up the team.
+    /// The active agencies — all of them, or those of <paramref name="agencyIds"/> — and who works in
+    /// them, named: every active standard account that does not itself supervise (product owner,
+    /// 2026-11-05, credit analysts included). For a manager's « Ma journée »: the agency and agent
+    /// pickers, and whose figures make up the team.
     /// </summary>
     Task<TeamRoster> GetTeamRosterAsync(
-        Guid tenantId, IReadOnlyCollection<Guid>? agencyIds, IReadOnlyCollection<string> roleCodes, CancellationToken ct);
+        Guid tenantId, IReadOnlyCollection<Guid>? agencyIds, CancellationToken ct);
 
     /// <summary>
     /// The beneficiary policy of a product line (BNF-B-06) — what it asks of the household and of

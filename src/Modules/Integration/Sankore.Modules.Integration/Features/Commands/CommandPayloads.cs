@@ -42,4 +42,4 @@ internal sealed record CancelPolicyPayload(string ExternalPolicyId, string Reaso
 /// the external customer id it needs is only known at send time, from the reference table.
 /// </summary>
 internal sealed record SubmitLoanApplicationPayload(
-    string ProductCode, decimal Amount, string Currency, int TermMonths, string? Purpose);
+    string ProductCode, decimal Amount, string Currency, int TermMonths, string? Purpose, Guid CrmCustomerId);

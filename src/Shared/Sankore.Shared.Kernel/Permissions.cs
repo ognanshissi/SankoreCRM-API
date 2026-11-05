@@ -223,6 +223,17 @@ public static class Permissions
     public static readonly PermissionItem CanReadAllLeads =
         new("lead:read:all", "View every lead, not only those assigned to me", ApplicationModules.Leads, "read:all");
 
+    // What a role does, instead of a list of role names (2026-11-05, product owner): a role an
+    // institution creates can supervise a team, cover every agency or open the settings by ticking these.
+    public static readonly PermissionItem CanSuperviseTeam =
+        new("lead:team:supervise", "Supervise a Team: its tasks, appointments and figures", ApplicationModules.Leads, "team:supervise");
+
+    public static readonly PermissionItem CanCoverAllAgencies =
+        new("lead:team:all-agencies", "Reach every Agency, not only one's own and those below it", ApplicationModules.Leads, "team:all-agencies");
+
+    public static readonly PermissionItem CanAccessSettings =
+        new("settings:access", "Open the Settings area", ApplicationModules.Leads, "settings:access");
+
     public static readonly PermissionItem CanUpdateLead =
         new("lead:update", "Update Lead Information", ApplicationModules.Leads, "update");
 
@@ -1102,6 +1113,9 @@ public static class Permissions
         CanCaptureLead,
         CanReadLead,
         CanReadAllLeads,
+        CanSuperviseTeam,
+        CanCoverAllAgencies,
+        CanAccessSettings,
         CanUpdateLead,
         CanAssignLead,
         CanQualifyLead,

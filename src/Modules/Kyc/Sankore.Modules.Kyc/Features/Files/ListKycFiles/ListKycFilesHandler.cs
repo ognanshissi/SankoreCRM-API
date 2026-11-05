@@ -42,6 +42,13 @@ internal sealed class ListKycFilesHandler(
             query = query.Where(f => f.ResponsibleAgentId == me);
         }
 
+        if (request.DocumentsExpiring)
+        {
+            var limit = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(Reviews.KycAlerts.ExpiryWindowDays);
+            query = query.Where(f => Reviews.KycAlerts.LiveStatuses.Contains(f.Status)
+                && db.KycIdentityDocuments.Where(d => d.KycFileId == f.Id).Max(d => d.ExpiryDate) <= limit);
+        }
+
         if (status is not null) query = query.Where(f => f.Status == status);
         if (vigilance is not null) query = query.Where(f => f.VigilanceLevel == vigilance);
         if (request.From is { } from) query = query.Where(f => f.UpdatedAt >= from);

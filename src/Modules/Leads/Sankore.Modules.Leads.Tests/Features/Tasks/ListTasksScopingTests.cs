@@ -89,7 +89,8 @@ public sealed class ListTasksScopingTests : IDisposable
     {
         await using var db = _db.CreateContext();
         var result = await new ListTasksHandler(db, new FixedTenantContext(_tenantId), _admin, new TaskTypeCatalog(db, new FixedTenantContext(_tenantId))).Handle(
-            new ListTasksQuery(LeadId: leadId, CurrentUserId: userId, CurrentUserRoles: [role]), default);
+            new ListTasksQuery(LeadId: leadId, CurrentUserId: userId, CurrentUserRoles: [role],
+                CurrentUserPermissions: role == "BranchManager" ? ["lead:team:supervise"] : []), default);
         return result.Value!;
     }
 

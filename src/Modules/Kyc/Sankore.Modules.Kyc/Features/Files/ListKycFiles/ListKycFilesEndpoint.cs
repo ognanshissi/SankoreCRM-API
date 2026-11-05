@@ -45,10 +45,11 @@ internal static class ListKycFilesEndpoint
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] bool mine = false,
+        [FromQuery] bool documentsExpiring = false,
         CancellationToken ct = default)
     {
         var result = await sender.Send(
-            new ListKycFilesQuery(status, agencyId, vigilanceLevel, from, to, page, pageSize, mine), ct);
+            new ListKycFilesQuery(status, agencyId, vigilanceLevel, from, to, page, pageSize, mine, documentsExpiring), ct);
 
         // 400, not 404: an unparsable status or vigilance level is a malformed request, and the
         // message names the accepted values. Nothing here can be "not found" — an empty perimeter

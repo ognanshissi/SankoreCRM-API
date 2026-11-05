@@ -11,8 +11,39 @@ namespace Sankore.Modules.Workflow;
 /// Exposed to the DI container as the concrete type behind the public contract.
 /// </summary>
 internal sealed class WorkflowModuleFacade(
-    WorkflowDbContext db, Infrastructure.Gates.RecordStepGates? gates = null) : IWorkflowModule
+    WorkflowDbContext db,
+    Infrastructure.Gates.RecordStepGates? gates = null,
+    MediatR.ISender? sender = null) : IWorkflowModule
 {
+    private const string ProjectEntityType = "Opportunity";
+
+    public async Task<Result<string>> EnsureProjectCircuitAsync(
+        string name, string? description, IReadOnlyList<ProjectCircuitStep> steps, CancellationToken ct = default)
+    {
+        if (sender is null) return Result.Fail<string>("WORKFLOW_CIRCUIT_UNAVAILABLE");
+
+        var circuit = WorkflowTemplate.CircuitFor(ProjectEntityType, name);
+        if (await db.WorkflowTemplates.AnyAsync(t => t.EntityType == ProjectEntityType && t.Circuit == circuit, ct))
+            return Result.Ok(circuit);
+
+        // The ordinary commands, so a ready-made circuit goes through what one drawn by hand does.
+        var created = await sender.Send(
+            new Features.Templates.CreateTemplate.CreateTemplateCommand(ProjectEntityType, name, description), ct);
+        if (created.IsFailure) return Result.Fail<string>(created.Error!);
+
+        var order = 0;
+        foreach (var step in steps)
+        {
+            var added = await sender.Send(new Features.Templates.AddStep.AddStepCommand(
+                created.Value, ++order, step.Name, null, step.ApproverRoleCode, step.TimeoutHours), ct);
+            if (added.IsFailure) return Result.Fail<string>(added.Error!);
+        }
+
+        var activated = await sender.Send(
+            new Features.Templates.ActivateTemplate.ActivateTemplateCommand(created.Value), ct);
+        return activated.IsSuccess ? Result.Ok(circuit) : Result.Fail<string>(activated.Error!);
+    }
+
     public async Task<Result<Guid>> StartWorkflowAsync(
         WorkflowStartRequest request,
         CancellationToken ct = default)

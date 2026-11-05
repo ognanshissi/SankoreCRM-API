@@ -272,8 +272,13 @@ internal sealed class ExecuteIntegrationCommandHandler(
         var payload = protector.Unprotect<SubmitLoanApplicationPayload>(command.PayloadEncrypted);
         if (payload is null) return MissingPayload(command);
 
-        var customer = await ExternalCustomerAsync(command, ct);
-        if (customer is null) return UnknownExternally(IntegrationEntityTypes.Customer, command.CrmId);
+        // The command is keyed on the PROJECT: a reference is unique per CRM id, and a client's second
+        // loan keyed on the client would be refused after the core banking had accepted it. Hence the
+        // customer from the payload.
+        var externalId = await references.GetExternalIdAsync(
+            command.TenantId, command.ConnectionId, IntegrationEntityTypes.Customer, payload.CrmCustomerId, ct);
+        if (externalId is null) return UnknownExternally(IntegrationEntityTypes.Customer, payload.CrmCustomerId);
+        var customer = new ExternalId(externalId);
 
         var port = resolver.ResolvePort<ICbsLoanPort>(
             adapter, IntegrationCapability.SubmitLoanApplication);
@@ -281,8 +286,8 @@ internal sealed class ExecuteIntegrationCommandHandler(
 
         var submitted = await port.Value.SubmitLoanApplicationAsync(
             new CbsLoanApplicationPayload(
-                CrmCustomerId: command.CrmId,
-                CustomerId: customer.Value,
+                CrmCustomerId: payload.CrmCustomerId,
+                CustomerId: customer,
                 ProductCode: payload.ProductCode,
                 Amount: payload.Amount,
                 Currency: payload.Currency,

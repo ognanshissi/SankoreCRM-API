@@ -514,6 +514,8 @@ builder.Services.AddMassTransit(x =>
 
     // KRM-B-10: tells the CUSTOMER how their file ended up. On the validation and rejection events
     // rather than on the routing, so an automatic and a manual approval produce the same message.
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Reviews.KycReviewDueNotificationConsumer>();
+    x.AddConsumer<Sankore.Modules.Integration.Features.Loans.CreditFileApprovedConsumer>();
     x.AddConsumer<Sankore.Modules.Kyc.Features.Routing.Consumers.KycRemoteOutcomeConsumer>();
 
     // Drops M08's SMS provider cache when a tenant reconfigures its channel. Its own consumer
@@ -931,6 +933,12 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(tenantId),
             Sankore.Modules.Leads.Features.ProjectTemplates.ProjectCloseDateOverdueJob.CronExpression);
 
+        // La cloche pour ce qui arrive à échéance : tâche en retard, rendez-vous proche, rappel dû.
+        AddOrUpdate<Sankore.Modules.Leads.Features.Tasks.WorkAlerts.WorkAlertsJob>(
+            $"{Sankore.Modules.Leads.Features.Tasks.WorkAlerts.WorkAlertsJob.RecurringJobPrefix}-{suffix}",
+            job => job.ExecuteAsync(tenantId),
+            Sankore.Modules.Leads.Features.Tasks.WorkAlerts.WorkAlertsJob.CronExpression);
+
         AddOrUpdate<Sankore.Modules.Leads.Features.ReactivateRecycledLeads.ReactivateRecycledLeadsJob>(
             $"reactivate-recycled-leads-{suffix}",
             job => job.ExecuteAsync(tenantId),
@@ -1062,6 +1070,11 @@ if (emitOpenApiTo is null) {
             $"insurance-follow-up-{suffix}",
             job => job.RunAsync(tenantId, CancellationToken.None),
             "30 7 * * *");
+
+        AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.PolicySync.PolicyExpiryAlertsJob>(
+            $"insurance-policy-expiry-alerts-{suffix}",
+            job => job.RunAsync(tenantId, CancellationToken.None),
+            "25 7 * * *");
 
         AddOrUpdate<Sankore.Modules.Integration.Features.Insurance.Premiums.PremiumPaymentDeadlineJob>(
             $"insurance-premium-deadlines-{suffix}",

@@ -48,7 +48,10 @@ internal sealed class ProjectStepTransition(
 
         // Reaching the approval step converts the lead (product owner, 2026-10-24).
         if (conversion is not null)
+        {
             await conversion.ConvertIfApprovedAsync(project, template, targetIndex, ct);
+            await conversion.AnnounceCreditFileIfApprovedAsync(project, template, targetIndex, ct);
+        }
 
         return Result.Ok();
     }

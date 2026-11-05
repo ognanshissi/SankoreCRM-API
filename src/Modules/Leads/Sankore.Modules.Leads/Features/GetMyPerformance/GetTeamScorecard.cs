@@ -66,10 +66,10 @@ public sealed record GetTeamScorecardQuery(string? Period, Guid? AgencyId, Guid?
 /// leads captured, tasks nobody started, first contacts already late — and one row per agent.
 ///
 /// <para>
-/// Perimeter by role (product owner): Administrator, System and SalesManager see every agency; anyone
-/// else their accessible agencies (<see cref="IAgencyScopeProvider"/>: their agency, its sub-agencies
+/// Perimeter (product owner): whoever covers every agency (<see cref="TeamSupervision.CoversAllAgencies"/>)
+/// sees them all; anyone else their accessible agencies (<see cref="IAgencyScopeProvider"/>: their agency, its sub-agencies
 /// and attributions). An agency or agent outside it is <see cref="OutOfScope"/>, never an empty page.
-/// The team is the active Agent / CommercialAgent accounts of those agencies.
+/// The team is everybody active in those agencies who does not supervise (product owner, 2026-11-05).
 /// </para>
 /// </summary>
 internal sealed class GetTeamScorecardHandler(
@@ -81,8 +81,6 @@ internal sealed class GetTeamScorecardHandler(
     : IRequestHandler<GetTeamScorecardQuery, Result<TeamScorecardDto>>
 {
     public const string OutOfScope = "TEAM_SCOPE_OUT_OF_PERIMETER";
-    internal static readonly string[] AllAgenciesRoles = ["System", "Administrator", "SalesManager"];
-    internal static readonly string[] AgentRoles = ["Agent", "CommercialAgent"];
 
     public async Task<Result<TeamScorecardDto>> Handle(GetTeamScorecardQuery query, CancellationToken ct)
     {
@@ -93,12 +91,12 @@ internal sealed class GetTeamScorecardHandler(
         var (from, to) = window;
         var tenantId = currentUser.TenantId;
 
-        var allAgencies = currentUser.Roles.Any(r => AllAgenciesRoles.Contains(r, StringComparer.OrdinalIgnoreCase));
+        var allAgencies = TeamSupervision.CoversAllAgencies(currentUser);
         IReadOnlySet<Guid>? accessible = allAgencies
             ? null
             : await agencyScope.GetAccessibleAgencyIdsAsync(tenantId, currentUser.Id, ct);
 
-        var roster = await admin.GetTeamRosterAsync(tenantId, accessible?.ToList(), AgentRoles, ct);
+        var roster = await admin.GetTeamRosterAsync(tenantId, accessible?.ToList(), ct);
 
         // The agency chosen and its sub-agencies, within the perimeter.
         IReadOnlyCollection<Guid>? agencies = accessible;

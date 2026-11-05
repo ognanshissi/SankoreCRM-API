@@ -88,7 +88,7 @@ public sealed class RescheduleTasksHandlerTests : IDisposable
     [Fact]
     public async Task A_supervisor_may_move_an_agents_task()
     {
-        _currentUser.Roles.Returns(["BranchManager"]);
+        _currentUser.Permissions.Returns(["lead:team:supervise"]);
         var task = await SeedAsync(Guid.NewGuid());
 
         (await RunAsync(new TaskDueDateInput(task.Id, _now.AddDays(2)))).IsSuccess.Should().BeTrue();

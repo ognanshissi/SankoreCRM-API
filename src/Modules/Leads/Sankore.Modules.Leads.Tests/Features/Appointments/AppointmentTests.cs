@@ -142,7 +142,7 @@ public sealed class AppointmentTests : IDisposable
 
         (await CancelAsync()).Error.Should().Be("NOT_APPOINTMENT_ORGANIZER");
 
-        _currentUser.Roles.Returns(["BranchManager"]);
+        _currentUser.Permissions.Returns(["lead:team:supervise"]);
         (await CancelAsync()).IsSuccess.Should().BeTrue();
         await _publisher.Received(1).PublishAsync(Arg.Any<AppointmentCancelledEvent>(), Arg.Any<CancellationToken>());
     }

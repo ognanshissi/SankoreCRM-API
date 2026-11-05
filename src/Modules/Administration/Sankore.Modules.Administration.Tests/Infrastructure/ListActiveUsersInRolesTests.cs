@@ -57,6 +57,35 @@ public sealed class ListActiveUsersInRolesTests : IDisposable
         inBranch.Should().NotContain(inactive);
     }
 
+    [Fact]
+    public async Task The_team_is_whoever_works_in_the_agency_and_does_not_supervise()
+    {
+        var branch = Agency.Create(_tenantId, "B1", "Plateau", "", AgencyType.HeadQuarter, null, null);
+        var other = Agency.Create(_tenantId, "B2", "Yopougon", "", AgencyType.HeadQuarter, null, null);
+        var manager = AppRole.Create("BranchManager", "Chef d'agence");
+        var analyst = AppRole.Create("CreditAnalyst", "Analyste crédit");
+        var supervise = Permission.Create(Permissions.CanSuperviseTeam.Code, "", "Leads", "team:supervise");
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.Agencies.AddRange(branch, other);
+            db.Roles.AddRange(manager, analyst);
+            db.Permissions.Add(supervise);
+            db.RolePermissions.Add(RolePermission.Grant(manager.Id, supervise.Id));
+            await db.SaveChangesAsync();
+        }
+
+        var head = await SeedUserAsync(branch.Id, manager);
+        var inBranch = await SeedUserAsync(branch.Id, analyst);
+        var elsewhere = await SeedUserAsync(other.Id, analyst);
+        var inactive = await SeedUserAsync(branch.Id, analyst, active: false);
+
+        var roster = await Facade().GetTeamRosterAsync(_tenantId, [branch.Id], default);
+
+        roster.Members.Select(m => m.UserId).Should().Equal(inBranch);
+        roster.Members.Select(m => m.UserId).Should().NotContain([head, elsewhere, inactive]);
+    }
+
     private async Task<Guid> SeedUserAsync(Guid agencyId, AppRole role, bool active = true)
     {
         await using var db = _factory.CreateContext();

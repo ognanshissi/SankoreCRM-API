@@ -32,11 +32,11 @@ public sealed class TeamScorecardTests : IDisposable
         _factory = new TestDbContextFactory(_tenant);
         _scope.GetAccessibleAgencyIdsAsync(_tenant, _manager, Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid> { _branch, _subBranch });
-        _admin.GetTeamRosterAsync(_tenant, Arg.Is<IReadOnlyCollection<Guid>?>(ids => ids != null), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+        _admin.GetTeamRosterAsync(_tenant, Arg.Is<IReadOnlyCollection<Guid>?>(ids => ids != null), Arg.Any<CancellationToken>())
             .Returns(new TeamRoster(
                 [Agency(_branch, "Agence 2", null), Agency(_subBranch, "Guichet Cocody", _branch)],
                 [new TeamMember(_agent, "Awa Konan", _subBranch)]));
-        _admin.GetTeamRosterAsync(_tenant, null, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+        _admin.GetTeamRosterAsync(_tenant, null, Arg.Any<CancellationToken>())
             .Returns(new TeamRoster(
                 [Agency(_branch, "Agence 2", null), Agency(_subBranch, "Guichet Cocody", _branch), Agency(_otherBranch, "Agence 5", null)],
                 [new TeamMember(_agent, "Awa Konan", _subBranch), new TeamMember(_stranger, "Yao Kouassi", _otherBranch)]));

@@ -63,7 +63,11 @@ public sealed record ClientContractDto(
     bool PremiumOutstanding,
     int DesignationsToReview = 0,
     /// <summary>A Crm line's signature date: « signé, non envoyé » is told apart by it.</summary>
-    DateTimeOffset? SignedAt = null);
+    DateTimeOffset? SignedAt = null,
+    /// <summary>When it ends: a policy's expiry, a loan's maturity. Null when the back office does not say.</summary>
+    DateOnly? EndDate = null,
+    /// <summary>A loan's days in arrears, as the core banking reports them. Null when it does not say: never read as zero.</summary>
+    int? DaysInArrears = null);
 
 /// <param name="UnavailableSources">
 /// <c>Insurer</c> and/or <c>CoreBanking</c> when that back office's records could not be read:

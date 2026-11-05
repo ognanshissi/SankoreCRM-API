@@ -87,7 +87,10 @@ internal sealed class CloseOpportunityHandler(
             return Result.Fail<CloseOpportunityResult>(closed.Error!);
 
         if (wonTemplate is not null)
+        {
             await conversion!.ConvertIfApprovedAsync(opportunity, wonTemplate, wonTemplate.Steps.Count, ct);
+            await conversion.AnnounceCreditFileIfApprovedAsync(opportunity, wonTemplate, wonTemplate.Steps.Count, ct);
+        }
 
         history?.Closed(opportunity);
         await db.SaveChangesAsync(ct);

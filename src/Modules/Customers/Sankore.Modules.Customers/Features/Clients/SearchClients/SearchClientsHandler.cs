@@ -53,7 +53,7 @@ internal sealed class SearchClientsHandler(
 
         var query = await ClientSearchFilter.ApplyAsync(
             db, visibility?.Apply(db.Clients) ?? db.Clients, request.Criteria, tenantId, actor, agencyScope, indexer, ct);
-        query = ClientSearchFilter.Quick(query, request.Quick);
+        query = ClientSearchFilter.Quick(query, request.Quick, actor);
 
         // Custom-field filters (dynamic forms, lot 6), served by the GIN index on custom_fields.
         if (request.CustomFilters is { Count: > 0 })

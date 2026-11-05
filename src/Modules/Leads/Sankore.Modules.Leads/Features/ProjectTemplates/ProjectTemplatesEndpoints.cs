@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Leads.Domain;
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
 /// <summary>
@@ -34,6 +35,18 @@ public static class ProjectTemplatesEndpoints
         group.MapPost("", Create)
             .WithName("CreateProjectTemplate")
             .RequireAuthorization(Permissions.CanManagePipelineStages.Code)
+            .Produces<Guid>(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .WithOpenApi();
+
+        // Ready-made: the template of the Loan family or of one credit product, and its validation
+        // circuit. Both rights, since it writes both.
+        group.MapPost("credit-file", CreateCreditFile)
+            .WithName("CreateCreditFileTemplate")
+            .RequireAuthorization(Permissions.CanManagePipelineStages.Code)
+            .RequireAuthorization(Permissions.CanManageWorkflowSteps.Code)
+            .RequireTenantModule(TenantModules.BankingMicrofinance)
             .Produces<Guid>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity)
@@ -80,6 +93,15 @@ public static class ProjectTemplatesEndpoints
             : ToProblem(result.Error!);
     }
 
+    private static async Task<IResult> CreateCreditFile(
+        CreateCreditFileTemplateRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new CreateCreditFileTemplateCommand(req.ProductCode), ct);
+        return result.IsSuccess
+            ? Results.Created($"project-templates/{result.Value}", result.Value)
+            : ToProblem(result.Error!);
+    }
+
     private static async Task<IResult> Update(
         Guid templateId, UpdateProjectTemplateRequest req, ISender sender, CancellationToken ct)
     {
@@ -113,6 +135,9 @@ public static class ProjectTemplatesEndpoints
         _ => Results.Problem(title: "Invalid project template", detail: error, statusCode: 422),
     };
 }
+
+/// <param name="ProductCode">One credit product; empty for the Loan family.</param>
+public sealed record CreateCreditFileTemplateRequest(string? ProductCode = null);
 
 /// <param name="Category">A family (<c>ProductCategory</c>). Leave both scopes empty for the default.</param>
 /// <param name="ProductCode">A catalogue product's code, for a template of its own.</param>
