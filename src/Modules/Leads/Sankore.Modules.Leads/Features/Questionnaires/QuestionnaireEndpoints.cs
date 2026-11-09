@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Leads.Features.Questionnaires;
 
+using Sankore.Shared.Infrastructure.Tenants;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -19,6 +20,8 @@ internal static class QuestionnaireEndpoints
             .WithTags("Leads")
             .WithSummary("Record a person's explicit consent to health-data processing")
             .RequireAuthorization(Permissions.CanRecordConsent.Code)
+            // Health data serve the insurers' health questionnaires only (docs/isolation-socle.md).
+            .RequireTenantModule(TenantModules.Insurance)
             .Produces<RecordHealthConsentResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status403Forbidden)

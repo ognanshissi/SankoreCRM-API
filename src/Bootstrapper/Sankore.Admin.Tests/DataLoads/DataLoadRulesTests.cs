@@ -111,6 +111,26 @@ public sealed class DataLoadRulesTests : IDisposable
     }
 
     [Fact]
+    public void A_load_interrupted_by_a_restart_is_taken_again_after_twenty_minutes()
+    {
+        // Recette of 2026-11-09: the API restarted under a load, which stayed « En cours » for ever.
+        var now = DateTimeOffset.Parse("2026-11-09T15:50:00Z");
+        var takeable = DataLoadRules.Takeable(now).Compile();
+        TenantDataLoad Load(TenantDataLoadStatus status, DateTimeOffset? startedAt)
+        {
+            var load = TenantDataLoad.Request(Guid.NewGuid(), TenantDataLoadKind.Demo, Guid.Empty, now.AddHours(-1));
+            typeof(TenantDataLoad).GetProperty(nameof(TenantDataLoad.Status))!.SetValue(load, status);
+            typeof(TenantDataLoad).GetProperty(nameof(TenantDataLoad.StartedAt))!.SetValue(load, startedAt);
+            return load;
+        }
+
+        takeable(Load(TenantDataLoadStatus.Pending, null)).Should().BeTrue();
+        takeable(Load(TenantDataLoadStatus.Running, now.AddMinutes(-5))).Should().BeFalse("it may still be running");
+        takeable(Load(TenantDataLoadStatus.Running, now.AddMinutes(-25))).Should().BeTrue();
+        takeable(Load(TenantDataLoadStatus.Completed, now.AddMinutes(-25))).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task One_load_at_a_time_and_an_unknown_kind_is_refused()
     {
         (await RequestAsync("Starter")).Error.Should().BeNull();

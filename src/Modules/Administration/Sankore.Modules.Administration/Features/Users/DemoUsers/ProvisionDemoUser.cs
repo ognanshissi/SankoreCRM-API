@@ -1,3 +1,4 @@
+using Sankore.Modules.Administration.Features.Roles.Modules;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +57,8 @@ internal sealed class ProvisionDemoUserHandler(
     ITenantStore tenantStore,
     IOptions<DemoDataOptions> demoOptions,
     [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher,
-    EmployeeNumberAllocator employeeNumbers) : IRequestHandler<ProvisionDemoUserCommand, Result<Guid>>
+    EmployeeNumberAllocator employeeNumbers,
+    ITenantModules? modules = null) : IRequestHandler<ProvisionDemoUserCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(ProvisionDemoUserCommand request, CancellationToken ct)
     {
@@ -71,6 +73,8 @@ internal sealed class ProvisionDemoUserHandler(
             return Result.Fail<Guid>(DemoUserErrors.AgencyNotFound);
         var role = await roleManager.FindByNameAsync(request.RoleCode);
         if (role is null) return Result.Fail<Guid>(DemoUserErrors.RoleNotFound);
+        if (await RoleModuleGate.RefusesAsync(modules, tenantContext.CurrentTenantId, role.Name, ct))
+            return Result.Fail<Guid>(RoleModuleGate.Disabled);
 
         var email = request.Email.Trim();
         var normalized = email.ToUpperInvariant();

@@ -13,6 +13,7 @@ using Sankore.Modules.Leads.Features.Visibility;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Modules.Leads.PublicApi;
 using Sankore.Shared.Infrastructure.Behaviors;
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Infrastructure.Messaging;
 using Sankore.Shared.Kernel;
 
@@ -119,8 +120,11 @@ internal static class CreditFiles
 
     public static IEndpointRouteBuilder MapCreditSubmission(this IEndpointRouteBuilder group)
     {
-        group.MapGet("{opportunityId:guid}/credit-submission", async (Guid opportunityId, ISender sender, CancellationToken ct) =>
+        // Banking - Microfinance's (docs/isolation-socle.md, lot 1). The read answers « nothing to show »
+        // rather than 403 without the module: the project page asks it of every project.
+        group.MapGet("{opportunityId:guid}/credit-submission", async (Guid opportunityId, ISender sender, ITenantModules modules, CancellationToken ct) =>
             {
+                if (!await modules.IsReadableAsync(TenantModules.BankingMicrofinance, ct)) return Results.NoContent();
                 var result = await sender.Send(new GetCreditSubmissionQuery(opportunityId), ct);
                 if (result.IsFailure) return Results.NotFound();
                 return result.Value is { } dto ? Results.Ok(dto) : Results.NoContent();
@@ -144,6 +148,7 @@ internal static class CreditFiles
             .WithName("SendProjectCreditSubmission")
             .WithTags("Opportunities")
             .RequireAuthorization(Permissions.CanManageOpportunities.Code)
+            .RequireTenantModule(TenantModules.BankingMicrofinance)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)

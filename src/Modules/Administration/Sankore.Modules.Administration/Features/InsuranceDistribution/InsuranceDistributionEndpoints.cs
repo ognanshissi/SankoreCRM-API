@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Administration.Features.InsuranceDistribution;
 
+using Sankore.Shared.Infrastructure.Tenants;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -30,7 +31,9 @@ internal static class InsuranceDistributionEndpoints
 
     public static IEndpointRouteBuilder MapInsuranceDistributionEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("insurance-distribution").WithTags("Insurance distribution").LiveModeWritesOnly();
+        // The CIMA distributor's file is the Insurance module's (docs/isolation-socle.md, lot 1).
+        var group = app.MapGroup("insurance-distribution").WithTags("Insurance distribution").LiveModeWritesOnly()
+            .RequireTenantModule(TenantModules.Insurance);
 
         group.MapGet(string.Empty, Get)
             .WithName("GetInsuranceDistributor")

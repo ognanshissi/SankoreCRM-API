@@ -71,6 +71,25 @@ public sealed class LeadSettingsEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task The_health_retention_is_the_insurance_modules_setting()
+    {
+        // docs/isolation-socle.md, lot 1: a socle institution neither sees nor reads it.
+        await using var db = _factory.CreateContext();
+
+        var socle = await new ListLeadSettingsHandler(db, FixedTenantModules.None)
+            .Handle(new ListLeadSettingsQuery(), CancellationToken.None);
+        socle.Value!.Select(s => s.Key).Should().NotContain(LeadSettingKeys.HealthResponseRetentionDays);
+
+        var insurance = await new ListLeadSettingsHandler(db, new FixedTenantModules(TenantModules.Insurance))
+            .Handle(new ListLeadSettingsQuery(), CancellationToken.None);
+        insurance.Value!.Select(s => s.Key).Should().Contain(LeadSettingKeys.HealthResponseRetentionDays);
+
+        (await new GetLeadSettingHandler(db, FixedTenantModules.None)
+                .Handle(new GetLeadSettingQuery(LeadSettingKeys.HealthResponseRetentionDays), CancellationToken.None))
+            .Error.Should().Be(LeadSettingErrors.Unknown);
+    }
+
+    [Fact]
     public async Task A_customised_value_is_reported_as_not_default()
     {
         await SeedRowAsync(LeadSettingKeys.LeadRetentionMonths, "36");

@@ -5,7 +5,7 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.Roles.GetRole;
 
-internal sealed class GetRoleHandler(AdministrationDbContext db)
+internal sealed class GetRoleHandler(AdministrationDbContext db, ITenantModules? modules = null, ITenantContext? tenant = null)
     : IRequestHandler<GetRoleQuery, Result<RoleDetailDto>>
 {
     public async Task<Result<RoleDetailDto>> Handle(GetRoleQuery request, CancellationToken ct)
@@ -24,6 +24,12 @@ internal sealed class GetRoleHandler(AdministrationDbContext db)
             .Where(rp => rp.RoleId == request.RoleId)
             .Select(rp => new RolePermissionDto(rp.PermissionId, rp.Permission.Code, rp.Permission.Description))
             .ToListAsync(ct);
+
+        if (modules is not null && tenant is not null)
+        {
+            var readable = await modules.ReadableSetAsync(tenant.CurrentTenantId, ct);
+            permissions = permissions.Where(p => ModuleScopes.InReach(ModuleScopes.OfPermission(p.Code), readable)).ToList();
+        }
 
         return Result.Ok(new RoleDetailDto(
             role.Id, role.Name!, role.Label, role.IsSystem, role.IsAssignable,

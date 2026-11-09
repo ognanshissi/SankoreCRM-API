@@ -359,6 +359,8 @@ public interface ICustomersModule
     /// 29 February is folded onto 28 February in a non-leap year, so a contract signed on a leap
     /// day is reviewed every year rather than once every four.
     /// </para>
+    ///
+    /// <para>INSURANCE contracts only (CIMA rule, owner's decision of 2026-11-09).</para>
     /// </summary>
     Task<IReadOnlyList<Guid>> GetClientsWithContractAnniversaryAsync(
         Guid tenantId, DateOnly onDay, CancellationToken ct);

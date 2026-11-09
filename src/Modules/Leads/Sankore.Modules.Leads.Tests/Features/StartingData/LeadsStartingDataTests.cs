@@ -89,6 +89,19 @@ public sealed class LeadsStartingDataTests : IDisposable
     }
 
     [Fact]
+    public async Task A_socle_institution_gets_one_standard_questionnaire_and_no_credit_file()
+    {
+        // docs/isolation-socle.md, lot 5.
+        Modules();
+
+        await LoadAsync();
+
+        _sent.OfType<CreateCreditFileTemplateCommand>().Should().BeEmpty();
+        _sent.OfType<CreateQualificationTemplateCommand>().Should().ContainSingle()
+            .Which.ProductCategory.Should().Be(ProductCategory.Standard);
+    }
+
+    [Fact]
     public async Task What_the_institution_already_has_is_left_alone()
     {
         Modules(TenantModules.BankingMicrofinance);

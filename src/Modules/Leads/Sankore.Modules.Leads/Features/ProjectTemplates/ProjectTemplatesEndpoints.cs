@@ -90,7 +90,7 @@ public static class ProjectTemplatesEndpoints
 
         return result.IsSuccess
             ? Results.Created($"project-templates/{result.Value}", result.Value)
-            : ToProblem(result.Error!);
+            : ToProblem(result.Error!, req.AmountKind, req.Category);
     }
 
     private static async Task<IResult> CreateCreditFile(
@@ -109,7 +109,7 @@ public static class ProjectTemplatesEndpoints
             new UpdateProjectTemplateCommand(templateId, req.Name, Inputs(req.Steps),
                 new ProjectForecastOptions(req.TracksForecast, req.AmountKind, req.CriticalCloseDate), Fields(req.Fields)), ct);
 
-        return result.IsSuccess ? Results.NoContent() : ToProblem(result.Error!);
+        return result.IsSuccess ? Results.NoContent() : ToProblem(result.Error!, req.AmountKind);
     }
 
     private static async Task<IResult> Delete(Guid templateId, ISender sender, CancellationToken ct)
@@ -128,8 +128,11 @@ public static class ProjectTemplatesEndpoints
     private static IReadOnlyList<ProjectFieldInput>? Fields(IReadOnlyList<ProjectFieldRequest>? fields)
         => fields?.Select(f => new ProjectFieldInput(f.Key, f.Label ?? string.Empty, f.Type, f.HelpText, f.Options)).ToList();
 
-    private static IResult ToProblem(string error) => error switch
+    private static IResult ToProblem(string error, ProjectAmountKind? kind = null, ProductCategory? category = null) => error switch
     {
+        TenantModuleErrors.CategoryDisabled => TenantModuleResults.CategoryDisabled(category),
+        TenantModuleErrors.Disabled => TenantModuleResults.Disabled(
+            kind is { } k && Features.ProjectTemplates.ProjectTemplateModules.ModuleOf(k) is { } m ? [m] : []),
         ProjectTemplateErrors.NotFound   => Results.NotFound(new { error }),
         ProjectTemplateErrors.ScopeTaken => Results.Problem(title: "Template scope taken", detail: error, statusCode: 409),
         _ => Results.Problem(title: "Invalid project template", detail: error, statusCode: 422),

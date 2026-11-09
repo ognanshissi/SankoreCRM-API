@@ -1,3 +1,4 @@
+using Sankore.Modules.Administration.Features.Roles.Modules;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +14,8 @@ internal sealed class BulkAssignRoleHandler(
     UserManager<AppUser> userManager,
     RoleManager<AppRole> roleManager,
     ICurrentUser currentUser,
-    BulkAssignNotifier notifier
+    BulkAssignNotifier notifier,
+    ITenantModules? modules = null
 ) : IRequestHandler<BulkAssignRoleCommand, Result<BulkAssignResult>>
 {
     public async Task<Result<BulkAssignResult>> Handle(
@@ -24,6 +26,8 @@ internal sealed class BulkAssignRoleHandler(
             return Result.Fail<BulkAssignResult>(BulkAssignErrors.RoleNotFound);
         if (!role.IsAssignable)
             return Result.Fail<BulkAssignResult>(BulkAssignErrors.RoleNotAssignable);
+        if (await RoleModuleGate.RefusesAsync(modules, currentUser.TenantId, role.Name, ct))
+            return Result.Fail<BulkAssignResult>(RoleModuleGate.Disabled);
 
         var userIds = request.UserIds.Distinct().ToList();
 

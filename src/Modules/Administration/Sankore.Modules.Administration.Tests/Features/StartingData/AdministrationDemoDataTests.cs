@@ -50,9 +50,10 @@ public sealed class AdministrationDemoDataTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private Task<IReadOnlyDictionary<string, int>> LoadAsync(StartingDataKind kind, string password = "Demo-2026!")
+    private Task<IReadOnlyDictionary<string, int>> LoadAsync(StartingDataKind kind, string password = "Demo-2026!", ITenantModules? modules = null)
     {
-        var services = new ServiceCollection().AddSingleton(_db.CreateContext()).AddSingleton(_sender).BuildServiceProvider();
+        var services = new ServiceCollection().AddSingleton(_db.CreateContext()).AddSingleton(_sender)
+            .AddSingleton(modules ?? FixedTenantModules.All).BuildServiceProvider();
         return new AdministrationDemoData(Options.Create(new DemoDataOptions { Password = password }))
             .LoadAsync(new StartingDataRequest(_tenantId, "Démo", kind, Guid.NewGuid()), services, default);
     }
@@ -84,6 +85,18 @@ public sealed class AdministrationDemoDataTests : IDisposable
         // Everyone but the administrator reports to someone.
         _sent.OfType<AssignManagerCommand>().Should().HaveCount(14);
         _sent.OfType<AssignAgencyManagerCommand>().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task A_socle_demo_has_no_credit_nor_cash_account()
+    {
+        // docs/isolation-socle.md, lot 2: those roles are Banking - Microfinance's.
+        var created = await LoadAsync(StartingDataKind.Demo, modules: FixedTenantModules.None);
+
+        created["Comptes de démo"].Should().Be(11);
+        _sent.OfType<ProvisionDemoUserCommand>().Select(a => a.RoleCode).Should()
+            .NotContain([Roles.CreditAnalyst.Code, Roles.CreditManager.Code, Roles.Cashier.Code, Roles.AccountManager.Code]);
+        _sent.OfType<AssignManagerCommand>().Should().HaveCount(10);
     }
 
     [Theory]

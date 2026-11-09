@@ -94,7 +94,7 @@ public static class DataWipeEndpoints
 
         service.MapGet("pending", async (AdminDbContext db, CancellationToken ct) =>
                 Results.Ok(await db.TenantDataWipes.AsNoTracking()
-                    .Where(w => w.Status == TenantDataWipeStatus.Pending)
+                    .Where(DataWipeRules.Takeable(DateTimeOffset.UtcNow))
                     .OrderBy(w => w.RequestedAt)
                     .Select(w => new PendingDataWipeResponse(w.Id, w.TenantId))
                     .ToListAsync(ct)))
@@ -108,7 +108,8 @@ public static class DataWipeEndpoints
                 // second must not both get a yes and wipe twice. The row count is the answer.
                 var now = DateTimeOffset.UtcNow;
                 var taken = await db.TenantDataWipes
-                    .Where(w => w.Id == wipeId && w.Status == TenantDataWipeStatus.Pending)
+                    .Where(w => w.Id == wipeId)
+                    .Where(DataWipeRules.Takeable(now))
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(w => w.Status, TenantDataWipeStatus.Running)
                         .SetProperty(w => w.StartedAt, now), ct);
@@ -168,6 +169,17 @@ public static class DataWipeEndpoints
 /// <summary>The three refusals of a wipe request, in one testable place.</summary>
 internal static class DataWipeRules
 {
+    /// <summary>
+    /// Waiting, or interrupted: « Running » for longer than the data loads' <c>StaleAfter</c> — an API
+    /// restarted under it. Retaken: a wipe is DELETEs, running it again finishes it.
+    /// </summary>
+    public static System.Linq.Expressions.Expression<Func<TenantDataWipe, bool>> Takeable(DateTimeOffset now)
+    {
+        var staleBefore = now - DataLoads.DataLoadEndpoints.StaleAfter;
+        return w => w.Status == TenantDataWipeStatus.Pending
+                 || (w.Status == TenantDataWipeStatus.Running && w.StartedAt < staleBefore);
+    }
+
     public static Task<bool> InFlightAsync(AdminDbContext db, Guid tenantId, CancellationToken ct)
         => db.TenantDataWipes.AnyAsync(w => w.TenantId == tenantId
             && (w.Status == TenantDataWipeStatus.Pending || w.Status == TenantDataWipeStatus.Running), ct);

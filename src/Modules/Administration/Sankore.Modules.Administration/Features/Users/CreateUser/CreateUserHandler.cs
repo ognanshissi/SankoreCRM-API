@@ -1,3 +1,4 @@
+using Sankore.Modules.Administration.Features.Roles.Modules;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +22,8 @@ internal sealed class CreateUserHandler(
     ITenantContext tenantContext,
     [FromKeyedServices(nameof(AdministrationDbContext))] IEventPublisher publisher,
     ActivationInvitationSender invitations,
-    EmployeeNumberAllocator employeeNumbers
+    EmployeeNumberAllocator employeeNumbers,
+    ITenantModules? modules = null
 ) : IRequestHandler<CreateUserCommand, Result<CreateUserResult>>
 {
     public async Task<Result<CreateUserResult>> Handle(
@@ -40,6 +42,8 @@ internal sealed class CreateUserHandler(
         var role = await roleManager.FindByIdAsync(request.RoleId.ToString());
         if (role is null)
             return Result.Fail<CreateUserResult>($"Role {request.RoleId} not found.");
+        if (await RoleModuleGate.RefusesAsync(modules, tenantContext.CurrentTenantId, role.Name, ct))
+            return Result.Fail<CreateUserResult>(RoleModuleGate.Message);
 
         // 3. Guard: email must be unique within tenant
         var normalizedEmail = request.Email.ToUpperInvariant();

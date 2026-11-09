@@ -8,6 +8,7 @@ using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.WhatsApp.Bot;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Shared.Kernel;
 
 /// <summary>What <see cref="WhatsAppComplaintDesk.DecideAsync"/> found: an intake to continue, or one to start (null).</summary>
 internal sealed record WhatsAppComplaintTurn(WhatsAppComplaintIntake? Intake);
@@ -37,7 +38,8 @@ internal sealed class WhatsAppComplaintDesk(
     ILeadSettings settings,
     WhatsAppEscalation escalation,
     ILogger<WhatsAppComplaintDesk> logger,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    ITenantModules? modules = null)
 {
     internal const string EscalationReason = "BOT_COMPLAINT";
 
@@ -92,9 +94,16 @@ internal sealed class WhatsAppComplaintDesk(
     internal const string Cancelled =
         "Votre réclamation n'a pas été enregistrée. Écrivez-nous à tout moment si vous changez d'avis.";
 
-    internal static string AskCategory() =>
+    /// <summary>
+    /// The menu of this institution: « Crédit » and « Épargne » only with Banking - Microfinance
+    /// (docs/isolation-socle.md, lot 4). The numbers follow the menu actually shown.
+    /// </summary>
+    internal static IReadOnlyList<(string Category, string Label, string[] Words)> CategoriesFor(bool banking)
+        => banking ? Categories : Categories.Where(c => c.Category is not ("Credit" or "Savings")).ToList();
+
+    internal static string AskCategory(bool banking = true) =>
         "Votre réclamation concerne :\n"
-        + string.Join("\n", Categories.Select((c, i) => $"{i + 1}. {c.Label}"))
+        + string.Join("\n", CategoriesFor(banking).Select((c, i) => $"{i + 1}. {c.Label}"))
         + "\nRépondez par le numéro.";
 
     internal static string Recap(string label) => $"Récapitulatif : réclamation « {label} ». {AskConfirmation}";
@@ -200,13 +209,14 @@ internal sealed class WhatsAppComplaintDesk(
                 }
 
                 intake.RecordDescription(text);
-                await SayAsync(tenantId, conversation, AskCategory(), now, ct);
+                await SayAsync(tenantId, conversation, AskCategory(await BankingAsync(tenantId, ct)), now, ct);
                 return;
 
             case WhatsAppComplaintStep.Category:
-                if (ParseCategory(normalized) is not { } picked)
+                var banking = await BankingAsync(tenantId, ct);
+                if (ParseCategory(normalized, banking) is not { } picked)
                 {
-                    await SayAsync(tenantId, conversation, AskCategory(), now, ct);
+                    await SayAsync(tenantId, conversation, AskCategory(banking), now, ct);
                     return;
                 }
 
@@ -404,12 +414,16 @@ internal sealed class WhatsAppComplaintDesk(
         return date.Year >= 1900 && date <= DateOnly.FromDateTime(now.UtcDateTime) ? date : null;
     }
 
-    internal static (string Category, string Label)? ParseCategory(string normalized)
-    {
-        if (int.TryParse(normalized, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n >= 1 && n <= Categories.Count)
-            return (Categories[n - 1].Category, Categories[n - 1].Label);
+    private async Task<bool> BankingAsync(Guid tenantId, CancellationToken ct)
+        => modules is null || await modules.IsEnabledAsync(tenantId, TenantModules.BankingMicrofinance, ct);
 
-        foreach (var c in Categories)
+    internal static (string Category, string Label)? ParseCategory(string normalized, bool banking = true)
+    {
+        var categories = CategoriesFor(banking);
+        if (int.TryParse(normalized, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n >= 1 && n <= categories.Count)
+            return (categories[n - 1].Category, categories[n - 1].Label);
+
+        foreach (var c in categories)
             if (c.Words.Any(w => WhatsAppBotText.ContainsPhrase(normalized, w)))
                 return (c.Category, c.Label);
 

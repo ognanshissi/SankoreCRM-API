@@ -2,6 +2,7 @@ namespace Sankore.Modules.Customers.Tests.Features.StartingData;
 
 using FluentAssertions;
 using Sankore.Modules.Customers.Features.StartingData;
+using Sankore.Modules.Customers.Features.Complaints;
 using Xunit;
 
 /// <summary>
@@ -17,6 +18,8 @@ public sealed class CustomersDemoDataShapeTests
 
         keys.Should().OnlyHaveUniqueItems();
         CustomersDemoData.Complaints.Select(c => c.Client).Should().BeSubsetOf(keys);
+        keys.Should().Contain(CustomersDemoData.SocleComplaint.Client);
+        ClientComplaintFiling.IsBankingCategory(CustomersDemoData.SocleComplaint.Category).Should().BeFalse();
     }
 
     [Fact]

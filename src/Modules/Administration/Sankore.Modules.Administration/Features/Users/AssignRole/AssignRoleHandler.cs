@@ -1,3 +1,4 @@
+using Sankore.Modules.Administration.Features.Roles.Modules;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,8 @@ internal sealed class AssignRoleHandler(
     AdministrationDbContext db,
     UserManager<AppUser> userManager,
     RoleManager<AppRole> roleManager,
-    ICurrentUser currentUser
+    ICurrentUser currentUser,
+    ITenantModules? modules = null
 ) : IRequestHandler<AssignRoleCommand, Result>
 {
     public async Task<Result> Handle(AssignRoleCommand request, CancellationToken ct)
@@ -24,6 +26,8 @@ internal sealed class AssignRoleHandler(
         var role = await roleManager.FindByIdAsync(request.RoleId.ToString());
         if (role is null || !role.IsAssignable)
             return Result.Fail("Role not found or not assignable.");
+        if (await RoleModuleGate.RefusesAsync(modules, currentUser.TenantId, role.Name, ct))
+            return Result.Fail(RoleModuleGate.Message);
 
         // Guard: already has this role active
         var alreadyAssigned = await db.UserRoles

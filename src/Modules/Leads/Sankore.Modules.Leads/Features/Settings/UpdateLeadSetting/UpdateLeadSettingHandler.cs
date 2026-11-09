@@ -18,7 +18,8 @@ internal sealed class UpdateLeadSettingHandler(
     LeadsDbContext db,
     ILeadSettings settings,
     ICurrentUser currentUser,
-    TimeProvider clock)
+    TimeProvider clock,
+    ITenantModules? modules = null)
     : IRequestHandler<UpdateLeadSettingCommand, Result<LeadSettingDto>>
 {
     public async Task<Result<LeadSettingDto>> Handle(
@@ -27,6 +28,10 @@ internal sealed class UpdateLeadSettingHandler(
         var declared = LeadSettingKeys.Find(command.Key);
         if (declared is null)
             return Result.Fail<LeadSettingDto>(LeadSettingErrors.Unknown);
+
+        if (LeadSettingKeys.InsuranceKeys.Contains(declared.Key)
+            && modules is not null && !await modules.IsEnabledAsync(TenantModules.Insurance, ct))
+            return Result.Fail<LeadSettingDto>(TenantModuleErrors.Disabled);
 
         var value = command.Value.Trim();
 

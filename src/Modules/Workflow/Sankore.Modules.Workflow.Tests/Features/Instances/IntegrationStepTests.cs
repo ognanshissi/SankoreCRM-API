@@ -14,6 +14,7 @@ using Sankore.Modules.Workflow.Infrastructure.Gates;
 using Sankore.Modules.Workflow.Infrastructure.Waits;
 using Sankore.Modules.Workflow.Tests.TestSupport;
 using Sankore.Shared.Infrastructure.Workflow;
+using Sankore.Shared.Kernel;
 using Xunit;
 
 /// <summary>
@@ -100,6 +101,32 @@ public sealed class IntegrationStepTests : IDisposable
         gate.EntityType.Returns(entityType);
 
         var result = await new ActivateTemplateHandler(_factory.CreateContext(), [], [gate])
+            .Handle(new ActivateTemplateCommand(template.Id), default);
+
+        if (refusal is null) result.IsSuccess.Should().BeTrue(result.Error);
+        else result.Error.Should().Contain(refusal);
+    }
+
+    [Theory]
+    [InlineData("""{"target":"CoreBanking"}""", new string[0], "Banking - Microfinance")]
+    [InlineData("""{"target":"Insurance"}""", new[] { TenantModules.BankingMicrofinance }, "« Assurance »")]
+    [InlineData("""{"target":"CoreBanking"}""", new[] { TenantModules.BankingMicrofinance }, null)]
+    [InlineData("""{"target":"Insurance"}""", new[] { TenantModules.Insurance }, null)]
+    public async Task A_step_waiting_for_a_back_office_needs_its_module(string config, string[] active, string? refusal)
+    {
+        // docs/isolation-socle.md, lot 1: without the module, the dossier would wait for ever.
+        var template = WorkflowTemplate.Create(_tenantId, "Opportunity", "Circuit", Guid.NewGuid());
+        template.AddStep(1, "Envoi", kind: StepKind.IntegrationAction, configJson: config);
+        await using (var seed = _factory.CreateContext())
+        {
+            seed.WorkflowTemplates.Add(template);
+            seed.WorkflowStepDefinitions.AddRange(template.Steps);
+            await seed.SaveChangesAsync();
+        }
+        var gate = Substitute.For<IWorkflowRecordGate>();
+        gate.EntityType.Returns("Opportunity");
+
+        var result = await new ActivateTemplateHandler(_factory.CreateContext(), [], [gate], new FixedTenantModules(active))
             .Handle(new ActivateTemplateCommand(template.Id), default);
 
         if (refusal is null) result.IsSuccess.Should().BeTrue(result.Error);

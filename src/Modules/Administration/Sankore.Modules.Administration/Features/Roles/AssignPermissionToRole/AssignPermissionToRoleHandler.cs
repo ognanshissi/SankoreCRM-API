@@ -1,3 +1,4 @@
+using Sankore.Modules.Administration.Features.Roles.Modules;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,9 @@ namespace Sankore.Modules.Administration.Features.Roles.AssignPermissionToRole;
 
 internal sealed class AssignPermissionToRoleHandler(
     AdministrationDbContext db,
-    RoleManager<AppRole> roleManager
+    RoleManager<AppRole> roleManager,
+    ITenantModules? modules = null,
+    ITenantContext? tenant = null
 ) : IRequestHandler<AssignPermissionToRoleCommand, Result>
 {
     public async Task<Result> Handle(AssignPermissionToRoleCommand request, CancellationToken ct)
@@ -26,6 +29,9 @@ internal sealed class AssignPermissionToRoleHandler(
             .FirstOrDefaultAsync(p => p.Code == request.PermissionCode, ct);
         if (permission is null)
             return Result.Fail("Permission not found.");
+        if (modules is not null && tenant is not null
+            && !ModuleScopes.InReach(ModuleScopes.OfPermission(permission.Code), await modules.EnabledSetAsync(tenant.CurrentTenantId, ct)))
+            return Result.Fail(RoleModuleGate.PermissionMessage);
 
         var alreadyGranted = await db.RolePermissions
             .AnyAsync(rp => rp.RoleId == role.Id && rp.PermissionId == permission.Id, ct);

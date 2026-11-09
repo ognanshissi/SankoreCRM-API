@@ -67,6 +67,19 @@ public sealed class AdministrationStartingDataTests : IDisposable
     }
 
     [Fact]
+    public async Task A_socle_institution_gets_standard_products_and_nothing_financial()
+    {
+        // docs/isolation-socle.md, lot 5: no module, a catalogue of Standard offers to rename.
+        Modules();
+
+        var created = await LoadAsync();
+
+        created["Produits"].Should().Be(4);
+        _sent.OfType<CreateProductCommand>().Should().OnlyContain(p => p.Category == ProductCategory.Standard);
+        _sent.OfType<CreateProductCommand>().Select(p => p.Code).Should().Contain("OFFRE-ESSENTIEL");
+    }
+
+    [Fact]
     public async Task Only_the_families_of_the_paid_modules_are_created()
     {
         Modules(TenantModules.Insurance);

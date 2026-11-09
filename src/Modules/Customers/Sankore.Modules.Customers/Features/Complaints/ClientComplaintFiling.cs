@@ -36,9 +36,17 @@ internal sealed class ClientComplaintFiling(
     [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
     TimeProvider clock,
     ILogger<ClientComplaintFiling> logger,
-    IAdministrationModule? administration = null)
+    IAdministrationModule? administration = null,
+    ITenantModules? modules = null)
 {
     internal const string ReferencePrefix = "RCL";
+
+    /// <summary>
+    /// The categories of a banking register (docs/isolation-socle.md, lot 4): offered and accepted only
+    /// with Banking - Microfinance. A socle institution files « Frais et tarifs », « Accueil et service »…
+    /// </summary>
+    internal static bool IsBankingCategory(ClientComplaintCategory category)
+        => category is ClientComplaintCategory.Credit or ClientComplaintCategory.Savings;
 
     /// <summary>Saves the complaint and queues its alert in the same transaction (the outbox writer does not save).</summary>
     public async Task<Result<ClientComplaint>> FileAsync(ClientComplaintFilingInput input, CancellationToken ct)
@@ -47,6 +55,9 @@ internal sealed class ClientComplaintFiling(
         if (client.IsReadOnly) return Result.Fail<ClientComplaint>(CustomerErrors.ClientReadOnly);
         if (string.IsNullOrWhiteSpace(input.Subject)) return Result.Fail<ClientComplaint>(CustomerErrors.ComplaintSubjectRequired);
         if (string.IsNullOrWhiteSpace(input.Description)) return Result.Fail<ClientComplaint>(CustomerErrors.ComplaintDescriptionRequired);
+        if (IsBankingCategory(input.Category) && modules is not null
+            && !await modules.IsEnabledAsync(client.TenantId, TenantModules.BankingMicrofinance, ct))
+            return Result.Fail<ClientComplaint>(TenantModuleErrors.CategoryDisabled);
 
         if (input.HoldingId is { } holdingId
             && !await db.ProductHoldings.IgnoreQueryFilters()

@@ -123,11 +123,16 @@ internal sealed class CreateProjectTemplateHandler(
     LeadsDbContext db,
     IAdministrationModule administration,
     ITenantContext tenant,
-    TimeProvider clock)
+    TimeProvider clock,
+    ITenantModules? modules = null)
     : IRequestHandler<CreateProjectTemplateCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateProjectTemplateCommand cmd, CancellationToken ct)
     {
+        if (await ProjectTemplateModules.RefusalAsync(modules, cmd.Category,
+                (cmd.Forecast ?? ProjectForecastOptions.Default).AmountKind, current: null, ct) is { } refused)
+            return Result.Fail<Guid>(refused);
+
         var code = string.IsNullOrWhiteSpace(cmd.ProductCode) ? null : cmd.ProductCode.Trim().ToUpperInvariant();
         ProductSummary? product = null;
 
@@ -192,7 +197,8 @@ internal sealed class UpdateProjectTemplateHandler(
     TimeProvider clock,
     IAdministrationModule? administration = null,
     ITenantContext? tenant = null,
-    ProjectTemplateResolver? templates = null)
+    ProjectTemplateResolver? templates = null,
+    ITenantModules? modules = null)
     : IRequestHandler<UpdateProjectTemplateCommand, Result>
 {
     public async Task<Result> Handle(UpdateProjectTemplateCommand cmd, CancellationToken ct)
@@ -203,6 +209,11 @@ internal sealed class UpdateProjectTemplateHandler(
 
         if (template is null)
             return Result.Fail(ProjectTemplateErrors.NotFound);
+
+        // The scope never changes, so only the amount kind can move TOWARD a module.
+        if (await ProjectTemplateModules.RefusalAsync(modules, category: null,
+                cmd.Forecast?.AmountKind ?? template.AmountKind, current: template.AmountKind, ct) is { } refused)
+            return Result.Fail(refused);
 
         var now = clock.GetUtcNow();
         await ProjectTemplateVersioning.KeepBaselineAsync(db, template, now, ct, templates);
@@ -235,6 +246,38 @@ internal sealed class UpdateProjectTemplateHandler(
         suppressed.Complete();
 
         return product is not null && Enum.TryParse<ProductCategory>(product.Category, true, out var c) ? c : null;
+    }
+}
+
+// ── Module gate ──────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// What a template may be in a tenant without the paid modules (<c>docs/isolation-socle.md</c>, lot 1):
+/// a credit or deposit amount is Banking - Microfinance's, a premium is Insurance's, a family scope
+/// its category's module. A loan amount with a <c>dureeMois</c> field IS a credit file
+/// (<see cref="CreditFileTemplate"/>) — its signing rules and its submission to the core banking —
+/// so the socle must not build one by hand while the « Dossier de crédit » route is gated. As for
+/// products, only going TOWARD a module is refused: a template made while the module was on stays
+/// editable once it is switched off.
+/// </summary>
+internal static class ProjectTemplateModules
+{
+    public static string? ModuleOf(ProjectAmountKind kind) => kind switch
+    {
+        ProjectAmountKind.Loan or ProjectAmountKind.Deposit => TenantModules.BankingMicrofinance,
+        ProjectAmountKind.Premium => TenantModules.Insurance,
+        _ => null,
+    };
+
+    /// <returns>A <see cref="TenantModuleErrors"/> code, or null when allowed.</returns>
+    public static async Task<string?> RefusalAsync(
+        ITenantModules? modules, ProductCategory? category, ProjectAmountKind kind, ProjectAmountKind? current, CancellationToken ct)
+    {
+        if (modules is null) return null;
+        if (category is { } c && !await modules.AllowsCategoryAsync(c, ct)) return TenantModuleErrors.CategoryDisabled;
+        if (kind != current && ModuleOf(kind) is { } module && !await modules.IsEnabledAsync(module, ct))
+            return TenantModuleErrors.Disabled;
+        return null;
     }
 }
 

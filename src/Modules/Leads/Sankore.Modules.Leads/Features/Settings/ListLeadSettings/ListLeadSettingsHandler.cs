@@ -6,7 +6,7 @@ using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class ListLeadSettingsHandler(LeadsDbContext db)
+internal sealed class ListLeadSettingsHandler(LeadsDbContext db, ITenantModules? modules = null)
     : IRequestHandler<ListLeadSettingsQuery, Result<IReadOnlyList<LeadSettingDto>>>
 {
     public async Task<Result<IReadOnlyList<LeadSettingDto>>> Handle(
@@ -20,7 +20,9 @@ internal sealed class ListLeadSettingsHandler(LeadsDbContext db)
         // appears, with the value every reader actually resolves to; and a stale row for a key
         // that no longer exists is not exposed, so a screen cannot offer to edit something
         // nothing reads.
+        var insurance = modules is null || await modules.IsReadableAsync(TenantModules.Insurance, ct);
         var items = LeadSettingKeys.Defaults
+            .Where(declared => insurance || !LeadSettingKeys.InsuranceKeys.Contains(declared.Key))
             .Select(declared => stored.TryGetValue(declared.Key, out var row)
                 ? LeadSettingDto.FromStored(row, declared)
                 : LeadSettingDto.FromDefault(declared))

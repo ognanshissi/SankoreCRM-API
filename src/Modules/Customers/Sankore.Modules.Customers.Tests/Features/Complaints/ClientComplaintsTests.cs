@@ -75,6 +75,28 @@ public sealed class ClientComplaintsTests : IDisposable
             "Frais de dossier prélevés deux fois", description, holdingId), CancellationToken.None);
     }
 
+    [Theory]
+    [InlineData(ClientComplaintCategory.Credit)]
+    [InlineData(ClientComplaintCategory.Savings)]
+    public async Task A_banking_category_needs_the_banking_module(ClientComplaintCategory category)
+    {
+        // docs/isolation-socle.md, lot 4: « Crédit » and « Épargne » are a banking register's.
+        await using var db = _factory.CreateContext();
+        var client = await db.Clients.SingleAsync(c => c.Id == _clientId);
+        ClientComplaintFiling FilingWith(ITenantModules modules) => new(
+            db, TestDoubles.Encryptor(), TestDoubles.Settings(_tenant), _publisher, _clock,
+            NullLogger<ClientComplaintFiling>.Instance, _administration, modules);
+        ClientComplaintFilingInput Input(ClientComplaintCategory c) => new(
+            client, ClientComplaintChannel.Branch, c, "Objet", "Une description assez longue.", null, _actor, null);
+
+        (await FilingWith(FixedTenantModules.None).FileAsync(Input(category), CancellationToken.None))
+            .Error.Should().Be(TenantModuleErrors.CategoryDisabled);
+        (await FilingWith(FixedTenantModules.None).FileAsync(Input(ClientComplaintCategory.Service), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+        (await FilingWith(new FixedTenantModules(TenantModules.BankingMicrofinance)).FileAsync(Input(category), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+    }
+
     [Fact]
     public async Task A_complaint_is_numbered_dated_from_the_settings_encrypted_and_assigned_to_the_advisor()
     {

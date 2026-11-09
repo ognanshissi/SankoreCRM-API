@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Customers.Features.Holdings;
 
+using Sankore.Shared.Infrastructure.Tenants;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -80,6 +81,8 @@ public static class HoldingsEndpoints
                 + "GET integration/insurance/products/product-routing, which says which product "
                 + "lines will fail BEFORE a client signs. Carries no client identity.")
             .RequireAuthorization(Permissions.CanManageCustomerHolding.Code)
+            // Holdings wait in PendingSync for an insurer only (docs/isolation-socle.md).
+            .RequireTenantModule(TenantModules.Insurance)
             .Produces<PagedResult<StalledHoldingDto>>(StatusCodes.Status200OK)
             .WithOpenApi()
             .WithTenantHeader();

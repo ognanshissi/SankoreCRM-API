@@ -43,8 +43,13 @@ internal sealed class GetCurrentUserHandler(
             .Distinct()
             .ToListAsync(ct);
 
+        // A paid module's permissions only reach the screens of an institution that has (or had) the
+        // module: built-in roles are platform-wide and carry them everywhere (docs/isolation-socle.md,
+        // lot 2). Its routes are gated anyway; this is what the front shows.
+        var readable = await tenantModules.ReadableSetAsync(user.TenantId, ct);
         var allPermissions = rolePermissions
             .Union(scopedPermissions)
+            .Where(p => ModuleScopes.InReach(ModuleScopes.OfPermission(p), readable))
             .OrderBy(p => p)
             .ToList();
 

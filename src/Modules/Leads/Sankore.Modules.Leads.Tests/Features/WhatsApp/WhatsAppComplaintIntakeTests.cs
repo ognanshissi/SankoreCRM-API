@@ -203,6 +203,16 @@ public sealed class WhatsAppComplaintIntakeTests : IDisposable
     public void A_category_is_picked_by_its_number_or_a_word(string normalized, string expected)
         => WhatsAppComplaintDesk.ParseCategory(normalized)!.Value.Category.Should().Be(expected);
 
+    [Fact]
+    public void Without_banking_the_menu_has_no_credit_nor_savings_and_its_numbers_follow()
+    {
+        // docs/isolation-socle.md, lot 4.
+        WhatsAppComplaintDesk.AskCategory(banking: false).Should().NotContain("Crédit").And.NotContain("Épargne")
+            .And.StartWith("Votre réclamation concerne :\n1. Frais et tarifs");
+        WhatsAppComplaintDesk.ParseCategory("1", banking: false)!.Value.Category.Should().Be("FeesAndPricing");
+        WhatsAppComplaintDesk.ParseCategory("credit", banking: false).Should().BeNull();
+    }
+
     // ── Plumbing ──────────────────────────────────────────────────────────────
 
     private async Task SayAsync(string text)

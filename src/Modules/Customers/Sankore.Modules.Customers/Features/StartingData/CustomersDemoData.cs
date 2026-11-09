@@ -72,14 +72,19 @@ internal sealed class CustomersDemoData : ITenantStartingData
         var sender = services.GetRequiredService<ISender>();
         Guid Agency(string name) => request.Shared.TryGetValue(DemoKeys.Agency(name), out var id) ? id
             : throw new InvalidOperationException($"Agence « {name} » introuvable : les comptes de démo doivent être chargés avant les clients.");
-        Guid? Advisor(string profile) => request.Shared.TryGetValue(DemoKeys.Account(profile), out var id) ? id : null;
+        // An account or credit manager is Banking - Microfinance's role: without it, the branch's first
+        // agent follows the client (docs/isolation-socle.md, lot 5).
+        Guid? Advisor(string profile, string branch)
+            => request.Shared.TryGetValue(DemoKeys.Account(profile), out var id) ? id
+             : request.Shared.TryGetValue(DemoKeys.Account(branch == Yopougon ? "agent-yopougon-1" : "agent-plateau-1"), out var agent) ? agent
+             : null;
 
         var clients = 0;
         for (var i = 0; i < People.Count; i++)
         {
             var p = People[i];
             var result = Ok(await sender.Send(new CreateIndividualClientCommand(
-                Agency(p.Branch), Advisor(p.Advisor), p.FirstName, p.LastName, null, p.Gender, p.BirthDate, "Abidjan",
+                Agency(p.Branch), Advisor(p.Advisor, p.Branch), p.FirstName, p.LastName, null, p.Gender, p.BirthDate, "Abidjan",
                 "Ivoirienne", MaritalStatus.Married, null, null, p.Profession, null, p.Income, "XOF", "fr",
                 IdentityDocumentType.NationalIdCard, $"CI-DEMO-{i + 1:D6}", new DateOnly(2021, 1, 15), new DateOnly(2031, 1, 14),
                 [Phone(i + 1)], $"{p.Key}@example.com", new PostalAddressInput(p.District, "Abidjan", null, "CI", null),
@@ -95,7 +100,7 @@ internal sealed class CustomersDemoData : ITenantStartingData
         {
             var c = Companies[i];
             var result = Ok(await sender.Send(new CreateLegalClientCommand(
-                Agency(c.Branch), Advisor(c.Advisor), c.Name, c.LegalForm, $"CI-ABJ-DEMO-{c.Incorporated.Year}-B-{i + 1:D5}", null,
+                Agency(c.Branch), Advisor(c.Advisor, c.Branch), c.Name, c.LegalForm, $"CI-ABJ-DEMO-{c.Incorporated.Year}-B-{i + 1:D5}", null,
                 c.Incorporated, new PostalAddressInput(c.District, "Abidjan", null, "CI", null),
                 [Phone(50 + i)], $"{c.Key}@example.com", "fr"), ct), c.Key);
             var clientId = result.Outcome == CreateLegalClientOutcome.BlockedDuplicateRegistrationNumber
@@ -109,14 +114,19 @@ internal sealed class CustomersDemoData : ITenantStartingData
         // Three complaints: one just received, one acknowledged, one answered.
         var db = services.GetRequiredService<CustomersDbContext>();
         var complaints = 0;
-        foreach (var (key, channel, category, subject, description, stage) in Complaints)
+        // A banking category needs Banking - Microfinance (docs/isolation-socle.md, lot 4).
+        var banking = await services.GetRequiredService<ITenantModules>().IsEnabledAsync(request.TenantId, TenantModules.BankingMicrofinance, ct);
+        foreach (var complaint in Complaints)
         {
+            // A credit complaint becomes a delivery one in an institution without banking (lot 5).
+            var (key, channel, category, subject, description, stage) =
+                !banking && ClientComplaintFiling.IsBankingCategory(complaint.Category) ? SocleComplaint : complaint;
             var clientId = request.Shared[DemoKeys.Client(key)];
             if (await db.ClientComplaints.AnyAsync(c => c.ClientId == clientId, ct)) continue;
             var filed = Ok(await sender.Send(new FileClientComplaintCommand(clientId, channel, category, subject, description, null), ct), subject);
             if (stage >= 1) Ok(await sender.Send(new AcknowledgeClientComplaintCommand(clientId, filed.ComplaintId), ct), subject);
             if (stage >= 2) Ok(await sender.Send(new ResolveClientComplaintCommand(clientId, filed.ComplaintId,
-                "Les frais ont été recalculés et le trop-perçu remboursé sur le compte du client."), ct), subject);
+                "Les frais ont été recalculés et le trop-perçu remboursé au client."), ct), subject);
             complaints++;
         }
         if (complaints > 0) created["Réclamations"] = complaints;
@@ -126,13 +136,17 @@ internal sealed class CustomersDemoData : ITenantStartingData
 
     internal static readonly IReadOnlyList<(string Client, ClientComplaintChannel Channel, ClientComplaintCategory Category, string Subject, string Description, int Stage)> Complaints =
     [
-        ("seydou-traore", ClientComplaintChannel.Branch, ClientComplaintCategory.FeesAndPricing, "Frais de tenue de compte contestés",
-            "Le client conteste des frais de tenue de compte prélevés deux fois ce mois-ci.", 2),
+        ("seydou-traore", ClientComplaintChannel.Branch, ClientComplaintCategory.FeesAndPricing, "Frais de dossier facturés deux fois",
+            "Le client conteste des frais de dossier facturés deux fois ce mois-ci.", 2),
         ("fanta-camara", ClientComplaintChannel.Telephone, ClientComplaintCategory.Credit, "Retard de déblocage du crédit",
             "La cliente attend le déblocage de son crédit depuis dix jours et demande des explications.", 1),
         ("koffi-ahoua", ClientComplaintChannel.WhatsApp, ClientComplaintCategory.Service, "Accueil en agence",
             "Le client signale une longue attente au guichet de l'agence Yopougon.", 0),
     ];
+
+    internal static readonly (string Client, ClientComplaintChannel Channel, ClientComplaintCategory Category, string Subject, string Description, int Stage) SocleComplaint =
+        ("fanta-camara", ClientComplaintChannel.Telephone, ClientComplaintCategory.Service, "Retard de livraison de la commande",
+            "La cliente attend la livraison de sa commande depuis dix jours et demande des explications.", 1);
 
     /// <summary>A Côte d'Ivoire mobile number reserved for the demo: +225 07 99 00 0x xx.</summary>
     internal static string Phone(int n) => $"+22507990{n:D5}";

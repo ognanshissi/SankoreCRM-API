@@ -18,14 +18,14 @@ public sealed class AssignRoleHandlerTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private (AssignRoleHandler handler, UserManager<AppUser> userManager, RoleManager<AppRole> roleManager)
-        BuildHandler(ICurrentUser? currentUser = null)
+        BuildHandler(ICurrentUser? currentUser = null, Sankore.Shared.Kernel.ITenantModules? modules = null)
     {
         var um = IdentityMockFactory.BuildUserManager();
         var rm = IdentityMockFactory.BuildRoleManager();
         var cu = currentUser ?? Substitute.For<ICurrentUser>();
         if (currentUser is null) { cu.TenantId.Returns(_tenantId); cu.TeamTenantId.Returns(_tenantId); }
         var db = _factory.CreateContext();
-        return (new AssignRoleHandler(db, um, rm, cu), um, rm);
+        return (new AssignRoleHandler(db, um, rm, cu, modules), um, rm);
     }
 
     // ── S1: Happy path — role assigned, UserRole row persisted ───────────
@@ -135,5 +135,25 @@ public sealed class AssignRoleHandlerTests : IDisposable
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("already has this role");
+    }
+
+    // ── Socle isolation, lot 2 ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_banking_role_is_not_given_without_the_module()
+    {
+        var user = AppUser.Create(_tenantId, Guid.NewGuid(), "Fatou", "Diop", "fatou@test.sn");
+        var role = AppRole.Create("CreditAnalyst", "Analyste crédit");
+        var roleId = Guid.NewGuid();
+        typeof(AppRole).GetProperty(nameof(AppRole.Id))!.SetValue(role, roleId);
+
+        var (handler, um, rm) = BuildHandler(modules: Sankore.Shared.Kernel.FixedTenantModules.None);
+        um.FindByIdAsync(user.Id.ToString()).Returns(user);
+        rm.FindByIdAsync(roleId.ToString()).Returns(role);
+
+        var result = await handler.Handle(new AssignRoleCommand(user.Id, roleId), CancellationToken.None);
+
+        result.Error.Should().StartWith("ROLE_MODULE_DISABLED");
+        await um.DidNotReceive().AddToRoleAsync(Arg.Any<AppUser>(), Arg.Any<string>());
     }
 }

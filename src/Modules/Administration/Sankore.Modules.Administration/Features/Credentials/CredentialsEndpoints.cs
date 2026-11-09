@@ -1,3 +1,4 @@
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Infrastructure.Auth;
 namespace Sankore.Modules.Administration.Features.Credentials;
 
@@ -30,9 +31,11 @@ public static class CredentialsEndpoints
 {
     public static IEndpointRouteBuilder MapCredentialsEndpoints(this IEndpointRouteBuilder app)
     {
+        // Professional cards are the CIMA insurance intermediary's (docs/isolation-socle.md, lot 1).
         var perUser = app.MapGroup("users/{userId:guid}/credentials")
             .WithTags("Distribution Credentials")
-            .LiveModeWritesOnly();
+            .LiveModeWritesOnly()
+            .RequireTenantModule(TenantModules.Insurance);
 
         perUser.MapGet(string.Empty, List)
             .WithName("ListUserCredentials")
@@ -89,6 +92,7 @@ public static class CredentialsEndpoints
             .WithTenantHeader();
 
         app.MapGet("distribution-credentials/expiring", Expiring)
+            .RequireTenantModule(TenantModules.Insurance)
             .WithName("ListExpiringCredentials")
             .WithTags("Distribution Credentials")
             .WithSummary("Cards that have lapsed or are about to")

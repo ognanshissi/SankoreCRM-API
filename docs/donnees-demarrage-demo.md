@@ -180,3 +180,11 @@ Après une présentation, la démo se remet à neuf en un clic, depuis l'écran 
 - **Second rechargement, après le correctif :** 572 lignes effacées, même contenu recréé. Chaque agent voit autant de dossiers KYC que de clients ; l'analyste a toujours 2 dossiers, chaque chef d'agence 1 KYC à signer.
 - **Correctif trouvé pendant la recette :** les KYC de démo avaient pour responsable le compte système, qui a créé les clients. Aucun agent ne voyait donc les dossiers de ses clients. L'étape KYC confie maintenant chaque dossier de démo au conseiller du client, comme le fait la création d'un client au guichet.
 
+## 7. Institution sans module (2026-11-09)
+
+Voir `docs/isolation-socle.md`, lot 5. Pour une institution « CRM seul » :
+- **Démarrage :** quatre produits Standard et un questionnaire « Qualification commerciale » remplacent le catalogue bancaire et d'assurance.
+- **Démo :** pas de compte crédit ni caisse, des leads et des projets sur les offres Standard, et aucune réclamation « Crédit ».
+
+Un chargement ou un vidage interrompu par un redémarrage de l'API est repris au bout de 20 minutes.
+

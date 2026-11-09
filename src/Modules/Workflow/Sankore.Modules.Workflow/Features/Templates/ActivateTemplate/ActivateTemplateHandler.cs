@@ -11,7 +11,8 @@ namespace Sankore.Modules.Workflow.Features.Templates.ActivateTemplate;
 internal sealed class ActivateTemplateHandler(
     WorkflowDbContext db,
     IEnumerable<Sankore.Shared.Infrastructure.Workflow.IContextProvider>? contextProviders = null,
-    IEnumerable<Sankore.Shared.Infrastructure.Workflow.IWorkflowRecordGate>? recordGates = null)
+    IEnumerable<Sankore.Shared.Infrastructure.Workflow.IWorkflowRecordGate>? recordGates = null,
+    ITenantModules? modules = null)
     : IRequestHandler<ActivateTemplateCommand, Result>
 {
     public async Task<Result> Handle(ActivateTemplateCommand request, CancellationToken ct)
@@ -83,6 +84,20 @@ internal sealed class ActivateTemplateHandler(
                 _ => null,
             };
             if (problem is not null) return Result.Fail(problem);
+        }
+
+        // A step waiting for the core banking or the insurer would hold the dossier for ever in an
+        // institution without that module (docs/isolation-socle.md, lot 1).
+        if (modules is not null)
+        {
+            foreach (var step in template.Steps.Where(s => s.Kind == StepKind.IntegrationAction).OrderBy(s => s.Order))
+            {
+                var insurance = Infrastructure.Gates.RecordStepGates.IsInsurance(step.ConfigJson);
+                if (!await modules.IsEnabledAsync(insurance ? TenantModules.Insurance : TenantModules.BankingMicrofinance, ct))
+                    return Result.Fail(insurance
+                        ? $"L'étape « {step.Name} » attend l'assureur : le module « Assurance » n'est pas activé pour votre institution."
+                        : $"L'étape « {step.Name} » attend le core banking : le module « Banking - Microfinance » n'est pas activé pour votre institution.");
+            }
         }
 
         foreach (var wait in template.Steps.Where(s => s.Kind == StepKind.Wait).OrderBy(s => s.Order))

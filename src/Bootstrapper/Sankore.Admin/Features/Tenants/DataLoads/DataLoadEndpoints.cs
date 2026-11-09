@@ -38,6 +38,13 @@ public static class DataLoadEndpoints
     public const string WipeInFlight = "DATA_WIPE_IN_FLIGHT";
     public const string ReloadAtCreation = "DEMO_RELOAD_AT_CREATION";
 
+    /// <summary>
+    /// A load still « Running » after this was interrupted — the API restarted under it (seen in the
+    /// recette of 2026-11-09: it stayed « En cours » for ever and blocked every later load). It is
+    /// offered again and retaken: every step is idempotent, and a full demo takes about three minutes.
+    /// </summary>
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(20);
+
     public static void MapDataLoadEndpoints(this WebApplication app)
     {
         // ── The platform administrator ────────────────────────────────────────
@@ -87,7 +94,7 @@ public static class DataLoadEndpoints
 
         service.MapGet("pending", async (AdminDbContext db, CancellationToken ct) =>
                 Results.Ok((await db.TenantDataLoads.AsNoTracking()
-                        .Where(l => l.Status == TenantDataLoadStatus.Pending)
+                        .Where(DataLoadRules.Takeable(DateTimeOffset.UtcNow))
                         .OrderBy(l => l.RequestedAt)
                         .ToListAsync(ct))
                     .Select(l => new PendingDataLoadResponse(l.Id, l.TenantId, l.Kind.ToString()))))
@@ -101,7 +108,8 @@ public static class DataLoadEndpoints
             {
                 var now = DateTimeOffset.UtcNow;
                 var taken = await db.TenantDataLoads
-                    .Where(l => l.Id == loadId && l.Status == TenantDataLoadStatus.Pending)
+                    .Where(l => l.Id == loadId)
+                    .Where(DataLoadRules.Takeable(now))
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(l => l.Status, TenantDataLoadStatus.Running)
                         .SetProperty(l => l.StartedAt, now), ct);
@@ -149,6 +157,14 @@ public static class DataLoadEndpoints
 /// <summary>The refusals of a load request, in one testable place — shared with the tenant creation.</summary>
 internal static class DataLoadRules
 {
+    /// <summary>Waiting, or interrupted (« Running » for longer than <see cref="DataLoadEndpoints.StaleAfter"/>).</summary>
+    public static System.Linq.Expressions.Expression<Func<TenantDataLoad, bool>> Takeable(DateTimeOffset now)
+    {
+        var staleBefore = now - DataLoadEndpoints.StaleAfter;
+        return l => l.Status == TenantDataLoadStatus.Pending
+                 || (l.Status == TenantDataLoadStatus.Running && l.StartedAt < staleBefore);
+    }
+
     public static bool TryParseKind(string? kind, out TenantDataLoadKind parsed)
         => Enum.TryParse(kind?.Trim(), ignoreCase: true, out parsed) && Enum.IsDefined(parsed);
 

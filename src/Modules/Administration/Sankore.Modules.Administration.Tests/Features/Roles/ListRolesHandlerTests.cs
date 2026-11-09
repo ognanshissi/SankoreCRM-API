@@ -69,4 +69,38 @@ public sealed class ListRolesHandlerTests: IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
     }
+
+    // ── Socle isolation, lot 2: a paid module's built-in roles only where it is in reach ──
+
+    [Fact]
+    public async Task A_socle_institution_does_not_see_the_banking_roles()
+    {
+        await using var db = _factory.CreateContext();
+        db.Roles.AddRange(
+            AppRole.Create("Agent", "Agent"),
+            AppRole.Create("CreditAnalyst", "Analyste crédit"),
+            AppRole.Create("Cashier", "Caissier"));
+        await db.SaveChangesAsync();
+
+        var socle = await new ListRolesHandler(db, Substitute.For<ICurrentUser>(), Sankore.Shared.Kernel.FixedTenantModules.None)
+            .Handle(new ListRolesQuery(), CancellationToken.None);
+        socle.Value!.Select(r => r.Name).Should().Equal("Agent");
+
+        var banking = await new ListRolesHandler(db, Substitute.For<ICurrentUser>(),
+                new Sankore.Shared.Kernel.FixedTenantModules(Sankore.Shared.Kernel.TenantModules.BankingMicrofinance))
+            .Handle(new ListRolesQuery(), CancellationToken.None);
+        banking.Value!.Select(r => r.Name).Should().Equal("Agent", "Cashier", "CreditAnalyst");
+    }
+
+    [Fact]
+    public async Task A_switched_off_module_keeps_its_roles_visible()
+    {
+        await using var db = _factory.CreateContext();
+        db.Roles.Add(AppRole.Create("CreditAnalyst", "Analyste crédit"));
+        await db.SaveChangesAsync();
+
+        var off = new Sankore.Shared.Kernel.FixedTenantModules { ReadOnly = [Sankore.Shared.Kernel.TenantModules.BankingMicrofinance] };
+        (await new ListRolesHandler(db, Substitute.For<ICurrentUser>(), off).Handle(new ListRolesQuery(), CancellationToken.None))
+            .Value!.Should().ContainSingle();
+    }
 }

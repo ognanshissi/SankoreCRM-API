@@ -39,6 +39,18 @@ internal sealed class AdministrationStartingData : ITenantStartingData
         ("ASS-EMPRUNTEUR", "Assurance emprunteur", ProductCategory.Insurance, "Couverture du crédit en cas de décès ou d'invalidité de l'emprunteur."),
     ];
 
+    /// <summary>
+    /// The catalogue of an institution with NO paid module (docs/isolation-socle.md, lot 5): Standard
+    /// products of a business that sells and follows up — to rename, the way the agencies are.
+    /// </summary>
+    internal static readonly IReadOnlyList<(string Code, string Name, ProductCategory Category, string Description)> SocleCatalogue =
+    [
+        ("OFFRE-ESSENTIEL", "Offre Essentiel", ProductCategory.Standard, "L'offre d'entrée de gamme, pour un premier achat."),
+        ("OFFRE-PREMIUM", "Offre Premium", ProductCategory.Standard, "L'offre complète, avec un accompagnement personnalisé."),
+        ("INSTALLATION", "Installation et mise en service", ProductCategory.Standard, "La prestation d'installation chez le client."),
+        ("CONTRAT-MAINTENANCE", "Contrat de maintenance", ProductCategory.Standard, "Le suivi et l'entretien, à l'année."),
+    ];
+
     public async Task<IReadOnlyDictionary<string, int>> LoadAsync(StartingDataRequest request, IServiceProvider services, CancellationToken ct)
     {
         var db = services.GetRequiredService<AdministrationDbContext>();
@@ -57,7 +69,8 @@ internal sealed class AdministrationStartingData : ITenantStartingData
 
         var codes = (await db.ProductSpecialities.Select(p => p.Code).ToListAsync(ct)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var products = 0;
-        foreach (var (code, name, category, description) in Catalogue)
+        var socle = !await modules.IsEnabledAsync(TenantModules.BankingMicrofinance, ct) && !await modules.IsEnabledAsync(TenantModules.Insurance, ct);
+        foreach (var (code, name, category, description) in socle ? SocleCatalogue : Catalogue)
         {
             // Only the families of the modules the institution pays for; the command would refuse the others.
             if (codes.Contains(code) || !await modules.AllowsCategoryAsync(category, ct)) continue;

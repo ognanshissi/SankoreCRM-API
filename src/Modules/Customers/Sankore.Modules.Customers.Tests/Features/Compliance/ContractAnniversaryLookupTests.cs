@@ -4,6 +4,7 @@ using FluentAssertions;
 using Sankore.Modules.Customers.Domain;
 using Sankore.Modules.Customers.Infrastructure;
 using Sankore.Modules.Customers.Tests.TestSupport;
+using Sankore.Shared.Kernel;
 using Xunit;
 
 /// <summary>
@@ -31,10 +32,11 @@ public sealed class ContractAnniversaryLookupTests : IDisposable
     private async Task<Guid> SeedHoldingAsync(
         DateOnly? effectiveFrom,
         DateTimeOffset? signedAt,
-        HoldingStatus status = HoldingStatus.Active)
+        HoldingStatus status = HoldingStatus.Active,
+        string category = nameof(ProductCategory.Insurance))
     {
         var clientId = Guid.NewGuid();
-        var line = TestHoldingFactory.Line();
+        var line = TestHoldingFactory.Line(category: category);
 
         await using var db = _factory.CreateContext();
         var holding = TestHoldingFactory.Draft(_tenant, clientId, line, _actor, Signed);
@@ -78,6 +80,18 @@ public sealed class ContractAnniversaryLookupTests : IDisposable
 
         return await Facade(db)
             .GetClientsWithContractAnniversaryAsync(_tenant, day, CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData(nameof(ProductCategory.Standard))]
+    [InlineData(nameof(ProductCategory.Loan))]
+    public async Task Only_insurance_contracts_have_an_anniversary_review(string category)
+    {
+        // CIMA's rule, the insurance contracts' only (owner, 2026-11-09, docs/isolation-socle.md).
+        await SeedHoldingAsync(effectiveFrom: new DateOnly(2024, 3, 15), signedAt: Signed, category: category);
+        var insured = await SeedHoldingAsync(effectiveFrom: new DateOnly(2024, 3, 15), signedAt: Signed);
+
+        (await OnAsync(new DateOnly(2026, 3, 15))).Should().Equal(insured);
     }
 
     [Fact]

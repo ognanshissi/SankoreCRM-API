@@ -75,7 +75,8 @@ internal sealed class LeadsStartingData : ITenantStartingData
         }
 
         var questionnaires = 0;
-        foreach (var (category, name, questions) in Questionnaires)
+        var socle = !await modules.IsEnabledAsync(TenantModules.BankingMicrofinance, ct) && !await modules.IsEnabledAsync(TenantModules.Insurance, ct);
+        foreach (var (category, name, questions) in socle ? SocleQuestionnaires : Questionnaires)
         {
             if (!await modules.AllowsCategoryAsync(category, ct)
                 || await db.QualificationTemplates.AnyAsync(t => t.ProductCategory == category && t.ProductCode == null, ct))
@@ -111,6 +112,19 @@ internal sealed class LeadsStartingData : ITenantStartingData
             new("Nombre de personnes à couvrir", QuestionType.Numeric, 3, IsRequired: true, MinValue: 1, MaxValue: 15),
             new("Le foyer a-t-il déjà une couverture santé ?", QuestionType.YesNo, 2),
             new("Budget mensuel envisagé (FCFA)", QuestionType.Numeric, 3, MinValue: 0, MaxValue: 500_000),
+        ]),
+    ];
+
+    /// <summary>An institution with no paid module qualifies for its Standard products (docs/isolation-socle.md, lot 5).</summary>
+    internal static readonly IReadOnlyList<(ProductCategory Category, string Name, IReadOnlyList<QuestionInput> Questions)> SocleQuestionnaires =
+    [
+        (ProductCategory.Standard, "Qualification commerciale",
+        [
+            new("Budget envisagé (FCFA)", QuestionType.Numeric, 3, MinValue: 0, MaxValue: 100_000_000),
+            new("Le prospect décide-t-il seul de l'achat ?", QuestionType.YesNo, 3, IsRequired: true),
+            new("Échéance du projet", QuestionType.SingleChoice, 3, Options: ["Ce mois-ci", "Dans le trimestre", "Plus tard"]),
+            new("Utilise-t-il déjà une solution concurrente ?", QuestionType.YesNo, 1),
+            new("Besoin exprimé", QuestionType.Text, 1),
         ]),
     ];
 

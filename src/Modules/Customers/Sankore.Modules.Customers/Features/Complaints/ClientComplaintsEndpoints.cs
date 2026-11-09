@@ -131,6 +131,7 @@ public static class ClientComplaintsEndpoints
     private static IResult ToProblem(string? error) => error switch
     {
         CustomerErrors.ClientNotFound or CustomerErrors.ComplaintNotFound => Results.NotFound(new { error }),
+        TenantModuleErrors.CategoryDisabled => Sankore.Shared.Infrastructure.Tenants.TenantModuleResults.Disabled([TenantModules.BankingMicrofinance]),
         CustomerErrors.ClientReadOnly or CustomerErrors.ComplaintInvalidTransition => Results.Conflict(new { error }),
         _ => Results.UnprocessableEntity(new { error }),
     };

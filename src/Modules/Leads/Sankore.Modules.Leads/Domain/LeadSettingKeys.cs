@@ -163,6 +163,13 @@ public static class LeadSettingKeys
     public const string TypeDecimal = "decimal";
     public const string TypeJson    = "json";
 
+    /// <summary>
+    /// The Insurance module's keys (docs/isolation-socle.md, lot 1): hidden from, and not writable
+    /// by, an institution without it — the purge job still reads them, a default being harmless.
+    /// </summary>
+    public static readonly IReadOnlySet<string> InsuranceKeys =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { HealthResponseRetentionDays };
+
     /// <summary>Factory defaults, seeded once per tenant. Order is the admin-screen order.</summary>
     public static readonly IReadOnlyList<LeadSettingDefault> Defaults =
     [

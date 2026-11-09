@@ -541,11 +541,17 @@ internal sealed class CustomersModuleFacade(
             .Select(h => new
             {
                 h.ClientId,
+                h.ProductCategory,
                 // Reached through the typed jsonb, so the fallback stays one expression.
                 EffectiveFrom = h.Specifics.EffectiveFrom,
                 h.SignedAt,
             })
             .ToListAsync(ct);
+
+        // The CIMA rule is the insurance contracts' (owner's decision, 2026-11-09,
+        // docs/isolation-socle.md): a Standard or banking holding has no anniversary review.
+        // Filtered in memory, the category being stored as text.
+        candidates = candidates.Where(h => ProductCategories.IsInsurance(h.ProductCategory)).ToList();
 
         var anniversaries = candidates
             .Select(h => h.EffectiveFrom

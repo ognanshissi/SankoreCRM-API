@@ -4,13 +4,20 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.PermissionsCatalog.ListPermissions;
 
-internal sealed class ListPermissionsHandler
+internal sealed class ListPermissionsHandler(ITenantModules? modules = null, ITenantContext? tenant = null)
     : IRequestHandler<ListPermissionsQuery, Result<List<PermissionGroupDto>>>
 {
-    public Task<Result<List<PermissionGroupDto>>> Handle(
+    public async Task<Result<List<PermissionGroupDto>>> Handle(
         ListPermissionsQuery request, CancellationToken ct)
     {
         var source = Shared.Kernel.Permissions.All.AsEnumerable();
+
+        // A paid module's permissions are offered only where the module is in reach (docs/isolation-socle.md, lot 2).
+        if (modules is not null && tenant is not null)
+        {
+            var readable = await modules.ReadableSetAsync(tenant.CurrentTenantId, ct);
+            source = source.Where(p => ModuleScopes.InReach(ModuleScopes.OfPermission(p.Code), readable));
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Module))
             source = source.Where(p =>
@@ -26,6 +33,6 @@ internal sealed class ListPermissionsHandler
                  .ToList()))
             .ToList();
 
-        return Task.FromResult(Result.Ok(groups));
+        return Result.Ok(groups);
     }
 }

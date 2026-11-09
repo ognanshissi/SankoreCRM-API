@@ -44,9 +44,31 @@ internal sealed class LeadsDemoData : ITenantStartingData
     private static readonly string[] LastNames =
         ["Kouadio", "Coulibaly", "Bamba", "Koffi", "Diomandé", "Touré", "N'Dri", "Gnamien", "Ouattara", "Yao", "Soro", "Kacou"];
 
-    /// <summary>Catalogue names, as an agent types them; « Crédit » ones carry an amount.</summary>
-    private static readonly string[] Products =
-        ["Crédit individuel", "Compte d'épargne", "Assurance santé", "Compte courant", "Crédit agricole de campagne", "Prévoyance décès", "Tontine"];
+    /// <summary>
+    /// Catalogue names, as an agent types them, for the institution's modules (docs/isolation-socle.md,
+    /// lot 5): a socle institution's leads ask for its Standard offers, never a credit.
+    /// </summary>
+    internal static string[] ProductsFor(bool banking, bool insurance)
+    {
+        var products = new List<string>();
+        if (banking) products.AddRange(["Crédit individuel", "Compte d'épargne", "Compte courant", "Crédit agricole de campagne", "Tontine"]);
+        if (insurance) products.AddRange(["Assurance santé", "Prévoyance décès"]);
+        return products.Count > 0 ? [.. products]
+            : ["Offre Essentiel", "Offre Premium", "Installation et mise en service", "Contrat de maintenance"];
+    }
+
+    /// <summary>
+    /// Lead <c>i</c>'s product. Shifted every eight leads: with four products, <c>i % 4</c> gave every
+    /// lead that opens a project (one in eight, <see cref="FateOf"/>) the same one.
+    /// </summary>
+    internal static string ProductOf(IReadOnlyList<string> products, int i) => products[(i + i / 8) % products.Count];
+
+    /// <summary>A credit asks for an amount, so does a Standard offer; savings and insurance do not.</summary>
+    internal static decimal? DesiredAmount(string product, int i)
+        => product.StartsWith("Crédit", StringComparison.Ordinal) ? 500_000m + (i % 6) * 250_000m
+         : product.StartsWith("Offre", StringComparison.Ordinal) || product.StartsWith("Contrat", StringComparison.Ordinal)
+            ? 150_000m + (i % 5) * 100_000m
+         : null;
 
     /// <summary>The agents who receive leads, by branch.</summary>
     private static readonly string[] Agents =
@@ -84,6 +106,10 @@ internal sealed class LeadsDemoData : ITenantStartingData
             : throw new InvalidOperationException($"Compte « {profile} » introuvable : les comptes de démo doivent être chargés avant l'activité.");
         Guid Agency(string name) => request.Shared[DemoKeys.Agency(name)];
         var sourceIds = await db.LeadSourceConfigs.ToDictionaryAsync(s => s.Code, s => s.Id, ct);
+        var tenantModules = services.GetRequiredService<ITenantModules>();
+        var products = ProductsFor(
+            await tenantModules.IsEnabledAsync(request.TenantId, TenantModules.BankingMicrofinance, ct),
+            await tenantModules.IsEnabledAsync(request.TenantId, TenantModules.Insurance, ct));
 
         // ── Leads ────────────────────────────────────────────────────────────
         var existing = await db.Leads.Where(l => l.ExternalReference != null && l.ExternalReference.StartsWith("DEMO-L"))
@@ -98,12 +124,12 @@ internal sealed class LeadsDemoData : ITenantStartingData
             var fate = FateOf(i);
             var first = FirstNames[i % FirstNames.Length];
             var last = LastNames[(i * 7 + i / FirstNames.Length) % LastNames.Length];
-            var product = Products[i % Products.Length];
+            var product = ProductOf(products, i);
             var (source, code) = Sources[i % Sources.Length];
             var ownerProfile = Agents[i % Agents.Length];
             var owner = fate == Fate.Unassigned ? (Guid?)null : Account(ownerProfile);
             var branch = ownerProfile.Contains("yopougon") ? "Agence Yopougon" : "Agence Plateau";
-            var amount = product.StartsWith("Crédit", StringComparison.Ordinal) ? 500_000m + (i % 6) * 250_000m : (decimal?)null;
+            var amount = DesiredAmount(product, i);
 
             var captured = Ok(await sender.Send(new CaptureLeadCommand(
                 request.TenantId, $"{first} {last}", Phone(i + 1), source, product, "fr", 5.3364, -4.0267, Agency(branch),
@@ -135,7 +161,7 @@ internal sealed class LeadsDemoData : ITenantStartingData
                     projects++;
                     break;
                 case Fate.Lost:
-                    Ok(await As(request, agent, () => sender.Send(new CloseLeadCommand(leadId, LeadCloseReason.Lost, "Taux jugé trop élevé."), ct)), reference);
+                    Ok(await As(request, agent, () => sender.Send(new CloseLeadCommand(leadId, LeadCloseReason.Lost, "Prix jugé trop élevé."), ct)), reference);
                     break;
                 case Fate.Disqualified:
                     Ok(await As(request, agent, () => sender.Send(new CloseLeadCommand(leadId, LeadCloseReason.Disqualified, "Hors zone d'intervention."), ct)), reference);
@@ -146,8 +172,10 @@ internal sealed class LeadsDemoData : ITenantStartingData
 
         // ── Credit files on clients, at three steps ───────────────────────────
         var titles = (await db.Opportunities.Select(o => o.Title).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
-        var creditManager = Account("gestionnaire-credit");
-        foreach (var (clientKey, name, amount, target) in CreditFiles)
+        // The credit manager is Banking - Microfinance's role: without it, no credit file (lot 2 of
+        // docs/isolation-socle.md; the rest of the demo follows the modules in lot 5).
+        var hasCreditManager = request.Shared.TryGetValue(DemoKeys.Account("gestionnaire-credit"), out var creditManager);
+        foreach (var (clientKey, name, amount, target) in CreditFiles.Where(_ => hasCreditManager))
         {
             var title = $"Crédit individuel — {name}";
             if (titles.Contains(title) || !request.Shared.TryGetValue(DemoKeys.Client(clientKey), out var clientId)) continue;
@@ -192,7 +220,7 @@ internal sealed class LeadsDemoData : ITenantStartingData
             var i = worked[t % worked.Count];
             if (!leadIds.TryGetValue(i, out var leadId)) continue;
             var agentProfile = Agents[i % Agents.Length];
-            var title = $"Rappeler {FirstNames[i % FirstNames.Length]} {LastNames[(i * 7 + i / FirstNames.Length) % LastNames.Length]} — {Products[i % Products.Length]}";
+            var title = $"Rappeler {FirstNames[i % FirstNames.Length]} {LastNames[(i * 7 + i / FirstNames.Length) % LastNames.Length]} — {ProductOf(products, i)}";
             if (!taskTitles.Add(title)) continue;
             var due = (t % 4) switch
             {

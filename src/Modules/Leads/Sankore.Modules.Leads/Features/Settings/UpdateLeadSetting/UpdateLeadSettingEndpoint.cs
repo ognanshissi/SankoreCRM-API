@@ -40,8 +40,8 @@ internal static class UpdateLeadSettingEndpoint
         if (result.IsSuccess)
             return Results.Ok(result.Value);
 
-        return result.Error == LeadSettingErrors.Unknown
-            ? Results.NotFound(new { error = result.Error })
+        return result.Error == LeadSettingErrors.Unknown ? Results.NotFound(new { error = result.Error })
+            : result.Error == TenantModuleErrors.Disabled ? Sankore.Shared.Infrastructure.Tenants.TenantModuleResults.Disabled([TenantModules.Insurance])
             : Results.BadRequest(new { error = result.Error });
     }
 }

@@ -135,16 +135,19 @@ internal sealed class AdministrationDemoData(IOptions<DemoDataOptions> options) 
         }
         if (newAgencies > 0) created["Agences"] = newAgencies;
 
-        // The accounts, found again by their address.
+        // The accounts, found again by their address — those of a paid module only where it is on
+        // (docs/isolation-socle.md, lot 2): a socle demo has no credit analyst nor cashier.
+        var enabled = await services.GetRequiredService<ITenantModules>().EnabledSetAsync(request.TenantId, ct);
+        var accounts = Accounts.Where(a => ModuleScopes.InReach(ModuleScopes.OfRole(a.Role), enabled)).ToList();
         var settings = options.Value;
         var institution = DemoDataOptions.InstitutionSlug(request.TenantName);
-        var emails = Accounts.ToDictionary(a => a.Profile, a => settings.EmailFor(a.Profile, institution));
+        var emails = accounts.ToDictionary(a => a.Profile, a => settings.EmailFor(a.Profile, institution));
         var normalized = emails.Values.Select(e => e.ToUpperInvariant()).ToList();
         var existing = await db.Users.Where(u => u.NormalizedEmail != null && normalized.Contains(u.NormalizedEmail))
             .ToDictionaryAsync(u => u.NormalizedEmail!, u => u.Id, ct);
         var ids = new Dictionary<string, Guid>();
         var newAccounts = 0;
-        foreach (var account in Accounts)
+        foreach (var account in accounts)
         {
             var email = emails[account.Profile];
             if (existing.TryGetValue(email.ToUpperInvariant(), out var id))
@@ -177,7 +180,7 @@ internal sealed class AdministrationDemoData(IOptions<DemoDataOptions> options) 
         var accountIds = ids.Values.ToList();
         var reportsTo = await db.Users.Where(u => accountIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.ReportsToUserId, ct);
-        foreach (var account in Accounts.Where(a => a.ReportsTo is not null))
+        foreach (var account in accounts.Where(a => a.ReportsTo is not null && ids.ContainsKey(a.ReportsTo)))
         {
             var id = ids[account.Profile];
             if (reportsTo.GetValueOrDefault(id) is null)
