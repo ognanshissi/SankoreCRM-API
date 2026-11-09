@@ -83,9 +83,9 @@ public sealed class IntegrationAdapterCompositionTests
         // 360dialog (WA-BE-01) — operating, built against Meta's documented Cloud API.
         [IntegrationKind.Dialog360] = true,
 
-        // The in-memory double (INT-10). Development only — asserted separately, in both
-        // directions, because this entry describes a NON-Development host.
-        [IntegrationKind.Fake] = false,
+        // The in-memory double (INT-10). Registered on every host since 2026-11-08; FakeAdapterGate
+        // keeps every real institution out of it (asserted separately).
+        [IntegrationKind.Fake] = true,
     };
 
     [Fact]
@@ -121,21 +121,15 @@ public sealed class IntegrationAdapterCompositionTests
     }
 
     [Fact]
-    public void The_in_memory_double_is_offered_in_development_and_nowhere_else()
+    public void The_in_memory_double_is_registered_on_every_host_and_reached_through_its_gate()
     {
-        // Both directions in one case, because each alone is half the guarantee: present-only
-        // would pass on a gate that is always open, absent-only on a registration that never
-        // happens. An adapter answering successful writes with no back-office behind it would
-        // leave a tenant whose CBS and whose CRM disagree about every write, with nothing
-        // reporting it — so the closed direction is the one that matters, and it is also the one
-        // a refactoring silently loses.
-        IsRegistered(Compose("Development"), IntegrationKind.Fake).Should().BeTrue();
-
-        foreach (var environment in new[] { "Production", "Staging", "Test" })
-        {
-            IsRegistered(Compose(environment), IntegrationKind.Fake).Should().BeFalse(
-                $"the in-memory double must not be offered in {environment}");
-        }
+        // Since 2026-11-08 (owner, docs/donnees-demarrage-demo.md): demos on the production
+        // platform subscribe through the double. Its presence no longer decides anything —
+        // FakeAdapterGate does, at connection creation, activation and every resolution, letting
+        // only Development or a TEST institution reach it (FakeAdapterGateTests, Integration).
+        foreach (var environment in new[] { "Development", "Production", "Staging", "Test" })
+            IsRegistered(Compose(environment), IntegrationKind.Fake).Should().BeTrue(
+                $"the double is registered in {environment}; the gate keeps real institutions out");
     }
 
     [Fact]

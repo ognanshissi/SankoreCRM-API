@@ -36,6 +36,7 @@ public sealed class IntegrationDbContext(
     public DbSet<MailServerSettings> MailServers => Set<MailServerSettings>();
     public DbSet<ConnectedMailMessage> ConnectedMailMessages => Set<ConnectedMailMessage>();
     public DbSet<ConnectedMailLink> ConnectedMailLinks => Set<ConnectedMailLink>();
+    public DbSet<ConnectedMailPendingLink> ConnectedMailPendingLinks => Set<ConnectedMailPendingLink>();
     public DbSet<MailboxSyncState> MailboxSyncStates => Set<MailboxSyncState>();
     public DbSet<MailTemplate> MailTemplates => Set<MailTemplate>();
     public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();
@@ -157,6 +158,7 @@ public sealed class IntegrationDbContext(
         modelBuilder.Entity<MailServerSettings>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ConnectedMailMessage>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ConnectedMailLink>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ConnectedMailPendingLink>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<MailboxSyncState>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<MailTemplate>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<WebhookSubscription>().HasQueryFilter(x => x.TenantId == tenant.CurrentTenantId);

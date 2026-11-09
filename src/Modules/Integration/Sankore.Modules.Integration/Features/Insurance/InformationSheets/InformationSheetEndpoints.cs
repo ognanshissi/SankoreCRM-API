@@ -120,25 +120,40 @@ internal static class InformationSheetEndpoints
         if (product is null)
             return Results.NotFound(new { error = "INSURANCE_PRODUCT_NOT_FOUND" });
 
+        await using var content = file.OpenReadStream();
+        var sheet = await AttachAsync(db, files, product, content, file.FileName, user.TenantId, user.Id, clock, ct);
+
+        return Results.Created($"integration/insurance/information-sheets/{sheet.Id}/content", InformationSheetDto.From(sheet, true));
+    }
+
+    /// <summary>
+    /// A new version of <paramref name="product"/>'s sheet, current from now on. Shared by the upload
+    /// and the demo's starting data (docs/donnees-demarrage-demo.md, lot 3): one path from a PDF to
+    /// a deliverable version, fingerprint included.
+    /// </summary>
+    internal static async Task<ProductInformationSheet> AttachAsync(
+        IntegrationDbContext db, IFileStore files, InsuranceProduct product, Stream pdf, string fileName,
+        Guid tenantId, Guid userId, TimeProvider clock, CancellationToken ct)
+    {
         await using var buffer = new MemoryStream();
-        await file.CopyToAsync(buffer, ct);
+        await pdf.CopyToAsync(buffer, ct);
         buffer.Position = 0;
 
         // The fingerprint is what a delivery proves was handed over.
         var sha256 = Convert.ToHexStringLower(SHA256.HashData(buffer.ToArray()));
+        var length = buffer.Length;
         buffer.Position = 0;
-        var reference = await files.StoreAsync(buffer, file.FileName, ct);
+        var reference = await files.StoreAsync(buffer, fileName, ct);
 
-        var version = await db.InformationSheets.Where(s => s.ProductId == productId).MaxAsync(s => (int?)s.Version, ct) ?? 0;
+        var version = await db.InformationSheets.Where(s => s.ProductId == product.Id).MaxAsync(s => (int?)s.Version, ct) ?? 0;
         var sheet = ProductInformationSheet.Create(
-            user.TenantId, productId, version + 1, reference, file.FileName, "application/pdf",
-            file.Length, sha256, user.Id, clock);
+            tenantId, product.Id, version + 1, reference, fileName, "application/pdf",
+            length, sha256, userId, clock);
 
         db.InformationSheets.Add(sheet);
-        product.AttachInformationSheet(sheet.Id, sheet.Version, user.Id, clock);
+        product.AttachInformationSheet(sheet.Id, sheet.Version, userId, clock);
         await db.SaveChangesAsync(ct);
-
-        return Results.Created($"integration/insurance/information-sheets/{sheet.Id}/content", InformationSheetDto.From(sheet, true));
+        return sheet;
     }
 
     private static async Task<IResult> ListVersions(Guid productId, IntegrationDbContext db, CancellationToken ct)

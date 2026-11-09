@@ -31,7 +31,10 @@ internal sealed record ScheduledMailPayload(
     string Body,
     Guid? ReplyToMessageId,
     Guid? ForwardMessageId,
-    List<string> ForwardAttachmentIds);
+    List<string> ForwardAttachmentIds,
+    Guid? ProjectId = null,
+    // The project's files among the kept attachments: recorded on the project when it leaves (lot 4).
+    List<Guid>? ProjectAttachmentIds = null);
 
 public sealed record ScheduledMailDto(
     Guid Id,
@@ -218,7 +221,8 @@ public sealed class SendScheduledMailJob(IServiceScopeFactory scopeFactory, ILog
 
         var result = await sp.GetRequiredService<ISender>().Send(new SendMailCommand(
             mail.AccountId, payload.To, payload.Cc, payload.Bcc, payload.Subject, payload.Body,
-            payload.ReplyToMessageId, payload.ForwardMessageId, payload.ForwardAttachmentIds, attachments));
+            payload.ReplyToMessageId, payload.ForwardMessageId, payload.ForwardAttachmentIds, attachments,
+            ProjectId: payload.ProjectId, ProjectAttachmentIds: payload.ProjectAttachmentIds, ProjectChecked: true));
 
         return result.IsSuccess ? null : result.Error ?? MailSendException.Failed;
     }

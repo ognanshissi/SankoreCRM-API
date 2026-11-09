@@ -154,4 +154,59 @@ public sealed class LeadCustomerDocumentReaderTests : IDisposable
             "an outbound media is listed before the provider gives it an id");
         files.Should().OnlyContain(f => f.ContentPath!.StartsWith("leads/whatsapp/conversations/"));
     }
+
+    [Fact]
+    public async Task A_project_s_document_sent_to_the_client_is_handed_over_and_its_WhatsApp_copy_hangs_off_the_project()
+    {
+        Guid projectId;
+        await using (var db = _factory.CreateContext())
+        {
+            var project = Opportunity.CreateForCustomer(_tenant, _client, "Crédit tracteur", "CRD", _agent, TimeProvider.System);
+            projectId = project.Id;
+            db.Opportunities.Add(project);
+
+            var devis = ProjectFile(project.Id, "devis.pdf");
+            devis.MarkSent(ProjectDocumentChannels.WhatsApp, _now.AddHours(1));
+            var emailed = ProjectFile(project.Id, "proposition.pdf");
+            emailed.MarkSent(ProjectDocumentChannels.Email, _now.AddHours(2));
+            db.ProjectAttachments.AddRange(devis, emailed, ProjectFile(project.Id, "bulletin.pdf"));
+
+            var conversation = WhatsAppConversation.Open(
+                _tenant, Guid.NewGuid(), "+2250700000001", "idx", leadId: null, clientId: _client,
+                contactName: null, ambiguousMatch: false, now: _now);
+            db.WhatsAppConversations.Add(conversation);
+
+            var copy = WhatsAppMessage.OutboundMedia(_tenant, conversation.Id, _agent, WhatsAppMessageKind.Document,
+                "application/pdf", "devis.pdf", null, _now);
+            copy.LinkToProject(project.Id, devis.Id);
+            copy.MarkSent("wamid.ok", _now);
+
+            var refused = WhatsAppMessage.OutboundMedia(_tenant, conversation.Id, _agent, WhatsAppMessageKind.Document,
+                "application/pdf", "refuse.pdf", null, _now);
+            refused.MarkFailed("MESSAGING_TEST_RECIPIENT", null, _now);
+
+            var template = WhatsAppMessage.OutboundTemplate(_tenant, conversation.Id, _agent, Guid.NewGuid(), "envoi_devis", "fr",
+                "Bonjour Awa", "[\"Awa\"]", _now);
+            template.AttachTemplateFile("application/pdf", "devis-modele.pdf");
+            template.AttachStoredMedia("wam-1", 100, "sha", _now);
+            template.LinkToProject(project.Id, devis.Id);
+
+            db.WhatsAppMessages.AddRange(copy, refused, template);
+            await db.SaveChangesAsync();
+        }
+
+        var files = await ReadAsync();
+
+        var sent = files.Single(f => f.Key.StartsWith("project-attachment:") && f.FileName == "devis.pdf");
+        sent.Direction.Should().Be(CustomerDocumentDirection.Delivered);
+        sent.Status.Should().Be("Delivered");
+        sent.Detail.Should().Be("SentByWhatsApp");
+        sent.At.Should().Be(_now.AddHours(1));
+        files.Single(f => f.FileName == "proposition.pdf").Detail.Should().Be("SentByEmail");
+        files.Single(f => f.FileName == "bulletin.pdf").Direction.Should().Be(CustomerDocumentDirection.Collected, "never sent");
+
+        var whatsapp = files.Where(f => f.Source == "WhatsApp").ToList();
+        whatsapp.Select(f => f.FileName).Should().BeEquivalentTo(["devis.pdf", "devis-modele.pdf"], "a refused send reached nobody");
+        whatsapp.Should().OnlyContain(f => f.OriginType == "Project" && f.OriginId == projectId && f.OriginLabel == "Crédit tracteur");
+    }
 }

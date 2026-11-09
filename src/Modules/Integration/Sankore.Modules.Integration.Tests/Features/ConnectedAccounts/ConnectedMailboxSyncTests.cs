@@ -91,7 +91,7 @@ public sealed class ConnectedMailboxSyncTests : IDisposable
             return Task.FromResult<MailContent?>(Contents.GetValueOrDefault(externalId) ?? new MailContent("<p>Bonjour</p>", true, []));
         }
 
-        public Task SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct) => throw new NotSupportedException();
+        public Task<SentMailReference?> SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct) => throw new NotSupportedException();
         public Task SetReadAsync(MailboxSession session, string externalId, bool isRead, CancellationToken ct) => throw new NotSupportedException();
         public Task<byte[]?> ReadAttachmentAsync(MailboxSession session, string externalId, string attachmentId, CancellationToken ct) => throw new NotSupportedException();
 
@@ -133,6 +133,94 @@ public sealed class ConnectedMailboxSyncTests : IDisposable
         await using var db = _factory.CreateContext();
         var filed = await db.ConnectedMailLinks.Where(l => l.EntityType == MailLinkEntity.Complaint).ToListAsync();
         filed.Should().ContainSingle().Which.EntityId.Should().Be(complaint);
+    }
+
+    // ── Projects (project documents lot 1, 2026-11-08) ─────────────────────────
+
+    private async Task PromiseAsync(ConnectedAccount account, Guid projectId, string? externalId, string? messageId, DateTimeOffset? at = null)
+    {
+        await using var db = _factory.CreateContext();
+        db.ConnectedMailPendingLinks.Add(ConnectedMailPendingLink.Create(
+            _tenant, account.Id, externalId, messageId, MailLinkEntity.Project, projectId, at ?? _now.AddMinutes(-1))!);
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task A_message_sent_from_a_project_is_filed_on_it_and_the_reply_in_its_conversation_follows()
+    {
+        var project = Guid.NewGuid();
+        var account = await AccountAsync();
+        await PromiseAsync(account, project, null, "<S1@Mail>");
+
+        _reader.Script("sent", _ => new MailChangePage(
+            [Header("s1", "awa@cabinet.ci", "aya@example.ci", MailFolderKind.Sent, thread: "tp")], [], "sent-1", HasMore: false));
+        await SyncAsync(account);
+
+        _reader.Script("inbox", _ => new MailChangePage(
+        [
+            Header("r1", "aya@example.ci", "awa@cabinet.ci", thread: "tp", subject: "RE: Votre devis"),
+            Header("x1", "aya@example.ci", "awa@cabinet.ci", thread: "other"),
+        ], [], "inbox-1", HasMore: false));
+        await SyncAsync(account);
+
+        await using var db = _factory.CreateContext();
+        var messages = await db.ConnectedMailMessages.ToDictionaryAsync(m => m.ExternalId, m => m.Id);
+        var filed = await db.ConnectedMailLinks.Where(l => l.EntityType == MailLinkEntity.Project).ToListAsync();
+        filed.Select(l => l.MessageId).Should().BeEquivalentTo([messages["s1"], messages["r1"]]);
+        filed.Should().OnlyContain(l => l.EntityId == project);
+        (await db.ConnectedMailPendingLinks.CountAsync()).Should().Be(0, "a promise is kept once");
+    }
+
+    [Fact]
+    public async Task A_promise_made_under_the_provider_s_own_id_is_kept_too_and_a_reply_on_the_same_page_follows()
+    {
+        var project = Guid.NewGuid();
+        var account = await AccountAsync();
+        await PromiseAsync(account, project, "g-sent-1", "<id-gmail-changed@mail>");
+
+        _reader.Script("inbox", _ => new MailChangePage(
+        [
+            Header("g-sent-1", "awa@cabinet.ci", "aya@example.ci", MailFolderKind.Sent, thread: "gt"),
+            Header("g-reply", "aya@example.ci", "awa@cabinet.ci", thread: "gt"),
+        ], [], "inbox-1", HasMore: false));
+        await SyncAsync(account);
+
+        await using var db = _factory.CreateContext();
+        (await db.ConnectedMailLinks.CountAsync(l => l.EntityType == MailLinkEntity.Project && l.EntityId == project)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_promise_waits_for_its_message_and_expires_with_the_window()
+    {
+        var waiting = Guid.NewGuid();
+        var stale = Guid.NewGuid();
+        var account = await AccountAsync();
+        await PromiseAsync(account, waiting, null, "<later@mail>");
+        await PromiseAsync(account, stale, null, "<never@mail>", _now - MailboxSyncState.Window - TimeSpan.FromMinutes(1));
+
+        _reader.Script("inbox", _ => new MailChangePage(
+            [Header("m1", "aya@example.ci", "awa@cabinet.ci")], [], "inbox-1", HasMore: false));
+        await SyncAsync(account);
+
+        await using var db = _factory.CreateContext();
+        (await db.ConnectedMailPendingLinks.SingleAsync()).EntityId.Should().Be(waiting);
+        (await db.ConnectedMailLinks.CountAsync(l => l.EntityType == MailLinkEntity.Project)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_page_that_fails_keeps_its_promise_for_the_next_run()
+    {
+        var project = Guid.NewGuid();
+        var account = await AccountAsync();
+        await PromiseAsync(account, project, null, "<s1@mail>");
+        _reader.FailContent = true;
+        _reader.Script("sent", _ => new MailChangePage(
+            [Header("s1", "awa@cabinet.ci", "aya@example.ci", MailFolderKind.Sent)], [], "sent-1", HasMore: false));
+
+        await SyncAsync(account);
+
+        await using var db = _factory.CreateContext();
+        (await db.ConnectedMailPendingLinks.SingleAsync()).EntityId.Should().Be(project);
     }
 
     // ── Keeping ────────────────────────────────────────────────────────────────

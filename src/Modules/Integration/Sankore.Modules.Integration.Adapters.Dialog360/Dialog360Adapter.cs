@@ -102,6 +102,24 @@ internal sealed class Dialog360Adapter(
     {
         ArgumentNullException.ThrowIfNull(template);
 
+        Dialog360Binding? bound = null;
+        string? mediaId = null;
+
+        // A DOCUMENT or IMAGE header (project documents lot 3): the file is uploaded first and the
+        // header names it by id — a link would have to be a public URL to a customer's document.
+        if (template.HeaderMedia is { } file)
+        {
+            var binding = await BindAsync(connection, ct);
+            if (binding.IsFailure) return Dialog360Results.Forward<string>(binding);
+            bound = binding.Value;
+
+            var uploaded = await UploadAsync(bound, file, ct);
+            if (uploaded.IsFailure) return Dialog360Results.Forward<string>(uploaded);
+            mediaId = uploaded.Value;
+        }
+
+        var components = Dialog360Templates.Components(template, mediaId);
+
         var body = new Dictionary<string, object?>
         {
             ["messaging_product"] = "whatsapp",
@@ -112,22 +130,50 @@ internal sealed class Dialog360Adapter(
             {
                 ["name"] = template.Name,
                 ["language"] = new Dictionary<string, object?> { ["code"] = template.Language },
-                ["components"] = template.BodyParameters.Count == 0
-                    ? Array.Empty<object>()
-                    : new object[]
-                    {
-                        new Dictionary<string, object?>
-                        {
-                            ["type"] = "body",
-                            ["parameters"] = template.BodyParameters
-                                .Select(p => new Dictionary<string, object?> { ["type"] = "text", ["text"] = p })
-                                .ToArray(),
-                        },
-                    },
+                ["components"] = components,
             },
         };
 
-        return await SendMessageAsync(connection, Dialog360Operations.SendTemplate, body, ct);
+        return await SendMessageAsync(connection, Dialog360Operations.SendTemplate, body, ct, bound);
+    }
+
+    /// <summary>The upload of one file to <c>/media</c>; answers the media id.</summary>
+    private async Task<IntegrationResult<string>> UploadAsync(Dialog360Binding binding, OutboundMedia media, CancellationToken ct)
+    {
+        if (media.Content.Length is 0 or > MaxMediaBytes)
+        {
+            return IntegrationResult.Functional<string>(
+                IntegrationErrors.MessagingMediaRefused,
+                $"A media must weigh between 1 byte and {MaxMediaBytes / (1024 * 1024)} MB.");
+        }
+
+        var upload = await transport.SendAsync(
+            binding,
+            Dialog360Operations.UploadMedia,
+            HttpMethod.Post,
+            new Uri(binding.BaseUrl, "media"),
+            () =>
+            {
+                var form = new MultipartFormDataContent
+                {
+                    { new StringContent("whatsapp"), "messaging_product" },
+                };
+
+                var file = new ByteArrayContent(media.Content);
+                file.Headers.ContentType = new MediaTypeHeaderValue(media.ContentType);
+                form.Add(file, "file", media.FileName);
+
+                return form;
+            },
+            ct);
+
+        if (upload.IsFailure) return Dialog360Results.Forward<string>(upload);
+
+        var mediaId = ReadString(upload.Value, "id");
+        return string.IsNullOrWhiteSpace(mediaId)
+            ? IntegrationResult.Functional<string>(
+                IntegrationErrors.UnexpectedResponse, $"{Dialog360Operations.UploadMedia}: the answer carries no media id.")
+            : IntegrationResult.Ok(mediaId);
     }
 
     public Task<IntegrationResult<string>> SendTextAsync(
@@ -165,36 +211,9 @@ internal sealed class Dialog360Adapter(
         var binding = await BindAsync(connection, ct);
         if (binding.IsFailure) return Dialog360Results.Forward<SentMedia>(binding);
 
-        var upload = await transport.SendAsync(
-            binding.Value,
-            Dialog360Operations.UploadMedia,
-            HttpMethod.Post,
-            new Uri(binding.Value.BaseUrl, "media"),
-            () =>
-            {
-                var form = new MultipartFormDataContent
-                {
-                    { new StringContent("whatsapp"), "messaging_product" },
-                };
-
-                var file = new ByteArrayContent(media.Content);
-                file.Headers.ContentType = new MediaTypeHeaderValue(media.ContentType);
-                form.Add(file, "file", media.FileName);
-
-                return form;
-            },
-            ct);
-
-        if (upload.IsFailure) return Dialog360Results.Forward<SentMedia>(upload);
-
-        var mediaId = ReadString(upload.Value, "id");
-
-        if (string.IsNullOrWhiteSpace(mediaId))
-        {
-            return IntegrationResult.Functional<SentMedia>(
-                IntegrationErrors.UnexpectedResponse,
-                $"{Dialog360Operations.UploadMedia}: the answer carries no media id.");
-        }
+        var uploaded = await UploadAsync(binding.Value, media, ct);
+        if (uploaded.IsFailure) return Dialog360Results.Forward<SentMedia>(uploaded);
+        var mediaId = uploaded.Value;
 
         var kind = media.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
             ? "image"
@@ -570,6 +589,41 @@ internal static class Dialog360Messages
 internal static class Dialog360Templates
 {
     /// <summary>
+    /// The components of a template send: the header's file by its uploaded id (a document keeps its
+    /// file name, an image needs none), then the body's values. Pure, for the tests.
+    /// </summary>
+    public static object[] Components(OutboundTemplate template, string? headerMediaId)
+    {
+        var components = new List<object>();
+
+        if (template.HeaderMedia is { } file && headerMediaId is not null)
+        {
+            var kind = file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image" : "document";
+            var media = new Dictionary<string, object?> { ["id"] = headerMediaId };
+            if (kind == "document") media["filename"] = file.FileName;
+
+            components.Add(new Dictionary<string, object?>
+            {
+                ["type"] = "header",
+                ["parameters"] = new object[] { new Dictionary<string, object?> { ["type"] = kind, [kind] = media } },
+            });
+        }
+
+        if (template.BodyParameters.Count > 0)
+        {
+            components.Add(new Dictionary<string, object?>
+            {
+                ["type"] = "body",
+                ["parameters"] = template.BodyParameters
+                    .Select(p => new Dictionary<string, object?> { ["type"] = "text", ["text"] = p })
+                    .ToArray(),
+            });
+        }
+
+        return components.ToArray();
+    }
+
+    /// <summary>
     /// The templates of one page and the catalogue's total, or a null list when the answer is not
     /// the shape 360dialog documents (<c>{"waba_templates":[…],"total":…}</c>).
     /// </summary>
@@ -596,7 +650,7 @@ internal static class Dialog360Templates
                 var language = Text(item, "language");
                 if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(language)) continue;
 
-                string? header = null, body = null, footer = null;
+                string? header = null, headerFormat = null, body = null, footer = null;
                 var buttons = new List<string>();
 
                 if (item.TryGetProperty("components", out var components) && components.ValueKind == JsonValueKind.Array)
@@ -605,9 +659,10 @@ internal static class Dialog360Templates
                     {
                         switch (Text(component, "type")?.ToUpperInvariant())
                         {
-                            case "HEADER" when string.Equals(Text(component, "format"), "TEXT", StringComparison.OrdinalIgnoreCase)
-                                               || Text(component, "format") is null:
-                                header = Text(component, "text");
+                            case "HEADER":
+                                // TEXT carries words; DOCUMENT, IMAGE, VIDEO, LOCATION want a value at every send.
+                                headerFormat = (Text(component, "format") ?? "TEXT").ToUpperInvariant();
+                                if (headerFormat == "TEXT") header = Text(component, "text");
                                 break;
                             case "BODY":
                                 body = Text(component, "text");
@@ -635,7 +690,8 @@ internal static class Dialog360Templates
                     HeaderText: header,
                     BodyText: body ?? string.Empty,
                     FooterText: footer,
-                    Buttons: buttons));
+                    Buttons: buttons,
+                    HeaderFormat: headerFormat));
             }
 
             return (templates, total);

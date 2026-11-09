@@ -123,3 +123,14 @@ internal sealed class StubHostEnvironment(string environmentName) : IHostEnviron
     public IFileProvider ContentRootFileProvider { get; set; } =
         new NullFileProvider();
 }
+
+/// <summary>
+/// The simulator's gate as Development grants it. The gate fails closed: a resolver or a connection
+/// handler built without one refuses every Fake connection, so a suite that runs the double must
+/// hand it this (FakeAdapterGateTests covers what the gate decides).
+/// </summary>
+internal static class TestFakeAdapterGate
+{
+    public static Sankore.Modules.Integration.Infrastructure.FakeAdapterGate Development
+        => new(StubHostEnvironment.Development, NSubstitute.Substitute.For<Sankore.Shared.Kernel.ITenantStore>());
+}

@@ -96,7 +96,7 @@ internal static class TelephonyTestHarness
         if (adapter is not null)
             services.AddKeyedSingleton(adapter.Kind.ToString(), adapter);
 
-        return new IntegrationAdapterResolver(db, services.BuildServiceProvider());
+        return new IntegrationAdapterResolver(db, services.BuildServiceProvider(), TestSupport.TestFakeAdapterGate.Development);
     }
 
     internal static TelephonyAccess Access(IntegrationDbContext db, ICbsAdapter? adapter)

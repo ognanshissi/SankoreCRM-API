@@ -151,6 +151,7 @@ public sealed class SyncClaimsJobTests : IDisposable
         services.AddSingleton(_administration);
         services.AddScoped(_ => _factory.CreateContext());
         services.AddScoped<IntegrationAdapterResolver>();
+        services.AddScoped(_ => TestSupport.TestFakeAdapterGate.Development);
         // Keyed by the connection's kind, which is how IntegrationAdapterResolver finds it.
         services.AddKeyedSingleton<IInsuranceClaimPort>(IntegrationKind.Fake.ToString(), _adapter);
         services.AddKeyedSingleton<ICbsAdapter>(IntegrationKind.Fake.ToString(), _adapter);

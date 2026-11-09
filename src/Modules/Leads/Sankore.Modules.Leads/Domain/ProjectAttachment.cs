@@ -8,6 +8,13 @@ using Sankore.Shared.Kernel;
 /// — same kind of content, same key — and this row says whose project, which field, who put it.
 /// Removed logically: the row stays, so the trail of what was once attached does too.
 /// </summary>
+/// <summary>How a project's document left (project documents lot 4).</summary>
+public static class ProjectDocumentChannels
+{
+    public const string Email = "Email";
+    public const string WhatsApp = "WhatsApp";
+}
+
 public sealed class ProjectAttachment : ITenant
 {
     public const int MaxPerField = 10;
@@ -28,6 +35,23 @@ public sealed class ProjectAttachment : ITenant
     public DateTimeOffset UploadedAt { get; private set; }
     public DateTimeOffset? DeletedAt { get; private set; }
     public Guid? DeletedBy { get; private set; }
+
+    /// <summary>
+    /// When the file last LEFT for the client or the lead (project documents lot 4, 2026-11-08): the
+    /// provider accepted the e-mail or the WhatsApp message carrying it. A devis sent is a document
+    /// handed over — the client's « Documents » tab says « Remis » from then on.
+    /// </summary>
+    public DateTimeOffset? LastSentAt { get; private set; }
+
+    /// <summary><see cref="ProjectDocumentChannels.Email"/> or <see cref="ProjectDocumentChannels.WhatsApp"/>.</summary>
+    public string? LastSentChannel { get; private set; }
+
+    public void MarkSent(string channel, DateTimeOffset at)
+    {
+        if (LastSentAt is { } previous && previous > at) return;
+        LastSentAt = at;
+        LastSentChannel = channel;
+    }
 
     private ProjectAttachment() { }
 

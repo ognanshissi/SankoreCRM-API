@@ -84,6 +84,7 @@ public sealed class SyncPoliciesJobTests : IDisposable
         services.AddKeyedSingleton(nameof(IntegrationDbContext), _publisher);
         services.AddScoped(_ => _factory.CreateContext());
         services.AddScoped<IntegrationAdapterResolver>();
+        services.AddScoped(_ => TestSupport.TestFakeAdapterGate.Development);
         // Keyed by the connection's kind, which is how IntegrationAdapterResolver finds it.
         services.AddKeyedSingleton<IInsurancePolicyPort>(IntegrationKind.Fake.ToString(), _adapter);
         services.AddKeyedSingleton<ICbsAdapter>(IntegrationKind.Fake.ToString(), _adapter);
@@ -269,6 +270,7 @@ public sealed class SyncPoliciesJobTests : IDisposable
         services.AddKeyedSingleton(nameof(IntegrationDbContext), _publisher);
         services.AddScoped(_ => _factory.CreateContext());
         services.AddScoped<IntegrationAdapterResolver>();
+        services.AddScoped(_ => TestSupport.TestFakeAdapterGate.Development);
         // Keyed by the connection's kind, which is how IntegrationAdapterResolver finds it.
         services.AddKeyedSingleton<IInsurancePolicyPort>(IntegrationKind.Fake.ToString(), _adapter);
         services.AddKeyedSingleton<ICbsAdapter>(IntegrationKind.Fake.ToString(), _adapter);

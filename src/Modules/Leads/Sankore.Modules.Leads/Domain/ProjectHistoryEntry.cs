@@ -15,6 +15,13 @@ public enum ProjectHistoryKind
     Lost,
     HoldingOpened,
     WorkflowRestarted,
+
+    /// <summary>
+    /// Documents of the project left for its client or lead (project documents lot 4): <c>To</c> =
+    /// the channel (<c>Email</c>, <c>WhatsApp</c>), <c>Detail</c> = the file names as they read then,
+    /// <c>RelatedId</c> = the WhatsApp message when there is one. Written when the provider ACCEPTED.
+    /// </summary>
+    DocumentSent,
 }
 
 /// <summary>

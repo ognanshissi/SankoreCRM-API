@@ -1,5 +1,6 @@
 namespace Sankore.Modules.Customers.Features.Clients.Shared;
 
+using System.Transactions;
 using Sankore.Modules.Administration.PublicApi;
 
 /// <summary>
@@ -37,7 +38,17 @@ internal sealed class AdministrationAgencyDirectory(IAdministrationModule admini
 {
     public async Task<string?> GetAgencyCodeAsync(Guid tenantId, Guid agencyId, CancellationToken ct)
     {
-        var agency = await administration.GetAgencyAsync(tenantId, agencyId, ct);
+        // Suppressed, as every read of Administration's facade from a command must be: unsuppressed,
+        // it enlisted Administration's context in the command's transaction, and the institution's
+        // currency, read suppressed a few lines later by the same creation, then failed with « This
+        // connection was used with an ambient transaction » — every client created with a declared
+        // income (found by the demo's starting data, 2026-11-08).
+        AgencySummary? agency;
+        using (var suppressed = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
+        {
+            agency = await administration.GetAgencyAsync(tenantId, agencyId, ct);
+            suppressed.Complete();
+        }
 
         // An inactive agency is treated exactly like a missing one: a client may not
         // be booked into an agency that has been closed, and the caller must not be
@@ -52,7 +63,12 @@ internal sealed class AdministrationAgencyDirectory(IAdministrationModule admini
         // their (globally unique) id alone. Tenant isolation therefore rests on the
         // agency comparison below: an agent of another tenant can never match an
         // agency id that this tenant owns.
-        var agent = await administration.GetAgentAsync(advisorUserId, ct);
+        AgentSummary? agent;
+        using (var suppressed = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
+        {
+            agent = await administration.GetAgentAsync(advisorUserId, ct);
+            suppressed.Complete();
+        }
 
         return agent is not null && agent.AgencyId == agencyId;
     }

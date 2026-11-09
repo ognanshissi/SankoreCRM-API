@@ -51,7 +51,9 @@ public sealed class SendWhatsAppMessageConsumer(
             logger,
             tenantId,
             messageId,
-            context.CancellationToken);
+            context.CancellationToken,
+            sp.GetService<Infrastructure.WhatsAppMedia.IWhatsAppMediaStore>(),
+            sp.GetService<Opportunities.Sending.ProjectDocumentTrail>());
     }
 
     internal static async Task SendAsync(
@@ -62,7 +64,9 @@ public sealed class SendWhatsAppMessageConsumer(
         ILogger logger,
         Guid tenantId,
         Guid messageId,
-        CancellationToken ct)
+        CancellationToken ct,
+        Infrastructure.WhatsAppMedia.IWhatsAppMediaStore? store = null,
+        Opportunities.Sending.ProjectDocumentTrail? trail = null)
     {
         var message = await db.WhatsAppMessages.AsTracking().FirstOrDefaultAsync(m => m.Id == messageId, ct);
 
@@ -110,10 +114,26 @@ public sealed class SendWhatsAppMessageConsumer(
                     return;
                 }
 
+                // A DOCUMENT or IMAGE header (project documents lot 3): its file was kept, encrypted,
+                // when the message was queued. Gone or unreadable = the message cannot leave as asked.
+                MessagingMediaContent? header = null;
+                if (message.MediaStorageRef is { } reference)
+                {
+                    var bytes = store is null ? null : await store.OpenAsync(tenantId, reference, ct);
+                    if (bytes is null)
+                    {
+                        message.MarkFailed(TemplateFileMissing, "The template's file could not be read.", clock.GetUtcNow());
+                        await db.SaveChangesAsync(ct);
+                        return;
+                    }
+
+                    header = new MessagingMediaContent(bytes, message.MediaMimeType ?? "application/pdf", message.MediaFileName);
+                }
+
                 sent = await integration.Messaging.SendTemplateAsync(
                     tenantId,
                     conversation.ConnectionId,
-                    new MessagingTemplateSend(conversation.ContactPhone, message.TemplateName!, message.TemplateLanguage!, values),
+                    new MessagingTemplateSend(conversation.ContactPhone, message.TemplateName!, message.TemplateLanguage!, values, header),
                     ct);
             }
             else
@@ -139,6 +159,13 @@ public sealed class SendWhatsAppMessageConsumer(
         if (sent.IsSuccess)
         {
             message.MarkSent(sent.Value, clock.GetUtcNow());
+
+            // A project's devis in a template's header (lots 3-4): it left — the project says so.
+            if (trail is not null && message.OpportunityId is { } projectId && message.ProjectAttachmentId is { } fileId)
+            {
+                await trail.RecordAsync(tenantId, projectId, Domain.ProjectDocumentChannels.WhatsApp, [fileId],
+                    message.AuthorUserId, message.Id, ct);
+            }
         }
         else
         {
@@ -151,6 +178,9 @@ public sealed class SendWhatsAppMessageConsumer(
         await db.SaveChangesAsync(ct);
         await NudgeAsync(realtime, logger, tenantId, conversation.LeadId, conversation.Id, message, ct);
     }
+
+    /// <summary>The file of a template's header was not found in the media store when the message left.</summary>
+    internal const string TemplateFileMissing = "WHATSAPP_TEMPLATE_FILE_MISSING";
 
     private static Task NudgeAsync(
         IRealtimeNotifier realtime,

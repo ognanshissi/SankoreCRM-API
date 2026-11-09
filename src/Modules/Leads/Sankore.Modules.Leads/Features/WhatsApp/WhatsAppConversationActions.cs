@@ -31,6 +31,8 @@ internal static class WhatsAppConversationErrors
     public const string WindowClosed = "WHATSAPP_WINDOW_CLOSED";
     public const string TextInvalid = "WHATSAPP_TEXT_INVALID";
     public const string MediaInvalid = "WHATSAPP_MEDIA_INVALID";
+    /// <summary>Not an image (JPEG, PNG) nor a PDF: WhatsApp does not carry it — by e-mail only.</summary>
+    public const string MediaTypeNotAllowed = "WHATSAPP_MEDIA_TYPE_NOT_ALLOWED";
     public const string AgentNotInTeam = "WHATSAPP_AGENT_NOT_IN_TEAM";
     public const string NotSupervisor = "WHATSAPP_NOT_SUPERVISOR";
 }
@@ -185,50 +187,84 @@ public sealed record SendWhatsAppMediaResult(Guid MessageId, string Status, stri
 
 /// <summary>
 /// An image or a PDF (WA-BE-16), sent while the agent waits: the bytes are in this request and
-/// are stored nowhere, so they cannot be handed to a consumer later. The provider call runs with
-/// the ambient transaction suppressed — it reaches another module's store for the number's key.
+/// are stored nowhere, so they cannot be handed to a consumer later. The sending itself is
+/// <see cref="WhatsAppMediaSender"/>, shared with the client's and the project's routes.
 /// </summary>
 internal sealed class SendWhatsAppMediaHandler(
-    LeadsDbContext db, WhatsAppConversationLoader loader, ICurrentUser me, IIntegrationModule integration,
-    TimeProvider clock, IServiceProvider services, ILogger<SendWhatsAppMediaHandler> logger)
+    LeadsDbContext db, WhatsAppConversationLoader loader, ICurrentUser me, WhatsAppMediaSender sender, TimeProvider clock)
     : IRequestHandler<SendWhatsAppMediaCommand, Result<SendWhatsAppMediaResult>>
 {
-    /// <summary>Meta's own ceiling for an image is 5 MB; a document is held to the platform's 10 MB.</summary>
-    internal const int MaxImageBytes = 5 * 1024 * 1024;
-    internal const int MaxDocumentBytes = 10 * 1024 * 1024;
+    internal const int MaxImageBytes = WhatsAppMediaSender.MaxImageBytes;
+    internal const int MaxDocumentBytes = WhatsAppMediaSender.MaxDocumentBytes;
 
     public async Task<Result<SendWhatsAppMediaResult>> Handle(SendWhatsAppMediaCommand cmd, CancellationToken ct)
     {
-        var type = (cmd.ContentType ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
-
-        var kind = type switch
-        {
-            "image/jpeg" or "image/png" => WhatsAppMessageKind.Image,
-            "application/pdf" => WhatsAppMessageKind.Document,
-            _ => (WhatsAppMessageKind?)null,
-        };
-
-        var limit = kind == WhatsAppMessageKind.Image ? MaxImageBytes : MaxDocumentBytes;
-
-        if (kind is null || cmd.Content is not { Length: > 0 } || cmd.Content.Length > limit
-            || !MatchesSignature(cmd.Content, type))
-        {
-            return Result.Fail<SendWhatsAppMediaResult>(WhatsAppConversationErrors.MediaInvalid);
-        }
+        var media = WhatsAppMediaSender.Check(cmd.Content, cmd.ContentType);
+        if (media.IsFailure) return Result.Fail<SendWhatsAppMediaResult>(WhatsAppConversationErrors.MediaInvalid);
 
         var loaded = await loader.LoadAsync(cmd.LeadId, cmd.ConversationId, cmd.MayReply, ct);
         if (loaded.IsFailure) return Result.Fail<SendWhatsAppMediaResult>(loaded.Error!);
 
         var (lead, conversation) = loaded.Value;
-        var now = clock.GetUtcNow();
-
-        var refusal = await ReplyRules.CheckAsync(db, lead, conversation, me.Id, now, ct);
+        var refusal = await ReplyRules.CheckAsync(db, lead, conversation, me.Id, clock.GetUtcNow(), ct);
         if (refusal is not null) return Result.Fail<SendWhatsAppMediaResult>(refusal);
 
-        var fileName = SafeFileName(cmd.FileName, type);
-        var caption = string.IsNullOrWhiteSpace(cmd.Caption) ? null : cmd.Caption.Trim();
+        return Result.Ok(await sender.SendAsync(conversation, media.Value!, cmd.Content, cmd.FileName, cmd.Caption, link: null, ct));
+    }
 
-        var message = WhatsAppMessage.OutboundMedia(me.TenantId, conversation.Id, me.Id, kind.Value, type, fileName, caption, now);
+    internal static bool MatchesSignature(byte[] content, string type) => WhatsAppMediaSender.MatchesSignature(content, type);
+}
+
+/// <summary>What a file is to WhatsApp: its kind and its normalised type.</summary>
+internal sealed record WhatsAppMediaKind(WhatsAppMessageKind Kind, string ContentType);
+
+/// <summary>
+/// Sends one image or PDF in a conversation the caller may write in — the checks of WHO may are
+/// the caller's (lead, client or project route). The provider call runs with the ambient
+/// transaction suppressed: it reaches another module's store for the number's key. A failure the
+/// provider reports is a FAILED message, recorded and answered, never an error.
+/// </summary>
+internal sealed class WhatsAppMediaSender(
+    LeadsDbContext db, ICurrentUser me, IIntegrationModule integration, TimeProvider clock,
+    IServiceProvider services, ILogger<WhatsAppMediaSender> logger)
+{
+    /// <summary>Meta's own ceiling for an image is 5 MB; a document is held to the platform's 10 MB.</summary>
+    internal const int MaxImageBytes = 5 * 1024 * 1024;
+    internal const int MaxDocumentBytes = 10 * 1024 * 1024;
+
+    /// <summary>
+    /// JPEG and PNG as images, PDF as a document, within their size, and bytes that ARE what the type
+    /// says. Anything else — a Word file, a spreadsheet — cannot go by WhatsApp: by e-mail only.
+    /// </summary>
+    public static Result<WhatsAppMediaKind> Check(byte[]? content, string? contentType)
+    {
+        var type = (contentType ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
+
+        WhatsAppMessageKind? kind = type switch
+        {
+            "image/jpeg" or "image/png" => WhatsAppMessageKind.Image,
+            "application/pdf" => WhatsAppMessageKind.Document,
+            _ => null,
+        };
+        if (kind is null) return Result.Fail<WhatsAppMediaKind>(WhatsAppConversationErrors.MediaTypeNotAllowed);
+
+        var limit = kind == WhatsAppMessageKind.Image ? MaxImageBytes : MaxDocumentBytes;
+        if (content is not { Length: > 0 } || content.Length > limit || !MatchesSignature(content, type))
+            return Result.Fail<WhatsAppMediaKind>(WhatsAppConversationErrors.MediaInvalid);
+
+        return Result.Ok(new WhatsAppMediaKind(kind.Value, type));
+    }
+
+    public async Task<SendWhatsAppMediaResult> SendAsync(
+        WhatsAppConversation conversation, WhatsAppMediaKind media, byte[] content, string? fileName, string? caption,
+        Action<WhatsAppMessage>? link, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var name = SafeFileName(fileName, media.ContentType);
+        var text = string.IsNullOrWhiteSpace(caption) ? null : caption.Trim();
+
+        var message = WhatsAppMessage.OutboundMedia(me.TenantId, conversation.Id, me.Id, media.Kind, media.ContentType, name, text, now);
+        link?.Invoke(message);
         db.WhatsAppMessages.Add(message);
         conversation.RecordOutbound(now);
 
@@ -238,7 +274,7 @@ internal sealed class SendWhatsAppMediaHandler(
         {
             sent = await integration.Messaging.SendMediaAsync(
                 me.TenantId, conversation.ConnectionId, conversation.ContactPhone,
-                new MessagingMediaContent(cmd.Content, type, fileName), caption, ct);
+                new MessagingMediaContent(content, media.ContentType, name), text, ct);
             suppressed.Complete();
         }
 
@@ -246,7 +282,7 @@ internal sealed class SendWhatsAppMediaHandler(
         {
             message.AttachProviderMedia(sent.Value.MediaId);
             message.MarkSent(sent.Value.ProviderMessageId, clock.GetUtcNow());
-            await KeepCopyAsync(message, cmd.Content, ct);
+            await KeepCopyAsync(message, content, ct);
         }
         else
         {
@@ -255,7 +291,7 @@ internal sealed class SendWhatsAppMediaHandler(
 
         await db.SaveChangesAsync(ct);
 
-        return Result.Ok(new SendWhatsAppMediaResult(message.Id, message.Status.ToString(), message.ErrorCode));
+        return new SendWhatsAppMediaResult(message.Id, message.Status.ToString(), message.ErrorCode);
     }
 
     /// <summary>
@@ -290,7 +326,7 @@ internal sealed class SendWhatsAppMediaHandler(
         _ => false,
     };
 
-    private static string SafeFileName(string? name, string type)
+    internal static string SafeFileName(string? name, string type)
     {
         var fallback = type == "application/pdf" ? "document.pdf" : type == "image/png" ? "image.png" : "image.jpg";
         if (string.IsNullOrWhiteSpace(name)) return fallback;

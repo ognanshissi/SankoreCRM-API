@@ -133,6 +133,8 @@ public static class KycModule
         services.AddOutboxForModule<KycDbContext>();
         // Emptying a TEST institution (data-purge lot 4).
         services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.KycTenantDataWipe>();
+        // Starting data of a demo (docs/donnees-demarrage-demo.md, lot 4): KYC files at several stages.
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.KycDemoData>();
 
         // Field protection, keyed to this module — see KycFieldProtection for why the shared
         // AddFieldProtection cannot be called a second time.

@@ -50,7 +50,20 @@ public sealed partial class FakeAdapter
             BodyText: "Bonjour {{1}}, il manque encore quelques éléments à votre dossier. Puis-je "
                       + "vous aider à le compléter ?",
             FooterText: null,
-            Buttons: []),
+            Buttons: [],
+            HeaderFormat: "TEXT"),
+        // A DOCUMENT header (project documents lot 3): sent with the project's devis as its file.
+        new ProviderTemplate(
+            ProviderTemplateId: "fake-tpl-3",
+            Name: "envoi_devis",
+            Language: "fr",
+            Category: "UTILITY",
+            Status: "APPROVED",
+            HeaderText: null,
+            BodyText: "Bonjour {{1}}, voici le document de votre projet. N'hésitez pas à nous répondre ici.",
+            FooterText: "Répondez STOP pour ne plus être contacté.",
+            Buttons: [],
+            HeaderFormat: "DOCUMENT"),
     ];
 
     public Task<IntegrationResult<string>> SendTemplateAsync(
@@ -75,6 +88,14 @@ public sealed partial class FakeAdapter
                     return IntegrationResult.Functional<string>(
                         IntegrationErrors.MessagingTemplateRejected,
                         $"The fake catalogue holds no approved template {template.Name} ({template.Language}).");
+                }
+
+                // A DOCUMENT or IMAGE header sent without its file is refused, as Meta refuses it.
+                var needsFile = MessagingTemplates.Any(t => t.Name == template.Name && t.HeaderFormat is "DOCUMENT" or "IMAGE");
+                if (needsFile && template.HeaderMedia is null)
+                {
+                    return IntegrationResult.Functional<string>(
+                        IntegrationErrors.MessagingTemplateRejected, $"The template {template.Name} needs its header's file.");
                 }
 
                 SentTemplates.Add(template);

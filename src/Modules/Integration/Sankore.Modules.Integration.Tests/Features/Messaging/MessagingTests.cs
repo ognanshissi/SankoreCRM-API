@@ -277,6 +277,43 @@ public sealed class MessagingTests : IDisposable
     }
 
     [Fact]
+    public void A_media_header_s_format_is_kept_and_its_text_is_none()
+    {
+        const string json = """
+            {"total":2,"waba_templates":[
+             {"name":"envoi_devis","language":"fr","category":"UTILITY","status":"APPROVED","components":[
+               {"type":"HEADER","format":"DOCUMENT","example":{"header_handle":["4::aW1h"]}},
+               {"type":"BODY","text":"Bonjour {{1}}, voici votre devis."}]},
+             {"name":"sans_entete","language":"fr","category":"UTILITY","status":"APPROVED","components":[
+               {"type":"BODY","text":"Bonjour"}]}]}
+            """;
+
+        var (templates, _) = Dialog360Templates.Read(json);
+
+        templates.Should().NotBeNull();
+        var devis = templates!.Single(t => t.Name == "envoi_devis");
+        devis.HeaderFormat.Should().Be("DOCUMENT");
+        devis.HeaderText.Should().BeNull();
+        templates!.Single(t => t.Name == "sans_entete").HeaderFormat.Should().BeNull();
+    }
+
+    [Fact]
+    public void A_template_with_a_file_names_it_by_its_uploaded_id_in_the_header()
+    {
+        var pdf = new OutboundTemplate("+221771234567", "envoi_devis", "fr", ["Awa"],
+            new OutboundMedia([0x25, 0x50, 0x44, 0x46], "application/pdf", "devis.pdf", null));
+        var image = pdf with { HeaderMedia = new OutboundMedia([0xFF, 0xD8, 0xFF], "image/jpeg", "photo.jpg", null) };
+
+        System.Text.Json.JsonSerializer.Serialize(Dialog360Templates.Components(pdf, "media-1")).Should().Be(
+            """[{"type":"header","parameters":[{"type":"document","document":{"id":"media-1","filename":"devis.pdf"}}]},"""
+            + """{"type":"body","parameters":[{"type":"text","text":"Awa"}]}]""");
+        System.Text.Json.JsonSerializer.Serialize(Dialog360Templates.Components(image, "media-2")).Should().StartWith(
+            """[{"type":"header","parameters":[{"type":"image","image":{"id":"media-2"}}]}""");
+        System.Text.Json.JsonSerializer.Serialize(Dialog360Templates.Components(pdf with { HeaderMedia = null, BodyParameters = [] }, null))
+            .Should().Be("[]");
+    }
+
+    [Fact]
     public void The_sent_message_id_is_read_from_the_answer()
         => Dialog360Messages.ReadMessageId("""{"messages":[{"id":"wamid.Z"}]}""").Should().Be("wamid.Z");
 

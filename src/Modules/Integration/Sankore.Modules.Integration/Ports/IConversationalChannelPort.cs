@@ -92,11 +92,17 @@ public interface IConversationalChannelPort
 /// <param name="Name">The template's name as the provider knows it.</param>
 /// <param name="Language">The template's language code, e.g. <c>fr</c> or <c>en_US</c>.</param>
 /// <param name="BodyParameters">The values of <c>{{1}}</c>, <c>{{2}}</c>… in order.</param>
+/// <param name="HeaderMedia">The file of a DOCUMENT or IMAGE header; the adapter uploads it first. Caption unused.</param>
 public sealed record OutboundTemplate(
     string ToE164,
     string Name,
     string Language,
-    IReadOnlyList<string> BodyParameters);
+    IReadOnlyList<string> BodyParameters,
+    OutboundMedia? HeaderMedia = null)
+{
+    /// <summary>The template only: never the number, the values or the file.</summary>
+    public override string ToString() => $"OutboundTemplate {{ {Name} ({Language}) }}";
+}
 
 /// <summary>A media sent: the provider's message id and the id of the uploaded file.</summary>
 public sealed record SentMedia(string ProviderMessageId, string MediaId);
@@ -113,6 +119,7 @@ public sealed record OutboundMedia(byte[] Content, string ContentType, string Fi
 /// template may be offered.
 /// </param>
 /// <param name="Buttons">The buttons' labels, for the preview. Never sent back.</param>
+/// <param name="HeaderFormat">The header's kind, upper-cased (<c>TEXT</c>, <c>DOCUMENT</c>, <c>IMAGE</c>…); null without a header.</param>
 public sealed record ProviderTemplate(
     string? ProviderTemplateId,
     string Name,
@@ -122,7 +129,8 @@ public sealed record ProviderTemplate(
     string? HeaderText,
     string BodyText,
     string? FooterText,
-    IReadOnlyList<string> Buttons);
+    IReadOnlyList<string> Buttons,
+    string? HeaderFormat = null);
 
 /// <summary>The bytes of one media and what the provider says they are.</summary>
 public sealed record ProviderMedia(byte[] Content, string ContentType, string? FileName);

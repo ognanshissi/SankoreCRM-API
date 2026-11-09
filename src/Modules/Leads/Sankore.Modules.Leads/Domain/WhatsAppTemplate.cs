@@ -36,6 +36,34 @@ public sealed partial class WhatsAppTemplate : ITenant
     public string? ProviderTemplateId { get; private set; }
 
     public string? HeaderText { get; private set; }
+
+    /// <summary>
+    /// The header's kind as the provider says (project documents lot 3, 2026-11-08): <c>TEXT</c>,
+    /// <c>DOCUMENT</c>, <c>IMAGE</c>, <c>VIDEO</c>, <c>LOCATION</c>; null without a header. Before,
+    /// a media header was dropped at the sync and the template offered as text — Meta then refused
+    /// every send for the missing file.
+    /// </summary>
+    public string? HeaderFormat { get; private set; }
+
+    /// <summary>A header that wants a value at every send: a file or a place.</summary>
+    public bool NeedsMedia => HeaderFormat is "DOCUMENT" or "IMAGE" or "VIDEO" or "LOCATION";
+
+    /// <summary>The header this platform fills with a file — a PDF, an image; null for the others.</summary>
+    public string? FileHeader => HeaderFormat is "DOCUMENT" or "IMAGE" ? HeaderFormat : null;
+
+    /// <summary>Sendable as words alone: the compose drawers of a lead or a client.</summary>
+    public bool IsSendableAsText => IsSendable && !NeedsMedia;
+
+    /// <summary>Sendable with a file from a project (lot 3): a DOCUMENT or IMAGE header.</summary>
+    public bool IsSendableWithFile => IsSendable && FileHeader is not null;
+
+    /// <summary>A DOCUMENT header takes a PDF, an IMAGE header a JPEG or a PNG.</summary>
+    public bool AcceptsFile(string contentType) => FileHeader switch
+    {
+        "DOCUMENT" => contentType == "application/pdf",
+        "IMAGE" => contentType is "image/jpeg" or "image/png",
+        _ => false,
+    };
     public string BodyText { get; private set; } = default!;
     public string? FooterText { get; private set; }
     public List<string> Buttons { get; private set; } = [];
@@ -87,8 +115,10 @@ public sealed partial class WhatsAppTemplate : ITenant
         string body,
         string? footer,
         IReadOnlyList<string> buttons,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? headerFormat = null)
     {
+        HeaderFormat = string.IsNullOrWhiteSpace(headerFormat) ? (header is null ? null : "TEXT") : headerFormat.Trim().ToUpperInvariant();
         Category = string.IsNullOrWhiteSpace(category) ? "UNKNOWN" : category.Trim().ToUpperInvariant();
         Status = ParseStatus(status);
         ProviderTemplateId = providerTemplateId;

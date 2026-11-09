@@ -124,6 +124,10 @@ public sealed record MessagingChannelInfo(
 /// The provider's word, upper-cased: <c>APPROVED</c>, <c>PENDING</c>, <c>REJECTED</c>,
 /// <c>PAUSED</c>, <c>DISABLED</c>…
 /// </param>
+/// <param name="HeaderFormat">
+/// The header's kind, upper-cased: <c>TEXT</c>, <c>DOCUMENT</c>, <c>IMAGE</c>, <c>VIDEO</c>,
+/// <c>LOCATION</c>; null without a header. A media header must be given its file at every send.
+/// </param>
 public sealed record MessagingTemplateInfo(
     string? ProviderTemplateId,
     string Name,
@@ -133,15 +137,21 @@ public sealed record MessagingTemplateInfo(
     string? HeaderText,
     string BodyText,
     string? FooterText,
-    IReadOnlyList<string> Buttons);
+    IReadOnlyList<string> Buttons,
+    string? HeaderFormat = null);
 
 /// <param name="ToE164">The recipient, with the plus. Personal data.</param>
 /// <param name="BodyParameters">The values of <c>{{1}}</c>, <c>{{2}}</c>… in order. Personal data.</param>
+/// <param name="HeaderMedia">
+/// The file of a template with a DOCUMENT (PDF) or IMAGE (JPEG, PNG) header — a client's devis:
+/// uploaded at the provider just before the send. Null for any other template.
+/// </param>
 public sealed record MessagingTemplateSend(
     string ToE164,
     string Name,
     string Language,
-    IReadOnlyList<string> BodyParameters)
+    IReadOnlyList<string> BodyParameters,
+    MessagingMediaContent? HeaderMedia = null)
 {
     /// <summary>The template only: the generated form would print the number and the values.</summary>
     public override string ToString() => $"MessagingTemplateSend {{ {Name} ({Language}) }}";

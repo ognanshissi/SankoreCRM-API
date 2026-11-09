@@ -2612,6 +2612,15 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("file_name");
 
+                    b.Property<DateTimeOffset?>("LastSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sent_at");
+
+                    b.Property<string>("LastSentChannel")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("last_sent_channel");
+
                     b.Property<Guid>("OpportunityId")
                         .HasColumnType("uuid")
                         .HasColumnName("opportunity_id");
@@ -4237,6 +4246,14 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("occurred_at");
 
+                    b.Property<Guid?>("OpportunityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("opportunity_id");
+
+                    b.Property<Guid?>("ProjectAttachmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_attachment_id");
+
                     b.Property<string>("ProviderMessageId")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
@@ -4293,6 +4310,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasDatabaseName("ix_whatsapp_messages_tenant_id_media_stored_at")
                         .HasFilter("media_storage_ref IS NOT NULL");
 
+                    b.HasIndex("TenantId", "OpportunityId")
+                        .HasDatabaseName("ix_whatsapp_messages_tenant_id_opportunity_id")
+                        .HasFilter("opportunity_id IS NOT NULL");
+
                     b.HasIndex("TenantId", "ProviderMessageId")
                         .IsUnique()
                         .HasDatabaseName("ux_whatsapp_messages_provider_id")
@@ -4339,6 +4360,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("footer_text");
+
+                    b.Property<string>("HeaderFormat")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("header_format");
 
                     b.Property<string>("HeaderText")
                         .HasMaxLength(1024)

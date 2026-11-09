@@ -111,6 +111,10 @@ public static class AdministrationModule
         // « Mode test » (sandbox lot 2): the twin at the registry, and the seeding of a new one.
         services.AddScoped<Infrastructure.PaidModules.ITestTwinRegistry, Infrastructure.PaidModules.HttpTestTwinRegistry>();
         services.AddScoped<Sankore.Shared.Infrastructure.Tenants.TenantProvisioner>();
+        // Starting data of a tenant (docs/donnees-demarrage-demo.md): agencies and products.
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.AdministrationStartingData>();
+        services.Configure<Features.StartingData.DemoDataOptions>(config.GetSection(Features.StartingData.DemoDataOptions.Section));
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.AdministrationDemoData>();
         // Copying configuration between production and its test mode (sandbox lots 4-5).
         services.AddScoped<Features.Products.ProductCopier>();
         services.AddScoped<Sankore.Shared.Infrastructure.TestMode.IConfigurationCopier>(sp => sp.GetRequiredService<Features.Products.ProductCopier>());

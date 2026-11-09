@@ -147,6 +147,12 @@ internal sealed class ConnectedMailboxSync(
         {
             entry.State = EntityState.Detached;
         }
+
+        // A promised link consumed by the dropped page stays promised: the page is read again.
+        foreach (var entry in db.ChangeTracker.Entries<ConnectedMailPendingLink>().Where(e => e.State == EntityState.Deleted).ToList())
+        {
+            entry.State = EntityState.Unchanged;
+        }
     }
 
     private async Task<(int Kept, int Updated, int Removed)> ApplyAsync(
@@ -183,6 +189,7 @@ internal sealed class ConnectedMailboxSync(
 
         var kept = 0;
         var complaints = new Dictionary<string, ClientComplaintReference?>(StringComparer.OrdinalIgnoreCase);
+        var projects = await ProjectLinksAsync(account, candidates, now, ct);
         foreach (var header in candidates)
         {
             var links = header.Parties
@@ -197,6 +204,9 @@ internal sealed class ConnectedMailboxSync(
             // A complaint quoted in the subject (« Votre réclamation RCL-2026-000042 », kept by the
             // client's reply), filed on it when ITS client is a party of the message (2026-10-31).
             links.AddRange(await ComplaintLinksAsync(account.TenantId, header.Subject, links, complaints, ct));
+
+            // A project: the message was sent from its page, or answers one in the same conversation.
+            links.AddRange(projects.For(header).Select(id => (MailLinkEntity.Project, id)));
 
             var content = await reader.ReadContentAsync(session, header.ExternalId, ct);
             if (content is null) continue;
@@ -232,6 +242,62 @@ internal sealed class ConnectedMailboxSync(
         }
 
         return (kept, updated, removed);
+    }
+
+    /// <summary>
+    /// The projects of a page (project documents lot 1): the links promised at send time for this
+    /// mailbox — those older than the window expire, the copy will never be read — and those already
+    /// on the conversations of the page's messages. One read of each per page.
+    /// </summary>
+    private async Task<ProjectLinkSource> ProjectLinksAsync(ConnectedAccount account, List<MailHeader> candidates, DateTimeOffset now, CancellationToken ct)
+    {
+        var pending = await db.ConnectedMailPendingLinks.AsTracking().Where(p => p.AccountId == account.Id).ToListAsync(ct);
+        var expired = pending.Where(p => p.CreatedAt < now - MailboxSyncState.Window).ToList();
+        if (expired.Count > 0) db.ConnectedMailPendingLinks.RemoveRange(expired);
+
+        var threadKeys = candidates.Select(h => h.ThreadKey.Trim()).Distinct().ToList();
+        var onThreads = await (
+                from link in db.ConnectedMailLinks
+                join message in db.ConnectedMailMessages on link.MessageId equals message.Id
+                where message.AccountId == account.Id && link.EntityType == MailLinkEntity.Project && threadKeys.Contains(message.ThreadKey)
+                select new { message.ThreadKey, link.EntityId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        return new ProjectLinkSource(db, pending.Except(expired).ToList(), onThreads.Select(t => (t.ThreadKey, t.EntityId)));
+    }
+
+    /// <summary>
+    /// What files a message on a project. A promised link is consumed when its message is kept; a
+    /// project found for a message is remembered for its conversation, so a reply on the same page
+    /// follows it.
+    /// </summary>
+    private sealed class ProjectLinkSource(IntegrationDbContext db, List<ConnectedMailPendingLink> pending, IEnumerable<(string ThreadKey, Guid ProjectId)> onThreads)
+    {
+        private readonly Dictionary<string, HashSet<Guid>> threads = onThreads
+            .GroupBy(t => t.ThreadKey, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(t => t.ProjectId).ToHashSet(), StringComparer.Ordinal);
+
+        public IReadOnlyCollection<Guid> For(MailHeader header)
+        {
+            var thread = header.ThreadKey.Trim();
+            var found = new HashSet<Guid>(threads.GetValueOrDefault(thread) ?? []);
+
+            foreach (var promised in pending.Where(p => p.EntityType == MailLinkEntity.Project && p.Matches(header.ExternalId, header.InternetMessageId)).ToList())
+            {
+                found.Add(promised.EntityId);
+                pending.Remove(promised);
+                db.ConnectedMailPendingLinks.Remove(promised);
+            }
+
+            if (found.Count > 0)
+            {
+                if (!threads.TryGetValue(thread, out var known)) threads[thread] = known = [];
+                known.UnionWith(found);
+            }
+
+            return found;
+        }
     }
 
     private static readonly System.Text.RegularExpressions.Regex ComplaintReference =
@@ -330,6 +396,7 @@ internal sealed class ConnectedMailboxSync(
     {
         await ForgetAsync(db, accountId, null, ct);
         db.MailboxSyncStates.RemoveRange(await db.MailboxSyncStates.AsTracking().Where(s => s.AccountId == accountId).ToListAsync(ct));
+        db.ConnectedMailPendingLinks.RemoveRange(await db.ConnectedMailPendingLinks.AsTracking().Where(l => l.AccountId == accountId).ToListAsync(ct));
         await ScheduledMails.ForgetAccountAsync(db, accountId, ct);
     }
 }

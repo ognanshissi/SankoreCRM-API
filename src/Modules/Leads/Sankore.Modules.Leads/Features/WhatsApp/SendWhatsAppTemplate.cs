@@ -27,11 +27,19 @@ public sealed record SendWhatsAppTemplateResult(Guid ConversationId, Guid Messag
 /// Whether the caller holds <c>WhatsApp.Send.Force</c>, read from the token by the endpoint —
 /// never from the request body.
 /// </param>
+/// <param name="File">
+/// The file of a template with a DOCUMENT or IMAGE header — set by a project's route only (project
+/// documents lot 3). Sensitive: never in the audit row.
+/// </param>
+/// <param name="ProjectId">The project the file is from; the message is linked to it.</param>
 internal sealed record SendWhatsAppTemplateCommand(
     Guid LeadId,
     Guid TemplateId,
     [property: SensitiveData] IReadOnlyList<string> Variables,
-    bool MayForce)
+    bool MayForce,
+    [property: SensitiveData] TemplateFile? File = null,
+    Guid? ProjectId = null,
+    Guid? ProjectAttachmentId = null)
     : IRequest<Result<SendWhatsAppTemplateResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";
@@ -65,7 +73,8 @@ internal sealed class SendWhatsAppTemplateHandler(
     [FromKeyedServices(LeadsFieldProtection.Key)] IBlindIndexer blindIndexer,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     TimeProvider clock,
-    Sankore.Modules.Customers.PublicApi.ICustomersModule? customers = null)
+    Sankore.Modules.Customers.PublicApi.ICustomersModule? customers = null,
+    IServiceProvider? services = null)
     : IRequestHandler<SendWhatsAppTemplateCommand, Result<SendWhatsAppTemplateResult>>
 {
     /// <summary>Meta's own limit on one body parameter.</summary>
@@ -123,6 +132,7 @@ internal sealed class SendWhatsAppTemplateHandler(
         // The product the lead ASKED for — the lead stores no line (product owner, 2026-10-24).
         if (!template.AppliesTo(await ProductLines.ProductLineLookup.ForLeadAsync(admin, lead, ct)))
             return Fail(WhatsAppErrors.TemplateNotForProduct);
+        if (WhatsAppTemplateFiles.Problem(template, cmd.File, out var media) is { } fileProblem) return Fail(fileProblem);
 
         var values = (cmd.Variables ?? []).Select(v => v?.Trim() ?? string.Empty).ToList();
 
@@ -160,6 +170,10 @@ internal sealed class SendWhatsAppTemplateHandler(
             JsonSerializer.Serialize(values),
             now);
 
+        if (cmd.ProjectId is { } projectId) message.LinkToProject(projectId, cmd.ProjectAttachmentId);
+        var kept = await WhatsAppTemplateFiles.KeepAsync(services, message, cmd.File, media, tenantId, now, ct);
+        if (kept.IsFailure) return Fail(kept.Error!);
+
         db.WhatsAppMessages.Add(message);
 
         conversation.RecordTemplateSent(now);
@@ -170,10 +184,78 @@ internal sealed class SendWhatsAppTemplateHandler(
 
         await publisher.PublishAsync(new WhatsAppMessageQueuedEvent(tenantId, message.Id), ct);
 
-        await db.SaveChangesAsync(ct);
+        await WhatsAppTemplateFiles.SaveAsync(db, services, message, ct);
 
         return Result.Ok(new SendWhatsAppTemplateResult(conversation.Id, message.Id));
     }
 
     private static Result<SendWhatsAppTemplateResult> Fail(string code) => Result.Fail<SendWhatsAppTemplateResult>(code);
+}
+
+/// <summary>A template's header file, as a project's route hands it over (project documents lot 3).</summary>
+internal sealed record TemplateFile(byte[] Content, string ContentType, string FileName)
+{
+    /// <summary>Never the bytes, never the name.</summary>
+    public override string ToString() => $"TemplateFile {{ {ContentType}, {Content.Length} bytes }}";
+}
+
+/// <summary>
+/// A template's DOCUMENT or IMAGE header (project documents lot 3): which file it takes, and where
+/// the file waits for the consumer. The send stays queued through the outbox — a provider down at
+/// the click delays the devis, never loses it — so the bytes are kept in the WhatsApp media store
+/// (envelope-encrypted, its own key) before the message is saved, and read back when it leaves.
+/// Without that store, a file cannot be queued: refused, nothing sent.
+/// </summary>
+internal static class WhatsAppTemplateFiles
+{
+    /// <summary>The template's header wants a file and none was given — it is a project's to send.</summary>
+    public const string NeedsFile = "WHATSAPP_TEMPLATE_NEEDS_FILE";
+    /// <summary>A file was given for a template whose header takes none.</summary>
+    public const string NoFileHeader = "WHATSAPP_TEMPLATE_HAS_NO_FILE_HEADER";
+    /// <summary>No media store is configured: a file cannot wait for the consumer.</summary>
+    public const string StoreUnavailable = "WHATSAPP_MEDIA_STORE_UNAVAILABLE";
+
+    public static string? Problem(WhatsAppTemplate template, TemplateFile? file, out WhatsAppMediaKind? media)
+    {
+        media = null;
+        if (file is null) return template.NeedsMedia ? NeedsFile : null;
+        if (template.FileHeader is null) return NoFileHeader;
+
+        var checkedFile = WhatsAppMediaSender.Check(file.Content, file.ContentType);
+        if (checkedFile.IsFailure) return checkedFile.Error;
+        if (!template.AcceptsFile(checkedFile.Value!.ContentType)) return WhatsAppConversationErrors.MediaTypeNotAllowed;
+
+        media = checkedFile.Value;
+        return null;
+    }
+
+    /// <summary>Stores the bytes and describes them on the message. Nothing to do without a file.</summary>
+    public static async Task<Result> KeepAsync(
+        IServiceProvider? services, WhatsAppMessage message, TemplateFile? file, WhatsAppMediaKind? media,
+        Guid tenantId, DateTimeOffset now, CancellationToken ct)
+    {
+        if (file is null || media is null) return Result.Ok();
+        if (services?.GetService(typeof(Infrastructure.WhatsAppMedia.IWhatsAppMediaStore)) is not Infrastructure.WhatsAppMedia.IWhatsAppMediaStore store)
+            return Result.Fail(StoreUnavailable);
+
+        var stored = await store.StoreAsync(tenantId, file.Content, ct);
+        message.AttachTemplateFile(media.ContentType, WhatsAppMediaSender.SafeFileName(file.FileName, media.ContentType));
+        message.AttachStoredMedia(stored.StorageRef, stored.SizeBytes, stored.Sha256, now);
+        return Result.Ok();
+    }
+
+    /// <summary>Saves; bytes stored for a message that could not be saved are removed rather than left behind.</summary>
+    public static async Task SaveAsync(LeadsDbContext db, IServiceProvider? services, WhatsAppMessage message, CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch when (message.MediaStorageRef is { } reference
+                    && services?.GetService(typeof(Infrastructure.WhatsAppMedia.IWhatsAppMediaStore)) is Infrastructure.WhatsAppMedia.IWhatsAppMediaStore store)
+        {
+            await store.DeleteAsync(message.TenantId, reference, CancellationToken.None);
+            throw;
+        }
+    }
 }

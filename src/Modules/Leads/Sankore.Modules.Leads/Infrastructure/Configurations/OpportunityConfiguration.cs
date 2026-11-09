@@ -47,6 +47,7 @@ internal sealed class ProjectAttachmentConfiguration : IEntityTypeConfiguration<
         b.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
         b.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
         b.Property(x => x.StorageRef).HasMaxLength(80).IsRequired();
+        b.Property(x => x.LastSentChannel).HasMaxLength(20);
         b.HasIndex(x => new { x.OpportunityId, x.FieldKey });
         b.HasOne<Opportunity>().WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
     }

@@ -26,9 +26,34 @@ public sealed class LeadsModuleFacade(
     MediatR.ISender? sender = null,
     Features.Questionnaires.IProjectAnswersSnapshots? projectAnswers = null,
     TimeProvider? clock = null,
-    Features.FindDuplicates.ILeadEmailIndexer? emailIndexer = null)
+    Features.FindDuplicates.ILeadEmailIndexer? emailIndexer = null,
+    IServiceProvider? services = null)
     : ILeadsModule
 {
+    public async Task<ProjectForMail?> GetProjectForMailAsync(
+        Guid tenantId, Guid projectId, Guid actorUserId, CancellationToken ct)
+        => ProjectSending is { } reader ? await reader.GetAsync(tenantId, projectId, actorUserId, ct) : null;
+
+    public async Task<Result<IReadOnlyList<ProjectFileForSending>>> ReadProjectFilesForSendingAsync(
+        Guid tenantId, Guid projectId, IReadOnlyCollection<Guid> attachmentIds, Guid actorUserId, CancellationToken ct)
+        => ProjectSending is { } reader
+            ? await reader.ReadFilesAsync(tenantId, projectId, attachmentIds, actorUserId, ct)
+            : Result.Fail<IReadOnlyList<ProjectFileForSending>>(Features.Opportunities.ProjectFields.ProjectAttachmentHandlers.Unavailable);
+
+    public async Task RecordProjectDocumentsEmailedAsync(
+        Guid tenantId, Guid projectId, IReadOnlyCollection<Guid> attachmentIds, Guid? actorUserId, CancellationToken ct)
+    {
+        if (services?.GetService(typeof(Features.Opportunities.Sending.ProjectDocumentTrail)) is not Features.Opportunities.Sending.ProjectDocumentTrail trail)
+            return;
+
+        await trail.RecordAsync(tenantId, projectId, Domain.ProjectDocumentChannels.Email, attachmentIds, actorUserId, null, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Resolved, not injected: the reader is internal and this facade public.</summary>
+    private Features.Opportunities.Sending.ProjectSendingReader? ProjectSending
+        => services?.GetService(typeof(Features.Opportunities.Sending.ProjectSendingReader)) as Features.Opportunities.Sending.ProjectSendingReader;
+
     public async Task<ProjectAnswersSnapshot?> GetProjectAnswersSnapshotAsync(
         Guid tenantId, Guid opportunityId, CancellationToken ct)
         => projectAnswers is null ? null : await projectAnswers.BuildAsync(tenantId, opportunityId, ct);

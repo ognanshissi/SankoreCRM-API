@@ -156,9 +156,18 @@ internal sealed class ProjectAttachmentHandlers(
     /// <summary>The task-attachment store: no key configured = none registered, uploads refused.</summary>
     private ITaskAttachmentStore? Store => services.GetService<ITaskAttachmentStore>();
 
+    /// <summary>
+    /// The project page's perimeter (2026-11-08): these routes checked the permission only, so an
+    /// agent who sees their assigned projects alone could deposit, remove or open another's file by id.
+    /// </summary>
+    private IQueryable<Domain.Opportunity> Visible()
+        => services.GetService<Visibility.LeadVisibility>() is { } visibility
+            ? visibility.Apply(db.Opportunities, db.Leads)
+            : db.Opportunities;
+
     public async Task<Result<ProjectAttachmentDto>> Handle(StoreProjectAttachment cmd, CancellationToken ct)
     {
-        var project = await db.Opportunities.AsNoTracking().FirstOrDefaultAsync(o => o.Id == cmd.OpportunityId, ct);
+        var project = await Visible().AsNoTracking().FirstOrDefaultAsync(o => o.Id == cmd.OpportunityId, ct);
         if (project is null) return Result.Fail<ProjectAttachmentDto>(OpportunityErrors.NotFound);
         if (project.Stage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
             return Result.Fail<ProjectAttachmentDto>(OpportunityErrors.AlreadyClosed);
@@ -201,7 +210,7 @@ internal sealed class ProjectAttachmentHandlers(
 
     public async Task<Result> Handle(RemoveProjectAttachmentCommand cmd, CancellationToken ct)
     {
-        var project = await db.Opportunities.AsNoTracking().FirstOrDefaultAsync(o => o.Id == cmd.OpportunityId, ct);
+        var project = await Visible().AsNoTracking().FirstOrDefaultAsync(o => o.Id == cmd.OpportunityId, ct);
         if (project is null) return Result.Fail(OpportunityErrors.NotFound);
         if (project.Stage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost)
             return Result.Fail(OpportunityErrors.AlreadyClosed);
@@ -230,6 +239,8 @@ internal sealed class ProjectAttachmentHandlers(
 
     public async Task<Result<TaskAttachmentContent>> Handle(GetProjectAttachmentContentQuery query, CancellationToken ct)
     {
+        if (!await Visible().AnyAsync(o => o.Id == query.OpportunityId, ct)) return Result.Fail<TaskAttachmentContent>(NotFound);
+
         var row = await db.ProjectAttachments.AsNoTracking().FirstOrDefaultAsync(
             a => a.Id == query.AttachmentId && a.OpportunityId == query.OpportunityId && a.DeletedAt == null, ct);
         if (row is null || Store is not { } store) return Result.Fail<TaskAttachmentContent>(NotFound);

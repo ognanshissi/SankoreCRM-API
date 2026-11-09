@@ -236,9 +236,16 @@ public static class LeadsModule
         // What workflow « Formulaire », « Formulaire de qualification » and « Vérification KYC » steps ask of a lead or a project.
         services.AddScoped<IWorkflowRecordGate, LeadRecordGate>();
         services.AddScoped<IWorkflowRecordGate, ProjectRecordGate>();
+        // Starting data of a tenant (docs/donnees-demarrage-demo.md): sources, credit template, questionnaires.
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.LeadsStartingData>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.LeadsDemoData>();
         // Public contract of M13. Consumed by the Customers module (M01) to import a
         // converted lead's commercial history into the client timeline (F13.29).
         services.AddScoped<PublicApi.ILeadsModule, LeadsModuleFacade>();
+        // Project documents lot 1 (2026-11-08): what the mailbox may read of a project to send its files.
+        services.AddScoped<Features.Opportunities.Sending.ProjectSendingReader>();
+        services.AddScoped<Features.Opportunities.Sending.ProjectWhatsAppTarget>();
+        services.AddScoped<Features.Opportunities.Sending.ProjectDocumentTrail>();
 
         // WhatsApp (WA lot 1): the read guard shared by the thread's slices, and the catalogue
         // synchroniser shared by the hourly job and the « Synchroniser » button.
@@ -247,6 +254,8 @@ public static class LeadsModule
         services.AddScoped<Features.WhatsApp.SyncWhatsAppTemplatesJob>();
         services.AddScoped<Features.WhatsApp.WhatsAppConversationLoader>();
         services.AddScoped<Features.WhatsApp.ClientWhatsAppContext>();
+        // The one way an image or a PDF leaves: lead, client and project routes (project documents lot 2).
+        services.AddScoped<Features.WhatsApp.WhatsAppMediaSender>();
         services.AddScoped<Features.WhatsApp.WhatsAppTakeoverJob>();
         services.AddScoped<Features.WhatsApp.WhatsAppEscalation>();
         // Complaints taken on WhatsApp, question by question, no model (2026-10-26).

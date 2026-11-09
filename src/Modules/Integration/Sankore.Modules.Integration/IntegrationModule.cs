@@ -112,6 +112,10 @@ public static class IntegrationModule
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddScoped<IntegrationAdapterResolver>();
+        // Who may reach the in-memory adapter: Development, or a test institution (2026-11-08).
+        services.AddScoped<FakeAdapterGate>();
+        // Starting data of a demo (docs/donnees-demarrage-demo.md, lot 3): the simulated insurer.
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.IntegrationDemoData>();
         services.AddScoped<IIntegrationInboxGuard, IntegrationInboxGuard>();
 
         // One registration per Features/<Area>/ folder, the shape M01 settled on: a slice adds

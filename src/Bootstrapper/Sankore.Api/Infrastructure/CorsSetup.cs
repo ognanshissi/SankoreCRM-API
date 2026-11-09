@@ -38,15 +38,24 @@ internal static class CorsSetup
         if (origins.Length == 0 && env.IsDevelopment())
             origins = [DevelopmentOrigin];
 
+        // In Development, every institution is reached on its own local host (`<name>.localhost`
+        // or `<name>.sankoreio.local`; the tenant is resolved from it), and the starting-data loads
+        // create new ones at will: a literal list made each new demo institution's front-end fail
+        // on CORS until somebody edited appsettings. Development only.
+        var allowLocalSubdomains = env.IsDevelopment();
+        var listed = new HashSet<string>(origins, StringComparer.OrdinalIgnoreCase);
+
         services.AddCors(options =>
         {
             options.AddDefaultPolicy(policy =>
             {
                 // No configured origin means no cross-origin access — fail closed. Same-origin
                 // callers and server-to-server clients are unaffected: CORS is a browser rule.
-                if (origins.Length > 0)
+                if (origins.Length > 0 || allowLocalSubdomains)
                 {
-                    policy.WithOrigins(origins)
+                    policy.SetIsOriginAllowed(origin =>
+                              listed.Contains(origin.TrimEnd('/'))
+                              || (allowLocalSubdomains && IsLocalSubdomain(origin)))
                           .AllowAnyHeader()
                           .AllowAnyMethod()
                           .AllowCredentials();
@@ -71,6 +80,10 @@ internal static class CorsSetup
             app.Logger.LogInformation(
                 "CORS: {OriginCount} allowed origin(s): {Origins}",
                 origins.Length, string.Join(", ", origins));
+            if (app.Environment.IsDevelopment())
+                app.Logger.LogInformation(
+                    "CORS: Development also allows every http(s) origin on {Domains}.",
+                    string.Join(", ", LocalDomainSuffixes));
             return;
         }
 
@@ -80,6 +93,19 @@ internal static class CorsSetup
             + "front-end is served from another origin.",
             OriginsKey);
     }
+
+    /// <summary>
+    /// The local domains an institution's front-end is served on in Development: <c>.localhost</c>
+    /// (always the loopback) and <c>.sankoreio.local</c> (names the developers map to 127.0.0.1 in
+    /// /etc/hosts, served over https by <c>npm start</c>).
+    /// </summary>
+    private static readonly string[] LocalDomainSuffixes = [".localhost", ".sankoreio.local"];
+
+    /// <summary><c>http(s)://&lt;name&gt;.&lt;local domain&gt;[:port]</c> — a local institution's front-end.</summary>
+    internal static bool IsLocalSubdomain(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+        && LocalDomainSuffixes.Any(s => uri.Host.EndsWith(s, StringComparison.OrdinalIgnoreCase));
 
     private sealed record CorsOriginsReport(string[] Origins);
 }

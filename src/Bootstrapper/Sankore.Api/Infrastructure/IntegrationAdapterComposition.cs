@@ -103,16 +103,11 @@ internal static class IntegrationAdapterComposition
         // key and registers none of it.
         services.AddDialog360Adapter(config);
 
-        // The in-memory double (INT-10), Development only. Guarded HERE as well as inside
-        // AddFakeAdapter, which throws outside Development: the host decides whether to offer the
-        // double at all, and the method refuses if the host got that decision wrong. Belt and
-        // braces on purpose — an adapter that answers successful writes with no back-office behind
-        // it would leave a tenant whose CBS and whose CRM disagree about every write, with nothing
-        // reporting it.
-        if (environment.IsDevelopment())
-        {
-            services.AddFakeAdapter(environment);
-        }
+        // The in-memory double (INT-10). Registered everywhere since 2026-11-08 (owner: demos on
+        // the production platform); FakeAdapterGate keeps it out of reach of every real
+        // institution — at connection creation, activation and every resolution — because it
+        // answers successful writes with no back office behind it.
+        services.AddFakeAdapter(environment);
 
         return services;
     }

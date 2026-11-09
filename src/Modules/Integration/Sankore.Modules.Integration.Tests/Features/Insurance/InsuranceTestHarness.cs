@@ -104,7 +104,7 @@ internal static class InsuranceTestHarness
 
     internal static IntegrationAdapterResolver Resolver(
         IntegrationDbContext db, params ICbsAdapter[] adapters)
-        => new(db, new KeyedAdapterProvider(adapters.ToDictionary(a => a.Kind.ToString())));
+        => new(db, new KeyedAdapterProvider(adapters.ToDictionary(a => a.Kind.ToString())), TestSupport.TestFakeAdapterGate.Development);
 
     /// <summary>Seeds one insurance connection, active by default — most tests want a live insurer.</summary>
     /// <param name="at">

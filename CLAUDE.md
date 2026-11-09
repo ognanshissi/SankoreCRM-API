@@ -473,6 +473,10 @@ holds. Overdue = open past `SlaDeadline ?? DueAt`, as « Ma journée ». Front: 
 
 **« Dossier de crédit » (2026-11-05, product owner).** The CRM carries a credit file up to the decision and keeps no loan: disbursement, schedule and repayments stay the core banking's. `POST project-templates/credit-file` (`CreditFileTemplate`, both `lead:pipeline-stage:manage` and `workflow:manage-steps`, Banking - Microfinance) creates the template of the Loan family, or with `productCode` of one credit product (so an institution with a family template takes it product by product, without touching the projects on it) (Demande, Constitution du dossier, Analyse et décision, Accord) and, through `IWorkflowModule.EnsureProjectCircuitAsync`, its active circuit: analyst's opinion, then branch manager's decision. A project is a credit file when its template's `AmountKind` is `Loan` and it has the `dureeMois` field, so existing loan templates are untouched. Declared income is deliberately not a field: project fields are stored in clear. Reaching the approval, or winning, publishes `CreditFileApprovedEvent` (ids only, outside `PublicApi.Events`); `CreditFileApprovedConsumer` queues `SubmitLoanApplication`, keyed and referenced on the PROJECT with the client in the payload: a reference is unique per CRM id, so a client's second loan keyed on the client was refused after the core banking had accepted it. `GET/POST opportunities/{id}/credit-submission` reads the state and resends what left no command. Only the fake adapter has run this: see `docs/points-bloquants-core-banking.md`.
 
+**Starting data of a tenant (2026-11-08, product owner; plan `docs/donnees-demarrage-demo.md`).** Two sets: « Starter » (configuration only, for a real institution) and « Demo » (the starter plus fictitious accounts and records, test institutions only, never a « Mode test » twin). The data wipe's circuit: the platform records a `TenantDataLoad` in the registry (`POST tenants/{id}/data-loads {kind}`, or `StartingData` on `POST tenants`, which marks a Demo tenant as test), `TenantDataLoadJob` (API, every minute) pulls it with the service key, re-checks the tenant read fresh (`DataLoadGate`), creates the system account when missing (`RegisterCommand`, random password nobody knows: the root address sets one with « Mot de passe oublié »), runs `TenantProvisioner` (the modules' default seeders) then every `ITenantStartingData` by `Order`, each in its own scope under `BackgroundJobContext(tenant, systemUser)` outside any ambient transaction, registers the tenant's recurring jobs (`TenantRecurringJobs.Register`, moved out of Program.cs so a tenant created while the API runs gets them), and reports a summary keyed by French label. Each step sends its module's ordinary commands and is idempotent on natural keys. Starter (lot 1): `AdministrationStartingData` (Order 10) creates « Siège » + « Agence principale » only for an institution with no agency, and the catalogue (`Catalogue`, ACTIVE, codes CPT-COURANT…ASS-EMPRUNTEUR) for the families its paid modules allow; `LeadsStartingData` (Order 20) the internal sources (AGENCE, PARRAINAGE, APPEL-ENTRANT, IMPORT-FICHIER, started then activated) and SITE-WEB left in draft, the « Dossier de crédit » for the Loan family, one published questionnaire per family (Loan, Savings, HealthInsurance) the institution has none of. Demo accounts (lot 2): `AdministrationDemoData` (Order 30, Demo loads only) adds « Agence Plateau » and « Agence Yopougon » under the head office, 15 accounts (`Accounts`, every role but System) through `ProvisionDemoUserCommand` — active at once, password `DemoData:Password` (the load fails with a French message when it is empty), no activation e-mail, refused outside a test non-twin tenant and for an address `DemoData:EmailTemplate` does not produce (default `contact+{profil}.{institution}@talisoft.net`, owner's choice so the demo's e-mails really arrive; `{institution}` = `DemoDataOptions.InstitutionSlug(tenant name)` because Identity's user-name index is unique ACROSS tenants — `DEMO_USER_ADDRESS_TAKEN_BY_ANOTHER_INSTITUTION` says so instead of a 23505) — then the branch managers, the reporting lines (only where empty) and territories ABJ-SUD / ABJ-OUEST. Demo accounts are team members, so the test-mode allow-list lets their e-mails out on purpose. Demo insurance (lot 3): `IntegrationDemoData` (Order 40, Demo + Insurance module) creates a Fake insurance connection « Assureur de démonstration » (health check, then activation), insurer products DEMO-SANTE / DEMO-PREVOYANCE / DEMO-EMPRUNTEUR realising ASS-SANTE / ASS-PREVOYANCE / ASS-EMPRUNTEUR (catalogue-priced, monthly, XOF), activated, each with a hand-written demonstration PDF (`DemoPdf`) attached through `InformationSheetEndpoints.AttachAsync` (shared with the upload) and its exclusions. **The in-memory adapter is registered on every platform since 2026-11-08 (owner: demos on the production platform)**: `FakeAdapterGate` lets only Development or a TEST institution create, activate or RESOLVE a Fake connection (`IntegrationAdapterResolver.ResolveConnectionAsync`, both overloads), so a real institution never gets its invented successes, even keeping an active Fake connection after its test flag is lifted. 
+
+**Demo records (starting data lot 4, 2026-11-08).** `CustomersDemoData` (Order 50: 20 clients, 3 complaints), `LeadsDemoData` (60: 48 leads by `FateOf`, projects, credit files moved through their steps, tasks, appointments, then capture dates and late tasks written back in the past by `ExecuteUpdate` — the only direct writes, demo rows only) and `KycDemoData` (70: documents stored as the upload does, verification, manual validation, rungs signed by other accounts). Steps share ids through `StartingDataRequest.Shared` (`DemoKeys`). **Each command of a step runs in a DI scope of its own** (`ScopedSender`, handed by the job through `StartingDataServices`): one scope per step made commands share DbContexts across their ambient transactions. Acts are done as the person who would do them by nesting `BackgroundJobContext.SetScope(tenant, user, …)` around the send. Found while building it: `AdministrationAgencyDirectory` read Administration's facade unsuppressed inside the client creation's transaction, so every client created with a declared income failed (fixed: both reads suppressed); still open, not fixed: `DispatchLeadHandler.QueueForRetryAsync` saves under a suppressed scope a context already enlisted in the command's transaction (« This connection was used with an ambient transaction ») — a lead no agent can take is never queued; and `ClientComplaintFiling.ResolveAssigneeAsync` hits the same error on `ResolveAgencyRecipientAsync` (logged, the complaint is still filed).
+
 **A credit file has separate signers, inside its agency's perimeter (2026-11-05, product owner).** `SigningGuard` (Workflow) refuses to approve OR reject a step of a record for which `IWorkflowRecordGate.SigningRulesAsync` answers a rule: to whoever works the file (project owner, else the lead's agent), to whoever already signed another step of that instance, and to anyone whose perimeter misses the client's agency (else the lead's). Only `ProjectRecordGate` answers, for a project whose template version `IsCreditFile`: read off the record and not off the circuit, so running and hand-drawn circuits are covered and no setting drops it. Every other record keeps the role check alone, because an agent signing a step on their own lead is a product-owner choice. A step handed over by name stays under the rule and stays in the holder's queue so they can pass it on; a step reached by role that would be refused leaves `GET my-steps`. The perimeter is read on `TeamTenantId` (accounts and agencies are the team's), and the cross-module reads are outside the ambient transaction. A « Tâche manuelle » step completed through its task does not pass through the guard.
 
 **Lead list tab counts (2026-11-03).** `GET leads/view-counts?agencyId&search&leadSourceConfigId&cf` answers
@@ -4135,8 +4139,8 @@ the lead/client, « Envoyer un e-mail » everywhere). Lot 1 is the accounts.
   default role), listed for `ConnectedAccounts.Use`. `POST me/mail/templates/{id}/render` fills
   `{{destinataire.nom}}`, `{{client.numero}}`, `{{agent.nom}}`, `{{agent.email}}`, `{{institution}}`,
   `{{date}}` — escaped for HTML (the five markup characters only: `HtmlEncode` would show « Kon&#233; »
-  in the composer) — and names the blank ones in `missing`. No project variables yet (no contract
-  reads a project summary).
+  in the composer) — and names the blank ones in `missing`. Project variables since project documents
+  lot 1 (below).
 
 ### Connected mailbox: search, scheduled send, signature (owner, 2026-10-28/29)
 
@@ -4158,6 +4162,135 @@ the lead/client, « Envoyer un e-mail » everywhere). Lot 1 is the accounts.
   by `MailSignatures.Clean`; empty text = null), `PUT integration/connected-accounts/{id}/mail/signature`.
   Stored as editor HTML; the front inserts it and converts Quill classes to inline styles at send
   (`toEmailHtml`) — recipients never have the editor's stylesheet.
+
+### Sending a project's documents by e-mail (project documents lot 1, owner, 2026-11-08)
+
+Owner's choices: the devis, the proposal… are DEPOSITED in the project's attachment fields, never
+generated by the CRM; they leave by e-mail and WhatsApp (lots 2-3); outside the 24-h WhatsApp window
+a template with a document header (lot 3). Lot 1 is the e-mail side, server only.
+
+- **`ILeadsModule.GetProjectForMailAsync` / `ReadProjectFilesForSendingAsync`** (`ProjectSendingReader`,
+  resolved by the public facade through `IServiceProvider` because it is internal): the project page's
+  perimeter (`LeadVisibility.Apply` on `Opportunities`), the actor must be the signed-in caller (as
+  `CanActorWorkLeadAsync`), every file id a LIVE attachment of THAT project, ≤ 10, bytes opened from
+  `ITaskAttachmentStore` (no store → `PROJECT_ATTACHMENTS_UNAVAILABLE`). `ProjectFileForSending.ToString`
+  never prints the bytes.
+- **The project's own attachment routes now apply the same perimeter** (upload, remove, download):
+  they checked the permission only, so an agent seeing their assigned projects alone could open
+  another's file by id. Out of reach = `OPPORTUNITY_NOT_FOUND` / `PROJECT_ATTACHMENT_NOT_FOUND`.
+- **`POST integration/me/mail/send`** takes `projectId` + repeated `projectAttachmentIds`. The project
+  must be the caller's to open (`MAIL_PROJECT_NOT_FOUND`, also for files named without a project); the
+  files are read on the server and counted with the uploaded ones towards 10 / 20 MB; a file not of the
+  project fails the whole message (`MAIL_ATTACHMENT_NOT_FOUND`); no store → 503
+  `MAIL_PROJECT_FILES_UNAVAILABLE`. Scheduled: the files are read AT SCHEDULING and kept with the
+  other scheduled attachments, `ScheduledMailPayload.ProjectId` keeps the project; the job sends with
+  `ProjectChecked: true` (a job has no perimeter to ask — the endpoint never sets it).
+- **Filing on the project without storing at send.** `IMailboxReader.SendAsync` now returns a
+  `SentMailReference`: Gmail its message id (+ our MIME Message-ID), Graph the draft's
+  `internetMessageId` (assigned at creation, kept once sent — the Sent Items id is another one), SMTP our
+  Message-ID (`OutgoingMime` sets one on the sender's domain). The send keeps a
+  `ConnectedMailPendingLink` (`cal_mail_pending_link`, ids only, Message-ID normalised without brackets,
+  lower-cased) BEFORE enqueuing the sync; a failure to keep it costs the link, never the send. The sync
+  (`ProjectLinkSource`) files a kept message on the project (`MailLinkEntity.Project`, stored « Project »)
+  when it matches a promise (consumed) or when its CONVERSATION (account + thread key) already carries
+  that project — so the client's reply follows, on the same page too. A dropped page restores the
+  promises it consumed; promises older than the sync window expire; forgetting a mailbox deletes them.
+  A provider that names nothing: the message leaves, no link is promised.
+- **`GET integration/projects/{projectId}/mails`** (`lead:opportunity:read`, project perimeter through
+  M13): when, which way, whose mailbox, attachments or not for all; subject, preview and message id for
+  the mailbox's owner only — the complaint route's reading. Project links are not mailbox chips
+  (`MailLinks.Of` skips them, like complaint links).
+- **Template variables** `{{projet.titre}}`, `{{projet.produit}}`, `{{projet.montant}}` (« 1 500 000
+  XOF »: no-break space and decimal comma spelt out — ICU and invariant containers disagree on fr-FR),
+  `{{projet.etape}}`, `{{projet.date_cloture}}`; `RenderMailTemplateRequest.ProjectId`, and with no lead
+  nor client named, `destinataire.*` is the project's client, else its lead.
+- Migration `AddMailPendingLinks` (Integration) not applied yet. Never run against a real provider:
+  whether Gmail keeps our Message-ID is not relied on (its own id is); Graph's `internetMessageId` on a
+  draft is documented, not yet observed here.
+
+### Sending a project's documents by WhatsApp, inside the window (project documents lot 2, 2026-11-08)
+
+- **`WhatsAppMediaSender`** is now the one way an image or a PDF leaves: `Check` (JPEG/PNG ≤ 5 MB,
+  PDF ≤ 10 MB, bytes matching the type; anything else `WHATSAPP_MEDIA_TYPE_NOT_ALLOWED` — by e-mail
+  only — or `WHATSAPP_MEDIA_INVALID`), then the message, the provider call outside the ambient
+  transaction, the encrypted copy, the save. The lead's media route uses it (its answers unchanged:
+  any check failure still reads `WHATSAPP_MEDIA_INVALID` there).
+- **`POST leads/whatsapp/clients/{clientId}/media`** (multipart `file`, `caption`, `complaintId`):
+  a client could only receive text. `ClientReplyRules` is the one set of conditions of a free
+  message to a client (restriction, conversation filed on them, holder, window, STOP), shared by the
+  text, the file and a project's documents.
+- **`GET leads/opportunities/{id}/whatsapp`** and **`POST …/whatsapp/documents`** `{ attachmentIds
+  (1-5), caption }` (`Features/Opportunities/Sending/ProjectWhatsApp.cs`). `ProjectWhatsAppTarget`:
+  the project in the page's perimeter; its LEAD when it has one (not anonymised) — `WhatsAppLeadAccess`
+  (the caller may work it), the conversation its tab presents (`WhatsAppLeadConversations.PresentedAsync`,
+  shared with the panel) only if FILED on that lead, processing restriction, then `ReplyRules`
+  (holder, window, consent); else its CLIENT through `ClientWhatsAppContext` + `ClientReplyRules`;
+  else `PROJECT_WHATSAPP_NO_RECIPIENT`. The GET answers the first blocker and each live file
+  `sendable` or not (from the row, no bytes read). The POST checks EVERYTHING before the first
+  message (a Word file in the selection sends nothing), sends one message per file with the caption
+  on the first, outside the command's transaction like the mailbox (each message commits as it
+  leaves), and answers per file (a provider refusal = `Failed` with its code).
+- **`WhatsAppMessage.OpportunityId`** (`LinkToProject`, filtered index, migration
+  `AddWhatsAppMessageProject` not applied) and `WhatsAppMessageDto.OpportunityId`.
+- Outside the window: lot 3 below. Never run against 360dialog.
+
+### Sending a project's documents by WhatsApp outside the window: templates with a file (project documents lot 3, 2026-11-08)
+
+Owner's choice: outside the 24-hour window the devis leaves in an approved template whose header
+carries it.
+
+- **The header's kind is kept.** `ProviderTemplate` / `MessagingTemplateInfo.HeaderFormat` (`TEXT`,
+  `DOCUMENT`, `IMAGE`, `VIDEO`, `LOCATION`), read by `Dialog360Templates.Read` (before, a media header
+  was dropped and the template offered as plain text — Meta then refused every send);
+  `WhatsAppTemplate.HeaderFormat` (migration `AddWhatsAppTemplateHeaderFormat`, backfills `TEXT` where a
+  header text exists; media headers are recognised at the next hourly sync). `NeedsMedia`,
+  `FileHeader` (DOCUMENT/IMAGE), `IsSendableAsText`, `IsSendableWithFile`, `AcceptsFile` (DOCUMENT = PDF,
+  IMAGE = JPEG/PNG). The lead's and the client's drawers offer `IsSendableAsText` templates only; both
+  template commands refuse a template that needs a file without one (`WHATSAPP_TEMPLATE_NEEDS_FILE`).
+- **The file at the provider.** `MessagingTemplateSend.HeaderMedia` → `OutboundTemplate.HeaderMedia`;
+  the 360dialog adapter uploads it to `/media` (`UploadAsync`, shared with `SendMediaAsync`) and
+  names it by id in a `header` component (`Dialog360Templates.Components`, pure: a document keeps its
+  filename, an image none). The fake adapter lists `envoi_devis` (DOCUMENT) and refuses a media-header
+  template sent without its file, as Meta does.
+- **Still queued through the outbox.** `SendWhatsAppTemplateCommand` / `SendClientWhatsAppTemplateCommand`
+  take `File` (`TemplateFile`, `[SensitiveData]`) and `ProjectId` — set by the project's route only.
+  `WhatsAppTemplateFiles`: the file must match the header (`WHATSAPP_MEDIA_TYPE_NOT_ALLOWED`,
+  `WHATSAPP_TEMPLATE_HAS_NO_FILE_HEADER`), is kept in the WhatsApp media store (envelope-encrypted)
+  BEFORE the message is saved (no store → `WHATSAPP_MEDIA_STORE_UNAVAILABLE`, nothing queued; bytes
+  of an unsaved message are deleted). `SendWhatsAppMessageConsumer` reads them back for a template
+  with `MediaStorageRef` and fails it `WHATSAPP_TEMPLATE_FILE_MISSING` rather than sending it bare.
+  The thread shows the file through the usual stored-media read; the media retention purge covers it.
+- **`POST leads/opportunities/{id}/whatsapp/template`** `{ templateId, attachmentId, variables }`
+  (`WhatsApp.Send`; force from the token): `SendProjectWhatsAppTemplateHandler`, NOT an `ICommand`,
+  reads the project's file with the caller's rights and sends the RECORD's own template command
+  (lead: consent, cooldown, product; client: STOP, restriction, cooldown) — that command is the
+  audited act. `GET …/whatsapp` adds `templateBlockers` (the lead's panel / client's panel blockers)
+  and `templates` (those with a file header, variables filled — `ComposeWhatsAppQuery.WithFile`,
+  `GetClientWhatsAppQuery.WithFile`); `WhatsAppComposeTemplateDto.HeaderFormat`,
+  `WhatsAppTemplateDto.HeaderFormat`.
+- Never run against 360dialog: a DOCUMENT template must first be created and approved in the
+  institution's WhatsApp Business account (Meta), then synchronised.
+
+### What a project keeps of a document sent (project documents lot 4, 2026-11-08)
+
+- **`ProjectDocumentTrail`** (Leads, scoped) writes a `ProjectHistoryKind.DocumentSent` line (`To` =
+  `Email` | `WhatsApp`, `Detail` = the file names as they read then, `RelatedId` = the WhatsApp message
+  when one) and marks each file `ProjectAttachment.MarkSent` (`LastSentAt`, `LastSentChannel`) — ONLY
+  when the provider accepted. The caller saves. Reads past the tenant filter with an explicit
+  tenant: the consumer and the scheduled mail job act for nobody signed in; the actor is the sender.
+- Callers: the free WhatsApp send (one line for the files the provider took, none for a refusal);
+  `SendWhatsAppMessageConsumer` when a template carrying a project's file is `Sent`
+  (`WhatsAppMessage.ProjectAttachmentId`, set by `LinkToProject(project, file)`); the mailbox through
+  `ILeadsModule.RecordProjectDocumentsEmailedAsync` after the provider accepted (immediate send, or
+  the scheduled job's — `ScheduledMailPayload.ProjectAttachmentIds`; nothing at scheduling). No
+  perimeter there: the send checked it when it read the files. A failure to record never fails a
+  send that left (logged).
+- **The client's « Documents » tab**: a project file once sent is `Delivered`, status `Delivered`,
+  detail `SentByEmail` | `SentByWhatsApp`, dated when it left; a WhatsApp copy sent from a project hangs
+  off the project (`OriginType` `Project`, its title); a template whose header carried a file is
+  listed; an outbound media the provider refused (`Failed`) is no longer listed as handed over.
+- Migration `AddProjectDocumentTrail` not applied. Front (lot 5): the history line and the
+  `SentByWhatsApp` label are not rendered yet (an unknown kind shows its raw name).
 
 ### Tasks people work on together: subject, people, criteria, comments, tags, files
 

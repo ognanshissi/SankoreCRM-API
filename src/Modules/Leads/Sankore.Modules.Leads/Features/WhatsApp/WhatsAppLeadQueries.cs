@@ -111,7 +111,9 @@ public sealed record WhatsAppMessageDto(
     string? ErrorDetail,
     bool MediaPurged = false,
     // The client complaint it was written about, when sent from one (2026-10-31).
-    Guid? ComplaintId = null);
+    Guid? ComplaintId = null,
+    // The project it was sent from, with one of its documents (2026-11-08).
+    Guid? OpportunityId = null);
 
 /// <param name="Items">Newest first. The screen reverses them.</param>
 /// <param name="NextBefore">The cursor for older messages; null when there are none.</param>
@@ -127,7 +129,9 @@ public sealed record WhatsAppComposeTemplateDto(
     string BodyText,
     string? FooterText,
     IReadOnlyList<string> Buttons,
-    IReadOnlyList<WhatsAppComposeVariableDto> Variables);
+    IReadOnlyList<WhatsAppComposeVariableDto> Variables,
+    // DOCUMENT or IMAGE: the template is sent with a file of the project (project documents lot 3).
+    string? HeaderFormat = null);
 
 /// <param name="Field">The lead field it was filled from, or null when the agent must type it.</param>
 public sealed record WhatsAppComposeVariableDto(int Index, string? Field, string Value);
@@ -152,6 +156,52 @@ internal sealed class WhatsAppLeadAccess(LeadsDbContext db, LeadAccessGuard guar
 
         var access = await guard.EnsureCanWorkAsync(lead, ct);
         return access.IsFailure ? Result.Fail<Lead>(access.Error!) : Result.Ok(lead);
+    }
+}
+
+/// <summary>
+/// The conversation a lead's WhatsApp tab presents — and the one a project of that lead sends its
+/// documents in (project documents lot 2), so both say the same thing.
+/// </summary>
+internal static class WhatsAppLeadConversations
+{
+    public static async Task<(MessagingChannelInfo? Channel, string? Phone, WhatsAppConversation? Conversation)> PresentedAsync(
+        LeadsDbContext db, IAdministrationModule admin, IIntegrationModule integration, IBlindIndexer blindIndexer,
+        Lead lead, bool tracking, CancellationToken ct)
+    {
+        var tenantId = lead.TenantId;
+        var callingCode = (await admin.GetSmsConfigAsync(tenantId, ct))?.DefaultCallingCode;
+        var channel = await integration.Messaging.ResolveChannelAsync(tenantId, lead.AgencyId, ct);
+        var phone = WhatsAppNumbers.ToE164(lead.PhoneNumber, callingCode);
+        var conversations = tracking ? db.WhatsAppConversations.AsTracking() : db.WhatsAppConversations;
+
+        WhatsAppConversation? conversation = null;
+
+        if (channel is not null && phone is not null)
+        {
+            var index = blindIndexer.Compute(BlindIndexPurpose.Phone, phone);
+            conversation = await conversations
+                .FirstOrDefaultAsync(c => c.ConnectionId == channel.ConnectionId && c.ContactPhoneBlindIndex == index, ct);
+        }
+
+        // A conversation filed on THIS lead through another number — a second handset, a number
+        // changed since, a conversation an agent attached from the inbox — is this lead's too. The
+        // tab presents one: an OPEN one first (somebody may be waiting on it), then the most
+        // recently active. Presenting the lead's own number regardless left an attached
+        // conversation waiting for an agent with no screen to take it from, and presenting the
+        // latest regardless hid a held conversation behind a closed one.
+        var filedOnLead = await conversations
+            .Where(c => c.LeadId == lead.Id)
+            .ToListAsync(ct);
+
+        conversation = filedOnLead
+            .Concat(conversation is null ? [] : [conversation])
+            .DistinctBy(c => c.Id)
+            .OrderBy(c => c.Status == WhatsAppConversationStatus.Closed)
+            .ThenByDescending(c => c.LastMessageAt)
+            .FirstOrDefault();
+
+        return (channel, phone, conversation);
     }
 }
 
@@ -192,35 +242,8 @@ internal sealed class GetWhatsAppPanelHandler(
             ? consents.Where(c => c.Status == ConsentStatus.Active).MaxBy(c => c.GrantedAt)
             : consents.MaxBy(c => c.WithdrawnAt ?? c.GrantedAt);
 
-        var callingCode = (await admin.GetSmsConfigAsync(tenantId, ct))?.DefaultCallingCode;
-        var channel = await integration.Messaging.ResolveChannelAsync(tenantId, lead.AgencyId, ct);
-        var phone = WhatsAppNumbers.ToE164(lead.PhoneNumber, callingCode);
-
-        WhatsAppConversation? conversation = null;
-
-        if (channel is not null && phone is not null)
-        {
-            var index = blindIndexer.Compute(BlindIndexPurpose.Phone, phone);
-            conversation = await db.WhatsAppConversations
-                .FirstOrDefaultAsync(c => c.ConnectionId == channel.ConnectionId && c.ContactPhoneBlindIndex == index, ct);
-        }
-
-        // A conversation filed on THIS lead through another number — a second handset, a number
-        // changed since, a conversation an agent attached from the inbox — is this lead's too. The
-        // tab presents one: an OPEN one first (somebody may be waiting on it), then the most
-        // recently active. Presenting the lead's own number regardless left an attached
-        // conversation waiting for an agent with no screen to take it from, and presenting the
-        // latest regardless hid a held conversation behind a closed one.
-        var filedOnLead = await db.WhatsAppConversations
-            .Where(c => c.LeadId == lead.Id)
-            .ToListAsync(ct);
-
-        conversation = filedOnLead
-            .Concat(conversation is null ? [] : [conversation])
-            .DistinctBy(c => c.Id)
-            .OrderBy(c => c.Status == WhatsAppConversationStatus.Closed)
-            .ThenByDescending(c => c.LastMessageAt)
-            .FirstOrDefault();
+        var (channel, phone, conversation) = await WhatsAppLeadConversations.PresentedAsync(
+            db, admin, integration, blindIndexer, lead, tracking: false, ct);
 
         var lastTemplateFailed = await WhatsAppTemplateCooldown.LastTemplateFailedAsync(db, conversation, ct);
         var blockers = WhatsAppEligibility.Blockers(
@@ -384,7 +407,8 @@ internal static class WhatsAppMessagePages
             m.ErrorCode,
             m.ErrorDetail,
             MediaPurged: m.MediaPurgedAt is not null,
-            ComplaintId: m.ComplaintId)).ToList();
+            ComplaintId: m.ComplaintId,
+            OpportunityId: m.OpportunityId)).ToList();
 
         return new WhatsAppMessagePageDto(items, hasMore ? page[^1].OccurredAt : null);
     }
@@ -465,7 +489,11 @@ internal sealed class GetWhatsAppMediaHandler(
 
 // ── Compose ──────────────────────────────────────────────────────────────────────────────────
 
-internal sealed record ComposeWhatsAppQuery(Guid LeadId, bool HasWhatsAppPermission)
+/// <param name="WithFile">
+/// The templates sent with a file (a DOCUMENT or IMAGE header) — a project's; else those sent as
+/// words alone, the lead's drawer. A template whose header wants a file is never offered without one.
+/// </param>
+internal sealed record ComposeWhatsAppQuery(Guid LeadId, bool HasWhatsAppPermission, bool WithFile = false)
     : IRequest<Result<IReadOnlyList<WhatsAppComposeTemplateDto>>>;
 
 /// <summary>
@@ -499,7 +527,7 @@ internal sealed class ComposeWhatsAppHandler(
 
         // The product the lead ASKED for — the lead stores no line (product owner, 2026-10-24).
         var leadLine = await ProductLines.ProductLineLookup.ForLeadAsync(admin, lead, ct);
-        templates = templates.Where(t => t.AppliesTo(leadLine)).ToList();
+        templates = templates.Where(t => t.AppliesTo(leadLine) && (query.WithFile ? t.IsSendableWithFile : t.IsSendableAsText)).ToList();
 
         var agentName = (await admin.GetUserNamesAsync(currentUser.TenantId, [currentUser.Id], ct))
             .GetValueOrDefault(currentUser.Id);
@@ -513,7 +541,7 @@ internal sealed class ComposeWhatsAppHandler(
                         i,
                         mapping?.Field.ToString(),
                         mapping is null ? string.Empty : ValueOf(mapping.Field, lead, agentName));
-                })]))
+                })], t.FileHeader))
             .ToList();
 
         return Result.Ok<IReadOnlyList<WhatsAppComposeTemplateDto>>(result);

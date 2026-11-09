@@ -1385,7 +1385,7 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
                 ? IntegrationResult.Ok<IReadOnlyList<MessagingTemplateInfo>>([.. templates.Value.Select(t =>
                     new MessagingTemplateInfo(
                         t.ProviderTemplateId, t.Name, t.Language, t.Category, t.Status,
-                        t.HeaderText, t.BodyText, t.FooterText, t.Buttons))])
+                        t.HeaderText, t.BodyText, t.FooterText, t.Buttons, t.HeaderFormat))])
                 : Forward<IReadOnlyList<MessagingTemplateInfo>>(templates);
         }
 
@@ -1400,7 +1400,10 @@ public sealed class IntegrationModuleFacade : IIntegrationModule
 
             return await port.Port!.SendTemplateAsync(
                 port.Connection!,
-                new OutboundTemplate(message.ToE164, message.Name, message.Language, message.BodyParameters),
+                new OutboundTemplate(message.ToE164, message.Name, message.Language, message.BodyParameters,
+                    message.HeaderMedia is { } file
+                        ? new OutboundMedia(file.Content, file.ContentType, file.FileName ?? "document", null)
+                        : null),
                 ct);
         }
 

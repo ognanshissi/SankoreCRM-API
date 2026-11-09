@@ -53,17 +53,24 @@ internal static class LeadCustomerDocumentReader
             .Where(a => a.TenantId == tenantId && a.DeletedAt == null && projectIds.Contains(a.OpportunityId))
             .ToListAsync(ct);
 
+        // A project's file SENT to the client — a devis, a proposal — is a document handed over
+        // (project documents lot 4): « Remis », with the channel, at the time it left.
         entries.AddRange(projectFiles.Select(a => new CustomerDocumentEntry(
             Key: $"project-attachment:{a.Id}",
             Source: "Project",
-            Direction: CustomerDocumentDirection.Collected,
+            Direction: a.LastSentAt is null ? CustomerDocumentDirection.Collected : CustomerDocumentDirection.Delivered,
             Kind: "ProjectAttachment",
             FileName: a.FileName,
             ContentType: a.ContentType,
             SizeBytes: a.SizeBytes,
-            At: a.UploadedAt,
-            Status: null,
-            Detail: a.FieldKey,
+            At: a.LastSentAt ?? a.UploadedAt,
+            Status: a.LastSentAt is null ? null : "Delivered",
+            Detail: a.LastSentChannel switch
+            {
+                ProjectDocumentChannels.Email => "SentByEmail",
+                ProjectDocumentChannels.WhatsApp => "SentByWhatsApp",
+                _ => a.FieldKey,
+            },
             OriginType: "Project",
             OriginId: a.OpportunityId,
             OriginLabel: projectTitles.GetValueOrDefault(a.OpportunityId),
@@ -106,9 +113,13 @@ internal static class LeadCustomerDocumentReader
         // The client's conversations: their leads', and those matched to the client directly.
         // A media is a message of a media kind not yet purged — the provider's id is null both
         // before an outbound upload completes and after a purge, so it cannot be the test.
+        // A template whose header carried a project's file (lot 3) is one too; an outbound media the
+        // provider refused reached nobody, so it is not listed as handed over.
         var media = await db.WhatsAppMessages
             .IgnoreQueryFilters()
-            .Where(m => m.TenantId == tenantId && m.MediaPurgedAt == null && MediaKinds.Contains(m.Kind))
+            .Where(m => m.TenantId == tenantId && m.MediaPurgedAt == null
+                     && (MediaKinds.Contains(m.Kind) || (m.Kind == WhatsAppMessageKind.Template && m.MediaStorageRef != null))
+                     && !(m.Direction == WhatsAppDirection.Outbound && m.Status == WhatsAppMessageStatus.Failed))
             .Join(db.WhatsAppConversations.IgnoreQueryFilters()
                     .Where(c => c.TenantId == tenantId
                              && (c.ClientId == customerId || (c.LeadId != null && leadIds.Contains(c.LeadId.Value)))),
@@ -128,9 +139,12 @@ internal static class LeadCustomerDocumentReader
             At: x.Message.SentAt ?? x.Message.CreatedAt,
             Status: null,
             Detail: x.Message.Kind.ToString(),
-            OriginType: x.Conversation.LeadId is null ? "Conversation" : "Lead",
-            OriginId: x.Conversation.LeadId ?? x.Conversation.Id,
-            OriginLabel: "Conversation WhatsApp",
+            // Sent from a project: it hangs off the project, which the client's screen links to.
+            OriginType: x.Message.OpportunityId is not null ? "Project" : x.Conversation.LeadId is null ? "Conversation" : "Lead",
+            OriginId: x.Message.OpportunityId ?? x.Conversation.LeadId ?? x.Conversation.Id,
+            OriginLabel: x.Message.OpportunityId is { } project
+                ? projectTitles.GetValueOrDefault(project) ?? "Projet"
+                : "Conversation WhatsApp",
             // The conversation route serves a conversation with or without a lead; it accepts
             // any of the three WhatsApp roles.
             ContentPath: $"leads/whatsapp/conversations/{x.Conversation.Id}/messages/{x.Message.Id}/media",

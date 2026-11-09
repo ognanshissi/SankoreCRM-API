@@ -172,9 +172,8 @@ internal static class WhatsAppChannelEndpoints
     private static async Task<IResult> CreateAsync(
         SaveWhatsAppChannelRequest request, ISender sender, IHostEnvironment environment, CancellationToken ct)
     {
-        if (request.Simulated && !environment.IsDevelopment())
-            return Results.UnprocessableEntity(new { error = IntegrationErrors.FakeAdapterNotAllowed });
-
+        // A simulated channel is a Fake connection: CreateConnectionHandler refuses it outside
+        // Development and test institutions (FakeAdapterGate), with FakeAdapterNotAllowed.
         var (kind, settings) = SettingsOf(request);
 
         var result = await sender.Send(new CreateConnectionCommand(

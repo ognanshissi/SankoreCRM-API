@@ -96,7 +96,7 @@ internal static class ConnectionsTestHarness
     /// </summary>
     internal static IntegrationAdapterResolver Resolver(
         IntegrationDbContext db, params ICbsAdapter[] adapters)
-        => new(db, new KeyedAdapterProvider(adapters.ToDictionary(a => a.Kind.ToString())));
+        => new(db, new KeyedAdapterProvider(adapters.ToDictionary(a => a.Kind.ToString())), TestSupport.TestFakeAdapterGate.Development);
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {

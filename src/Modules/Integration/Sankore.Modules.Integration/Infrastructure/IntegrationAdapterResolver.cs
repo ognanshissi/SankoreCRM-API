@@ -20,7 +20,8 @@ using Sankore.Shared.Kernel;
 /// </summary>
 internal sealed class IntegrationAdapterResolver(
     IntegrationDbContext db,
-    IServiceProvider services)
+    IServiceProvider services,
+    FakeAdapterGate? fakeGate = null)
 {
     /// <summary>
     /// The tenant's active connection for a family, or a functional failure naming what is
@@ -37,11 +38,11 @@ internal sealed class IntegrationAdapterResolver(
             .OrderBy(c => c.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
-        return connection is null
-            ? IntegrationResult.Technical<IntegrationConnection>(
+        if (connection is null)
+            return IntegrationResult.Technical<IntegrationConnection>(
                 IntegrationErrors.NoActiveConnection,
-                $"No active {family} connection is configured for this tenant.")
-            : IntegrationResult.Ok(connection);
+                $"No active {family} connection is configured for this tenant.");
+        return await FakeRefusalAsync(connection, ct) ?? IntegrationResult.Ok(connection);
     }
 
     /// <summary>One named connection, whatever its family — the insurance path (ASS-02).</summary>
@@ -52,12 +53,24 @@ internal sealed class IntegrationAdapterResolver(
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.Id == connectionId, ct);
 
-        return connection is null
-            ? IntegrationResult.Technical<IntegrationConnection>(
+        if (connection is null)
+            return IntegrationResult.Technical<IntegrationConnection>(
                 IntegrationErrors.ConnectionNotFound,
-                "The connection does not exist for this tenant.")
-            : IntegrationResult.Ok(connection);
+                "The connection does not exist for this tenant.");
+        return await FakeRefusalAsync(connection, ct) ?? IntegrationResult.Ok(connection);
     }
+
+    /// <summary>
+    /// The in-memory adapter for an institution no longer allowed it (its test flag lifted): refused
+    /// at every resolution, so a real institution never gets an invented success. See
+    /// <see cref="FakeAdapterGate"/>.
+    /// </summary>
+    private async Task<IntegrationResult<IntegrationConnection>?> FakeRefusalAsync(IntegrationConnection connection, CancellationToken ct)
+        => connection.Kind == IntegrationKind.Fake && (fakeGate is null || !await fakeGate.AllowsAsync(connection.TenantId, ct))
+            ? IntegrationResult.Technical<IntegrationConnection>(
+                IntegrationErrors.FakeAdapterNotAllowed,
+                "The simulated adapter is reserved to test institutions.")
+            : null;
 
     /// <summary>
     /// The adapter registered for a connection's kind. Keyed DI: one registration per

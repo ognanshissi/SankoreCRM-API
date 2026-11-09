@@ -9,7 +9,7 @@ using Sankore.Modules.Integration.Tests.TestSupport;
 using Xunit;
 
 /// <summary>
-/// INT-10, acceptance criterion 3 — the fake is selectable in Development only.
+/// INT-10, acceptance criterion 3 — the fake is registered; who reaches it is FakeAdapterGate's call.
 ///
 /// <para>
 /// The gate is asserted rather than documented because its failure mode is silent and permanent.
@@ -39,39 +39,17 @@ public sealed class FakeAdapterRegistrationTests
     }
 
     [Fact]
-    public void Production_should_refuse_to_register_it_at_all()
+    public void Every_platform_registers_it_and_the_gate_decides_who_reaches_it()
     {
-        var services = new ServiceCollection();
-
-        var act = () => services.AddFakeAdapter(StubHostEnvironment.Production);
-
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage($"*{IntegrationErrors.FakeAdapterNotAllowed}*",
-                "the boot failure has to name the rule, not the symptom");
-
-        // Fails CLOSED and loudly, rather than skipping the registration: a skip would surface
-        // hours later as ADAPTER_NOT_REGISTERED in a job log, far from the deployment that caused
-        // it, while the connection sat there looking configured.
-        services.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Any_environment_that_is_not_development_should_be_refused()
-    {
-        // Staging specifically: it is the environment a copied appsettings reaches first, and the
-        // one where "it worked in dev" is most likely to be the reason nobody looks.
-        foreach (var env in new[]
-                 {
-                     StubHostEnvironment.Staging,
-                     new StubHostEnvironment("Production"),
-                     new StubHostEnvironment("Preprod"),
-                     new StubHostEnvironment(string.Empty),
-                 })
+        // Since 2026-11-08 (owner): a demo on the production platform subscribes through the
+        // double. Reaching it is FakeAdapterGate's decision — Development or a test institution —
+        // pinned in FakeAdapterGateTests.
+        foreach (var env in new[] { StubHostEnvironment.Production, StubHostEnvironment.Staging })
         {
-            var act = () => new ServiceCollection().AddFakeAdapter(env);
-
-            act.Should().Throw<InvalidOperationException>(
-                $"'{env.EnvironmentName}' is not Development");
+            var services = new ServiceCollection();
+            services.AddFakeAdapter(env);
+            using var provider = services.BuildServiceProvider();
+            provider.GetKeyedService<ICbsAdapter>(IntegrationKind.Fake.ToString()).Should().NotBeNull();
         }
     }
 

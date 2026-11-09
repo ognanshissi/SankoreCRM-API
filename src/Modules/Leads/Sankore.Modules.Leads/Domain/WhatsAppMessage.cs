@@ -113,6 +113,22 @@ public sealed class WhatsAppMessage : ITenant
 
     public void LinkToComplaint(Guid complaintId) => ComplaintId = complaintId;
 
+    /// <summary>
+    /// The project this message was sent from (project documents lot 2, 2026-11-08): one of its
+    /// documents, sent from the project's page, so the project lists what left. No foreign key, like
+    /// <see cref="ComplaintId"/>; the sender checked the project is the caller's to open.
+    /// </summary>
+    public Guid? OpportunityId { get; private set; }
+
+    /// <summary>The project's file this message carries (lot 4): marked « remis » once the message left.</summary>
+    public Guid? ProjectAttachmentId { get; private set; }
+
+    public void LinkToProject(Guid opportunityId, Guid? attachmentId = null)
+    {
+        OpportunityId = opportunityId;
+        ProjectAttachmentId = attachmentId;
+    }
+
     private WhatsAppMessage() { } // EF Core
 
     public static WhatsAppMessage Inbound(
@@ -241,6 +257,17 @@ public sealed class WhatsAppMessage : ITenant
             OccurredAt = now,
             CreatedAt = now,
         };
+
+    /// <summary>
+    /// The file a template's DOCUMENT or IMAGE header carries (project documents lot 3): what it is
+    /// and its name. The bytes are kept encrypted (<see cref="AttachStoredMedia"/>) BEFORE the
+    /// message is queued — the consumer reads them from there, the browser being long gone.
+    /// </summary>
+    public void AttachTemplateFile(string mimeType, string fileName)
+    {
+        MediaMimeType = Clip(mimeType, 100);
+        MediaFileName = Clip(fileName, 255);
+    }
 
     /// <summary>The media id the provider gave the upload, so the thread can show it again.</summary>
     public void AttachProviderMedia(string mediaId) => MediaId = Clip(mediaId, 200);

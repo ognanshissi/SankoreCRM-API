@@ -250,8 +250,8 @@ internal sealed class ListMyMailThreadsHandler(IntegrationDbContext db, ICurrent
 internal static class MailLinks
 {
     public static IReadOnlyList<MailLinkDto> Of(IEnumerable<ConnectedMailLink> links, IReadOnlyDictionary<(MailLinkEntity, Guid), string>? names = null) =>
-        // A complaint link is the complaint's (its « Échanges »), not a record the mailbox names.
-        links.Where(l => l.EntityType != MailLinkEntity.Complaint).Select(l => (l.EntityType, l.EntityId)).Distinct()
+        // A complaint or project link is that record's (its « Échanges »), not a person the mailbox names.
+        links.Where(l => l.EntityType is not (MailLinkEntity.Complaint or MailLinkEntity.Project)).Select(l => (l.EntityType, l.EntityId)).Distinct()
             .OrderBy(l => l.EntityType).ThenBy(l => l.EntityId)
             .Select(l => new MailLinkDto(l.EntityType.ToString(), l.EntityId, names?.GetValueOrDefault(l)))
             .ToList();

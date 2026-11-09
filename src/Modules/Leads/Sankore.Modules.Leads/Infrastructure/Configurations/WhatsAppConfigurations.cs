@@ -102,6 +102,8 @@ internal sealed class WhatsAppMessageConfiguration(IFieldEncryptor encryptor)
 
         // The media purge: stored or provider-held media past their retention.
         b.HasIndex(m => new { m.TenantId, m.MediaStoredAt }).HasFilter("media_storage_ref IS NOT NULL");
+        // A project's page lists the documents sent from it.
+        b.HasIndex(m => new { m.TenantId, m.OpportunityId }).HasFilter("opportunity_id IS NOT NULL");
         b.Property(m => m.MediaMimeType).HasMaxLength(100);
         b.Property(m => m.ProviderMessageId).HasMaxLength(200);
         b.Property(m => m.ReplyToProviderMessageId).HasMaxLength(200);
@@ -138,6 +140,7 @@ internal sealed class WhatsAppTemplateConfiguration : IEntityTypeConfiguration<W
         b.Property(t => t.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         b.Property(t => t.ProviderTemplateId).HasMaxLength(100);
         b.Property(t => t.HeaderText).HasMaxLength(1024);
+        b.Property(t => t.HeaderFormat).HasMaxLength(20);
         b.Property(t => t.BodyText).IsRequired();
         b.Property(t => t.FooterText).HasMaxLength(1024);
 

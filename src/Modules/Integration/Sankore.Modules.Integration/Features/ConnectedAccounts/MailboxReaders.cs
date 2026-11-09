@@ -69,6 +69,13 @@ internal sealed record OutgoingMail(
     OutgoingReplyTo? ReplyTo);
 
 /// <summary>
+/// How the provider will name the message just sent (project documents lot 1): what the sync
+/// recognises it by when it reads the copy back from « Envoyés ». Gmail gives its own id; Graph and
+/// SMTP a Message-ID. Either may be null — the message then simply gets no link promised at send.
+/// </summary>
+internal sealed record SentMailReference(string? ExternalId, string? InternetMessageId);
+
+/// <summary>
 /// The provider refused to send (lot 3). <see cref="Code"/> is ours — <c>MAIL_SEND_REFUSED</c>
 /// (the provider said no: a recipient, a size, a policy) or <c>MAIL_SEND_FAILED</c> (it could not
 /// be reached) — never the provider's text, which may echo the message.
@@ -107,8 +114,11 @@ internal interface IMailboxReader
 
     // ── Writing (lot 3) ──────────────────────────────────────────────────
 
-    /// <summary>Sends from the account, so the message lands in its own « Envoyés » too. Throws <see cref="MailSendException"/>.</summary>
-    Task SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct);
+    /// <summary>
+    /// Sends from the account, so the message lands in its own « Envoyés » too, and says how the
+    /// provider names it. Throws <see cref="MailSendException"/>.
+    /// </summary>
+    Task<SentMailReference?> SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct);
 
     Task SetReadAsync(MailboxSession session, string externalId, bool isRead, CancellationToken ct);
 
@@ -126,6 +136,11 @@ internal static class OutgoingMime
     {
         var message = new MimeMessage { Subject = mail.Subject };
         message.From.Add(new MailboxAddress(mail.From.Name, mail.From.Address));
+
+        // Ours, so the sync recognises the copy in « Envoyés » (project documents lot 1), on the
+        // sender's domain as mail clients expect.
+        var at = mail.From.Address.LastIndexOf('@');
+        message.MessageId = MimeKit.Utils.MimeUtils.GenerateMessageId(at > 0 && at < mail.From.Address.Length - 1 ? mail.From.Address[(at + 1)..] : "sankore.local");
         message.To.AddRange(mail.To.Select(p => new MailboxAddress(p.Name, p.Address)));
         message.Cc.AddRange(mail.Cc.Select(p => new MailboxAddress(p.Name, p.Address)));
         message.Bcc.AddRange(mail.Bcc.Select(p => new MailboxAddress(p.Name, p.Address)));
@@ -388,7 +403,7 @@ internal sealed class GraphMailboxReader(HttpClient http, ConnectedAccountTokens
     /// draft then takes the agent's text and recipients, its attachments, and is sent; a failure on
     /// the way deletes it rather than leaving a half-written draft in the user's Outlook.
     /// </summary>
-    public async Task SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct)
+    public async Task<SentMailReference?> SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct)
     {
         var token = ((TokenMailboxSession)session).AccessToken;
         var content = new Dictionary<string, object?>
@@ -402,13 +417,21 @@ internal sealed class GraphMailboxReader(HttpClient http, ConnectedAccountTokens
 
         string? draftId = null;
 
+        // Exchange gives the draft its Message-ID at creation and keeps it once sent; the id of the
+        // copy in « Éléments envoyés » is another one (an item moved between folders changes id).
+        string? internetMessageId = null;
+
         if (mail.ReplyTo is { } reply)
         {
             var (status, created) = await MailHttp.SendJsonAsync(http, HttpMethod.Post,
                 $"{Graph}/messages/{Uri.EscapeDataString(reply.ExternalId)}/createReply", token, new { }, ct);
 
             // The answered message was deleted meanwhile: the reply goes out as a new message.
-            if ((int)status < 300) draftId = created?.String("id");
+            if ((int)status < 300)
+            {
+                draftId = created?.String("id");
+                internetMessageId = created?.String("internetMessageId");
+            }
             else if (status != HttpStatusCode.NotFound) throw MailHttp.WriteFailure("graph", status);
 
             if (draftId is not null)
@@ -423,6 +446,7 @@ internal sealed class GraphMailboxReader(HttpClient http, ConnectedAccountTokens
             var (status, created) = await MailHttp.SendJsonAsync(http, HttpMethod.Post, $"{Graph}/messages", token, content, ct);
             if ((int)status >= 300 || created?.String("id") is not { } id) throw MailHttp.WriteFailure("graph", status);
             draftId = id;
+            internetMessageId = created?.String("internetMessageId");
         }
 
         var draft = Uri.EscapeDataString(draftId);
@@ -444,6 +468,7 @@ internal sealed class GraphMailboxReader(HttpClient http, ConnectedAccountTokens
 
         var (sent, _) = await MailHttp.SendJsonAsync(http, HttpMethod.Post, $"{Graph}/messages/{draft}/send", token, null, ct);
         if ((int)sent >= 300) await FailAsync(token, draftId, sent, ct);
+        return new SentMailReference(null, internetMessageId);
     }
 
     private async Task<HttpStatusCode> UploadAsync(string token, string draft, OutgoingAttachment attachment, CancellationToken ct)
@@ -709,10 +734,11 @@ internal sealed class GmailMailboxReader(HttpClient http, ConnectedAccountTokens
     /// The MIME message through the UPLOAD endpoint (35 MB, against the metadata endpoint's few):
     /// a reply as multipart/related with its thread id, so Gmail files it in the conversation.
     /// </summary>
-    public async Task SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct)
+    public async Task<SentMailReference?> SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct)
     {
         var token = ((TokenMailboxSession)session).AccessToken;
-        var raw = OutgoingMime.ToBytes(OutgoingMime.Build(mail));
+        var mime = OutgoingMime.Build(mail);
+        var raw = OutgoingMime.ToBytes(mime);
 
         using var request = new HttpRequestMessage(HttpMethod.Post,
             $"https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType={(mail.ReplyTo is null ? "media" : "multipart")}");
@@ -733,8 +759,11 @@ internal sealed class GmailMailboxReader(HttpClient http, ConnectedAccountTokens
             request.Content = message;
         }
 
-        var (status, _) = await MailHttp.ReadAsync(http, request, ct);
+        var (status, sent) = await MailHttp.ReadAsync(http, request, ct);
         if ((int)status >= 300) throw MailHttp.WriteFailure("gmail", status);
+
+        // Gmail answers the message's own id, the one its « Envoyés » copy is read under.
+        return new SentMailReference(sent?.String("id"), mime.MessageId);
     }
 
     public async Task SetReadAsync(MailboxSession session, string externalId, bool isRead, CancellationToken ct)
@@ -980,7 +1009,7 @@ internal sealed class ImapMailboxReader(IntegrationDbContext db, ISecretsModule 
     /// </summary>
     private static readonly string[] SelfFilingSmtpHosts = ["gmail.com", "googlemail.com", "office365.com", "outlook.com"];
 
-    public async Task SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct)
+    public async Task<SentMailReference?> SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct)
     {
         var imap = (ImapMailboxSession)session;
         var server = await db.MailServers.FirstOrDefaultAsync(m => m.AccountId == account.Id, ct);
@@ -1015,7 +1044,8 @@ internal sealed class ImapMailboxReader(IntegrationDbContext db, ISecretsModule 
             }
         }
 
-        if (SelfFilingSmtpHosts.Any(h => server.SmtpHost == h || server.SmtpHost.EndsWith("." + h, StringComparison.Ordinal))) return;
+        var reference = new SentMailReference(null, message.MessageId);
+        if (SelfFilingSmtpHosts.Any(h => server.SmtpHost == h || server.SmtpHost.EndsWith("." + h, StringComparison.Ordinal))) return reference;
 
         // Sent: a copy that cannot be filed is not a failure of the sending, which already happened.
         try
@@ -1026,6 +1056,8 @@ internal sealed class ImapMailboxReader(IntegrationDbContext db, ISecretsModule 
         {
             // Logged by the caller's absence of a sent copy; nothing to undo.
         }
+
+        return reference;
     }
 
     public async Task SetReadAsync(MailboxSession session, string externalId, bool isRead, CancellationToken ct)
@@ -1143,7 +1175,7 @@ internal sealed class FakeMailboxReader(IHostEnvironment environment) : IMailbox
         Task.FromResult<MailContent?>(null);
 
     /// <summary>Refused, not pretended: a simulated account that « sent » would hide that nothing left.</summary>
-    public Task SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct) =>
+    public Task<SentMailReference?> SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct) =>
         throw new MailSendException("CONNECTED_MAILBOX_SIMULATED");
 
     public Task SetReadAsync(MailboxSession session, string externalId, bool isRead, CancellationToken ct) => Task.CompletedTask;

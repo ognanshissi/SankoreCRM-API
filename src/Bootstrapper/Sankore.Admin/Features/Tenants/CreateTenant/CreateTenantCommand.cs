@@ -11,13 +11,18 @@ namespace Sankore.Admin.Features.Tenants.CreateTenant;
 /// profile (« Caisse avec assurance » = both). Null or empty creates a tenant on the socle alone.
 /// </param>
 /// <param name="AdminId">The platform administrator creating it; null when the service key does.</param>
+/// <param name="StartingData">
+/// The starting data to load once created, queued in the same save; <see cref="TenantDataLoadKind.Demo"/>
+/// marks the institution as a test one first, the only kind allowed to receive it.
+/// </param>
 public record CreateTenantCommand(
     string Name,
     string RootUserEmail,
     string Fqdn,
     DateTimeOffset? TrialExpiresAt,
     IReadOnlyList<string>? ActiveModules = null,
-    Guid? AdminId = null) : IRequest<CreateTenantResponse>;
+    Guid? AdminId = null,
+    TenantDataLoadKind? StartingData = null) : IRequest<CreateTenantResponse>;
 
 
 public record CreateTenantResponse(Guid Id);
@@ -41,6 +46,12 @@ internal sealed class CreateTenantHandler(AdminDbContext db) : IRequestHandler<C
         db.Tenants.Add(tenant);
 
         var now = DateTimeOffset.UtcNow;
+        if (request.StartingData is { } kind)
+        {
+            if (kind == TenantDataLoadKind.Demo) tenant.MarkAsTest(true);
+            db.TenantDataLoads.Add(TenantDataLoad.Request(tenant.Id, kind, request.AdminId ?? Guid.Empty, now));
+        }
+
         foreach (var module in modules)
             db.TenantModuleSubscriptions.Add(TenantModuleSubscription.ActivateDirect(
                 tenant.Id, module, request.AdminId, ModuleSubscriptionSource.Direct, now));

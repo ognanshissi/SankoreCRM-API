@@ -33,7 +33,9 @@ public sealed record WhatsAppTemplateDto(
     int VariableCount,
     IReadOnlyList<Guid> ProductLineIds,
     IReadOnlyList<WhatsAppVariableMappingDto> VariableMappings,
-    DateTimeOffset SyncedAt);
+    DateTimeOffset SyncedAt,
+    // TEXT, DOCUMENT, IMAGE, VIDEO, LOCATION; null without a header (project documents lot 3).
+    string? HeaderFormat = null);
 
 /// <param name="Field">
 /// <c>LeadFirstName</c>, <c>LeadLastName</c>, <c>LeadFullName</c>, <c>InterestedProduct</c>,
@@ -119,7 +121,7 @@ internal sealed class WhatsAppTemplateSynchronizer(
                 }
 
                 template.Refresh(item.Category, item.Status, item.ProviderTemplateId, item.HeaderText,
-                    item.BodyText, item.FooterText, item.Buttons, now);
+                    item.BodyText, item.FooterText, item.Buttons, now, item.HeaderFormat);
 
                 seen.Add(template.Id);
             }
@@ -189,7 +191,7 @@ internal sealed class ListWhatsAppTemplatesHandler(
     internal static WhatsAppTemplateDto ToDto(WhatsAppTemplate t, string? displayNumber) => new(
         t.Id, t.ConnectionId, displayNumber, t.Name, t.Language, t.Category, t.Status.ToString(), t.IsAvailable,
         t.HeaderText, t.BodyText, t.FooterText, t.Buttons, t.VariableCount, t.ProductLineIds,
-        [.. t.VariableMappings.Select(m => new WhatsAppVariableMappingDto(m.Index, m.Field))], t.SyncedAt);
+        [.. t.VariableMappings.Select(m => new WhatsAppVariableMappingDto(m.Index, m.Field))], t.SyncedAt, t.HeaderFormat);
 }
 
 internal sealed record SyncWhatsAppTemplatesCommand : IRequest<WhatsAppTemplateSyncResult>, ICommand, IResourceCommand

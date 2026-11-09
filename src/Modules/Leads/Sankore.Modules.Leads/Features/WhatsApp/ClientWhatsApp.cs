@@ -185,7 +185,8 @@ internal sealed class ClientWhatsAppContext(
 
 // ── The panel ────────────────────────────────────────────────────────────────────────────────
 
-internal sealed record GetClientWhatsAppQuery(Guid ClientId, bool MayForce) : IRequest<Result<ClientWhatsAppDto>>;
+/// <param name="WithFile">The templates sent with a file — a project's (lot 3); else those sent as words alone.</param>
+internal sealed record GetClientWhatsAppQuery(Guid ClientId, bool MayForce, bool WithFile = false) : IRequest<Result<ClientWhatsAppDto>>;
 
 internal sealed class GetClientWhatsAppHandler(
     LeadsDbContext db, ClientWhatsAppContext context, ICurrentUser me, IAdministrationModule admin, TimeProvider clock)
@@ -210,14 +211,14 @@ internal sealed class GetClientWhatsAppHandler(
 
         var agentName = (await admin.GetUserNamesAsync(me.TenantId, [me.Id], ct)).GetValueOrDefault(me.Id);
 
-        var compose = templates.Where(t => t.AppliesTo(null)).Select(t => new WhatsAppComposeTemplateDto(
+        var compose = templates.Where(t => t.AppliesTo(null) && (query.WithFile ? t.IsSendableWithFile : t.IsSendableAsText)).Select(t => new WhatsAppComposeTemplateDto(
                 t.Id, t.Name, t.Language, t.Category, t.HeaderText, t.BodyText, t.FooterText, t.Buttons,
                 [.. Enumerable.Range(1, t.VariableCount).Select(i =>
                 {
                     var mapping = t.VariableMappings.FirstOrDefault(m => m.Index == i);
                     return new WhatsAppComposeVariableDto(i, mapping?.Field.ToString(),
                         mapping is null ? string.Empty : ValueOf(mapping.Field, s.Client, agentName));
-                })]))
+                })], t.FileHeader))
             .ToList();
 
         return Result.Ok(new ClientWhatsAppDto(
@@ -271,8 +272,11 @@ internal sealed class ListClientWhatsAppMessagesHandler(
 
 // ── Sending ──────────────────────────────────────────────────────────────────────────────────
 
+/// <param name="File">The file of a template with a DOCUMENT or IMAGE header — set by a project's route only (lot 3).</param>
+/// <param name="ProjectId">The project the file is from; the message is linked to it.</param>
 internal sealed record SendClientWhatsAppTemplateCommand(
-    Guid ClientId, Guid TemplateId, [property: SensitiveData] IReadOnlyList<string> Variables, Guid? ComplaintId, bool MayForce)
+    Guid ClientId, Guid TemplateId, [property: SensitiveData] IReadOnlyList<string> Variables, Guid? ComplaintId, bool MayForce,
+    [property: SensitiveData] TemplateFile? File = null, Guid? ProjectId = null, Guid? ProjectAttachmentId = null)
     : IRequest<Result<SendWhatsAppTemplateResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Client";
@@ -282,7 +286,8 @@ internal sealed record SendClientWhatsAppTemplateCommand(
 /// <summary>Opens the exchange with a template, as <see cref="SendWhatsAppTemplateHandler"/> does for a lead.</summary>
 internal sealed class SendClientWhatsAppTemplateHandler(
     LeadsDbContext db, ClientWhatsAppContext context, ICurrentUser me,
-    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher, TimeProvider clock)
+    [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher, TimeProvider clock,
+    IServiceProvider? services = null)
     : IRequestHandler<SendClientWhatsAppTemplateCommand, Result<SendWhatsAppTemplateResult>>
 {
     public async Task<Result<SendWhatsAppTemplateResult>> Handle(SendClientWhatsAppTemplateCommand cmd, CancellationToken ct)
@@ -303,6 +308,7 @@ internal sealed class SendClientWhatsAppTemplateHandler(
         if (template is null) return Fail(WhatsAppErrors.TemplateNotFound);
         if (!template.IsSendable) return Fail(WhatsAppErrors.TemplateNotApproved);
         if (!template.AppliesTo(null)) return Fail(WhatsAppErrors.TemplateNotForProduct);
+        if (WhatsAppTemplateFiles.Problem(template, cmd.File, out var media) is { } fileProblem) return Fail(fileProblem);
 
         var values = (cmd.Variables ?? []).Select(v => v?.Trim() ?? string.Empty).ToList();
         if (values.Count != template.VariableCount
@@ -328,11 +334,16 @@ internal sealed class SendClientWhatsAppTemplateHandler(
             me.TenantId, conversation.Id, me.Id, template.Id, template.Name, template.Language,
             template.Render(values), JsonSerializer.Serialize(values), now);
         if (complaint.Value is { } complaintId) message.LinkToComplaint(complaintId);
+        if (cmd.ProjectId is { } projectId) message.LinkToProject(projectId, cmd.ProjectAttachmentId);
+
+        var kept = await WhatsAppTemplateFiles.KeepAsync(services, message, cmd.File, media, me.TenantId, now, ct);
+        if (kept.IsFailure) return Fail(kept.Error!);
+
         db.WhatsAppMessages.Add(message);
         conversation.RecordTemplateSent(now);
 
         await publisher.PublishAsync(new WhatsAppMessageQueuedEvent(me.TenantId, message.Id), ct);
-        await db.SaveChangesAsync(ct);
+        await WhatsAppTemplateFiles.SaveAsync(db, services, message, ct);
 
         return Result.Ok(new SendWhatsAppTemplateResult(conversation.Id, message.Id));
     }
@@ -392,14 +403,10 @@ internal sealed class SendClientWhatsAppTextHandler(
         var loaded = await context.LoadAsync(cmd.ClientId, ct);
         if (loaded.IsFailure) return Result.Fail<Guid>(loaded.Error!);
         var s = loaded.Value!;
-        if (s.Mine is not { } conversation) return Result.Fail<Guid>(ClientWhatsAppErrors.NoConversation);
 
         var now = clock.GetUtcNow();
-        if (s.Restricted) return Result.Fail<Guid>(WhatsAppErrors.ProcessingRestricted);
-        if (conversation.Status != WhatsAppConversationStatus.Human || conversation.OwnerUserId != me.Id)
-            return Result.Fail<Guid>(WhatsAppConversationErrors.NotHolder);
-        if (!conversation.IsWindowOpen(now)) return Result.Fail<Guid>(WhatsAppConversationErrors.WindowClosed);
-        if (conversation.IsOptedOut) return Result.Fail<Guid>(ClientWhatsAppErrors.OptedOut);
+        if (ClientReplyRules.Check(s, me.Id, now) is { } refusal) return Result.Fail<Guid>(refusal);
+        var conversation = s.Mine!;
 
         var complaint = await context.ComplaintAsync(cmd.ClientId, cmd.ComplaintId, ct);
         if (complaint.IsFailure) return Result.Fail<Guid>(complaint.Error!);
@@ -412,6 +419,66 @@ internal sealed class SendClientWhatsAppTextHandler(
         await publisher.PublishAsync(new WhatsAppMessageQueuedEvent(me.TenantId, message.Id), ct);
         await db.SaveChangesAsync(ct);
         return Result.Ok(message.Id);
+    }
+}
+
+/// <summary>
+/// The conditions of a free message to a client, shared by text, file and a project's documents:
+/// a conversation filed on them, held by the caller, inside the 24-hour window, no STOP, no
+/// processing restriction. In the order the advisor can act on them.
+/// </summary>
+internal static class ClientReplyRules
+{
+    public static string? Check(ClientWhatsAppState s, Guid me, DateTimeOffset now)
+    {
+        if (s.Restricted) return WhatsAppErrors.ProcessingRestricted;
+        if (s.Mine is not { } conversation) return ClientWhatsAppErrors.NoConversation;
+        if (conversation.Status != WhatsAppConversationStatus.Human || conversation.OwnerUserId != me)
+            return WhatsAppConversationErrors.NotHolder;
+        if (!conversation.IsWindowOpen(now)) return WhatsAppConversationErrors.WindowClosed;
+        if (conversation.IsOptedOut) return ClientWhatsAppErrors.OptedOut;
+        return null;
+    }
+}
+
+/// <param name="Content">The file's bytes. Marked sensitive: never written to the audit trail.</param>
+internal sealed record SendClientWhatsAppMediaCommand(
+    Guid ClientId,
+    [property: SensitiveData] byte[] Content,
+    string ContentType,
+    [property: SensitiveData] string FileName,
+    [property: SensitiveData] string? Caption,
+    Guid? ComplaintId)
+    : IRequest<Result<SendWhatsAppMediaResult>>, ICommand, IResourceCommand
+{
+    public string ResourceType => "Client";
+    public string? ResourceId => ClientId.ToString();
+}
+
+/// <summary>
+/// An image or a PDF to the client (project documents lot 2, 2026-11-08): the lead's media reply,
+/// for a client — same rules as a free text to them, optionally about one of their complaints.
+/// </summary>
+internal sealed class SendClientWhatsAppMediaHandler(
+    ClientWhatsAppContext context, ICurrentUser me, WhatsAppMediaSender sender, TimeProvider clock)
+    : IRequestHandler<SendClientWhatsAppMediaCommand, Result<SendWhatsAppMediaResult>>
+{
+    public async Task<Result<SendWhatsAppMediaResult>> Handle(SendClientWhatsAppMediaCommand cmd, CancellationToken ct)
+    {
+        var media = WhatsAppMediaSender.Check(cmd.Content, cmd.ContentType);
+        if (media.IsFailure) return Result.Fail<SendWhatsAppMediaResult>(media.Error!);
+
+        var loaded = await context.LoadAsync(cmd.ClientId, ct);
+        if (loaded.IsFailure) return Result.Fail<SendWhatsAppMediaResult>(loaded.Error!);
+        var s = loaded.Value!;
+
+        if (ClientReplyRules.Check(s, me.Id, clock.GetUtcNow()) is { } refusal) return Result.Fail<SendWhatsAppMediaResult>(refusal);
+
+        var complaint = await context.ComplaintAsync(cmd.ClientId, cmd.ComplaintId, ct);
+        if (complaint.IsFailure) return Result.Fail<SendWhatsAppMediaResult>(complaint.Error!);
+
+        return Result.Ok(await sender.SendAsync(s.Mine!, media.Value!, cmd.Content, cmd.FileName, cmd.Caption,
+            message => { if (complaint.Value is { } id) message.LinkToComplaint(id); }, ct));
     }
 }
 
@@ -473,6 +540,31 @@ internal static class ClientWhatsAppEndpoints
             .WithSummary("A free reply to the client, inside their 24-hour window, by the advisor who holds the conversation")
             .RequireAuthorization(Permissions.CanReplyWhatsApp.Code)
             .Produces<Guid>()
+            .WithTenantHeader();
+
+        app.MapPost("whatsapp/clients/{clientId:guid}/media",
+                async (Guid clientId, IFormFile file, [Microsoft.AspNetCore.Mvc.FromForm] string? caption,
+                       [Microsoft.AspNetCore.Mvc.FromForm] Guid? complaintId, ISender sender, CancellationToken ct) =>
+                {
+                    if (file is null || file.Length is 0 or > WhatsAppMediaSender.MaxDocumentBytes)
+                        return Problem(WhatsAppConversationErrors.MediaInvalid);
+
+                    using var buffer = new MemoryStream();
+                    await file.CopyToAsync(buffer, ct);
+                    return Map(await sender.Send(new SendClientWhatsAppMediaCommand(
+                        clientId, buffer.ToArray(), file.ContentType, file.FileName, caption, complaintId), ct));
+                })
+            .WithName("SendClientWhatsAppMedia")
+            .WithTags("WhatsApp")
+            .WithSummary("Sends the client an image (JPEG, PNG, 5 MB) or a PDF (10 MB) — holder only, inside their window")
+            .WithDescription(
+                "multipart/form-data: `file`, optional `caption` and `complaintId`. Same refusals as a free text, plus "
+                + "WHATSAPP_MEDIA_TYPE_NOT_ALLOWED (not an image nor a PDF) and WHATSAPP_MEDIA_INVALID (empty, too large, "
+                + "bytes that are not what the type says). A provider refusal answers 200 with status Failed.")
+            .RequireAuthorization(Permissions.CanReplyWhatsApp.Code)
+            .DisableAntiforgery()
+            .Accepts<IFormFile>("multipart/form-data")
+            .Produces<SendWhatsAppMediaResult>()
             .WithTenantHeader();
 
         return app;

@@ -317,6 +317,77 @@ public enum MailLinkEntity
     /// complaint's client is a party of it. Stored as « Complaint » — the column holds 10 characters.
     /// </summary>
     Complaint,
+
+    /// <summary>
+    /// A project (project documents lot 1, 2026-11-08): the message was sent from the project's page
+    /// — recognised by the id its provider gave it, see <see cref="ConnectedMailPendingLink"/> — or
+    /// answers such a message in the same conversation. Stored « Project ».
+    /// </summary>
+    Project,
+}
+
+/// <summary>
+/// A link promised at send time and placed by the sync (project documents lot 1). Sending stores
+/// nothing — the copy in « Envoyés » is read back like every message — so the record the agent
+/// wrote FROM is kept here, under the id the provider gave the message: its own id (Gmail) or its
+/// Message-ID (Graph, SMTP). The sync that keeps the message adds the link and drops the row; one
+/// never matched expires with the sync window. Ids only, nothing a person wrote.
+/// </summary>
+public sealed class ConnectedMailPendingLink : AggregateRoot
+{
+    public const int IdMaxLength = 1000;
+
+    private ConnectedMailPendingLink() { }
+
+    public Guid Id { get; private set; }
+    public Guid AccountId { get; private set; }
+
+    /// <summary>The provider's message id, when it gives it at send time (Gmail).</summary>
+    public string? ExternalId { get; private set; }
+
+    /// <summary>The Message-ID, without angle brackets, lower-cased (<see cref="NormalizeMessageId"/>).</summary>
+    public string? InternetMessageId { get; private set; }
+
+    public MailLinkEntity EntityType { get; private set; }
+    public Guid EntityId { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+
+    /// <summary>Null when the provider said nothing the sync could recognise the message by.</summary>
+    public static ConnectedMailPendingLink? Create(
+        Guid tenantId, Guid accountId, string? externalId, string? internetMessageId, MailLinkEntity type, Guid entityId, DateTimeOffset now)
+    {
+        var external = string.IsNullOrWhiteSpace(externalId) ? null : externalId.Trim();
+        var messageId = NormalizeMessageId(internetMessageId);
+        if (external is null && messageId is null) return null;
+        if (external?.Length > IdMaxLength || messageId?.Length > IdMaxLength) return null;
+
+        return new ConnectedMailPendingLink
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            AccountId = accountId,
+            ExternalId = external,
+            InternetMessageId = messageId,
+            EntityType = type,
+            EntityId = entityId,
+            CreatedAt = now,
+        };
+    }
+
+    /// <summary>
+    /// One spelling for a Message-ID whoever reports it: Graph gives « &lt;id@host&gt; », MimeKit
+    /// « id@host ». Compared case-insensitively, as mail clients do.
+    /// </summary>
+    public static string? NormalizeMessageId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim().Trim('<', '>').Trim();
+        return trimmed.Length == 0 ? null : trimmed.ToLowerInvariant();
+    }
+
+    public bool Matches(string externalId, string? internetMessageId) =>
+        (ExternalId is not null && string.Equals(ExternalId, externalId, StringComparison.Ordinal))
+        || (InternetMessageId is not null && InternetMessageId == NormalizeMessageId(internetMessageId));
 }
 
 /// <summary>

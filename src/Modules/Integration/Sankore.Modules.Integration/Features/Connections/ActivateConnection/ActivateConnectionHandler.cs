@@ -13,7 +13,8 @@ internal sealed class ActivateConnectionHandler(
     ICurrentUser currentUser,
     TimeProvider clock,
     ILogger<ActivateConnectionHandler> logger,
-    ITenantModules modules)
+    ITenantModules modules,
+    FakeAdapterGate? fakeGate = null)
     : IRequestHandler<ActivateConnectionCommand, Result>
 {
     /// <summary>
@@ -58,6 +59,10 @@ internal sealed class ActivateConnectionHandler(
         // A connection created while the module was on cannot be switched on after it went off.
         if (!await ConnectionFamilyModules.IsOpenAsync(modules, connection.Family, ct))
             return Result.Fail(TenantModuleErrors.Disabled);
+
+        // The in-memory adapter: Development, or a test institution only (FakeAdapterGate).
+        if (connection.Kind == IntegrationKind.Fake && (fakeGate is null || !await fakeGate.AllowsAsync(connection.TenantId, ct)))
+            return Result.Fail(IntegrationErrors.FakeAdapterNotAllowed);
 
         // ONE active core banking connection per tenant, SEVERAL insurance ones: a customer
         // cannot be created in two core banking systems, while an IMF legitimately distributes

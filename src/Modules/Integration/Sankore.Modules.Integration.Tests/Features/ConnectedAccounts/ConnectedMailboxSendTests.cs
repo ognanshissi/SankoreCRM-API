@@ -77,11 +77,14 @@ public sealed class ConnectedMailboxSendTests : IDisposable
 
         public Task<MailContent?> ReadContentAsync(MailboxSession session, string externalId, CancellationToken ct) => Task.FromResult<MailContent?>(null);
 
-        public Task SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct)
+        /// <summary>How the provider names what it sent — a Graph-style Message-ID by default.</summary>
+        public SentMailReference? NextReference { get; set; } = new(null, "<Sent-1@cabinet.ci>");
+
+        public Task<SentMailReference?> SendAsync(MailboxSession session, ConnectedAccount account, OutgoingMail mail, CancellationToken ct)
         {
             if (SendFailure is not null) throw SendFailure;
             Sent.Add(mail);
-            return Task.CompletedTask;
+            return Task.FromResult(NextReference);
         }
 
         public Task SetReadAsync(MailboxSession session, string externalId, bool isRead, CancellationToken ct)
@@ -536,6 +539,187 @@ public sealed class ConnectedMailboxSendTests : IDisposable
             .Error.Should().Be(MailSendErrors.MessageNotFound);
     }
 
+    // ── From a project (project documents lot 1) ───────────────────────────────
+
+    [Fact]
+    public async Task A_project_s_files_are_read_on_the_server_attached_and_the_project_link_is_promised_before_the_sync()
+    {
+        var account = await AccountAsync();
+        var projectId = Guid.NewGuid();
+        var devis = new ProjectFileForSending(Guid.NewGuid(), "devis", "devis.pdf", "application/pdf", Encoding.UTF8.GetBytes("%PDF-devis"));
+        var leads = ProjectModule(projectId, devis);
+
+        var result = await SendAsync(Command(account.Id) with { ProjectId = projectId, ProjectAttachmentIds = [devis.Id] }, leads: leads);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var sent = _mailbox.Sent.Single();
+        sent.Attachments.Should().ContainSingle(a => a.Name == "devis.pdf" && a.ContentType == "application/pdf");
+
+        await using var db = _factory.CreateContext();
+        var pending = await db.ConnectedMailPendingLinks.SingleAsync();
+        pending.AccountId.Should().Be(account.Id);
+        pending.EntityType.Should().Be(MailLinkEntity.Project);
+        pending.EntityId.Should().Be(projectId);
+        pending.InternetMessageId.Should().Be("sent-1@cabinet.ci", "the Message-ID is kept without brackets, lower-cased");
+        _jobs.ReceivedWithAnyArgs(1).Create(default!, default!);
+    }
+
+    [Fact]
+    public async Task A_project_outside_the_caller_s_perimeter_sends_nothing_and_files_need_a_project()
+    {
+        var account = await AccountAsync();
+        var leads = Substitute.For<ILeadsModule>(); // answers null: not in the perimeter
+
+        (await SendAsync(Command(account.Id) with { ProjectId = Guid.NewGuid(), ProjectAttachmentIds = [Guid.NewGuid()] }, leads: leads))
+            .Error.Should().Be(MailSendErrors.ProjectNotFound);
+        (await SendAsync(Command(account.Id) with { ProjectAttachmentIds = [Guid.NewGuid()] }, leads: leads))
+            .Error.Should().Be(MailSendErrors.ProjectNotFound);
+
+        _mailbox.Sent.Should().BeEmpty();
+        await leads.DidNotReceiveWithAnyArgs().ReadProjectFilesForSendingAsync(default, default, default!, default, default);
+        await using var db = _factory.CreateContext();
+        (await db.ConnectedMailPendingLinks.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_file_that_is_not_the_project_s_refuses_the_whole_message()
+    {
+        var account = await AccountAsync();
+        var projectId = Guid.NewGuid();
+        var devis = new ProjectFileForSending(Guid.NewGuid(), "devis", "devis.pdf", "application/pdf", [1, 2, 3]);
+
+        (await SendAsync(Command(account.Id) with { ProjectId = projectId, ProjectAttachmentIds = [devis.Id, Guid.NewGuid()] },
+                leads: ProjectModule(projectId, devis)))
+            .Error.Should().Be(MailSendErrors.AttachmentNotFound);
+        _mailbox.Sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Project_files_count_with_the_uploaded_ones_towards_the_ten()
+    {
+        var account = await AccountAsync();
+        var projectId = Guid.NewGuid();
+        var files = Enumerable.Range(0, 2).Select(i => new ProjectFileForSending(Guid.NewGuid(), "devis", $"d{i}.pdf", "application/pdf", [1])).ToArray();
+        var uploaded = Enumerable.Range(0, 9).Select(i => new OutgoingAttachment($"u{i}.txt", "text/plain", [1])).ToList();
+
+        (await SendAsync(Command(account.Id, attachments: uploaded) with { ProjectId = projectId, ProjectAttachmentIds = files.Select(f => f.Id).ToList() },
+                leads: ProjectModule(projectId, files)))
+            .Error.Should().Be(MailSendErrors.TooManyAttachments);
+    }
+
+    [Fact]
+    public async Task A_provider_that_names_nothing_still_sends_and_promises_no_link()
+    {
+        var account = await AccountAsync();
+        var projectId = Guid.NewGuid();
+        _mailbox.NextReference = null;
+
+        (await SendAsync(Command(account.Id) with { ProjectId = projectId }, leads: ProjectModule(projectId))).IsSuccess.Should().BeTrue();
+
+        _mailbox.Sent.Should().ContainSingle();
+        await using var db = _factory.CreateContext();
+        (await db.ConnectedMailPendingLinks.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_scheduled_message_keeps_the_project_s_files_and_the_project_for_when_it_leaves()
+    {
+        var account = await AccountAsync();
+        var projectId = Guid.NewGuid();
+        var devis = new ProjectFileForSending(Guid.NewGuid(), "devis", "devis.pdf", "application/pdf", Encoding.UTF8.GetBytes("%PDF"));
+
+        var result = await SendAsync(
+            Command(account.Id) with { ProjectId = projectId, ProjectAttachmentIds = [devis.Id], SendAt = _now.AddHours(2) },
+            leads: ProjectModule(projectId, devis));
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        _mailbox.Sent.Should().BeEmpty();
+        await using var db = _factory.CreateContext();
+        (await db.ScheduledMailAttachments.SingleAsync()).Name.Should().Be("devis.pdf");
+        var payload = ScheduledMails.Reveal(new CalendarEventProtector(new PrefixEncryptor()), await db.ScheduledMails.SingleAsync());
+        payload!.ProjectId.Should().Be(projectId);
+    }
+
+    [Fact]
+    public async Task When_it_leaves_a_scheduled_project_message_is_not_checked_again_and_its_link_is_promised()
+    {
+        var account = await AccountAsync();
+        var projectId = Guid.NewGuid();
+        var leads = Substitute.For<ILeadsModule>(); // a job has no perimeter to ask: it must not be asked
+
+        var result = await SendAsync(Command(account.Id) with { ProjectId = projectId, ProjectChecked = true }, leads: leads);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        await leads.DidNotReceiveWithAnyArgs().GetProjectForMailAsync(default, default, default, default);
+        await using var db = _factory.CreateContext();
+        (await db.ConnectedMailPendingLinks.SingleAsync()).EntityId.Should().Be(projectId);
+    }
+
+    [Fact]
+    public async Task The_project_s_files_that_left_are_recorded_on_it_once_the_provider_accepted()
+    {
+        var account = await AccountAsync();
+        var projectId = Guid.NewGuid();
+        var devis = new ProjectFileForSending(Guid.NewGuid(), "devis", "devis.pdf", "application/pdf", [1, 2]);
+        var leads = ProjectModule(projectId, devis);
+
+        _mailbox.SendFailure = new MailSendException(MailSendException.Refused);
+        (await SendAsync(Command(account.Id) with { ProjectId = projectId, ProjectAttachmentIds = [devis.Id] }, leads: leads)).IsFailure.Should().BeTrue();
+        await leads.DidNotReceiveWithAnyArgs().RecordProjectDocumentsEmailedAsync(default, default, default!, default, default);
+
+        _mailbox.SendFailure = null;
+        (await SendAsync(Command(account.Id) with { ProjectId = projectId, ProjectAttachmentIds = [devis.Id] }, leads: leads)).IsSuccess.Should().BeTrue();
+        await leads.Received(1).RecordProjectDocumentsEmailedAsync(
+            _tenant, projectId, Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Single() == devis.Id), _me, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_scheduled_project_message_records_its_files_when_it_leaves_not_when_it_is_scheduled()
+    {
+        var account = await AccountAsync();
+        var projectId = Guid.NewGuid();
+        var devis = new ProjectFileForSending(Guid.NewGuid(), "devis", "devis.pdf", "application/pdf", [1, 2]);
+        var leads = ProjectModule(projectId, devis);
+
+        (await SendAsync(Command(account.Id) with { ProjectId = projectId, ProjectAttachmentIds = [devis.Id], SendAt = _now.AddHours(2) }, leads: leads))
+            .IsSuccess.Should().BeTrue();
+        await leads.DidNotReceiveWithAnyArgs().RecordProjectDocumentsEmailedAsync(default, default, default!, default, default);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var payload = ScheduledMails.Reveal(new CalendarEventProtector(new PrefixEncryptor()), await db.ScheduledMails.SingleAsync());
+            payload!.ProjectAttachmentIds.Should().Equal(devis.Id);
+        }
+
+        // What the job sends when the time comes: checked at scheduling, recorded now.
+        (await SendAsync(Command(account.Id) with { ProjectId = projectId, ProjectAttachmentIds = [devis.Id], ProjectChecked = true }, leads: leads))
+            .IsSuccess.Should().BeTrue();
+        await leads.Received(1).RecordProjectDocumentsEmailedAsync(_tenant, projectId, Arg.Any<IReadOnlyCollection<Guid>>(), _me, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_template_quotes_the_project_and_writes_to_its_person_when_none_is_named()
+    {
+        var projectId = Guid.NewGuid();
+        var leads = ProjectModule(projectId);
+        var template = await TemplateAsync("Devis", "Votre devis — {{projet.titre}}",
+            "<p>{{projet.produit}} : {{projet.montant}}, étape {{projet.etape}}, clôture {{projet.date_cloture}}.</p>");
+
+        await using var db = _factory.CreateContext();
+        var rendered = await new MailTemplateRenderer(db, _currentUser, Substitute.For<ITenantStore>(), new FixedClock(_now), leads: leads)
+            .Handle(new RenderMailTemplateQuery(template.Id, new RenderMailTemplateRequest(null, null, null, projectId)), CancellationToken.None);
+
+        rendered.Value!.Subject.Should().Be("Votre devis — Crédit tracteur");
+        rendered.Value.Body.Should().Be("<p>Crédit de campagne : 1\u00A0500\u00A0000 XOF, étape Constitution du dossier, clôture 15/12/2026.</p>");
+    }
+
+    [Theory]
+    [InlineData(1500000, "XOF", "1\u00A0500\u00A0000 XOF")]
+    [InlineData(1250.5, "EUR", "1\u00A0250,50 EUR")]
+    [InlineData(10, null, "10")]
+    public void A_project_amount_reads_the_French_way(double amount, string? currency, string expected) =>
+        MailTemplateRenderer.ProjectAmount((decimal)amount, currency).Should().Be(expected);
+
     // ── Templates ──────────────────────────────────────────────────────────────
 
     [Fact]
@@ -704,12 +888,31 @@ public sealed class ConnectedMailboxSendTests : IDisposable
         db, [_mailbox], new CalendarEventProtector(new PrefixEncryptor()), new FixedClock(_now), NullLogger<ConnectedMailboxSync>.Instance);
 
     private async Task<Result<SendMailOutcome>> SendAsync(
-        SendMailCommand command, ICurrentUser? user = null, ICustomersModule? customers = null, IAdministrationModule? administration = null)
+        SendMailCommand command, ICurrentUser? user = null, ICustomersModule? customers = null, IAdministrationModule? administration = null,
+        ILeadsModule? leads = null)
     {
         await using var db = _factory.CreateContext();
         return await new SendMailHandler(db, user ?? _currentUser, [_mailbox], Sync(db), NullLogger<SendMailHandler>.Instance, _jobs, customers,
-                new CalendarEventProtector(new PrefixEncryptor()), new FixedClock(_now), administration)
+                new CalendarEventProtector(new PrefixEncryptor()), new FixedClock(_now), administration, leads)
             .Handle(command, CancellationToken.None);
+    }
+
+    private ILeadsModule ProjectModule(Guid projectId, params ProjectFileForSending[] files)
+    {
+        var leads = Substitute.For<ILeadsModule>();
+        leads.GetProjectForMailAsync(_tenant, projectId, _me, Arg.Any<CancellationToken>())
+            .Returns(new ProjectForMail(projectId, Guid.NewGuid(), null, "Crédit tracteur", "Crédit de campagne",
+                1_500_000m, "XOF", "Constitution du dossier", new DateTimeOffset(2026, 12, 15, 0, 0, 0, TimeSpan.Zero), false));
+        leads.ReadProjectFilesForSendingAsync(_tenant, projectId, Arg.Any<IReadOnlyCollection<Guid>>(), _me, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var ids = call.ArgAt<IReadOnlyCollection<Guid>>(2);
+                var found = files.Where(f => ids.Contains(f.Id)).ToList();
+                return found.Count == ids.Distinct().Count()
+                    ? Result.Ok<IReadOnlyList<ProjectFileForSending>>(found)
+                    : Result.Fail<IReadOnlyList<ProjectFileForSending>>("PROJECT_ATTACHMENT_NOT_FOUND");
+            });
+        return leads;
     }
 
     private async Task StatusShouldBe(Guid accountId, ConnectedAccountStatus status)

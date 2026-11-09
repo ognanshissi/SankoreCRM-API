@@ -107,6 +107,26 @@ internal sealed class ConnectedMailLinkConfiguration : IEntityTypeConfiguration<
     }
 }
 
+internal sealed class ConnectedMailPendingLinkConfiguration : IEntityTypeConfiguration<ConnectedMailPendingLink>
+{
+    public void Configure(EntityTypeBuilder<ConnectedMailPendingLink> b)
+    {
+        b.ToTable("cal_mail_pending_link");
+        b.HasKey(l => l.Id);
+        b.Property(l => l.Id).ValueGeneratedNever();
+        b.Property(l => l.ExternalId).HasMaxLength(ConnectedMailPendingLink.IdMaxLength);
+        b.Property(l => l.InternetMessageId).HasMaxLength(ConnectedMailPendingLink.IdMaxLength);
+        b.Property(l => l.EntityType).HasConversion<string>().HasMaxLength(10).IsRequired();
+
+        // La synchro d'une boîte lit ses liens en attente à chaque page.
+        b.HasIndex(l => new { l.TenantId, l.AccountId });
+
+        b.HasOne<ConnectedAccount>().WithMany().HasForeignKey(l => l.AccountId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Ignore(l => l.DomainEvents);
+    }
+}
+
 internal sealed class MailTemplateConfiguration : IEntityTypeConfiguration<MailTemplate>
 {
     public void Configure(EntityTypeBuilder<MailTemplate> b)

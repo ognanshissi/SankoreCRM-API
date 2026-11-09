@@ -116,6 +116,17 @@ internal sealed class StubLeadsModule(IReadOnlyList<LeadHistoryItem>? history = 
     public Task MarkProjectAnswersTransmittedAsync(Guid tenantId, Guid opportunityId, CancellationToken ct)
         => Task.CompletedTask;
 
+    public Task<ProjectForMail?> GetProjectForMailAsync(Guid tenantId, Guid projectId, Guid actorUserId, CancellationToken ct)
+        => Task.FromResult<ProjectForMail?>(null);
+
+    public Task<Result<IReadOnlyList<ProjectFileForSending>>> ReadProjectFilesForSendingAsync(
+        Guid tenantId, Guid projectId, IReadOnlyCollection<Guid> attachmentIds, Guid actorUserId, CancellationToken ct)
+        => Task.FromResult(Result.Fail<IReadOnlyList<ProjectFileForSending>>("OPPORTUNITY_NOT_FOUND"));
+
+    public Task RecordProjectDocumentsEmailedAsync(
+        Guid tenantId, Guid projectId, IReadOnlyCollection<Guid> attachmentIds, Guid? actorUserId, CancellationToken ct)
+        => Task.CompletedTask;
+
     /// <summary>
     /// TEL-B-13's missed-call capture. Refused, like the two below: a stub that created a lead
     /// would make a timeline test quietly write into the lead schema.

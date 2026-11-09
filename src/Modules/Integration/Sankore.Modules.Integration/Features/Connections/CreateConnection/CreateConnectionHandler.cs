@@ -13,7 +13,8 @@ internal sealed class CreateConnectionHandler(
     ICurrentUser currentUser,
     TimeProvider clock,
     ILogger<CreateConnectionHandler> logger,
-    ITenantModules modules)
+    ITenantModules modules,
+    FakeAdapterGate? fakeGate = null)
     : IRequestHandler<CreateConnectionCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateConnectionCommand cmd, CancellationToken ct)
@@ -28,6 +29,10 @@ internal sealed class CreateConnectionHandler(
 
         if (!await ConnectionFamilyModules.IsOpenAsync(modules, cmd.Family, ct))
             return Result.Fail<Guid>(TenantModuleErrors.Disabled);
+
+        // The in-memory adapter: Development, or a test institution only (FakeAdapterGate).
+        if (cmd.Kind == IntegrationKind.Fake && (fakeGate is null || !await fakeGate.AllowsAsync(currentUser.TenantId, ct)))
+            return Result.Fail<Guid>(IntegrationErrors.FakeAdapterNotAllowed);
 
         var connection = IntegrationConnection.Create(
             tenantId: currentUser.TenantId,

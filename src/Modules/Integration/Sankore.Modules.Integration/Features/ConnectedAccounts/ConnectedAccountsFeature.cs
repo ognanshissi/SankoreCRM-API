@@ -739,6 +739,7 @@ internal static class ConnectedAccountEndpoints
         app.MapConnectedMailboxReadEndpoints();
         app.MapConnectedMailboxSendEndpoints();
         app.MapComplaintMailsEndpoints();
+        app.MapProjectMailsEndpoints();
         app.MapConnectedMailboxScheduledEndpoints();
 
         return app;

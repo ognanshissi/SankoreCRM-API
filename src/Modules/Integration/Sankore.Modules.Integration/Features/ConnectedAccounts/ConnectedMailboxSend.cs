@@ -66,6 +66,10 @@ internal static class MailSendErrors
     public const string ScheduleInvalid = "MAIL_SCHEDULE_INVALID";
     /// <summary>The tenant is in test mode and a recipient is not one of its users.</summary>
     public const string TestRecipient = "MAIL_TEST_RECIPIENT";
+    /// <summary>The project written from is unknown or outside the caller's perimeter — or files were named without one.</summary>
+    public const string ProjectNotFound = "MAIL_PROJECT_NOT_FOUND";
+    /// <summary>The project files cannot be read now (no store configured): nothing was sent.</summary>
+    public const string ProjectFilesUnavailable = "MAIL_PROJECT_FILES_UNAVAILABLE";
 }
 
 // ── Send ─────────────────────────────────────────────────────────────────────────────────────
@@ -87,9 +91,18 @@ internal sealed record SendMailCommand(
     [property: SensitiveData] IReadOnlyList<OutgoingAttachment> Attachments,
     Guid? ToClientId = null,
     DateTimeOffset? SendAt = null,
-    Guid? ComplaintId = null)
+    Guid? ComplaintId = null,
+    Guid? ProjectId = null,
+    IReadOnlyList<Guid>? ProjectAttachmentIds = null,
+    bool ProjectChecked = false)
     : IRequest<Result<SendMailOutcome>>, ICommand, IResourceCommand
 {
+    // ProjectId / ProjectAttachmentIds (project documents lot 1, 2026-11-08): the message is written
+    // from a project's page and carries some of its files, read here from the project's encrypted
+    // store with the caller's rights — the browser never uploads them again. ProjectChecked is set
+    // by the scheduled send alone: the project and its files were checked, and the files kept, when
+    // the message was scheduled; the endpoint never sets it.
+
     public string ResourceType => "ConnectedAccount";
     public string? ResourceId => AccountId.ToString();
 }
@@ -122,7 +135,8 @@ internal sealed class SendMailHandler(
     ICustomersModule? customers = null,
     CalendarEventProtector? protector = null,
     TimeProvider? clock = null,
-    IAdministrationModule? administration = null)
+    IAdministrationModule? administration = null,
+    ILeadsModule? leads = null)
     : IRequestHandler<SendMailCommand, Result<SendMailOutcome>>
 {
     public async Task<Result<SendMailOutcome>> Handle(SendMailCommand cmd, CancellationToken ct)
@@ -184,7 +198,11 @@ internal sealed class SendMailHandler(
         if (subject.Length > MailSendLimits.MaxSubject || subject.Contains('\n') || subject.Contains('\r')) return Fail(MailSendErrors.SubjectInvalid);
         if ((cmd.Body?.Length ?? 0) > MailSendLimits.MaxBody) return Fail(MailSendErrors.BodyTooLarge);
 
-        var attachmentCheck = CheckAttachments(cmd.Attachments.Select(a => (a.Name, (long)a.Content.Length)), cmd.ForwardAttachmentIds.Count);
+        var files = cmd.Attachments.ToList();
+        var project = await ProjectFilesAsync(cmd, files, ct);
+        if (project.IsFailure) return Fail(project.Error!);
+
+        var attachmentCheck = CheckAttachments(files.Select(a => (a.Name, (long)a.Content.Length)), cmd.ForwardAttachmentIds.Count);
         if (attachmentCheck.IsFailure) return Fail(attachmentCheck.Error!);
 
         var account = await db.ConnectedAccounts.AsTracking().FirstOrDefaultAsync(a => a.Id == cmd.AccountId && a.UserId == me.Id, ct);
@@ -217,24 +235,25 @@ internal sealed class SendMailHandler(
             }
 
             var all = CheckAttachments(
-                cmd.Attachments.Select(a => (a.Name, (long)a.Content.Length)).Concat(forwardedAttachments.Select(a => (a.Name, a.Size))), 0);
+                files.Select(a => (a.Name, (long)a.Content.Length)).Concat(forwardedAttachments.Select(a => (a.Name, a.Size))), 0);
             if (all.IsFailure) return Fail(all.Error!);
         }
 
         // Programmé : tout ce qui précède a été vérifié comme pour un envoi immédiat — le client a été
         // adressé ICI, avec les droits de l'agent, et c'est son adresse qui est gardée.
-        if (cmd.SendAt is { } sendAt) return await ScheduleAsync(cmd, account, to, cc, bcc, subject, sendAt, ct);
+        if (cmd.SendAt is { } sendAt) return await ScheduleAsync(cmd, account, to, cc, bcc, subject, files, sendAt, ct);
 
         var reader = readers.FirstOrDefault(r => r.CanRead(account));
         if (reader is null) return Fail(ConnectedAccountErrors.ProviderUnavailable);
 
+        SentMailReference? sent;
         try
         {
             var opened = await reader.OpenAsync(account, ct);
             if (opened.IsFailure) return Fail((await RefusedAsync(account, opened.Error!, ct)).Error!);
             await using var session = opened.Value!;
 
-            var attachments = cmd.Attachments.ToList();
+            var attachments = files;
             foreach (var info in forwardedAttachments)
             {
                 var bytes = await reader.ReadAttachmentAsync(session, forwarded!.ExternalId, info.Id, ct);
@@ -245,7 +264,7 @@ internal sealed class SendMailHandler(
             if (attachments.Sum(a => (long)a.Content.Length) > MailSendLimits.MaxAttachmentBytes)
                 return Fail(MailSendErrors.AttachmentsTooLarge);
 
-            await reader.SendAsync(session, account, new OutgoingMail(
+            sent = await reader.SendAsync(session, account, new OutgoingMail(
                 new MailParty(account.Email, account.DisplayName), to, cc, bcc, subject, cmd.Body ?? string.Empty, attachments, replyTo), ct);
         }
         catch (MailSendException ex)
@@ -262,6 +281,14 @@ internal sealed class SendMailHandler(
             return Fail(ConnectedAccountErrors.NeedsReconnect);
         }
 
+        // Written from a project: the link is promised under the provider's id for the message, and
+        // placed by the sync below when it keeps the copy — saved BEFORE that sync is enqueued.
+        if (cmd.ProjectId is { } projectId)
+        {
+            await PromiseProjectLinkAsync(account, projectId, sent, ct);
+            await RecordProjectDocumentsAsync(account, projectId, cmd.ProjectAttachmentIds ?? [], ct);
+        }
+
         // The sent copy is read back like any other message — and kept if it went to a lead or a client.
         var (tenantId, accountId) = (account.TenantId, account.Id);
         jobs?.Enqueue<SyncConnectedMailboxJob>(job => job.ExecuteAsync(tenantId, accountId));
@@ -271,20 +298,100 @@ internal sealed class SendMailHandler(
     private static Result<SendMailOutcome> Fail(string code) => Result.Fail<SendMailOutcome>(code);
 
     /// <summary>
+    /// A project named by the send must be one the caller may open (the project page's perimeter,
+    /// asked of M13), and the files named must be ITS live attachments — read now and added to
+    /// <paramref name="files"/>. Files without a project are refused rather than ignored.
+    /// </summary>
+    private async Task<Result> ProjectFilesAsync(SendMailCommand cmd, List<OutgoingAttachment> files, CancellationToken ct)
+    {
+        var ids = cmd.ProjectAttachmentIds ?? [];
+        if (cmd.ProjectId is not { } projectId) return ids.Count == 0 ? Result.Ok() : Result.Fail(MailSendErrors.ProjectNotFound);
+        if (cmd.ProjectChecked) return Result.Ok();
+
+        if (leads is null || await leads.GetProjectForMailAsync(me.TenantId, projectId, me.Id, ct) is null)
+            return Result.Fail(MailSendErrors.ProjectNotFound);
+        if (ids.Count == 0) return Result.Ok();
+
+        // Counted before the bytes are read: ten ids are refused here, not after opening ten files.
+        if (files.Count + ids.Distinct().Count() + cmd.ForwardAttachmentIds.Count > MailSendLimits.MaxAttachments)
+            return Result.Fail(MailSendErrors.TooManyAttachments);
+
+        var read = await leads.ReadProjectFilesForSendingAsync(me.TenantId, projectId, ids, me.Id, ct);
+        if (read.IsFailure)
+        {
+            return Result.Fail(read.Error switch
+            {
+                "PROJECT_ATTACHMENTS_UNAVAILABLE" => MailSendErrors.ProjectFilesUnavailable,
+                "PROJECT_TOO_MANY_ATTACHMENTS" => MailSendErrors.TooManyAttachments,
+                "OPPORTUNITY_NOT_FOUND" => MailSendErrors.ProjectNotFound,
+                _ => MailSendErrors.AttachmentNotFound,
+            });
+        }
+
+        files.AddRange(read.Value!.Select(f => new OutgoingAttachment(f.FileName, f.ContentType, f.Content)));
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// The project's files that left with the message, in the project's history and its client's
+    /// documents (project documents lot 4). The message has LEFT: a failure here is only logged.
+    /// </summary>
+    private async Task RecordProjectDocumentsAsync(ConnectedAccount account, Guid projectId, IReadOnlyList<Guid> fileIds, CancellationToken ct)
+    {
+        if (fileIds.Count == 0 || leads is null) return;
+
+        try
+        {
+            await leads.RecordProjectDocumentsEmailedAsync(account.TenantId, projectId, fileIds, me.Id, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Mailbox {AccountId}: the project's documents were sent but could not be recorded on it.", account.Id);
+        }
+    }
+
+    /// <summary>
+    /// Keeps the project the message was written from under the provider's id for it. The message
+    /// has LEFT: a failure here costs the link, never the send, and is only logged.
+    /// </summary>
+    private async Task PromiseProjectLinkAsync(ConnectedAccount account, Guid projectId, SentMailReference? sent, CancellationToken ct)
+    {
+        var pending = ConnectedMailPendingLink.Create(account.TenantId, account.Id, sent?.ExternalId, sent?.InternetMessageId,
+            MailLinkEntity.Project, projectId, (clock ?? TimeProvider.System).GetUtcNow());
+
+        if (pending is null)
+        {
+            logger.LogInformation("Mailbox {AccountId}: the provider named no sent message; no project link promised.", account.Id);
+            return;
+        }
+
+        try
+        {
+            db.ConnectedMailPendingLinks.Add(pending);
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Mailbox {AccountId}: the project link of a sent message could not be kept.", account.Id);
+        }
+    }
+
+    /// <summary>
     /// Keeps the message, encrypted, for <see cref="SendScheduledMailJob"/> — the files too, since
     /// the browser that sent them will be long closed. Reply and forward keep their references: the
     /// answered message, and the forwarded files, are read again when it leaves.
     /// </summary>
     private async Task<Result<SendMailOutcome>> ScheduleAsync(
         SendMailCommand cmd, ConnectedAccount account, List<MailParty> to, List<MailParty> cc, List<MailParty> bcc,
-        string subject, DateTimeOffset sendAt, CancellationToken ct)
+        string subject, List<OutgoingAttachment> files, DateTimeOffset sendAt, CancellationToken ct)
     {
         if (protector is null) return Fail(MailSendException.Failed);
         var now = (clock ?? TimeProvider.System).GetUtcNow();
 
         var payload = new ScheduledMailPayload(
             to.Select(p => p.Address).ToList(), cc.Select(p => p.Address).ToList(), bcc.Select(p => p.Address).ToList(),
-            subject, cmd.Body ?? string.Empty, cmd.ReplyToMessageId, cmd.ForwardMessageId, cmd.ForwardAttachmentIds.ToList());
+            subject, cmd.Body ?? string.Empty, cmd.ReplyToMessageId, cmd.ForwardMessageId, cmd.ForwardAttachmentIds.ToList(),
+            cmd.ProjectId, (cmd.ProjectAttachmentIds ?? []).Distinct().ToList());
 
         var created = ScheduledMail.Create(me.TenantId, me.Id, account.Id, sendAt.ToUniversalTime(),
             protector.Protect(System.Text.Json.JsonSerializer.Serialize(payload))!, now);
@@ -292,7 +399,9 @@ internal sealed class SendMailHandler(
 
         var mail = created.Value!;
         db.ScheduledMails.Add(mail);
-        foreach (var file in cmd.Attachments)
+        // The project's files too, read now with the agent's rights: when it leaves, the job sends what
+        // the agent saw, even if the file was removed from the project meanwhile.
+        foreach (var file in files)
         {
             db.ScheduledMailAttachments.Add(ScheduledMailAttachment.Create(
                 me.TenantId, mail.Id, file.Name, file.ContentType, file.Content.Length, protector.Protect(Convert.ToBase64String(file.Content))!));
@@ -495,7 +604,11 @@ public sealed record MailTemplateVariableDto(string Key, string Label);
 /// <param name="LeadId">The lead written to, for <c>destinataire.*</c>.</param>
 /// <param name="ClientId">Or the client written to — <c>client.numero</c> too.</param>
 /// <param name="AccountId">The mailbox sending, for <c>agent.email</c>.</param>
-public sealed record RenderMailTemplateRequest(Guid? LeadId, Guid? ClientId, Guid? AccountId);
+/// <param name="ProjectId">
+/// The project written from, for <c>projet.*</c> — and for <c>destinataire.*</c> when neither a lead
+/// nor a client is named: the project's client, else its lead.
+/// </param>
+public sealed record RenderMailTemplateRequest(Guid? LeadId, Guid? ClientId, Guid? AccountId, Guid? ProjectId = null);
 
 /// <param name="Missing">Variables the template uses that had no value here — left blank, shown to the agent before sending.</param>
 public sealed record RenderedMailTemplateDto(string Subject, string Body, IReadOnlyList<string> Missing);
@@ -596,6 +709,11 @@ internal sealed partial class MailTemplateRenderer(
         new("agent.email", "Adresse de la boîte qui envoie"),
         new("institution", "Nom de l'institution"),
         new("date", "Date du jour (jj/mm/aaaa)"),
+        new("projet.titre", "Titre du projet"),
+        new("projet.produit", "Produit du projet"),
+        new("projet.montant", "Montant du projet, avec sa monnaie"),
+        new("projet.etape", "Étape où en est le projet"),
+        new("projet.date_cloture", "Date de clôture prévue du projet (jj/mm/aaaa)"),
     ];
 
     [GeneratedRegex(@"\{\{\s*([a-z_.]+)\s*\}\}", RegexOptions.IgnoreCase)]
@@ -626,6 +744,27 @@ internal sealed partial class MailTemplateRenderer(
     /// The five characters that make text markup, and only those: <c>WebUtility.HtmlEncode</c> also
     /// turns « é » into <c>&amp;#233;</c>, which the agent then sees and edits in the composer.
     /// </summary>
+    /// <summary>
+    /// « 1 500 000 XOF » — grouped by a no-break space, a decimal comma, decimals only when there
+    /// are some. Spelt out rather than read from the host's « fr-FR »: ICU versions and invariant
+    /// containers disagree on that culture's separators, and a client's devis must read the same
+    /// from every server.
+    /// </summary>
+    private static readonly System.Globalization.NumberFormatInfo AmountFormat = new()
+    {
+        NumberGroupSeparator = "\u00A0",
+        NumberDecimalSeparator = ",",
+        NumberGroupSizes = [3],
+        NegativeSign = "-",
+    };
+
+    internal static string? ProjectAmount(decimal? amount, string? currency)
+    {
+        if (amount is not { } value) return null;
+        var text = value.ToString(decimal.Truncate(value) == value ? "N0" : "N2", AmountFormat);
+        return string.IsNullOrWhiteSpace(currency) ? text : $"{text} {currency}";
+    }
+
     private static string Escape(string value) => value
         .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;").Replace("'", "&#39;");
 
@@ -644,6 +783,19 @@ internal sealed partial class MailTemplateRenderer(
         // The ids come from the browser: a name or a client number is read only for a record the
         // caller may open — the record's own perimeter, asked of its module. Outside it, the
         // variables stay empty and are reported missing, exactly as for a record with no value.
+        var project = request.ProjectId is { } projectId && leads is not null
+            ? await leads.GetProjectForMailAsync(me.TenantId, projectId, me.Id, ct)
+            : null;
+        if (project is not null)
+        {
+            values["projet.titre"] = project.Title;
+            values["projet.produit"] = project.Product;
+            values["projet.montant"] = ProjectAmount(project.Amount, project.Currency);
+            values["projet.etape"] = project.StepLabel;
+            values["projet.date_cloture"] = project.ExpectedCloseDate?.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            if (request.LeadId is null && request.ClientId is null) request = request with { ClientId = project.ClientId, LeadId = project.LeadId };
+        }
+
         if (request.ClientId is { } clientId && customers is not null
             && await customers.CanActorAccessClientAsync(me.TenantId, clientId, me.Id, ct)
             && await customers.GetClientSummaryAsync(me.TenantId, clientId, ct) is { } client)
@@ -682,7 +834,8 @@ internal static class ConnectedMailboxSendEndpoints
                 + "executables refused. Answers 202: the provider accepted it; it appears in the conversation after the sync "
                 + "that follows, when a lead or a client is among its recipients. Limited to 30 sends a minute per user. "
                 + "`sendAt`: « Programmer l'envoi » — everything is checked now and the message is kept, encrypted, to leave "
-                + "at that instant; the answer carries its `scheduledId`.")
+                + "at that instant; the answer carries its `scheduledId`. `projectId` + repeated `projectAttachmentIds`: written from "
+                + "a project's page, with some of its files read on the server; the message and its conversation are filed on the project.")
             .Accepts<SendMailForm>("multipart/form-data")
             .DisableAntiforgery()
             .RequireRateLimiting("mail-send")
@@ -796,7 +949,17 @@ internal static class ConnectedMailboxSendEndpoints
 
         // Refused before reading: the sizes are known from the request, the bytes are not needed.
         var forwardIds = All(form["forwardAttachmentIds"]);
-        var check = SendMailHandler.CheckAttachments(form.Files.Select(f => (f.FileName, f.Length)), forwardIds.Length);
+        var projectFileIds = new List<Guid>();
+        foreach (var raw in All(form["projectAttachmentIds"]))
+        {
+            foreach (var value in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!Guid.TryParse(value, out var fileId)) return Problem(MailSendErrors.AttachmentNotFound);
+                projectFileIds.Add(fileId);
+            }
+        }
+
+        var check = SendMailHandler.CheckAttachments(form.Files.Select(f => (f.FileName, f.Length)), forwardIds.Length + projectFileIds.Distinct().Count());
         if (check.IsFailure) return Problem(check.Error!);
 
         var attachments = new List<OutgoingAttachment>(form.Files.Count);
@@ -815,7 +978,8 @@ internal static class ConnectedMailboxSendEndpoints
         var result = await sender.Send(new SendMailCommand(
             accountId, All(form["to"]), All(form["cc"]), All(form["bcc"]), form["subject"].ToString(), form["body"].ToString(),
             OptionalGuid(form["replyToMessageId"]), OptionalGuid(form["forwardMessageId"]), forwardIds, attachments,
-            OptionalGuid(form["toClientId"]), sendAt, OptionalGuid(form["complaintId"])), ct);
+            OptionalGuid(form["toClientId"]), sendAt, OptionalGuid(form["complaintId"]),
+            OptionalGuid(form["projectId"]), projectFileIds), ct);
 
         return result.IsSuccess ? Results.Accepted(value: result.Value) : Problem(result.Error!);
     }
@@ -827,7 +991,10 @@ internal static class ConnectedMailboxSendEndpoints
     private static IResult Problem(string code) => code switch
     {
         ConnectedAccountErrors.NotFound or MailSendErrors.MessageNotFound or MailSendErrors.AttachmentNotFound or MailTemplateRenderer.NotFound
+            or MailSendErrors.ProjectNotFound
             => Results.Problem(title: "Messagerie", detail: code, statusCode: StatusCodes.Status404NotFound),
+        MailSendErrors.ProjectFilesUnavailable
+            => Results.Problem(title: "Messagerie", detail: code, statusCode: StatusCodes.Status503ServiceUnavailable),
         ConnectedAccountErrors.NeedsReconnect or MailSendErrors.MailboxDisabled
             => Results.Problem(title: "Messagerie", detail: code, statusCode: StatusCodes.Status409Conflict),
         MailSendException.Failed or ConnectedAccountErrors.ProviderError
@@ -872,4 +1039,16 @@ public sealed class SendMailForm
     /// and the message (and the client's reply) are filed on it by the sync.
     /// </summary>
     public Guid? ComplaintId { get; set; }
+
+    /// <summary>
+    /// Written from a project's page: the message — and the replies in its conversation — are filed
+    /// on the project by the sync. A project the caller cannot open answers 404 MAIL_PROJECT_NOT_FOUND.
+    /// </summary>
+    public Guid? ProjectId { get; set; }
+
+    /// <summary>
+    /// Files of <see cref="ProjectId"/> to attach, by id — read on the server from the project's
+    /// encrypted store, never uploaded again. Count with <c>files</c> towards the 10 / 20 MB.
+    /// </summary>
+    public List<Guid>? ProjectAttachmentIds { get; set; }
 }

@@ -909,6 +909,56 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                     b.ToTable("cal_mail_message", "integration");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConnectedMailPendingLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("external_id");
+
+                    b.Property<string>("InternetMessageId")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("internet_message_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cal_mail_pending_link");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_cal_mail_pending_link_account_id");
+
+                    b.HasIndex("TenantId", "AccountId")
+                        .HasDatabaseName("ix_cal_mail_pending_link_tenant_id_account_id");
+
+                    b.ToTable("cal_mail_pending_link", "integration");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConsentProof", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4784,6 +4834,16 @@ namespace Sankore.Modules.Integration.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_cal_mail_message_cal_connected_account_account_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConnectedMailPendingLink", b =>
+                {
+                    b.HasOne("Sankore.Modules.Integration.Domain.ConnectedAccount", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cal_mail_pending_link_cal_connected_account_account_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Integration.Domain.ConsentProof", b =>

@@ -531,6 +531,7 @@ public sealed class HoldingSubscriptionConsumerTests : IDisposable
         services.AddSingleton<IIntegrationInboxGuard>(_inbox);
         services.AddTransient(_ => _modules);
         services.AddScoped<IntegrationAdapterResolver>();
+        services.AddScoped(_ => TestSupport.TestFakeAdapterGate.Development);
         services.AddScoped<Sankore.Modules.Integration.Features.References.GetReference.ReferenceLookup>();
         services.AddScoped<CommandPayloadProtector>();
         services.AddScoped<CbsCustomerPayloadSource>();

@@ -352,6 +352,7 @@ internal sealed class OnboardingTestContext : IDisposable
         // make every replay look like a first delivery.
         services.AddSingleton<IIntegrationInboxGuard>(Inbox);
         services.AddScoped<IntegrationAdapterResolver>();
+        services.AddScoped(_ => TestSupport.TestFakeAdapterGate.Development);
         services.AddScoped<ReferenceLookup>();
         services.AddScoped<CommandPayloadProtector>();
         services.AddScoped<CbsCustomerPayloadSource>();

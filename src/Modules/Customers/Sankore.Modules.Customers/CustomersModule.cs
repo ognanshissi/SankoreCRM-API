@@ -77,6 +77,8 @@ public static class CustomersModule
         services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITechnicalPurge, Infrastructure.Retention.ClientImportFilesPurge>();
         // Emptying a TEST institution (data-purge lot 4).
         services.AddScoped<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe, Infrastructure.Retention.CustomersTenantDataWipe>();
+        // Starting data of a demo (docs/donnees-demarrage-demo.md, lot 4): clients and complaints.
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.CustomersDemoData>();
         services.AddLocalization(o => o.ResourcesPath = "Resources");
 
         // Field-level AES-256-GCM encryption + HMAC blind indexes for this module's

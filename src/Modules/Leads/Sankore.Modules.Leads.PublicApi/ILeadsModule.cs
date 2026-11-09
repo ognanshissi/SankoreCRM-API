@@ -306,6 +306,64 @@ public interface ILeadsModule
     /// retention period starts (BNF-B-09). Idempotent.
     /// </summary>
     Task MarkProjectAnswersTransmittedAsync(Guid tenantId, Guid opportunityId, CancellationToken ct);
+
+    /// <summary>
+    /// A project as an e-mail written from its page sees it (project documents lot 1, 2026-11-08):
+    /// who it is about, and what a template may quote — title, product, amount, step, close date.
+    /// Null when the project does not exist OR is outside <paramref name="actorUserId"/>'s
+    /// perimeter (the project page's own: <c>LeadVisibility</c>), which a caller holding an
+    /// arbitrary id cannot tell apart. <paramref name="actorUserId"/> must be the authenticated
+    /// caller of the request this runs in, as for <see cref="CanActorWorkLeadAsync"/>.
+    /// </summary>
+    Task<ProjectForMail?> GetProjectForMailAsync(
+        Guid tenantId, Guid projectId, Guid actorUserId, CancellationToken ct);
+
+    /// <summary>
+    /// The bytes of some of a project's attachments, to send them (project documents lot 1). Same
+    /// perimeter as <see cref="GetProjectForMailAsync"/>; every id must be a live attachment of THAT
+    /// project. Fails with <c>OPPORTUNITY_NOT_FOUND</c>, <c>PROJECT_ATTACHMENT_NOT_FOUND</c> or
+    /// <c>PROJECT_ATTACHMENTS_UNAVAILABLE</c> (no store configured). The bytes reach the caller
+    /// only: they must not be logged, audited or put on a bus.
+    /// </summary>
+    Task<Result<IReadOnlyList<ProjectFileForSending>>> ReadProjectFilesForSendingAsync(
+        Guid tenantId, Guid projectId, IReadOnlyCollection<Guid> attachmentIds, Guid actorUserId, CancellationToken ct);
+
+    /// <summary>
+    /// Some of a project's files LEFT by e-mail (project documents lot 4): a « Document envoyé » line
+    /// in the project's history and the files marked handed over. Called by the mailbox once the
+    /// provider accepted the message — from a request or from the scheduled send's job, so it
+    /// checks no perimeter (the send did, when it read the files). Ids of another project are ignored.
+    /// </summary>
+    Task RecordProjectDocumentsEmailedAsync(
+        Guid tenantId, Guid projectId, IReadOnlyCollection<Guid> attachmentIds, Guid? actorUserId, CancellationToken ct);
+}
+
+/// <param name="LeadId">The lead the project was opened for, if any.</param>
+/// <param name="ClientId">The client it is about (opened on a client, or its lead converted), if any.</param>
+/// <param name="Product">The product's label as the project carries it.</param>
+/// <param name="StepLabel">The step it stands on; null once closed.</param>
+public sealed record ProjectForMail(
+    Guid Id,
+    Guid? LeadId,
+    Guid? ClientId,
+    string Title,
+    string Product,
+    decimal? Amount,
+    string? Currency,
+    string? StepLabel,
+    DateTimeOffset? ExpectedCloseDate,
+    bool IsClosed);
+
+/// <param name="FieldKey">The template field the file was put in — « devis », « proposition »…</param>
+public sealed record ProjectFileForSending(
+    Guid Id,
+    string FieldKey,
+    string FileName,
+    string ContentType,
+    byte[] Content)
+{
+    /// <summary>The bytes are never printed.</summary>
+    public override string ToString() => $"ProjectFileForSending {{ {Id}, {ContentType}, {Content.Length} bytes }}";
 }
 
 /// <param name="IsComplete">Every expected questionnaire is answered.</param>
