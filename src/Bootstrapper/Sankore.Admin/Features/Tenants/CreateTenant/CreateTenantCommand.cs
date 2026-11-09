@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Admin.Domain;
+using Sankore.Admin.Features.TenantDomains;
 using Sankore.Admin.Infrastructure;
+using Sankore.Shared.Infrastructure.Tenants;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Admin.Features.Tenants.CreateTenant;
@@ -31,19 +33,24 @@ internal sealed class CreateTenantHandler(AdminDbContext db) : IRequestHandler<C
 {
     public async Task<CreateTenantResponse> Handle(CreateTenantCommand request, CancellationToken ct)
     {
-        var existing = await db.Tenants
-            .AnyAsync(t => t.Fqdn == request.Fqdn, ct);
+        var fqdn = TenantFqdn.Normalize(request.Fqdn);
+
+        // A secondary domain of another tenant counts too: the main origin is looked up first and
+        // would take that tenant's address.
+        var existing = await db.Tenants.AnyAsync(t => t.Fqdn == fqdn, ct)
+                       || await TenantPrimaryDomain.TakenByAnotherTenantAsync(db, null, fqdn, ct);
 
         if (existing)
-            throw new InvalidOperationException($"A tenant with FQDN '{request.Fqdn}' already exists.");
+            throw new InvalidOperationException($"A tenant with FQDN '{fqdn}' already exists.");
 
         var modules = (request.ActiveModules ?? []).Distinct(StringComparer.Ordinal).ToList();
         var unknown = modules.Where(m => !TenantModules.IsKnown(m)).ToList();
         if (unknown.Count > 0)
             throw new ArgumentException($"Unknown module(s): {string.Join(", ", unknown)}.");
 
-        var tenant = Tenant.Create(request.Name, request.RootUserEmail, request.Fqdn, request.TrialExpiresAt);
+        var tenant = Tenant.Create(request.Name, request.RootUserEmail, fqdn, request.TrialExpiresAt);
         db.Tenants.Add(tenant);
+        await TenantPrimaryDomain.SyncAsync(db, tenant.Id, fqdn, ct);
 
         var now = DateTimeOffset.UtcNow;
         if (request.StartingData is { } kind)
