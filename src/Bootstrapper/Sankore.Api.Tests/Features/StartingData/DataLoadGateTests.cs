@@ -38,6 +38,21 @@ public sealed class DataLoadGateTests
     }
 
     [Fact]
+    public void A_reload_is_the_demo_after_the_wipe_and_so_only_for_a_test_institution()
+    {
+        DataLoadGate.Parse("DemoReload").Should().Be(((StartingDataKind?)StartingDataKind.Demo, true));
+        DataLoadGate.Parse("demo").Should().Be(((StartingDataKind?)StartingDataKind.Demo, false));
+        DataLoadGate.Parse("Starter").Should().Be(((StartingDataKind?)StartingDataKind.Starter, false));
+        DataLoadGate.Parse("Everything").Kind.Should().BeNull();
+        DataLoadGate.Parse("7").Kind.Should().BeNull();
+
+        // The wipe runs only once the gate has let the demo through: never on a real institution.
+        var (kind, _) = DataLoadGate.Parse("DemoReload");
+        DataLoadGate.Refusal(Tenant(), kind).Should().StartWith("DEMO_REQUIRES_TEST_TENANT");
+        DataLoadGate.Refusal(Tenant(isTest: true, parent: Guid.NewGuid()), kind).Should().StartWith("DATA_LOAD_ON_TEST_TWIN");
+    }
+
+    [Fact]
     public void The_system_account_password_is_strong_and_never_the_same()
     {
         var first = TenantDataLoadJob.RandomPassword();

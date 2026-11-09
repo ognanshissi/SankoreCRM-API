@@ -31,6 +31,7 @@ public static class DataWipeEndpoints
     public const string NotTest = "TENANT_NOT_TEST";
     public const string ConfirmationMismatch = "CONFIRMATION_MISMATCH";
     public const string InFlight = "DATA_WIPE_IN_FLIGHT";
+    public const string LoadInFlight = "DATA_LOAD_IN_FLIGHT";
     public const string NotPending = "DATA_WIPE_NOT_PENDING";
     public const string NotRunning = "DATA_WIPE_FINISHED";
 
@@ -167,6 +168,10 @@ public static class DataWipeEndpoints
 /// <summary>The three refusals of a wipe request, in one testable place.</summary>
 internal static class DataWipeRules
 {
+    public static Task<bool> InFlightAsync(AdminDbContext db, Guid tenantId, CancellationToken ct)
+        => db.TenantDataWipes.AnyAsync(w => w.TenantId == tenantId
+            && (w.Status == TenantDataWipeStatus.Pending || w.Status == TenantDataWipeStatus.Running), ct);
+
     public static async Task<(string? Error, TenantDataWipe? Wipe)> RequestAsync(
         AdminDbContext db, Guid tenantId, string? confirmationName, Guid requestedBy, DateTimeOffset now, CancellationToken ct)
     {
@@ -178,9 +183,12 @@ internal static class DataWipeRules
         if (!string.Equals(confirmationName?.Trim(), found.Name.Trim(), StringComparison.Ordinal))
             return (DataWipeEndpoints.ConfirmationMismatch, null);
 
-        var inFlight = await db.TenantDataWipes.AnyAsync(w => w.TenantId == tenantId
-            && (w.Status == TenantDataWipeStatus.Pending || w.Status == TenantDataWipeStatus.Running), ct);
-        if (inFlight) return (DataWipeEndpoints.InFlight, null);
+        if (await InFlightAsync(db, tenantId, ct)) return (DataWipeEndpoints.InFlight, null);
+
+        // A demo being loaded (or reloaded) writes the rows a wipe deletes: one after the other.
+        var loading = await db.TenantDataLoads.AnyAsync(l => l.TenantId == tenantId
+            && (l.Status == TenantDataLoadStatus.Pending || l.Status == TenantDataLoadStatus.Running), ct);
+        if (loading) return (DataWipeEndpoints.LoadInFlight, null);
 
         var wipe = TenantDataWipe.Request(tenantId, requestedBy, now);
         db.TenantDataWipes.Add(wipe);

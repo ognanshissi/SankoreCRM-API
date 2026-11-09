@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Admin.Domain;
 using Sankore.Admin.Features.Tenants.CreateTenant;
 using Sankore.Admin.Features.Tenants.DataLoads;
+using Sankore.Admin.Features.Tenants.DataWipes;
 using Sankore.Admin.Tests.Modules;
 using Xunit;
 
@@ -18,10 +19,56 @@ public sealed class DataLoadRulesTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private async Task<(string? Error, TenantDataLoad? Load)> RequestAsync(string kind, Guid? tenantId = null)
+    private async Task<(string? Error, TenantDataLoad? Load)> RequestAsync(string kind, Guid? tenantId = null, string? confirmation = null)
     {
         await using var db = _db.Create();
-        return await DataLoadRules.RequestAsync(db, tenantId ?? _db.TenantId, kind, Guid.NewGuid(), DateTimeOffset.UtcNow, default);
+        return await DataLoadRules.RequestAsync(db, tenantId ?? _db.TenantId, kind, confirmation, Guid.NewGuid(), DateTimeOffset.UtcNow, default);
+    }
+
+    private async Task<string> MarkTestAsync()
+    {
+        await using var db = _db.Create();
+        var tenant = await db.Tenants.SingleAsync(t => t.Id == _db.TenantId);
+        tenant.MarkAsTest(true);
+        await db.SaveChangesAsync();
+        return tenant.Name;
+    }
+
+    [Fact]
+    public async Task A_reload_erases_so_it_needs_a_test_institution_and_its_name_retyped()
+    {
+        (await RequestAsync("DemoReload")).Error.Should().Be(DataLoadEndpoints.DemoNeedsTest);
+
+        var name = await MarkTestAsync();
+        (await RequestAsync("DemoReload")).Error.Should().Be(DataLoadEndpoints.ConfirmationMismatch);
+        (await RequestAsync("DemoReload", confirmation: name.ToUpperInvariant())).Error.Should().Be(DataLoadEndpoints.ConfirmationMismatch);
+
+        var (error, load) = await RequestAsync("demoreload", confirmation: $"  {name} ");
+        error.Should().BeNull();
+        load!.Kind.Should().Be(TenantDataLoadKind.DemoReload);
+    }
+
+    [Fact]
+    public async Task A_reload_and_a_wipe_never_run_over_each_other()
+    {
+        var name = await MarkTestAsync();
+        await using (var db = _db.Create())
+        {
+            (await DataWipeRules.RequestAsync(db, _db.TenantId, name, Guid.NewGuid(), DateTimeOffset.UtcNow, default)).Error.Should().BeNull();
+        }
+        (await RequestAsync("DemoReload", confirmation: name)).Error.Should().Be(DataLoadEndpoints.WipeInFlight);
+
+        await using (var db = _db.Create())
+        {
+            db.TenantDataWipes.RemoveRange(db.TenantDataWipes); // InMemory runs no ExecuteDelete
+            await db.SaveChangesAsync();
+        }
+        (await RequestAsync("Demo")).Error.Should().BeNull();
+        await using (var db = _db.Create())
+        {
+            (await DataWipeRules.RequestAsync(db, _db.TenantId, name, Guid.NewGuid(), DateTimeOffset.UtcNow, default))
+                .Error.Should().Be(DataWipeEndpoints.LoadInFlight);
+        }
     }
 
     [Fact]

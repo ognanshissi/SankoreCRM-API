@@ -26,7 +26,8 @@ public static class DemoKeys
 {
     public static string Agency(string name) => "agency:" + name;
     public static string Account(string profile) => "account:" + profile;
-    public static string Client(string key) => "client:" + key;
+    public const string ClientPrefix = "client:";
+    public static string Client(string key) => ClientPrefix + key;
 }
 
 /// <summary>

@@ -43,6 +43,9 @@ public static class CreateTenantEndpoint
                 {
                     if (!DataLoads.DataLoadRules.TryParseKind(req.StartingData, out var kind))
                         return Results.BadRequest(new { error = DataLoads.DataLoadEndpoints.KindUnknown, startingData = req.StartingData });
+                    // A new institution has nothing to erase: it takes the demo.
+                    if (kind == TenantDataLoadKind.DemoReload)
+                        return Results.BadRequest(new { error = DataLoads.DataLoadEndpoints.ReloadAtCreation, startingData = req.StartingData });
                     startingData = kind;
                 }
 

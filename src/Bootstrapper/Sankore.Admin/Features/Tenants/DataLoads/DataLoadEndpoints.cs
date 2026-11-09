@@ -2,11 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Sankore.Admin.Domain;
 using Sankore.Admin.Infrastructure;
 using Sankore.Admin.Infrastructure.Auth;
+using Sankore.Admin.Features.Tenants.DataWipes;
 
 namespace Sankore.Admin.Features.Tenants.DataLoads;
 
-/// <param name="Kind"><c>Starter</c> or <c>Demo</c>.</param>
-public sealed record RequestDataLoadRequest(string Kind);
+/// <param name="Kind"><c>Starter</c>, <c>Demo</c> or <c>DemoReload</c>.</param>
+/// <param name="ConfirmationName">For <c>DemoReload</c> only: the institution's name, retyped — its records are erased.</param>
+public sealed record RequestDataLoadRequest(string Kind, string? ConfirmationName = null);
 
 public sealed record TenantDataLoadResponse(
     Guid Id, Guid TenantId, string Kind, Guid RequestedBy, DateTimeOffset RequestedAt, string Status,
@@ -32,6 +34,9 @@ public static class DataLoadEndpoints
     public const string InFlight = "DATA_LOAD_IN_FLIGHT";
     public const string NotPending = "DATA_LOAD_NOT_PENDING";
     public const string NotRunning = "DATA_LOAD_FINISHED";
+    public const string ConfirmationMismatch = "CONFIRMATION_MISMATCH";
+    public const string WipeInFlight = "DATA_WIPE_IN_FLIGHT";
+    public const string ReloadAtCreation = "DEMO_RELOAD_AT_CREATION";
 
     public static void MapDataLoadEndpoints(this WebApplication app)
     {
@@ -41,7 +46,7 @@ public static class DataLoadEndpoints
         tenant.MapPost("data-loads", async (Guid tenantId, RequestDataLoadRequest body, HttpContext http, AdminDbContext db, ILoggerFactory logs, CancellationToken ct) =>
             {
                 var (error, load) = await DataLoadRules.RequestAsync(
-                    db, tenantId, body.Kind, AdminClaims.AdminId(http.User) ?? Guid.Empty, DateTimeOffset.UtcNow, ct);
+                    db, tenantId, body.Kind, body.ConfirmationName, AdminClaims.AdminId(http.User) ?? Guid.Empty, DateTimeOffset.UtcNow, ct);
                 if (error is null)
                 {
                     logs.CreateLogger("DataLoads").LogInformation(
@@ -52,13 +57,13 @@ public static class DataLoadEndpoints
                 return error switch
                 {
                     NotFound => Results.NotFound(),
-                    KindUnknown => Results.BadRequest(new { error }),
+                    KindUnknown or ConfirmationMismatch => Results.BadRequest(new { error }),
                     _ => Results.Conflict(new { error }),
                 };
             })
             .RequirePlatformAdmin()
             .WithName("RequestTenantDataLoad")
-            .WithSummary("Load an institution's starting data: Starter (configuration) or Demo (test institutions only)")
+            .WithSummary("Load an institution's starting data: Starter (configuration), Demo or DemoReload (erase the records, then the demo) — test institutions only for the last two")
             .Produces<TenantDataLoadResponse>()
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound)
@@ -155,21 +160,29 @@ internal static class DataLoadRules
     /// </summary>
     public static string? Refusal(Tenant tenant, TenantDataLoadKind kind)
         => tenant.ParentTenantId is not null ? DataLoadEndpoints.Twin
-         : kind == TenantDataLoadKind.Demo && !tenant.IsTest ? DataLoadEndpoints.DemoNeedsTest
+         : kind is (TenantDataLoadKind.Demo or TenantDataLoadKind.DemoReload) && !tenant.IsTest ? DataLoadEndpoints.DemoNeedsTest
          : null;
 
+    /// <param name="confirmationName">Read for a reload only, which erases: the operator must have READ which institution it is.</param>
     public static async Task<(string? Error, TenantDataLoad? Load)> RequestAsync(
-        AdminDbContext db, Guid tenantId, string? kind, Guid requestedBy, DateTimeOffset now, CancellationToken ct)
+        AdminDbContext db, Guid tenantId, string? kind, string? confirmationName, Guid requestedBy, DateTimeOffset now, CancellationToken ct)
     {
         if (!TryParseKind(kind, out var parsed)) return (DataLoadEndpoints.KindUnknown, null);
 
         var found = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, ct);
         if (found is null) return (DataLoadEndpoints.NotFound, null);
         if (Refusal(found, parsed) is { } refusal) return (refusal, null);
+        if (parsed == TenantDataLoadKind.DemoReload
+            && !string.Equals(confirmationName?.Trim(), found.Name.Trim(), StringComparison.Ordinal))
+            return (DataLoadEndpoints.ConfirmationMismatch, null);
 
         var inFlight = await db.TenantDataLoads.AnyAsync(l => l.TenantId == tenantId
             && (l.Status == TenantDataLoadStatus.Pending || l.Status == TenantDataLoadStatus.Running), ct);
         if (inFlight) return (DataLoadEndpoints.InFlight, null);
+
+        // A reload empties what a wipe empties: the two must not run over each other.
+        if (parsed == TenantDataLoadKind.DemoReload && await DataWipeRules.InFlightAsync(db, tenantId, ct))
+            return (DataLoadEndpoints.WipeInFlight, null);
 
         var load = TenantDataLoad.Request(tenantId, parsed, requestedBy, now);
         db.TenantDataLoads.Add(load);

@@ -50,7 +50,7 @@ public sealed class TenantDataLoadJob(
         foreach (var load in pending)
         {
             var (tenant, rootEmail) = await FreshTenantAsync(registry, load.TenantId, ct);
-            var kind = Enum.TryParse<StartingDataKind>(load.Kind, ignoreCase: true, out var parsed) ? parsed : (StartingDataKind?)null;
+            var (kind, wipeFirst) = DataLoadGate.Parse(load.Kind);
             if (DataLoadGate.Refusal(tenant, kind) is { } refusal)
             {
                 await registry.PostAsJsonAsync($"api/v1/data-loads/{load.Id}/fail", new { Error = refusal }, Json, ct);
@@ -68,6 +68,13 @@ public sealed class TenantDataLoadJob(
             {
                 var (systemUserId, created) = await EnsureSystemUserAsync(tenant, rootEmail, ct);
                 if (created) summary["Compte système"] = 1;
+
+                if (wipeFirst)
+                {
+                    current = "Effacement des dossiers";
+                    var erased = await WipeRecordsAsync(tenant.Id, ct);
+                    if (erased > 0) summary["Lignes effacées"] = erased;
+                }
 
                 current = "Paramétrage par défaut";
                 await using (var scope = scopeFactory.CreateAsyncScope())
@@ -104,6 +111,25 @@ public sealed class TenantDataLoadJob(
                     new { Error = $"{current} : {ex.GetType().Name} — {ex.Message}" }, Json, ct);
             }
         }
+    }
+
+    /// <summary>
+    /// « Recharger la démo »: exactly what « Effacer les données de test » empties — every module's
+    /// <see cref="Sankore.Shared.Infrastructure.Retention.ITenantDataWipe"/>, configuration and accounts
+    /// kept — so the demo steps then find no record and create them afresh. The gate above has checked,
+    /// on the registry read fresh, that the institution is a test one.
+    /// </summary>
+    private async Task<int> WipeRecordsAsync(Guid tenantId, CancellationToken ct)
+    {
+        using var suppressed = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
+        using var bg = BackgroundJobContext.SetScope(tenantId, Guid.Empty, "SYSTEM");
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var total = 0;
+        foreach (var module in scope.ServiceProvider.GetServices<Sankore.Shared.Infrastructure.Retention.ITenantDataWipe>())
+            total += await module.WipeAsync(tenantId, ct);
+        logger.LogWarning("Demo reload: {Rows} rows erased in TEST tenant {TenantId}.", total, tenantId);
+        suppressed.Complete();
+        return total;
     }
 
     /// <summary>The steps by order, resolved once to know them; each runs in its own scope.</summary>
@@ -172,6 +198,15 @@ public sealed class TenantDataLoadJob(
 /// <summary>The API's own check of a load, against the registry read fresh — the registry's is not trusted alone.</summary>
 internal static class DataLoadGate
 {
+    /// <summary>
+    /// The registry's kind: « DemoReload » is the demo, after the records are erased — the steps only
+    /// ever see Starter or Demo.
+    /// </summary>
+    public static (StartingDataKind? Kind, bool WipeFirst) Parse(string? kind)
+        => string.Equals(kind?.Trim(), "DemoReload", StringComparison.OrdinalIgnoreCase) ? (StartingDataKind.Demo, true)
+         : Enum.TryParse<StartingDataKind>(kind?.Trim(), ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) ? (parsed, false)
+         : (null, false);
+
     public static string? Refusal(TenantInfo? tenant, StartingDataKind? kind)
         => tenant is null ? "TENANT_NOT_FOUND : l'institution est introuvable dans le registre."
          : kind is null ? "DATA_LOAD_KIND_UNKNOWN : type de chargement inconnu."

@@ -8,6 +8,12 @@ public enum TenantDataLoadKind
 
     /// <summary>The starter, plus fictitious accounts of every profile and fictitious records. Test institutions only.</summary>
     Demo,
+
+    /// <summary>
+    /// « Recharger la démo » (lot 5): the test wipe's emptying — records go, accounts and configuration
+    /// stay — then the demo, in the same run. Test institutions only, the name retyped, never at creation.
+    /// </summary>
+    DemoReload,
 }
 
 public enum TenantDataLoadStatus { Pending, Running, Completed, Failed }

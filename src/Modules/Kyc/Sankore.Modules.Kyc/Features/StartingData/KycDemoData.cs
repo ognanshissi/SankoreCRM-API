@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Sankore.Modules.Customers.PublicApi;
 using Sankore.Modules.Kyc.Domain;
 using Sankore.Modules.Kyc.Features.Approval.Decide;
 using Sankore.Modules.Kyc.Features.Verification.ManualValidation;
@@ -123,10 +124,35 @@ internal sealed class KycDemoData : ITenantStartingData
                 case Target.Refused: refused++; break;
             }
         }
+        await HandToAdvisorsAsync(request, services, db, ct);
+
         if (validated > 0) created["KYC validés"] = validated;
         if (waiting > 0) created["KYC en validation"] = waiting;
         if (refused > 0) created["KYC refusés"] = refused;
         return created;
+    }
+
+    /// <summary>
+    /// Every demo file to its client's advisor. A file is its opener's (the client's creator, here the
+    /// system account), and an agent sees only the files they are responsible for: without this no
+    /// agent of the demo saw a single file of their clients (recette of lot 5). At the counter the
+    /// agent who creates the client opens the file and is its responsible — this gives the demo that
+    /// state. A direct write, demo rows only, and only where the system account still holds the file.
+    /// </summary>
+    private static async Task HandToAdvisorsAsync(StartingDataRequest request, IServiceProvider services, KycDbContext db, CancellationToken ct)
+    {
+        var clientIds = request.Shared.Where(kv => kv.Key.StartsWith(DemoKeys.ClientPrefix, StringComparison.Ordinal))
+            .Select(kv => kv.Value).Distinct().ToList();
+        if (clientIds.Count == 0) return;
+
+        var summaries = await services.GetRequiredService<ICustomersModule>().GetClientSummariesAsync(request.TenantId, clientIds, ct);
+        foreach (var (clientId, summary) in summaries)
+        {
+            if (summary.AdvisorUserId is not { } advisor) continue;
+            await db.KycFiles
+                .Where(f => f.CustomerId == clientId && f.ResponsibleAgentId == request.SystemUserId)
+                .ExecuteUpdateAsync(s => s.SetProperty(f => f.ResponsibleAgentId, (Guid?)advisor), ct);
+        }
     }
 
     /// <summary>What the upload endpoint does for one image: the encrypted store, then the row.</summary>

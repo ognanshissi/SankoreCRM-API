@@ -1,6 +1,6 @@
 # Données de démarrage et de démo d'un tenant
 
-**Statut : plan validé le 2026-11-08. Lots 0 à 4 livrés et vérifiés avec l'API lancée (dernier tenant complet : « Démo Complète ») ; lot 5 à faire.**
+**Statut : plan validé le 2026-11-08. Lots 0 à 5 livrés et vérifiés avec l'API lancée (tenant de référence : « Démo Complète »), non commités.**
 
 ## 1. Ce qui est décidé
 
@@ -13,7 +13,7 @@ Choix du propriétaire du 2026-11-08 :
 | Connexion des comptes de démo | Un mot de passe commun lu dans la configuration du serveur, jamais écrit dans le code. Les comptes sont actifs d'emblée, sans e-mail d'activation. |
 | Adresses des comptes de démo | `contact+<profil>.<institution>@talisoft.net` (2026-11-08) : les e-mails de la démo partent vers une vraie boîte, et plusieurs démos coexistent. |
 | Assureur en démo | Le simulateur, disponible sur toutes les plateformes mais seulement pour une institution de test (2026-11-08). |
-| Lancement | Depuis l'app plateforme : une option à la création du tenant, et un bouton « Charger les données » sur un tenant existant. |
+| Lancement | Depuis l'app plateforme : une option à la création du tenant, et les boutons « Charger le démarrage », « Charger la démo » et « Recharger la démo » sur un tenant existant. |
 | Produits du démarrage | Créés **actifs** ; l'institution désactive ce qui ne la concerne pas. |
 | Agences du démarrage | « Siège » et « Agence principale », à renommer. |
 | Core banking en démo | Aucune connexion, pas même le simulateur. |
@@ -32,11 +32,11 @@ Chaque objet est créé par la commande ordinaire de son module, sous le compte 
 
 **Garde-fous :**
 - **Démo réservée aux tenants de test :** la démo n'est acceptée que sur un tenant marqué test, et jamais sur le jumeau « Mode test » d'une vraie institution. Dans un jumeau, l'équipe est celle de la production : 50 leads distribués préviendraient de vrais agents.
-- **Adresses de démo maîtrisées :** les comptes de démo ont des adresses `contact+<profil>@talisoft.net`, une boîte de l'éditeur. Comme ce sont des comptes de l'équipe, le mode test les laisse recevoir les e-mails de la démo ; les clients et leads fictifs, eux, ne reçoivent rien.
+- **Adresses de démo maîtrisées :** les comptes de démo ont des adresses `contact+<profil>.<institution>@talisoft.net`, une boîte de l'éditeur. Comme ce sont des comptes de l'équipe, le mode test les laisse recevoir les e-mails de la démo ; les clients et leads fictifs, eux, ne reçoivent rien.
 - **Mot de passe obligatoire :** sans mot de passe de démo configuré (`DemoData:Password`), la démo est refusée avec un message clair.
 - **Simulateur d'assureur réservé aux tests :** il est disponible partout, mais une connexion « Fake » ne peut être créée, activée ni utilisée que par une institution de test (ou en développement). Une institution qui cesse d'être de test perd l'accès à sa prochaine opération.
 - **Pas de core banking :** aucune connexion core banking n'est créée en démo. Un KYC validé ne déclenche donc aucun envoi vers un core banking.
-- **Réinitialisation :** le bouton existant « Effacer les données de test » efface les dossiers et garde les comptes et le paramétrage. « Recharger la démo » efface puis recharge.
+- **Réinitialisation :** « Vider les données » (section « Données de test ») efface les dossiers et garde les comptes et le paramétrage. « Recharger la démo » efface de la même façon puis recharge la démo, dans la même tâche (voir § 6).
 
 ## 3. Contenu
 
@@ -149,4 +149,34 @@ Limites connues :
 | **3** | Assurance de démo : assureur simulé, produits assureur, fiche d'information | Le parcours assurance se montre | S |
 | **4** | Dossiers de démo et vieillissement | Chaque écran a quelque chose à montrer, rapports compris | L |
 | **5** | « Recharger la démo », documentation, recette complète | Une démo se remet à neuf en un clic | S |
+
+## 6. Recharger la démo (lot 5)
+
+Après une présentation, la démo se remet à neuf en un clic, depuis l'écran du tenant dans l'app plateforme (section « Données de départ »).
+
+**Utilisation**
+1. Ouvrir le tenant de démo dans l'app plateforme.
+2. Dans « Recharger la démo », ressaisir le nom exact de l'institution, puis cliquer sur « Recharger la démo ».
+3. La demande apparaît « En attente » dans l'historique, puis « Terminé » au bout de deux à trois minutes, avec le nombre de lignes effacées et ce qui a été recréé.
+
+**Ce qui se passe**
+- **Effacement :** les dossiers sont effacés exactement comme par « Vider les données » : leads, clients, projets, tâches, rendez-vous, KYC et leurs pièces, réclamations, conversations, circuits en cours.
+- **Ce qui reste :** les comptes de démo et leur mot de passe, les agences, le catalogue, les sources, les gabarits, les questionnaires, l'assureur simulé et ses produits.
+- **Rechargement :** les dossiers de démo sont recréés, datés du jour du rechargement. Les identifiants changent : un lien vers un ancien dossier ne mène plus nulle part.
+
+**Garde-fous**
+- **Institution de test seulement :** comme la démo, jamais sur une vraie institution ni sur un jumeau « Mode test ». L'API le vérifie à nouveau, sur le registre lu à l'instant, avant d'effacer quoi que ce soit.
+- **Nom à ressaisir :** le rechargement efface ; le registre refuse un nom qui ne correspond pas (`CONFIRMATION_MISMATCH`).
+- **Jamais à la création :** une institution neuve n'a rien à effacer ; la création refuse « DemoReload » et propose la démo.
+- **Un seul traitement à la fois :** un rechargement est refusé pendant un vidage (`DATA_WIPE_IN_FLIGHT`), et un vidage pendant un chargement (`DATA_LOAD_IN_FLIGHT`).
+
+**Côté technique :** le registre enregistre un chargement de type `DemoReload`. `TenantDataLoadJob` le lit comme « Démo » précédée d'un effacement : il lance chaque `ITenantDataWipe` (les modules de « Vider les données »), puis les étapes de la démo. Le résumé ajoute « Lignes effacées ».
+
+**Recette du 2026-11-09 sur « Démo Complète »**
+- **Rechargement :** 605 lignes effacées. Les mêmes volumes sont recréés : 20 clients, 3 réclamations, 48 leads, 10 projets, 12 tâches, 4 rendez-vous, 3 KYC validés, 2 en validation et 1 refusé. Aucun identifiant de lead, de client ni de KYC n'est commun avec l'avant.
+- **Comptes :** les 15 comptes se connectent, chacun avec son rôle.
+- **Files d'attente :** l'analyste crédit a 2 dossiers dans sa file. Chaque chef d'agence a 1 KYC à signer.
+- **Ce que voit chaque profil :** les agents voient leurs leads (6 à 9 chacun), leurs clients et leurs tâches. La conformité voit tous les KYC.
+- **Second rechargement, après le correctif :** 572 lignes effacées, même contenu recréé. Chaque agent voit autant de dossiers KYC que de clients ; l'analyste a toujours 2 dossiers, chaque chef d'agence 1 KYC à signer.
+- **Correctif trouvé pendant la recette :** les KYC de démo avaient pour responsable le compte système, qui a créé les clients. Aucun agent ne voyait donc les dossiers de ses clients. L'étape KYC confie maintenant chaque dossier de démo au conseiller du client, comme le fait la création d'un client au guichet.
 
