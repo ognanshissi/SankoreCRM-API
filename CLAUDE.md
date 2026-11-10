@@ -476,6 +476,37 @@ where nothing is set; `LeadsCompanyDemoData.Offers` prices BTP Lagune (and print
 waiting for approval, only on projects without an offer. Every cross-module read in these commands runs outside
 the ambient transaction (`Outside.RunAsync`): the second save of lines failed without it.
 
+**KYC can be switched off per institution, in socle only (2026-11-10, product owner; plan `docs/kyc-par-institution.md`).**
+`ComplianceSettings.KycEnabled` (default true, column too), switched by `PUT compliance-settings/kyc {enabled}`
+(`admin:compliance:manage`, `SwitchKycCommand`, audited, closed in « Mode test »), refused `KYC_REQUIRED_BY_MODULE`
+(409) while Banking - Microfinance or Insurance is active. A real change publishes `TenantKycSwitchedEvent` (team
+tenant). Read ONLY through `ITenantKyc` (Kernel; `TenantKycReader`, 1-min cache, fails closed): `InForce` = switch on
+OR a regulated module active, a twin reading its production's switch. `KycModuleRestorer`, run by
+`NotifyTenantModuleDecisionsJob` for every live tenant, puts the switch back on once a module is active.
+`CurrentUserDto.KycInForce`; `GET compliance-settings` adds `kycEnabled` / `kycRequiredByModule`. A new
+« must this customer have a KYC? » check starts with `ITenantKyc`, then the product's tier. The reader suppresses the
+ambient transaction itself. Lot 2 wiring (optional `ITenantKyc? tenantKyc = null` everywhere, null = in force):
+- Client creation: individual, legal and from a lead create the client `Active`, reason `Client.KycDisabledReason`,
+  with `KycRequired: false` on `ClientCreatedEvent` and a `ClientActivatedEvent`.
+- The same switch is read by `ConvertLeadHandler.IsKycRequiredAsync`, `ProjectStepGate.RequirementOfAsync`,
+  `LeadCompletenessCalculator` and the workflow's `RecordStepGates.KycAsync`; the KYC step passes.
+- M02: every route group carries `.RequireKycInForce()` (Shared: GET/HEAD pass, writes 409 `KYC_DISABLED`, only the
+  link revocation exempted). `CreateKycFileHandler` and the remote-link issue refuse `KYC_DISABLED`, and its
+  jobs and the PEP review consumer stop through `KycSwitch.IsOffAsync`.
+- On `TenantKycSwitchedEvent` off, for production and its twin:
+  - `TenantKycDisabledConsumer` (Customers) activates the `PendingKyc` clients;
+  - `TenantKycDisabledKycConsumer` cancels and unlinks the validation circuits with a pending rung;
+  - `TenantKycDisabledTasksConsumer` (Leads) cancels open tasks whose `EntityType` is `KycFile`.
+- KYC files are never modified. Switched back on, a project's KYC steps ask for a file again.
+- With KYC off, `ListKycFilesHandler` reports nothing awaiting anyone.
+- Front (lot 3): `TenantKycService` (`crm/common`):
+  - `inForce` comes from `kycInForce`; `readable` = in force OR at least one file exists;
+    `whileInForce(permission)` gates every KYC write button.
+  - Guards: `kycGuard()` for screens that act, `kycReadGuard()` for screens that consult.
+  - `<kyc-read-only-notice>` is the read-only banner.
+  - `kyc: true` on a nav item, settings entry or client tab hides it when KYC is not readable or not
+    in force.
+
 **Agents' monthly objectives (« Ma journée » redesign lot 1, 2026-10-31, product owner).**
 `AgentObjective` (`leads.agent_objectives`, one row per agent and month): first contacts within 24 h
 (%) and conversions of the month, set by the agent's manager. A month with no row reads the latest

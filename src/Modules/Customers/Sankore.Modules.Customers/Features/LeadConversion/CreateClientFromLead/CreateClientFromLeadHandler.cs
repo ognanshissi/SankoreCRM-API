@@ -56,7 +56,8 @@ internal sealed class CreateClientFromLeadHandler(
     IPhoneticKeyCalculator phoneticKeys,
     [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
     Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
-    Microsoft.Extensions.Logging.ILogger<CreateClientFromLeadHandler>? logger = null
+    Microsoft.Extensions.Logging.ILogger<CreateClientFromLeadHandler>? logger = null,
+    ITenantKyc? tenantKyc = null
 ) : IRequestHandler<CreateClientFromLeadCommand, Result<CreateFromLeadResult>>
 {
     /// <summary>PostgreSQL SQLSTATE for "unique_violation".</summary>
@@ -277,8 +278,12 @@ internal sealed class CreateClientFromLeadHandler(
 
         // 8c. A product that requires no KYC: the client is a customer as of now, with no file to
         //     wait for. Through the ordinary transition, so the status history says when and why.
-        if (!cmd.KycRequired)
-            client.ActivateWithoutKyc(actor, now);
+        //     The institution's KYC switched off (docs/kyc-par-institution.md) waives it too, whatever
+        //     the caller computed: one reading of the switch for every creation path.
+        var kycInForce = tenantKyc is null || await tenantKyc.IsInForceAsync(tenantId, ct);
+        var kycRequired = cmd.KycRequired && kycInForce;
+        if (!kycRequired)
+            client.ActivateWithoutKyc(actor, now, kycInForce ? Client.NoKycProductReason : Client.KycDisabledReason);
 
         db.Clients.Add(client);
 
@@ -296,10 +301,10 @@ internal sealed class CreateClientFromLeadHandler(
                 AdvisorUserId: client.AdvisorUserId,
                 SourceLeadId: cmd.LeadId,
                 CreatedBy: actor,
-                KycRequired: cmd.KycRequired),
+                KycRequired: kycRequired),
             ct);
 
-        if (!cmd.KycRequired)
+        if (!kycRequired)
             await publisher.PublishAsync(new ClientActivatedEvent(tenantId, client.Id), ct);
 
         try

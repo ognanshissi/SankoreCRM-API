@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Administration.Features.ComplianceSettings.GetComplianceSettings;
+using Sankore.Modules.Administration.Features.ComplianceSettings.SwitchKyc;
 using Sankore.Modules.Administration.Features.ComplianceSettings.UpdateComplianceSettings;
 
 internal static class ComplianceSettingsEndpoints
@@ -14,6 +15,7 @@ internal static class ComplianceSettingsEndpoints
 
         group.MapGetComplianceSettings();
         group.MapUpdateComplianceSettings();
+        group.MapSwitchKyc();
 
         return app;
     }

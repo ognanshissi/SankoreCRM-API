@@ -11,6 +11,7 @@ using Sankore.Modules.Kyc.Features.RemoteInvitations.ReissueInvitation;
 using Sankore.Modules.Kyc.Features.RemoteInvitations.RevokeInvitation;
 using Sankore.Shared.Infrastructure.Extensions;
 using Sankore.Shared.Kernel;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// Area aggregator for the back-office side of remote collection (KRM-B-04). The three endpoints
@@ -28,7 +29,10 @@ internal static class RemoteInvitationsEndpoints
     internal static IEndpointRouteBuilder MapKycRemoteInvitationsEndpoints(
         this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("kyc-files").WithTags("KYC");
+        var group = app.MapGroup("kyc-files").WithTags("KYC")
+            // Read-only while the institution's KYC is off (docs/kyc-par-institution.md); revoking a
+            // link stays possible — it only closes a door.
+            .RequireKycInForce(h => h.Request.Path.Value?.EndsWith("/revoke", StringComparison.Ordinal) == true);
 
         group.MapGet("{kycFileId:guid}/remote-invitations", ListAsync)
             .WithName("ListKycRemoteInvitations")

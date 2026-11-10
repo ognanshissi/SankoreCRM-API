@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Kyc.Features.Verification.GetVerification;
 using Sankore.Modules.Kyc.Features.Verification.ManualValidation;
 using Sankore.Modules.Kyc.Features.Verification.RunVerification;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// Area aggregator: one MapGroup, one call per slice. Adding a feature touches its own folder plus
@@ -20,7 +21,8 @@ internal static class VerificationEndpoints
 {
     internal static IEndpointRouteBuilder MapKycVerificationEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("kyc-files").WithTags("KYC");
+        var group = app.MapGroup("kyc-files").WithTags("KYC")
+            .RequireKycInForce(); // read-only while the institution's KYC is off (docs/kyc-par-institution.md)
 
         group.MapRunKycVerification();
         group.MapGetKycVerification();

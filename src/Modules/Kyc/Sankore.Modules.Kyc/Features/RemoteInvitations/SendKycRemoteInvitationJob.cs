@@ -63,6 +63,10 @@ public sealed class SendKycRemoteInvitationJob(IServiceScopeFactory scopeFactory
         using var bg = BackgroundJobContext.SetScope(tenantId, Guid.Empty, "SYSTEM");
         using var scope = scopeFactory.CreateScope();
 
+        // Nothing to run for an institution whose KYC is switched off (docs/kyc-par-institution.md).
+        if (await Sankore.Modules.Kyc.Infrastructure.KycSwitch.IsOffAsync(scope.ServiceProvider, tenantId, CancellationToken.None))
+            return;
+
         var db = scope.ServiceProvider.GetRequiredService<KycDbContext>();
         var tokens = scope.ServiceProvider.GetRequiredService<IKycRemoteLinkTokens>();
         var customers = scope.ServiceProvider.GetRequiredService<ICustomersModule>();

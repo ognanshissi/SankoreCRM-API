@@ -160,6 +160,15 @@ public sealed class ComplianceSettings : ITenant
     /// </summary>
     public int KycAutoApprovalSamplePct { get; private set; } = DefaultKycAutoApprovalSamplePct;
 
+    /// <summary>
+    /// Whether this institution runs KYC at all (docs/kyc-par-institution.md, product owner
+    /// 2026-11-10). TRUE by default, at the column too: a deployment must not stop verifying the
+    /// customers of an institution that never asked. Read through <c>ITenantKyc</c>, never alone:
+    /// an active Banking - Microfinance or Insurance module keeps KYC in force whatever this says,
+    /// and switching it off is refused while one is (<see cref="SwitchKyc"/>'s caller checks).
+    /// </summary>
+    public bool KycEnabled { get; private set; } = true;
+
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
     public Guid UpdatedBy { get; private set; }
@@ -194,6 +203,7 @@ public sealed class ComplianceSettings : ITenant
         KycAutoApprovalEnabled   = false,
         KycAutoApprovalMaxTier   = KycRemotePolicyValues.SimplifiedTier,
         KycAutoApprovalSamplePct = DefaultKycAutoApprovalSamplePct,
+        KycEnabled           = true,
         CreatedAt            = now,
         UpdatedAt            = now,
         UpdatedBy            = createdBy,
@@ -333,6 +343,20 @@ public sealed class ComplianceSettings : ITenant
 
         Stamp(actor, now);
         return Result.Ok();
+    }
+
+    /// <summary>
+    /// Switches the institution's KYC on or off. Whether it MAY be switched off (no regulated
+    /// module active) is the caller's to check: this row does not know the modules.
+    /// </summary>
+    /// <returns>Whether the value changed — the caller announces only a real change.</returns>
+    public bool SwitchKyc(bool enabled, Guid actor, DateTimeOffset now)
+    {
+        if (KycEnabled == enabled) return false;
+
+        KycEnabled = enabled;
+        Stamp(actor, now);
+        return true;
     }
 
     private void Stamp(Guid actor, DateTimeOffset now)

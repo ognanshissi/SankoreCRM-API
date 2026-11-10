@@ -93,6 +93,16 @@ public static class AdministrationModule
         services.AddScoped(sp => new Infrastructure.ProductCatalogCache(
             sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 
+        // Whether the institution runs KYC (docs/kyc-par-institution.md): read by every module that
+        // asks « must this customer have a KYC file? ».
+        services.AddScoped(sp => new Infrastructure.TenantKycReader(
+            sp.GetRequiredService<Infrastructure.AdministrationDbContext>(),
+            sp.GetRequiredService<ITenantStore>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Infrastructure.TenantKycReader>>(),
+            sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
+        services.AddScoped<ITenantKyc>(sp => sp.GetRequiredService<Infrastructure.TenantKycReader>());
+        services.AddScoped<Features.ComplianceSettings.SwitchKyc.KycModuleRestorer>();
+
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
         services.AddScoped<IInstitutionCurrency, InstitutionCurrency>();
         // Issuer of the institution's quotes and their numbering (quote lines, lot 2).

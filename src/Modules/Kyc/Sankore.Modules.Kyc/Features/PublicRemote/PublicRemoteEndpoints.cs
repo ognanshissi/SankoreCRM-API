@@ -7,6 +7,7 @@ using Sankore.Modules.Kyc.Features.PublicRemote.Identify;
 using Sankore.Modules.Kyc.Features.PublicRemote.LinkStatus;
 using Sankore.Modules.Kyc.Features.PublicRemote.Otp;
 using Sankore.Modules.Kyc.Features.PublicRemote.Session;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// The customer-facing surface of remote KYC (KRM-B-05 to B-07), mounted by the host under
@@ -38,7 +39,8 @@ public static class PublicRemoteEndpoints
     internal static IEndpointRouteBuilder MapKycPublicRemoteEndpoints(
         this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup(GroupPrefix).WithTags("KYC public");
+        var group = app.MapGroup(GroupPrefix).WithTags("KYC public")
+            .RequireKycInForce(); // read-only while the institution's KYC is off (docs/kyc-par-institution.md)
 
         group.MapKycLinkStatus();
         group.MapKycIdentify();

@@ -15,7 +15,8 @@ internal sealed class ListKycFilesHandler(
     ICurrentUser currentUser,
     IAgencyScopeProvider agencyScope,
     ICustomersModule customers,
-    KycVisibility? visibility = null)
+    KycVisibility? visibility = null,
+    ITenantKyc? tenantKyc = null)
     : IRequestHandler<ListKycFilesQuery, Result<KycFileListPage>>
 {
     private const int MaxPageSize = 100;
@@ -57,6 +58,11 @@ internal sealed class ListKycFilesHandler(
         // The ranks the caller's ROLES can sign. A List, not an array: on .NET 10 an array's
         // Contains binds to the ReadOnlySpan<T> extension and stops translating to SQL.
         var myRanks = KycApproverLevels.RanksFor(currentUser.Roles).ToList();
+
+        // KYC switched off for the institution (docs/kyc-par-institution.md): its files are read-only,
+        // so none awaits anybody's decision — no « Décider », no badge.
+        if (tenantKyc is not null && !await tenantKyc.IsInForceAsync(currentUser.TenantId, ct))
+            myRanks.Clear();
 
         // The next rung is the LOWEST rank still pending — the only one DecideKycApprovalHandler
         // will accept. Expressed on level_rank and not on the level column: that one is text, and a

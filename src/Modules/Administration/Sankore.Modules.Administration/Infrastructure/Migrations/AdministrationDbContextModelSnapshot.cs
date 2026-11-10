@@ -866,6 +866,12 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasDefaultValue(10)
                         .HasColumnName("kyc_auto_approval_sample_pct");
 
+                    b.Property<bool>("KycEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("kyc_enabled");
+
                     b.Property<bool>("PepEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

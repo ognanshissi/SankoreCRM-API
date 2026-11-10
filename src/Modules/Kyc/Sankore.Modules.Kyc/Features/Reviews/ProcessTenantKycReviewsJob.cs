@@ -49,6 +49,10 @@ public sealed class ProcessTenantKycReviewsJob(IServiceScopeFactory scopeFactory
         using var bgCtx = BackgroundJobContext.SetScope(tenantId, Guid.Empty, "SYSTEM");
         using var scope = scopeFactory.CreateScope();
 
+        // Nothing to run for an institution whose KYC is switched off (docs/kyc-par-institution.md).
+        if (await Sankore.Modules.Kyc.Infrastructure.KycSwitch.IsOffAsync(scope.ServiceProvider, tenantId, CancellationToken.None))
+            return;
+
         var sp = scope.ServiceProvider;
         var logger = sp.GetRequiredService<ILogger<ProcessTenantKycReviewsJob>>();
 

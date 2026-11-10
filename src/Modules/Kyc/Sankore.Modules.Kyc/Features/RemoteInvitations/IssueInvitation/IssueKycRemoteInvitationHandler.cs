@@ -15,12 +15,17 @@ internal sealed class IssueKycRemoteInvitationHandler(
     IKycSettings settings,
     IBackgroundJobClient hangfire,
     TimeProvider clock,
-    ILogger<IssueKycRemoteInvitationHandler> logger)
+    ILogger<IssueKycRemoteInvitationHandler> logger,
+    ITenantKyc? tenantKyc = null)
     : IRequestHandler<IssueKycRemoteInvitationCommand, Result<IssueKycRemoteInvitationResult>>
 {
     public async Task<Result<IssueKycRemoteInvitationResult>> Handle(
         IssueKycRemoteInvitationCommand cmd, CancellationToken ct)
     {
+        // No link into a file the institution no longer runs (docs/kyc-par-institution.md).
+        if (tenantKyc is not null && !await tenantKyc.IsInForceAsync(cmd.TenantId, ct))
+            return Result.Fail<IssueKycRemoteInvitationResult>(TenantKycErrors.Disabled);
+
         var verdict = await eligibility.EvaluateAsync(cmd.TenantId, cmd.KycFileId, ct);
 
         // Le refus du canal CHOISI, et non « l'un des deux marche » : un agent qui demande un SMS

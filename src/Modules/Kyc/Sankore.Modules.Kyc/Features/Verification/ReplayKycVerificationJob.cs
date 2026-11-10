@@ -55,6 +55,10 @@ public sealed class ReplayKycVerificationJob(IServiceScopeFactory scopeFactory)
         using var bgCtx = BackgroundJobContext.SetScope(tenantId, requestedBy, "SYSTEM");
         using var scope = scopeFactory.CreateScope();
 
+        // Nothing to run for an institution whose KYC is switched off (docs/kyc-par-institution.md).
+        if (await Sankore.Modules.Kyc.Infrastructure.KycSwitch.IsOffAsync(scope.ServiceProvider, tenantId, CancellationToken.None))
+            return;
+
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<ReplayKycVerificationJob>>();
 

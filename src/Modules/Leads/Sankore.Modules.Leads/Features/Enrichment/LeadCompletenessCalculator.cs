@@ -9,6 +9,7 @@ using Sankore.Modules.Leads.Features.Fatca;
 using Sankore.Modules.Leads.Features.Household;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Kernel.ValueObject;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// How complete a lead's file is, and whether it may convert (BNF-B-04).
@@ -41,7 +42,8 @@ internal sealed class LeadCompletenessCalculator(
     IAdministrationModule administration,
     ICustomersModule customers,
     IKycModule kyc,
-    FatcaSubjectPlanner fatcaPlanner)
+    FatcaSubjectPlanner fatcaPlanner,
+    Sankore.Shared.Kernel.ITenantKyc? tenantKyc = null)
 {
     /// <summary>What the conversion reports when the file is not complete.</summary>
     internal const string Incomplete = "LEAD_NOT_COMPLETE";
@@ -383,8 +385,11 @@ internal sealed class LeadCompletenessCalculator(
                   client.Status, FixOnCustomer));
 
         // A line that requires no KYC (a Standard product whose policy says None) sells to an
-        // active client whatever its file says — it may have none at all.
+        // active client whatever its file says — it may have none at all. So does any product of an
+        // institution whose KYC is switched off (docs/kyc-par-institution.md).
         if (!KycRequirement.IsRequired(policy?.RequiredKycTier))
+            return;
+        if (tenantKyc is not null && !await tenantKyc.IsInForceAsync(lead.TenantId, ct))
             return;
 
         check(kycStatus == KycStatus.Approved, () => new CompletenessGap(

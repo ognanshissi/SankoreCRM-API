@@ -25,6 +25,10 @@ public sealed class ExpireTenantKycRemoteInvitationsJob(IServiceScopeFactory sco
         using var bg = BackgroundJobContext.SetScope(tenantId, Guid.Empty, "SYSTEM");
         using var scope = scopeFactory.CreateScope();
 
+        // Nothing to run for an institution whose KYC is switched off (docs/kyc-par-institution.md).
+        if (await Sankore.Modules.Kyc.Infrastructure.KycSwitch.IsOffAsync(scope.ServiceProvider, tenantId, CancellationToken.None))
+            return;
+
         var db = scope.ServiceProvider.GetRequiredService<KycDbContext>();
         var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
         var administration = scope.ServiceProvider.GetRequiredService<IAdministrationModule>();

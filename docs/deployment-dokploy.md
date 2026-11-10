@@ -1258,3 +1258,97 @@ database on a **fresh** volume — and only there: on a volume that is already i
 is ignored, and the schema comes from the app's EF migrations at start-up instead. A `\l` that
 lists neither means the app has not started cleanly yet — read its logs before suspecting the
 connection.
+
+## 16. One address per institution: `*.talisoftcrm.com`
+
+Added 2026-11-10 for the free trial (`docs/essai-gratuit-socle.md`, lot 0). Every institution gets
+`https://<name>.talisoftcrm.com`. Nothing below is repeated per institution: once it is in place,
+a new institution answers as soon as the registry holds its FQDN. No Cloudflare record, no Dokploy
+domain, no redeploy. The per-domain method (§ 4) stays for a paying client that brings its own
+domain.
+
+### Cloudflare (once)
+
+1. **DNS**: an `A` record `*` pointing at the Dokploy host, **proxied** (orange cloud). Keep the
+   apex `talisoftcrm.com` for a redirect to the marketing site, or leave it out.
+2. **Edge certificate**: Universal SSL already covers `talisoftcrm.com` and `*.talisoftcrm.com`.
+   One level only. `a.b.talisoftcrm.com` would need Advanced Certificate Manager, and nothing
+   here uses two levels.
+3. **SSL/TLS mode: Full (strict)**, and *Always Use HTTPS* on.
+4. **Origin certificate**: SSL/TLS → Origin Server → *Create certificate* for
+   `talisoftcrm.com, *.talisoftcrm.com`, RSA, 15 years. Save the certificate and the private key.
+   The key is shown once.
+
+### Traefik (once)
+
+Traefik must not ask Let's Encrypt for each name. It serves the Cloudflare origin certificate, and
+one router catches every institution. In Dokploy → *Traefik* → *File System*, under the dynamic
+directory (`/etc/dokploy/traefik/dynamic` on the host):
+
+- `certs/talisoftcrm.crt` and `certs/talisoftcrm.key`, the origin certificate and its key
+  (`chmod 600` on the key);
+- `talisoftcrm.yml`:
+
+```yaml
+tls:
+  certificates:
+    - certFile: /etc/dokploy/traefik/dynamic/certs/talisoftcrm.crt
+      keyFile: /etc/dokploy/traefik/dynamic/certs/talisoftcrm.key
+
+http:
+  routers:
+    talisoftcrm-institutions:
+      rule: "HostRegexp(`^[a-z0-9-]+\\.talisoftcrm\\.com$`)"
+      entryPoints: [websecure]
+      service: talisoftcrm-crm-web
+      priority: 1
+      tls: {}
+  services:
+    talisoftcrm-crm-web:
+      loadBalancer:
+        servers:
+          - url: "http://<crm web container>:4000"
+```
+
+- **`priority: 1` is required.** Traefik ranks routers by the length of their rule, and this regexp
+  is longer than `Host(`api.talisoftcrm.com`)`. Without it, a future explicit host under the same
+  domain would be swallowed by the CRM front.
+- **`<crm web container>`** is the name of the `web` service of `docker-compose.dokploy.yml` on
+  `dokploy-network`: `docker ps --format '{{.Names}}' | grep web` on the host. Use the service
+  name instead if Dokploy deployed the compose as a stack.
+- **The regexp allows one label only.** It matches what the API accepts (below) and what the
+  registry will hand out.
+- **Plain http** never reaches this router. Cloudflare redirects to https before forwarding.
+
+### Front-end and API (environment, once)
+
+| Application | Variable | Value |
+|---|---|---|
+| CRM front (`web`) | `NG_ALLOWED_HOSTS` | the existing hosts plus `*.talisoftcrm.com`, comma-separated. Angular 22 understands the `*.` form. Without it, the server-side render answers 400 for every institution. |
+| Sankore.Api | `Cors__AllowedOriginSuffixes__0` | `.talisoftcrm.com` |
+
+`Cors:AllowedOriginSuffixes` (`CorsSetup`) has these rules:
+- It allows `https://<one label>.talisoftcrm.com` on the default port, and nothing else: not http,
+  not another port, not two labels, not the bare domain, not `eviltalisoftcrm.com`.
+- A suffix without its leading dot, a top-level domain alone (`.com`) or a `*` **fails the boot**,
+  with the reason.
+- It adds to `Cors:AllowedOrigins` and does not replace it.
+- The start-up log lists it.
+
+### Per institution
+
+Only the registry. The institution's FQDN is `https://<name>.talisoftcrm.com`, entered in the
+platform app today and by the sign-up flow later. It is what the front sends as `X-Tenant-Fqdn`
+and what every mailed link is built from: activation, password reset, remote KYC.
+
+### Check
+
+```bash
+curl -sI https://recette.talisoftcrm.com | head -1         # 200: the front answers any name
+curl -s  https://recette.talisoftcrm.com/config.json       # the API URL the browser will use
+```
+
+Then create an institution « Recette » with `https://recette.talisoftcrm.com` in the platform app
+and confirm the following on the real address: sign-in, an activation e-mail whose link opens that
+address, and no CORS error in the browser console. A name the registry does not know opens the
+« institution inconnue » page. That is expected.

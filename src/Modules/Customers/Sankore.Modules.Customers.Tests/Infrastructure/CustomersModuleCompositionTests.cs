@@ -67,6 +67,8 @@ public sealed class CustomersModuleCompositionTests
         // a job resolved from the root container must be able to depend on it.
         services.AddSingleton(_ => Substitute.For<ITenantStore>());
         services.AddSingleton<ITenantModules>(FixedTenantModules.All);
+        // Administration's, like the tenant store: whether the institution runs KYC.
+        services.AddSingleton<ITenantKyc>(FixedTenantKyc.InForce);
         services.AddSingleton(_ => Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>());
         services.AddSingleton(_ => Substitute.For<Hangfire.IBackgroundJobClient>());
         services.AddSingleton(_ => Substitute.For<IBus>());

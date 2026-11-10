@@ -43,4 +43,14 @@ public sealed record ComplianceSettingsResponse(
     /// Accepted values for <c>KycAutoApprovalMaxTier</c>, so the product screen can offer the
     /// ceiling without hard-coding M02's tier names.
     /// </summary>
-    IReadOnlyList<string> AllowedKycTiers);
+    IReadOnlyList<string> AllowedKycTiers,
+    /// <summary>
+    /// The institution's KYC switch (docs/kyc-par-institution.md) — production's, also in « Mode
+    /// test ». TRUE for a tenant that never touched it.
+    /// </summary>
+    bool KycEnabled = true,
+    /// <summary>
+    /// The active module keeping KYC in force (<c>BankingMicrofinance</c>, <c>Insurance</c>), or
+    /// null in socle only. While set, the switch cannot be turned off.
+    /// </summary>
+    string? KycRequiredByModule = null);

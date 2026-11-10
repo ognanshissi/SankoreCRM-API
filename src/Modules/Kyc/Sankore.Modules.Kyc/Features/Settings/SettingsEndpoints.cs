@@ -7,6 +7,7 @@ using Sankore.Modules.Kyc.Features.Settings.GetKycSetting;
 using Sankore.Modules.Kyc.Features.Settings.ListKycSettings;
 using Sankore.Modules.Kyc.Features.Settings.SetBiometryToken;
 using Sankore.Modules.Kyc.Features.Settings.UpdateKycSetting;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// Area aggregator: one MapGroup, one call per slice. Same shape as M01's <c>customer-settings</c>,
@@ -23,7 +24,8 @@ internal static class SettingsEndpoints
 {
     internal static IEndpointRouteBuilder MapKycSettingsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("kyc-settings").WithTags("KYC Settings");
+        var group = app.MapGroup("kyc-settings").WithTags("KYC Settings")
+            .RequireKycInForce(); // read-only while the institution's KYC is off (docs/kyc-par-institution.md)
 
         group.MapListKycSettings();
         group.MapGetKycSetting();

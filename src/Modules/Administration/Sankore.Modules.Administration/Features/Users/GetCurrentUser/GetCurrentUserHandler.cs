@@ -12,7 +12,8 @@ internal sealed class GetCurrentUserHandler(
     AdministrationDbContext db,
     UserManager<AppUser> userManager,
     ICurrentUser currentUser,
-    ITenantModules tenantModules)
+    ITenantModules tenantModules,
+    ITenantKyc tenantKyc)
     : IRequestHandler<GetCurrentUserQuery, Result<CurrentUserDto>>
 {
     public async Task<Result<CurrentUserDto>> Handle(
@@ -77,6 +78,7 @@ internal sealed class GetCurrentUserHandler(
             ImpersonatorName: impersonatorName,
             ActiveModules:   await tenantModules.ActiveAsync(user.TenantId, ct),
             ReadOnlyModules: await tenantModules.ReadOnlyAsync(user.TenantId, ct),
-            TestMode:        currentUser.TenantId != user.TenantId));
+            TestMode:        currentUser.TenantId != user.TenantId,
+            KycInForce:      await tenantKyc.IsInForceAsync(currentUser.TenantId, ct)));
     }
 }

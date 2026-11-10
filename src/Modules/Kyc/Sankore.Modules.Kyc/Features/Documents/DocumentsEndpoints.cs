@@ -9,12 +9,14 @@ using Sankore.Modules.Kyc.Features.Documents.MyAccessLog;
 using Sankore.Modules.Kyc.Features.Documents.ReadDocument;
 using Sankore.Modules.Kyc.Features.Documents.ReviewDocument;
 using Sankore.Modules.Kyc.Features.Documents.UploadDocument;
+using Sankore.Shared.Infrastructure.Tenants;
 
 internal static class KycDocumentsEndpoints
 {
     internal static IEndpointRouteBuilder MapKycDocumentsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("kyc-files").WithTags("KYC");
+        var group = app.MapGroup("kyc-files").WithTags("KYC")
+            .RequireKycInForce(); // read-only while the institution's KYC is off (docs/kyc-par-institution.md)
 
         group.MapUploadKycDocument();
         group.MapReadKycDocument();

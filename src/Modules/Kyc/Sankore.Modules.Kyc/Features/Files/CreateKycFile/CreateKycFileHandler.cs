@@ -28,12 +28,19 @@ internal sealed class CreateKycFileHandler(
     ICustomersModule customers,
     TimeProvider clock,
     [FromKeyedServices(nameof(KycDbContext))] IEventPublisher publisher,
-    ILogger<CreateKycFileHandler> logger)
+    ILogger<CreateKycFileHandler> logger,
+    ITenantKyc? tenantKyc = null)
     : IRequestHandler<CreateKycFileCommand, Result<CreateKycFileResult>>
 {
     public async Task<Result<CreateKycFileResult>> Handle(
         CreateKycFileCommand cmd, CancellationToken ct)
     {
+        // The one door every new file goes through — the agent's enrolment, a client's creation, a
+        // project asking for one. Closed while the institution's KYC is switched off
+        // (docs/kyc-par-institution.md); its consumers log the refusal and move on.
+        if (tenantKyc is not null && !await tenantKyc.IsInForceAsync(cmd.TenantId, ct))
+            return Result.Fail<CreateKycFileResult>(TenantKycErrors.Disabled);
+
         // IgnoreQueryFilters + explicit tenant: consumers run outside any HTTP context, so the
         // ambient tenant is not the one being processed.
         var existing = await db.KycFiles

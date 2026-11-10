@@ -53,7 +53,8 @@ internal sealed class ProjectStepGate(
     ICurrentUser currentUser,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
     QuestionnaireCompletenessChecker? questionnaires = null,
-    ProjectWorkflows? workflows = null)
+    ProjectWorkflows? workflows = null,
+    ITenantKyc? tenantKyc = null)
 {
     /// <param name="targetIndex">
     /// The index of the step reached in <paramref name="template"/>; <c>Steps.Count</c> for a project
@@ -269,6 +270,11 @@ internal sealed class ProjectStepGate(
     /// <summary>(KYC required?, tier to compare or null, product line) for a project's product.</summary>
     private async Task<(bool Required, string? Tier, Guid? LineId)> RequirementOfAsync(Opportunity project, CancellationToken ct)
     {
+        // The institution first (docs/kyc-par-institution.md). Switched back on later, the same
+        // steps ask M02 for a file again, which is how waiting clients are taken up.
+        if (tenantKyc is not null && !await tenantKyc.IsInForceAsync(tenant.CurrentTenantId, ct))
+            return (false, null, project.ProductLineId);
+
         if (project.ProductLineId is null && string.IsNullOrWhiteSpace(project.Product))
             return (true, null, null);
 

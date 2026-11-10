@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Kyc.Features.Approval.Decide;
 using Sankore.Modules.Kyc.Features.Approval.GetCircuit;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// Area aggregator: one MapGroup, one call per slice. Adding a feature touches its own folder plus
@@ -22,7 +23,8 @@ internal static class KycApprovalEndpoints
 {
     internal static IEndpointRouteBuilder MapKycApprovalEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("kyc-files").WithTags("KYC");
+        var group = app.MapGroup("kyc-files").WithTags("KYC")
+            .RequireKycInForce(); // read-only while the institution's KYC is off (docs/kyc-par-institution.md)
 
         group.MapGetKycApprovalCircuit();
         group.MapDecideKycApproval();

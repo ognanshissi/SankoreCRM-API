@@ -6,7 +6,7 @@ using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Shared.Kernel;
 
-internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
+internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db, ITenantContext tenant, ITenantKyc tenantKyc)
     : IRequestHandler<GetComplianceSettingsQuery, Result<ComplianceSettingsResponse>>
 {
     private static readonly IReadOnlyList<string> Regimes = Enum.GetNames<FatcaRegime>();
@@ -23,6 +23,7 @@ internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
         GetComplianceSettingsQuery request, CancellationToken ct)
     {
         var settings = await db.ComplianceSettings.FirstOrDefaultAsync(ct);
+        var kyc = await tenantKyc.GetAsync(tenant.CurrentTenantId, ct);
 
         // No row yet: answer with the platform defaults rather than 404. The defaults ARE the
         // tenant's configuration until somebody changes them, and a 404 on "what is my FATCA
@@ -47,7 +48,9 @@ internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
                 UpdatedAt:            DateTimeOffset.UtcNow,
                 AllowedRegimes:       Regimes,
                 AllowedRequiredAt:    RequiredAtValues,
-                AllowedKycTiers:      KycTiers));
+                AllowedKycTiers:      KycTiers,
+                KycEnabled:           kyc.SwitchedOn,
+                KycRequiredByModule:  kyc.RequiredByModule));
         }
 
         return Result.Ok(new ComplianceSettingsResponse(
@@ -64,6 +67,8 @@ internal sealed class GetComplianceSettingsHandler(AdministrationDbContext db)
             settings.UpdatedAt,
             Regimes,
             RequiredAtValues,
-            KycTiers));
+            KycTiers,
+            kyc.SwitchedOn,
+            kyc.RequiredByModule));
     }
 }

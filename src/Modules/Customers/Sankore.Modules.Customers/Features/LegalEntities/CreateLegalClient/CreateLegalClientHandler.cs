@@ -33,7 +33,8 @@ internal sealed class CreateLegalClientHandler(
     IPhoneticKeyCalculator phoneticKeys,
     [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
     IAdministrationModule? administration = null,
-    ILogger<CreateLegalClientHandler>? logger = null
+    ILogger<CreateLegalClientHandler>? logger = null,
+    ITenantKyc? tenantKyc = null
 ) : IRequestHandler<CreateLegalClientCommand, Result<CreateLegalClientResult>>
 {
     public async Task<Result<CreateLegalClientResult>> Handle(
@@ -172,6 +173,12 @@ internal sealed class CreateLegalClientHandler(
         if (customFields.Value is not null)
             client.SetCustomFields(customFields.Value, actor);
 
+        // The institution's KYC switched off (docs/kyc-par-institution.md): a customer at once, no
+        // file opened. Through the ordinary transition, so the status history says why.
+        var kycRequired = tenantKyc is null || await tenantKyc.IsInForceAsync(tenantId, ct);
+        if (!kycRequired)
+            client.ActivateWithoutKyc(actor, now, Client.KycDisabledReason);
+
         db.Clients.Add(client);
 
         // 8. Outbox BEFORE SaveChanges: the publisher only enqueues the row, so the
@@ -185,8 +192,12 @@ internal sealed class CreateLegalClientHandler(
                 AgencyId: client.AgencyId,
                 AdvisorUserId: client.AdvisorUserId,
                 SourceLeadId: null,
-                CreatedBy: actor),
+                CreatedBy: actor,
+                KycRequired: kycRequired),
             ct);
+
+        if (!kycRequired)
+            await publisher.PublishAsync(new ClientActivatedEvent(tenantId, client.Id), ct);
 
         await db.SaveChangesAsync(ct);
 

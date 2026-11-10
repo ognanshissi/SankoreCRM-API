@@ -33,7 +33,8 @@ internal sealed class ConvertLeadHandler(
     ILeadEmailIndexer emailIndexer,
     Features.Enrichment.LeadCompletenessCalculator completeness,
     [FromKeyedServices(nameof(LeadsDbContext))] IEventPublisher publisher,
-    Sankore.Modules.Workflow.PublicApi.IWorkflowModule? workflow = null)
+    Sankore.Modules.Workflow.PublicApi.IWorkflowModule? workflow = null,
+    ITenantKyc? tenantKyc = null)
     : IRequestHandler<ConvertLeadCommand, Result<ConvertLeadResult>>
 {
     /// <summary>
@@ -360,6 +361,11 @@ internal sealed class ConvertLeadHandler(
     /// </summary>
     private async Task<bool> IsKycRequiredAsync(Guid tenantId, Guid? productLineId, CancellationToken ct)
     {
+        // The institution first (docs/kyc-par-institution.md): KYC switched off in socle means no
+        // file whatever the product says.
+        if (tenantKyc is not null && !await tenantKyc.IsInForceAsync(tenantId, ct))
+            return false;
+
         if (productLineId is not { } lineId)
             return true;
 

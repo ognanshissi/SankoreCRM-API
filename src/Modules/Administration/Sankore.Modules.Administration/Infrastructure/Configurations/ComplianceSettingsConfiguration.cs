@@ -49,6 +49,9 @@ internal sealed class ComplianceSettingsConfiguration : IEntityTypeConfiguration
             .HasDefaultValue(ComplianceSettings.DefaultKycAutoApprovalSamplePct)
             .IsRequired();
 
+        // DEFAULT TRUE, like PepEnabled and for the same reason: existing institutions keep their KYC.
+        b.Property(s => s.KycEnabled).HasDefaultValue(true).IsRequired();
+
         b.Property(s => s.Version)
             .HasColumnName("xmin").HasColumnType("xid")
             .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();

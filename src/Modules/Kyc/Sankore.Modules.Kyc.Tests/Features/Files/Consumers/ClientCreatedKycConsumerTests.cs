@@ -63,6 +63,18 @@ public sealed class ClientCreatedKycConsumerTests : IDisposable
         => _db.KycFiles.IgnoreQueryFilters().ToListAsync();
 
     [Fact]
+    public async Task No_file_is_opened_for_an_institution_whose_KYC_is_switched_off()
+    {
+        // docs/kyc-par-institution.md: CreateKycFileHandler is the one door, closed by the switch.
+        using var sp = ConsumerTestContainer.Build(_db, tenantKyc: Sankore.Shared.Kernel.FixedTenantKyc.Off);
+        var consumer = new ClientCreatedKycConsumer(new FixedScopeFactory(sp), NullLogger<ClientCreatedKycConsumer>.Instance);
+
+        await consumer.Consume(Delivered.Of(Event(Guid.NewGuid(), Guid.NewGuid())));
+
+        (await AllFiles()).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task A_client_created_without_a_lead_gets_a_file_on_the_Agency_channel()
     {
         var clientId = Guid.NewGuid();
@@ -206,9 +218,11 @@ internal static class ConsumerTestContainer
     /// What M01 answers for the customer. <c>null</c> stands for a customer M01 cannot resolve at
     /// all — an archived client, or a race — which must open the file anyway, without an agency.
     /// </param>
-    public static ServiceProvider Build(KycDbContext db, Guid? agencyId = null, bool clientKnown = true)
+    public static ServiceProvider Build(KycDbContext db, Guid? agencyId = null, bool clientKnown = true,
+        Sankore.Shared.Kernel.ITenantKyc? tenantKyc = null)
     {
         var services = new ServiceCollection();
+        if (tenantKyc is not null) services.AddSingleton(tenantKyc);
 
         services.AddSingleton(db);
         services.AddSingleton(TimeProvider.System);

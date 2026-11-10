@@ -492,6 +492,8 @@ builder.Services.AddMassTransit(x =>
 
     x.AddConsumer<Sankore.Modules.Kyc.Features.Files.Consumers.ClientCreatedKycConsumer>();
     x.AddConsumer<Sankore.Modules.Kyc.Features.Files.Consumers.KycRequestedConsumer>();
+    // The institution's KYC switched off: its validation circuits leave the queues (docs/kyc-par-institution.md).
+    x.AddConsumer<Sankore.Modules.Kyc.Features.Files.Consumers.TenantKycDisabledKycConsumer>();
 
     // A rise in a client's PEP exposure owes a KYC review (BNF-B-13). Lives in M02 because
     // RaiseKycReviewCommand is internal to it, and its handler already announces the review
@@ -535,6 +537,8 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Sankore.Modules.Leads.Features.Appointments.AppointmentInvitationConsumer>();
     // Task activity (assigned, associated, commented, file attached) → the bell.
     x.AddConsumer<Sankore.Modules.Leads.Features.Tasks.Collaboration.CrmTaskActivityConsumer>();
+    // The institution's KYC switched off: open KYC tasks are cancelled (docs/kyc-par-institution.md).
+    x.AddConsumer<Sankore.Modules.Leads.Features.Tasks.TenantKycDisabledTasksConsumer>();
     // WA-BE-06 : hands a queued WhatsApp template to the provider, at most once.
     x.AddConsumer<Sankore.Modules.Leads.Features.WhatsApp.SendWhatsAppMessageConsumer>();
     // WA-BE-14/15 : trouve l'agent attendu (dispatching M13) et prévient — e-mail et cloche.
@@ -609,6 +613,8 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<ChildWorkflowCompletedConsumer>();
 
     x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.KycValidatedConsumer>();
+    // The institution's KYC switched off: waiting clients become active (docs/kyc-par-institution.md).
+    x.AddConsumer<Sankore.Modules.Customers.Features.Lifecycle.Consumers.TenantKycDisabledConsumer>();
 
     // Integration module — the onboarding chain (INT-14). KycValidatedEvent is consumed here AND
     // by M01 above; each module has its own inbox table, and this module's guard additionally

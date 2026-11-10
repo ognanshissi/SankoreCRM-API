@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sankore.Modules.Kyc.Features.Routing.Controls.ListControls;
 using Sankore.Modules.Kyc.Features.Routing.Controls.RecordControl;
+using Sankore.Shared.Infrastructure.Tenants;
 
 /// <summary>
 /// Area aggregator: one MapGroup, one call per slice — the repo's vertical-slice rule.
@@ -29,7 +30,8 @@ internal static class KycRoutingEndpoints
 {
     internal static IEndpointRouteBuilder MapKycRoutingEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("kyc-files").WithTags("KYC");
+        var group = app.MapGroup("kyc-files").WithTags("KYC")
+            .RequireKycInForce(); // read-only while the institution's KYC is off (docs/kyc-par-institution.md)
 
         group.MapListKycAutoApprovalControls();
         group.MapRecordKycAutoApprovalControl();

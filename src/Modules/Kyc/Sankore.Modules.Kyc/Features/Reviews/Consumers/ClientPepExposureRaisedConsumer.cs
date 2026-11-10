@@ -64,6 +64,10 @@ public sealed class ClientPepExposureRaisedConsumer(
         using var bg = BackgroundJobContext.SetScope(evt.TenantId, evt.DeclaredBy, "SYSTEM");
         using var scope = scopeFactory.CreateScope();
 
+        // No review for an institution whose KYC is switched off (docs/kyc-par-institution.md).
+        if (await Sankore.Modules.Kyc.Infrastructure.KycSwitch.IsOffAsync(scope.ServiceProvider, evt.TenantId, context.CancellationToken))
+            return;
+
         var db = scope.ServiceProvider.GetRequiredService<KycDbContext>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 

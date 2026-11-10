@@ -52,6 +52,10 @@ public sealed class NotifyTenantModuleDecisionsJobTests : IDisposable
         services.AddSingleton(Options.Create(new TenantModuleNotificationOptions()));
         services.AddLogging();
         services.AddScoped<TenantModuleNotifier>();
+        // The job also checks the institution's KYC against its modules: in force, nothing to restore.
+        services.AddSingleton<ITenantKyc>(FixedTenantKyc.InForce);
+        services.AddSingleton(Substitute.For<MediatR.ISender>());
+        services.AddScoped<Sankore.Modules.Administration.Features.ComplianceSettings.SwitchKyc.KycModuleRestorer>();
         _provider = services.BuildServiceProvider();
     }
 

@@ -684,18 +684,27 @@ public sealed class Client : AggregateRoot
         return Result.Ok();
     }
 
+    /// <summary>The status history's reason for a product that requires no KYC.</summary>
+    public const string NoKycProductReason = "KYC non requis par le produit";
+
+    /// <summary>
+    /// The reason when the institution's KYC is switched off (docs/kyc-par-institution.md): at
+    /// creation, and for the clients that were waiting when it was switched off.
+    /// </summary>
+    public const string KycDisabledReason = "KYC désactivé pour l'institution";
+
     /// <summary>
     /// A client converted on a product that requires no KYC (a Standard product whose policy says
     /// <c>None</c>): active at once, its KYC status left at <c>NotStarted</c> — no file was opened,
     /// none was approved. A later product that does require KYC opens a file then, and the
     /// per-product gate checks that file; the client's own status does not stand in for it.
     /// </summary>
-    public Result ActivateWithoutKyc(Guid actor, DateTimeOffset at)
+    public Result ActivateWithoutKyc(Guid actor, DateTimeOffset at, string reason = NoKycProductReason)
     {
         if (Status != ClientStatus.PendingKyc)
             return Result.Fail(CustomerErrors.InvalidStatusTransition);
 
-        ChangeStatus(ClientStatus.Active, "KYC non requis par le produit", actor, at);
+        ChangeStatus(ClientStatus.Active, reason, actor, at);
         return Result.Ok();
     }
 

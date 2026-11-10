@@ -34,4 +34,9 @@ public sealed record CurrentUserDto(
     /// The session works on the tenant's TEST TWIN (sandbox lot 2): data and configuration are the
     /// sandbox's, the team is production's. The front shows its banner while this is true.
     /// </summary>
-    bool TestMode = false);
+    bool TestMode = false,
+    /// <summary>
+    /// Whether the institution runs KYC (docs/kyc-par-institution.md): its switch, or a Banking -
+    /// Microfinance / Insurance module keeping it. False: KYC screens are hidden or read-only.
+    /// </summary>
+    bool KycInForce = true);

@@ -386,7 +386,8 @@ public sealed class CreateIndividualClientHandlerTests : IDisposable
     private static CreateIndividualClientHandler BuildHandler(
         CustomersDbContext db,
         out ClientsTestHarness.CountingFieldEncryptor encryptor,
-        ICurrentUser? user = null)
+        ICurrentUser? user = null,
+        ITenantKyc? tenantKyc = null)
     {
         encryptor = new ClientsTestHarness.CountingFieldEncryptor(TestDoubles.Encryptor());
 
@@ -400,6 +401,47 @@ public sealed class CreateIndividualClientHandlerTests : IDisposable
             encryptor,
             TestDoubles.Indexer(),
             ClientsTestHarness.PhoneticKeys(),
-            new OutboxEventPublisher<CustomersDbContext>(db));
+            new OutboxEventPublisher<CustomersDbContext>(db),
+            tenantKyc: tenantKyc);
+    }
+
+    // ── KYC switched off for the institution (docs/kyc-par-institution.md) ─────────────────────
+
+    [Fact]
+    public async Task With_the_institution_KYC_off_the_client_is_active_at_once_and_no_file_is_asked()
+    {
+        await using var db = _factory.CreateContext();
+        var result = await BuildHandler(db, out _, tenantKyc: FixedTenantKyc.Off).Handle(Command(), CancellationToken.None);
+
+        await using var read = _factory.CreateContext();
+        var stored = await read.Clients.Include(c => c.StatusHistory).SingleAsync(c => c.Id == result.Value.ClientId!.Value);
+        stored.Status.Should().Be(ClientStatus.Active);
+        stored.StatusHistory.Should().Contain(h => h.NewStatus == ClientStatus.Active && h.Reason == Client.KycDisabledReason);
+
+        var outbox = await read.Set<OutboxMessage>().ToListAsync();
+        outbox.Should().Contain(m => m.EventType.Contains(nameof(ClientActivatedEvent)));
+        outbox.Single(m => m.EventType.Contains(nameof(ClientCreatedEvent))).PayloadJson
+            .Should().MatchRegex("\"[Kk]ycRequired\"\\s*:\\s*false");
+    }
+
+    [Fact]
+    public async Task Switching_KYC_off_activates_the_clients_waiting_for_it()
+    {
+        await using (var db = _factory.CreateContext())
+            await BuildHandler(db, out _).Handle(Command(), CancellationToken.None);
+
+        await using var work = _factory.CreateContext();
+        var consumer = new Sankore.Modules.Customers.Features.Lifecycle.Consumers.TenantKycDisabledConsumer(
+            work, Substitute.For<Sankore.Modules.Customers.Infrastructure.IInboxGuard>(), FixedTenantKyc.Off,
+            Substitute.For<ITenantStore>(), TimeProvider.System, new OutboxEventPublisher<CustomersDbContext>(work),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Sankore.Modules.Customers.Features.Lifecycle.Consumers.TenantKycDisabledConsumer>.Instance);
+
+        var activated = await consumer.ActivateWaitingAsync(TenantId, CancellationToken.None);
+
+        activated.Should().Be(1);
+        await using var read = _factory.CreateContext();
+        var client = await read.Clients.Include(c => c.StatusHistory).SingleAsync();
+        client.Status.Should().Be(ClientStatus.Active);
+        client.StatusHistory.Should().Contain(h => h.Reason == Client.KycDisabledReason);
     }
 }

@@ -42,7 +42,8 @@ internal sealed class CreateIndividualClientHandler(
     [FromKeyedServices(nameof(CustomersDbContext))] IEventPublisher publisher,
     IAdministrationModule? administration = null,
     ILogger<CreateIndividualClientHandler>? logger = null,
-    IInstitutionCurrency? institutionCurrency = null
+    IInstitutionCurrency? institutionCurrency = null,
+    ITenantKyc? tenantKyc = null
 ) : IRequestHandler<CreateIndividualClientCommand, Result<CreateClientResult>>
 {
     public async Task<Result<CreateClientResult>> Handle(
@@ -246,6 +247,12 @@ internal sealed class CreateIndividualClientHandler(
                 actor: actor);
         }
 
+        // The institution's KYC switched off (docs/kyc-par-institution.md): a customer at once, no
+        // file opened. Through the ordinary transition, so the status history says why.
+        var kycRequired = tenantKyc is null || await tenantKyc.IsInForceAsync(tenantId, ct);
+        if (!kycRequired)
+            client.ActivateWithoutKyc(actor, now, Client.KycDisabledReason);
+
         db.Clients.Add(client);
 
         // ── 9. Outbox BEFORE SaveChanges ─────────────────────────────────────
@@ -265,8 +272,12 @@ internal sealed class CreateIndividualClientHandler(
                 AgencyId: client.AgencyId,
                 AdvisorUserId: client.AdvisorUserId,
                 SourceLeadId: client.SourceLeadId,
-                CreatedBy: actor),
+                CreatedBy: actor,
+                KycRequired: kycRequired),
             ct);
+
+        if (!kycRequired)
+            await publisher.PublishAsync(new ClientActivatedEvent(tenantId, client.Id), ct);
 
         await db.SaveChangesAsync(ct);
 

@@ -43,6 +43,10 @@ public sealed class NotifyTenantModuleDecisionsJob(
         var registry = scope.ServiceProvider.GetRequiredService<ITenantModuleRegistry>();
         var notifier = scope.ServiceProvider.GetRequiredService<TenantModuleNotifier>();
 
+        // A regulated module active puts the institution's KYC switch back on (docs/kyc-par-institution.md).
+        await scope.ServiceProvider.GetRequiredService<ComplianceSettings.SwitchKyc.KycModuleRestorer>()
+            .RestoreAsync(tenantId, ct);
+
         var answer = await registry.ListAsync(tenantId, ct);
         if (!answer.IsSuccess)
         {

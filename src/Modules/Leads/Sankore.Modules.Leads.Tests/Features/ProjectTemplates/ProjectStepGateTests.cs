@@ -123,6 +123,18 @@ public sealed class ProjectStepGateTests : IDisposable
     }
 
     [Fact]
+    public async Task With_the_institution_KYC_off_the_approval_step_asks_no_kyc_and_opens_none()
+    {
+        _tenantKyc = FixedTenantKyc.Off;
+        var steps = await SeedLoanTemplate();
+        var project = await SeedLeadProject("CREDCOM", convertedTo: _clientId);
+        _kyc.GetStatusAsync(_tenantId, _clientId, Arg.Any<CancellationToken>()).Returns(KycStatus.NotStarted);
+
+        (await Move(project, steps[2])).IsSuccess.Should().BeTrue();
+        _publisher.ReceivedCalls().Select(c => c.GetArguments()[0]).OfType<KycRequestedIntegrationEvent>().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task The_approval_step_waits_for_an_approved_kyc()
     {
         var steps = await SeedLoanTemplate();
@@ -313,8 +325,11 @@ public sealed class ProjectStepGateTests : IDisposable
         return project.Id;
     }
 
+    /// <summary>The institution's KYC switch (docs/kyc-par-institution.md); null = in force.</summary>
+    private ITenantKyc? _tenantKyc;
+
     private ProjectStepGate Gate(Sankore.Modules.Leads.Infrastructure.LeadsDbContext db)
-        => new(db, _administration, _kyc, new FixedTenantContext(_tenantId), _user, _publisher);
+        => new(db, _administration, _kyc, new FixedTenantContext(_tenantId), _user, _publisher, tenantKyc: _tenantKyc);
 
     private async Task<Result> Move(Guid projectId, Guid stepId)
     {

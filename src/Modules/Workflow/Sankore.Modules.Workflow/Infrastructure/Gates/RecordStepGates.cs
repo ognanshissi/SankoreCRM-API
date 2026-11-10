@@ -27,7 +27,8 @@ internal sealed class RecordStepGates(
     IEnumerable<IWorkflowRecordGate> gates,
     IKycModule kyc,
     Sankore.Modules.Integration.PublicApi.IIntegrationModule? integration = null,
-    Sankore.Modules.Customers.PublicApi.ICustomersModule? customers = null)
+    Sankore.Modules.Customers.PublicApi.ICustomersModule? customers = null,
+    Sankore.Shared.Kernel.ITenantKyc? tenantKyc = null)
 {
     public IWorkflowRecordGate? Gate(string entityType)
         => gates.FirstOrDefault(g => string.Equals(g.EntityType, entityType, StringComparison.OrdinalIgnoreCase));
@@ -125,6 +126,11 @@ internal sealed class RecordStepGates(
 
     public async Task<KycVerdict> KycAsync(Guid tenantId, string entityType, Guid entityId, string? configJson, CancellationToken ct)
     {
+        // An institution that switched its KYC off (docs/kyc-par-institution.md) asks none: the
+        // step passes rather than holding the circuit for ever.
+        if (tenantKyc is not null && !await Sankore.Shared.Kernel.TenantKycExtensions.IsInForceAsync(tenantKyc, tenantId, ct))
+            return new KycVerdict(true, "KYC désactivé pour l'institution : vérification sans objet.");
+
         var full = !string.Equals(KycLevel(configJson), "Simplified", StringComparison.OrdinalIgnoreCase);
         var levelLabel = full ? "complet" : "simplifié";
 
