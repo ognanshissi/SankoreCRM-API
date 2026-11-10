@@ -12,7 +12,8 @@ internal sealed class LogoutHandler(AdministrationDbContext db)
 {
     public async Task<Result> Handle(LogoutCommand request, CancellationToken ct)
     {
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, ct);
+        // AsTracking: without it RecordLogout was never saved (the context reads untracked by default).
+        var user = await db.Users.AsTracking().FirstOrDefaultAsync(u => u.Id == request.UserId, ct);
         if (user is null)
             return Result.Fail("User not found.");
 
