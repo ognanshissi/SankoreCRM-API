@@ -18,7 +18,9 @@ public sealed record UpdateUserCommand(
     /// <summary>Accepté seulement avant activation ; renvoie alors l'invitation à la nouvelle adresse.</summary>
     string? Email = null,
     /// <summary>Null : inchangé. Chaîne vide : effacé.</summary>
-    string? WorkPhone = null
+    string? WorkPhone = null,
+    /// <summary>Seconde adresse, comptée par le mode test parmi celles de l'équipe. Null : inchangée. Vide : effacée.</summary>
+    string? AdditionalEmail = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "User";

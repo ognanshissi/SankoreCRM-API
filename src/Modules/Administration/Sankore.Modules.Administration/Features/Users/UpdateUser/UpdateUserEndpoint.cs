@@ -43,7 +43,8 @@ public static class UpdateUserEndpoint
             req.FirstName,
             req.LastName,
             req.Email,
-            req.WorkPhone), ct);
+            req.WorkPhone,
+            req.AdditionalEmail), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -61,4 +62,5 @@ public sealed record UpdateUserRequest(
     string? FirstName = null,
     string? LastName = null,
     string? Email = null,
-    string? WorkPhone = null);
+    string? WorkPhone = null,
+    string? AdditionalEmail = null);

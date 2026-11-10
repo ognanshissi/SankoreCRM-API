@@ -71,4 +71,26 @@ public sealed class UpdateMyProfileHandlerTests : IDisposable
         await using var db = _factory.CreateContext();
         (await db.Users.SingleAsync(u => u.Id == userId)).FullName.Should().Be("Ibrahim Sanogo");
     }
+
+    [Fact]
+    public async Task The_user_sets_their_additional_email_and_an_older_screen_leaves_it_alone()
+    {
+        // 2026-11-10, product owner: the signed-in user sets it too, not only the administrator.
+        var userId = await SeedUserAsync(withProfile: true);
+
+        (await Handler(userId).Handle(new UpdateMyProfileCommand(Request() with { AdditionalEmail = " Ibrahima.Perso@Gmail.com " }),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await using (var db = _factory.CreateContext())
+            (await db.UserProfiles.SingleAsync(p => p.UserId == userId)).AdditionalEmail.Should().Be("ibrahima.perso@gmail.com");
+
+        // A screen that does not send the field (null) keeps it; an empty one clears it.
+        (await Handler(userId).Handle(new UpdateMyProfileCommand(Request()), CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await using (var db = _factory.CreateContext())
+            (await db.UserProfiles.SingleAsync(p => p.UserId == userId)).AdditionalEmail.Should().Be("ibrahima.perso@gmail.com");
+
+        (await Handler(userId).Handle(new UpdateMyProfileCommand(Request() with { AdditionalEmail = "" }), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+        await using (var db = _factory.CreateContext())
+            (await db.UserProfiles.SingleAsync(p => p.UserId == userId)).AdditionalEmail.Should().BeEmpty();
+    }
 }

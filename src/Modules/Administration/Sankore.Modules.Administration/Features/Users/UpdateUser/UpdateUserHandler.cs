@@ -69,7 +69,7 @@ internal sealed class UpdateUserHandler(
             return Result.Fail(ex.Message);
         }
 
-        if (request.WorkPhone is not null)
+        if (request.WorkPhone is not null || request.AdditionalEmail is not null)
         {
             var profile = await db.UserProfiles.AsTracking().FirstOrDefaultAsync(p => p.UserId == user.Id, ct);
             if (profile is null)
@@ -77,7 +77,8 @@ internal sealed class UpdateUserHandler(
                 profile = UserProfile.Create(user.TenantId, user.Id);
                 db.UserProfiles.Add(profile);
             }
-            profile.SetWorkPhone(request.WorkPhone);
+            if (request.WorkPhone is not null) profile.SetWorkPhone(request.WorkPhone);
+            if (request.AdditionalEmail is not null) profile.SetAdditionalEmail(request.AdditionalEmail);
         }
 
         await db.SaveChangesAsync(ct);

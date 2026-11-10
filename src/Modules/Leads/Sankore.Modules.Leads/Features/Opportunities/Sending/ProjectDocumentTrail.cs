@@ -25,7 +25,8 @@ internal sealed class ProjectDocumentTrail(LeadsDbContext db, TimeProvider clock
         var ids = attachmentIds.Distinct().ToList();
         if (ids.Count == 0) return;
 
-        var project = await db.Opportunities.IgnoreQueryFilters().AsNoTracking()
+        // Tracked: a quote sent ticks « Devis envoyé au client » on it (below).
+        var project = await db.Opportunities.IgnoreQueryFilters().AsTracking()
             .FirstOrDefaultAsync(o => o.TenantId == tenantId && o.Id == projectId, ct);
         if (project is null) return;
 
@@ -37,6 +38,12 @@ internal sealed class ProjectDocumentTrail(LeadsDbContext db, TimeProvider clock
 
         var now = clock.GetUtcNow();
         foreach (var file in files) file.MarkSent(channel, now);
+
+        // A generated quote that left IS the « Devis envoyé au client » point of the standard
+        // route (2026-11-10, product owner): the agent no longer ticks what the CRM saw happen.
+        // A closed project refuses the tick, and a route without that point simply never reads it.
+        if (files.Any(f => f.FieldKey == Quote.IssueProjectQuoteHandler.FieldKey))
+            project.SetChecklistItem(ProjectTemplate.QuoteSentChecklistItemId, true, now);
 
         var names = string.Join(" ; ", ids.Select(id => files.FirstOrDefault(f => f.Id == id)?.FileName).Where(n => n is not null));
         if (names.Length > ProjectHistoryEntry.DetailMaxLength) names = names[..(ProjectHistoryEntry.DetailMaxLength - 1)] + "…";

@@ -18,6 +18,9 @@ internal sealed class UpdateUserValidator : AbstractValidator<UpdateUserCommand>
         When(x => x.FirstName is not null, () => RuleFor(x => x.FirstName).NotEmpty().MaximumLength(200));
         When(x => x.LastName is not null, () => RuleFor(x => x.LastName).NotEmpty().MaximumLength(200));
         When(x => x.Email is not null, () => RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(256));
+        When(x => !string.IsNullOrWhiteSpace(x.AdditionalEmail), () =>
+            RuleFor(x => x.AdditionalEmail).EmailAddress().MaximumLength(Domain.UserProfile.MaxAdditionalEmailLength)
+                .WithMessage("L'adresse e-mail supplémentaire n'est pas valide."));
         RuleFor(x => x.WorkPhone).MaximumLength(30).Matches(@"^\+?[0-9 ().-]*$")
             .WithMessage("Le téléphone professionnel n'est pas un numéro valide.");
     }

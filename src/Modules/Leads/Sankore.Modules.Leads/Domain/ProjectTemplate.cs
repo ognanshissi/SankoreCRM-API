@@ -344,13 +344,42 @@ public sealed class ProjectTemplate : AggregateRoot
     /// the tenant saves its default keeps pointing at a step the saved copy still has, as long as
     /// the screen sends the ids back — which it does.
     /// </summary>
+    /// <remarks>
+    /// <b>Exit criteria (product owner, 2026-11-10).</b> Each step is left on something the CLIENT
+    /// did, checkable on the record — the practice the sales references converge on (criteria on
+    /// buyer actions, verifiable in the CRM). Qualification follows BANT: need and decision-maker
+    /// are ticked, budget and timeline are the estimated amount and the close date, required to
+    /// REACH « Étude ». The checklist ids are fixed: ticks are stored by id, so a reworded point
+    /// keeps them. An institution that saves its own default route replaces all of this.
+    /// </remarks>
+    /// <summary>
+    /// « Devis envoyé au client » (Proposition): ticked by the CRM itself when a generated quote of
+    /// the project leaves by e-mail or WhatsApp (<c>ProjectDocumentTrail</c>). By id, so a route an
+    /// institution saved from the built-in one keeps the behaviour.
+    /// </summary>
+    public static readonly Guid QuoteSentChecklistItemId = new("6f1c0a10-0000-4000-8000-000000000401");
+
     public static readonly IReadOnlyList<ProjectStepInput> BuiltInDefault =
     [
-        new(new Guid("6f1c0a10-0000-4000-8000-000000000001"), "Prospection", OpportunityStage.Prospecting, 10, "Planifier un rendez-vous"),
-        new(new Guid("6f1c0a10-0000-4000-8000-000000000002"), "Qualification", OpportunityStage.Qualification, 20, "Vérifier l'éligibilité"),
-        new(new Guid("6f1c0a10-0000-4000-8000-000000000003"), "Étude", OpportunityStage.NeedsAnalysis, 40, "Réunir les pièces du dossier"),
-        new(new Guid("6f1c0a10-0000-4000-8000-000000000004"), "Proposition", OpportunityStage.Proposal, 60, "Présenter l'offre"),
-        new(new Guid("6f1c0a10-0000-4000-8000-000000000005"), "Négociation", OpportunityStage.Negotiation, 80, "Fixer la date de signature"),
+        new(new Guid("6f1c0a10-0000-4000-8000-000000000001"), "Prospection", OpportunityStage.Prospecting, 10, "Planifier un rendez-vous",
+            Checklist: [new(new Guid("6f1c0a10-0000-4000-8000-000000000101"), "Rendez-vous tenu avec le client")]),
+        new(new Guid("6f1c0a10-0000-4000-8000-000000000002"), "Qualification", OpportunityStage.Qualification, 20, "Vérifier le besoin, le budget, le décideur et l'échéance",
+            Checklist:
+            [
+                new(new Guid("6f1c0a10-0000-4000-8000-000000000201"), "Besoin exprimé par le client"),
+                new(new Guid("6f1c0a10-0000-4000-8000-000000000202"), "Décideur identifié"),
+            ]),
+        new(new Guid("6f1c0a10-0000-4000-8000-000000000003"), "Étude", OpportunityStage.NeedsAnalysis, 40, "Étudier la solution avec le client",
+            RequiresAmount: true, RequiresCloseDate: true,
+            Checklist: [new(new Guid("6f1c0a10-0000-4000-8000-000000000301"), "Besoin validé avec le client")]),
+        new(new Guid("6f1c0a10-0000-4000-8000-000000000004"), "Proposition", OpportunityStage.Proposal, 60, "Présenter l'offre",
+            Checklist:
+            [
+                new(QuoteSentChecklistItemId, "Devis envoyé au client"),
+                new(new Guid("6f1c0a10-0000-4000-8000-000000000402"), "Retour du client sur le devis"),
+            ]),
+        new(new Guid("6f1c0a10-0000-4000-8000-000000000005"), "Négociation", OpportunityStage.Negotiation, 80, "Fixer la date de signature",
+            Checklist: [new(new Guid("6f1c0a10-0000-4000-8000-000000000501"), "Accord du décideur sur les conditions")]),
     ];
 
     /// <summary>

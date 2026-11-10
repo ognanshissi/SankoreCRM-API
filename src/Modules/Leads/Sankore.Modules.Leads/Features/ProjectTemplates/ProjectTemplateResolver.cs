@@ -196,7 +196,10 @@ internal sealed class ProjectTemplateResolver(
         ProjectTemplate.BuiltInDefaultName,
         "Default",
         ProjectTemplate.BuiltInDefault
-            .Select(s => new ProjectStepDto(s.Id!.Value, s.Label, s.Phase, s.Probability, s.Suggestion))
+            .Select(s => new ProjectStepDto(s.Id!.Value, s.Label, s.Phase, s.Probability, s.Suggestion,
+                s.OpensClientFile, s.IsApproval, s.RequiresQuestionnaires, s.RequiresAmount, s.RequiresCloseDate,
+                s.Checklist?.Select(c => new ProjectChecklistItem(c.Id!.Value, c.Label)).ToList(), s.WorkflowCircuit,
+                s.RequiredFieldKeys))
             .ToList());
 
     /// <summary>

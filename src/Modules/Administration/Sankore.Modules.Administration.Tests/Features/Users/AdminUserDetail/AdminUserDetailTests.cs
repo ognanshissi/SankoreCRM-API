@@ -125,6 +125,27 @@ public sealed class AdminUserDetailTests : IDisposable
     }
 
     [Fact]
+    public async Task The_administrator_sets_and_clears_the_additional_email()
+    {
+        // 2026-11-10: no screen could fill it although test mode counts it as a team address.
+        var user = await SeedAsync("oumou@imf.ci", active: true);
+
+        await using (var db = _factory.CreateContext())
+            (await new UpdateUserHandler(db, Invitations(db)).Handle(
+                new UpdateUserCommand(user.Id, null, null, null, null, null, AdditionalEmail: " Oumou.Perso@Gmail.com "),
+                CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await using (var read = _factory.CreateContext())
+            (await read.UserProfiles.SingleAsync(p => p.UserId == user.Id)).AdditionalEmail.Should().Be("oumou.perso@gmail.com");
+
+        await using (var db = _factory.CreateContext())
+            (await new UpdateUserHandler(db, Invitations(db)).Handle(
+                new UpdateUserCommand(user.Id, null, null, null, null, null, AdditionalEmail: ""),
+                CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await using (var read = _factory.CreateContext())
+            (await read.UserProfiles.SingleAsync(p => p.UserId == user.Id)).AdditionalEmail.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task The_address_of_an_activated_account_is_locked()
     {
         var user = await SeedAsync("oumou@imf.ci", active: true);

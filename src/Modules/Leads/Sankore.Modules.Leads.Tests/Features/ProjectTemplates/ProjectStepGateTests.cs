@@ -227,9 +227,48 @@ public sealed class ProjectStepGateTests : IDisposable
     [Fact]
     public async Task A_template_without_marked_steps_gates_nothing()
     {
+        // An institution's own route with no requirement: nothing is asked. The built-in route
+        // asks for its criteria since 2026-11-10 (tests below).
+        await using (var db = _factory.CreateContext())
+        {
+            db.ProjectTemplates.Add(ProjectTemplate.Create(_tenantId, "Sans exigence", null, "CREDCOM",
+            [
+                new(null, "Contact", OpportunityStage.Prospecting, 10),
+                new(null, "Offre", OpportunityStage.Proposal, 60),
+            ], DateTimeOffset.UtcNow).Value);
+            await db.SaveChangesAsync();
+        }
         var project = await SeedLeadProject("CREDCOM", convertedTo: null);
+        await using var read = _factory.CreateContext();
+        var offer = (await new ProjectTemplateResolver(read, _administration, new FixedTenantContext(_tenantId))
+            .ResolveAsync("CREDCOM", CancellationToken.None)).Steps[1].Id;
 
-        (await Move(project, ProjectTemplate.BuiltInDefault[4].Id!.Value)).IsSuccess.Should().BeTrue();
+        (await Move(project, offer)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task The_built_in_route_is_left_on_what_the_client_did()
+    {
+        var project = await SeedLeadProject("Offre à préciser", convertedTo: null);
+        var steps = ProjectTemplate.BuiltInDefault;
+
+        (await Move(project, steps[1].Id!.Value)).Error.Should().Be(ProjectTemplateErrors.ChecklistIncomplete,
+            "« Rendez-vous tenu avec le client » is not ticked");
+
+        await Tick(project, steps[0].Checklist![0].Id!.Value);
+        (await Move(project, steps[1].Id!.Value)).IsSuccess.Should().BeTrue();
+
+        foreach (var item in steps[1].Checklist!) await Tick(project, item.Id!.Value);
+        (await Move(project, steps[2].Id!.Value)).Error.Should().Be(ProjectTemplateErrors.AmountRequired,
+            "budget and timeline (BANT) are the amount and the close date, required to reach « Étude »");
+    }
+
+    private async Task Tick(Guid projectId, Guid itemId)
+    {
+        await using var db = _factory.CreateContext();
+        var project = await db.Opportunities.AsTracking().SingleAsync(o => o.Id == projectId);
+        project.SetChecklistItem(itemId, true, DateTimeOffset.UtcNow).IsSuccess.Should().BeTrue();
+        await db.SaveChangesAsync();
     }
 
     // ── Outils ──────────────────────────────────────────────────────────────

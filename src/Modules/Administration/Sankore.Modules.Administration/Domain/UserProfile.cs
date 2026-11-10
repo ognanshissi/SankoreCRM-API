@@ -80,6 +80,19 @@ public class UserProfile
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    public const int MaxAdditionalEmailLength = 256;
+
+    /// <summary>
+    /// Une seconde adresse de l'utilisateur, réglée par l'administrateur (2026-11-10). Le mode test
+    /// la compte parmi celles de l'équipe : un message vers elle n'est pas bloqué. Blanc l'efface ;
+    /// gardée en minuscules, comme l'adresse de connexion normalisée à laquelle elle est comparée.
+    /// </summary>
+    public void SetAdditionalEmail(string? email)
+    {
+        AdditionalEmail = Blank(email)?.ToLowerInvariant() ?? string.Empty;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>Le téléphone professionnel, réglé par l'administrateur. Blanc l'efface.</summary>
     public void SetWorkPhone(string? workPhone)
     {

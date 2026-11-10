@@ -54,7 +54,8 @@ internal sealed class GetMyProfileHandler(AdministrationDbContext db, ICurrentUs
             user.Agency?.Name,
             managerName,
             user.CreatedAt,
-            profile?.UpdatedAt));
+            profile?.UpdatedAt,
+            string.IsNullOrWhiteSpace(profile?.AdditionalEmail) ? null : profile!.AdditionalEmail));
     }
 }
 

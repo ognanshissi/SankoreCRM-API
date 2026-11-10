@@ -37,7 +37,7 @@ internal sealed class GetUserHandler(
 
         var profile = await db.UserProfiles
             .Where(p => p.UserId == user.Id)
-            .Select(p => new { Phone = p.WorkNumber != null ? p.WorkNumber.Contact : null })
+            .Select(p => new { Phone = p.WorkNumber != null ? p.WorkNumber.Contact : null, p.AdditionalEmail })
             .FirstOrDefaultAsync(ct);
         var avatar = await db.UserAvatars.FirstOrDefaultAsync(a => a.UserId == user.Id, ct);
 
@@ -90,6 +90,7 @@ internal sealed class GetUserHandler(
             FirstName: user.FirstName,
             LastName: user.LastName,
             WorkPhone: string.IsNullOrWhiteSpace(profile?.Phone) ? null : profile!.Phone,
+            AdditionalEmail: string.IsNullOrWhiteSpace(profile?.AdditionalEmail) ? null : profile!.AdditionalEmail,
             AvatarDataUrl: avatar?.ToDataUrl(),
             CreatedAt: user.CreatedAt,
             CreatedByName: createdByName,

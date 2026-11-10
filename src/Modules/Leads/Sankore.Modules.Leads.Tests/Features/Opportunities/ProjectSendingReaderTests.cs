@@ -83,10 +83,10 @@ public sealed class ProjectSendingReaderTests : IDisposable
         return (project, clientId);
     }
 
-    private async Task<ProjectAttachment> AttachAsync(Guid projectId, string name, bool removed = false)
+    private async Task<ProjectAttachment> AttachAsync(Guid projectId, string name, bool removed = false, string fieldKey = "devis")
     {
         var stored = await _store.StoreAsync(_tenant, System.Text.Encoding.UTF8.GetBytes("%PDF-" + name), CancellationToken.None);
-        var row = ProjectAttachment.Record(_tenant, projectId, "devis", name, "application/pdf", stored.SizeBytes, stored.Sha256,
+        var row = ProjectAttachment.Record(_tenant, projectId, fieldKey, name, "application/pdf", stored.SizeBytes, stored.Sha256,
             stored.StorageRef, _me, DateTimeOffset.UtcNow);
         if (removed) row.Remove(_me, DateTimeOffset.UtcNow);
 
@@ -215,5 +215,31 @@ public sealed class ProjectSendingReaderTests : IDisposable
         read.ProjectAttachments.Single(a => a.Id == devis.Id).LastSentChannel.Should().Be(ProjectDocumentChannels.Email);
         read.ProjectAttachments.Single(a => a.Id == elsewhere.Id).LastSentAt.Should().BeNull();
     }
-}
 
+    [Fact]
+    public async Task A_generated_quote_that_leaves_ticks_devis_envoye_and_an_uploaded_file_does_not()
+    {
+        // 2026-11-10, product owner: the CRM ticks what it saw happen.
+        var (project, _) = await ProjectOwnedByAsync(_me);
+        var upload = await AttachAsync(project.Id, "photo.pdf");
+        var quote = await AttachAsync(project.Id, "Devis DEV-2026-000001.pdf", fieldKey: "quote");
+
+        async Task SendAsync(Guid file, string channel)
+        {
+            await using var db = _db.CreateContext();
+            await new ProjectDocumentTrail(db, TimeProvider.System)
+                .RecordAsync(_tenant, project.Id, channel, [file], _me, null, CancellationToken.None);
+            await db.SaveChangesAsync();
+        }
+
+        await SendAsync(upload.Id, ProjectDocumentChannels.Email);
+        await using (var read = _db.CreateContext())
+            read.Opportunities.Single(o => o.Id == project.Id).CheckedChecklistItems
+                .Should().NotContain(ProjectTemplate.QuoteSentChecklistItemId);
+
+        await SendAsync(quote.Id, ProjectDocumentChannels.WhatsApp);
+        await using (var read = _db.CreateContext())
+            read.Opportunities.Single(o => o.Id == project.Id).CheckedChecklistItems
+                .Should().Contain(ProjectTemplate.QuoteSentChecklistItemId);
+    }
+}

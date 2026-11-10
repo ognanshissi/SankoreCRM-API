@@ -449,6 +449,16 @@ BEFORE a source's pinned rule, and never gives such a rule to another lead (no t
 simulation. List, export and view counts take `potential` (`LeadListFilter.Potential`, `keyAccounts` count);
 `LeadDto.PotentialTier`; the lead report adds `ByPotential` (null without thresholds) and `BySector`.
 
+**The built-in « Parcours standard » has exit criteria (2026-11-10, product owner).** `ProjectTemplate.BuiltInDefault`
+(the route of every institution that never saved its own default) is left on what the CLIENT did, checkable on the
+record: Prospection « Rendez-vous tenu avec le client »; Qualification « Besoin exprimé par le client », « Décideur
+identifié » (BANT's budget and timeline are the amount and close date, required to REACH Étude); Étude « Besoin validé
+avec le client »; Proposition « Devis envoyé au client », « Retour du client sur le devis »; Négociation « Accord du
+décideur sur les conditions ». Checklist ids are fixed GUIDs (ticks are stored by id). « Marquer gagné » leaves every
+remaining step, so it needs all their points plus the amount and the date. Projects already in progress are bound too.
+« Devis envoyé au client » (`ProjectTemplate.QuoteSentChecklistItemId`) is ticked by `ProjectDocumentTrail` when a
+generated quote (attachment key `quote`) leaves by e-mail or WhatsApp — by id, so a route saved from the built-in keeps it.
+
 **Quotes with product lines (2026-11-10, product owner; plan `docs/devis-en-lignes.md`, socle).** Standard products carry
 `UnitPrice` (excl. VAT), `PriceUnit`, `VatCategory` (`PUT products/{id}/pricing`); the institution its VAT rates, discount
 ceiling, legal identity and quote settings (`company-info/pricing`, `/legal-identity`, `/quote-settings`), read by Leads
@@ -1200,7 +1210,11 @@ mean something beyond the data wipe: **a test tenant never reaches anybody outsi
   decision. Live or unknown tenant → never blocked. Test tenant → blocked unless the address is a
   user's sign-in (`NormalizedEmail`) or additional e-mail, or the number one of a user's (account,
   work, home, personal, WhatsApp), compared on digits by `TestModePhones` (the shorter is the end
-  of the longer, at least 8 digits — a local « 07 08… » matches « +225 07 08… »).
+  of the longer, at least 8 digits — a local « 07 08… » matches « +225 07 08… »). The additional
+  e-mail is set by the administrator on the user record (`UpdateUserCommand.AdditionalEmail`) and by
+  the user in « Mon compte » (`UpdateMyProfileRequest.AdditionalEmail`, null = unchanged, empty =
+  cleared), since 2026-11-10; before, nothing wrote it. Its column is `user_profile.additional_email`: until the
+  `RenameUserProfileColumns` migration (hand-written renames) that column held the profile's id.
 - **Asked as « blocked? » on purpose**: an NSubstitute double answers `false`, the live behaviour,
   so no existing sender test starts refusing. Keep new callers on that polarity.
 - Callers, each BEFORE the allowance and the provider: `EmailOutboxProcessor` and

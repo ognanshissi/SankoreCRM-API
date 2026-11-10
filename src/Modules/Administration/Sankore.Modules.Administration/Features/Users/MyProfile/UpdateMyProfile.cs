@@ -13,8 +13,9 @@ using Sankore.Shared.Kernel;
 namespace Sankore.Modules.Administration.Features.Users.MyProfile;
 
 /// <summary>
-/// L'utilisateur corrige son propre profil. Ni l'e-mail ni le matricule, ni l'agence ni le
-/// superviseur : ceux-là restent à l'administrateur, par <c>PUT users/{id}</c>.
+/// L'utilisateur corrige son propre profil. Ni l'e-mail de connexion ni le matricule, ni l'agence ni
+/// le superviseur : ceux-là restent à l'administrateur, par <c>PUT users/{id}</c>. L'e-mail
+/// supplémentaire, lui, se règle des deux côtés (propriétaire, 2026-11-10).
 /// </summary>
 public sealed record UpdateMyProfileCommand(UpdateMyProfileRequest Request) : IRequest<Result>, ICommand;
 
@@ -31,6 +32,9 @@ internal sealed class UpdateMyProfileValidator : AbstractValidator<UpdateMyProfi
         RuleFor(x => x.Request.WhatsAppNumber).MaximumLength(30).Matches(@"^\+?[0-9 ().-]*$")
             .WithMessage("Le numéro WhatsApp n'est pas un numéro valide.");
         RuleFor(x => x.Request.Signature).MaximumLength(UserProfile.MaxSignatureLength);
+        When(x => !string.IsNullOrWhiteSpace(x.Request.AdditionalEmail), () =>
+            RuleFor(x => x.Request.AdditionalEmail).EmailAddress().MaximumLength(UserProfile.MaxAdditionalEmailLength)
+                .WithMessage("L'adresse e-mail supplémentaire n'est pas valide."));
         RuleFor(x => x.Request.InterfaceLanguage)
             .Must(l => InterfaceLanguages.Contains(LanguageCode.NormalizeOrNull(l)))
             .WithMessage("Langue d'interface inconnue : fr ou en.");
@@ -64,6 +68,7 @@ internal sealed class UpdateMyProfileHandler(AdministrationDbContext db, ICurren
             // Les deux portent la langue : PreferredLanguage pour les e-mails et le jeton,
             // DefaultLanguage pour GET users/me. Les laisser diverger donnerait deux réponses.
             user.SetPreferredLanguage(req.InterfaceLanguage);
+            if (req.AdditionalEmail is not null) profile.SetAdditionalEmail(req.AdditionalEmail);
         }
         catch (DomainException ex)
         {

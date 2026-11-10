@@ -220,6 +220,14 @@ public sealed class ProjectQuestionnaireTests : IDisposable
     public async Task Winning_needs_the_per_person_declarations_even_with_no_marked_step()
     {
         var (_, project) = await SeedAsync(HealthTemplate());
+        // Winning leaves every step of the built-in route, whose points are owed since 2026-11-10.
+        await using (var db = _factory.CreateContext())
+        {
+            var tracked = await db.Opportunities.AsTracking().SingleAsync(o => o.Id == project);
+            foreach (var item in ProjectTemplate.BuiltInDefault.SelectMany(s => s.Checklist ?? []))
+                tracked.SetChecklistItem(item.Id!.Value, true, Now);
+            await db.SaveChangesAsync();
+        }
 
         var result = await CloseAsync(project, OpportunityStage.ClosedWon);
 
@@ -359,7 +367,11 @@ public sealed class ProjectQuestionnaireTests : IDisposable
         lead.AddHouseholdMember(
             HouseholdMemberType.Child, null, PersonIdentity.Create("Kouassi", "Kofi"), null, true, Now);
 
-        var project = Opportunity.CreateFromLead(_tenant, lead.Id, "Projet santé", Product, null, TimeProvider.System);
+        // With an amount and a close date: the built-in route asks for both to reach « Étude »
+        // (2026-11-10), and these tests are about the questionnaires, not about those.
+        var project = Opportunity.CreateFromLead(_tenant, lead.Id, "Projet santé", Product, null, TimeProvider.System,
+            estimatedAmount: new Sankore.Shared.Kernel.ValueObject.Money(1_000_000m, "XOF"),
+            expectedCloseDate: DateTimeOffset.UtcNow.AddDays(30));
 
         await using var db = _factory.CreateContext();
         db.Leads.Add(lead);

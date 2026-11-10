@@ -20,7 +20,9 @@ public sealed record MyProfileDto(
     string? ManagerName,
     /// <summary>Null pour un compte antérieur dont l'arrivée n'a pas pu être reconstituée.</summary>
     DateTimeOffset? MemberSince,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    /// <summary>Seconde adresse ; le mode test la compte parmi celles de l'équipe.</summary>
+    string? AdditionalEmail = null);
 
 public sealed record UpdateMyProfileRequest(
     string FirstName,
@@ -30,4 +32,6 @@ public sealed record UpdateMyProfileRequest(
     string? Signature,
     string InterfaceLanguage,
     string TimeZone,
-    string AmountFormat);
+    string AmountFormat,
+    /// <summary>Null : inchangée (un écran plus ancien ne l'envoie pas). Vide : effacée.</summary>
+    string? AdditionalEmail = null);

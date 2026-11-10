@@ -68,7 +68,8 @@ public sealed class TestModeRecipientsTests : IDisposable
         using (var db = _factory.CreateContext())
         {
             var profile = UserProfile.Create(_tenantId, user.Id);
-            typeof(UserProfile).GetProperty(nameof(UserProfile.AdditionalEmail))!.SetValue(profile, "awa.kone@perso.test");
+            // Set as the administrator sets it from the user record (2026-11-10): kept in lower case.
+            profile.SetAdditionalEmail("  Awa.Kone@Perso.test ");
             db.UserProfiles.Add(profile);
             db.SaveChanges();
         }

@@ -45,4 +45,6 @@ public sealed record UserDto(
     /// <summary>Utilisateurs qui lui sont directement rattachés.</summary>
     int DirectReportsCount = 0,
     string? ReportsToRoleLabel = null,
-    string? ReportsToAgencyName = null);
+    string? ReportsToAgencyName = null,
+    /// <summary>Seconde adresse (détail seulement) : le mode test la compte parmi celles de l'équipe.</summary>
+    string? AdditionalEmail = null);

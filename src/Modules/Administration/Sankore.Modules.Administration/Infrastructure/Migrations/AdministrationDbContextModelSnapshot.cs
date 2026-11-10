@@ -2010,9 +2010,8 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasMaxLength(100)
                         .HasColumnType("uuid")
-                        .HasColumnName("additional_email");
+                        .HasColumnName("id");
 
                     b.Property<string>("AdditionalEmail")
                         .IsRequired()
@@ -2077,11 +2076,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_user_profile_user_id");
 
-                    b.ToTable("user_profile", "administration", t =>
-                        {
-                            t.Property("AdditionalEmail")
-                                .HasColumnName("additional_email1");
-                        });
+                    b.ToTable("user_profile", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.UserRole", b =>
@@ -2533,7 +2528,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         {
                             b1.Property<Guid>("UserProfileId")
                                 .HasColumnType("uuid")
-                                .HasColumnName("additional_email");
+                                .HasColumnName("id");
 
                             b1.Property<string>("City")
                                 .HasColumnType("text")
@@ -2561,13 +2556,13 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                             b1.WithOwner()
                                 .HasForeignKey("UserProfileId")
-                                .HasConstraintName("fk_user_profile_user_profile_additional_email");
+                                .HasConstraintName("fk_user_profile_user_profile_id");
 
                             b1.OwnsOne("Sankore.Shared.Kernel.ValueObject.GeoPoint", "Location", b2 =>
                                 {
                                     b2.Property<Guid>("AddressUserProfileId")
                                         .HasColumnType("uuid")
-                                        .HasColumnName("additional_email");
+                                        .HasColumnName("id");
 
                                     b2.Property<double>("Latitude")
                                         .HasColumnType("double precision")
@@ -2583,7 +2578,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                                     b2.WithOwner()
                                         .HasForeignKey("AddressUserProfileId")
-                                        .HasConstraintName("fk_user_profile_user_profile_additional_email");
+                                        .HasConstraintName("fk_user_profile_user_profile_id");
                                 });
 
                             b1.Navigation("Location");
@@ -2593,7 +2588,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         {
                             b1.Property<Guid>("UserProfileId")
                                 .HasColumnType("uuid")
-                                .HasColumnName("additional_email");
+                                .HasColumnName("id");
 
                             b1.Property<DateTimeOffset?>("ConfirmedAt")
                                 .HasColumnType("timestamp with time zone")
@@ -2615,14 +2610,14 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                             b1.WithOwner()
                                 .HasForeignKey("UserProfileId")
-                                .HasConstraintName("fk_user_profile_user_profile_additional_email");
+                                .HasConstraintName("fk_user_profile_user_profile_id");
                         });
 
                     b.OwnsOne("Sankore.Shared.Kernel.PhoneNumber", "PersonalNumber", b1 =>
                         {
                             b1.Property<Guid>("UserProfileId")
                                 .HasColumnType("uuid")
-                                .HasColumnName("additional_email");
+                                .HasColumnName("id");
 
                             b1.Property<DateTimeOffset?>("ConfirmedAt")
                                 .HasColumnType("timestamp with time zone")
@@ -2644,14 +2639,14 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                             b1.WithOwner()
                                 .HasForeignKey("UserProfileId")
-                                .HasConstraintName("fk_user_profile_user_profile_additional_email");
+                                .HasConstraintName("fk_user_profile_user_profile_id");
                         });
 
                     b.OwnsOne("Sankore.Shared.Kernel.PhoneNumber", "WorkNumber", b1 =>
                         {
                             b1.Property<Guid>("UserProfileId")
                                 .HasColumnType("uuid")
-                                .HasColumnName("additional_email");
+                                .HasColumnName("id");
 
                             b1.Property<DateTimeOffset?>("ConfirmedAt")
                                 .HasColumnType("timestamp with time zone")
@@ -2673,7 +2668,7 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
 
                             b1.WithOwner()
                                 .HasForeignKey("UserProfileId")
-                                .HasConstraintName("fk_user_profile_user_profile_additional_email");
+                                .HasConstraintName("fk_user_profile_user_profile_id");
                         });
 
                     b.Navigation("Address")

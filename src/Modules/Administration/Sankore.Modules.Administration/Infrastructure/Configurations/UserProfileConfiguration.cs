@@ -11,7 +11,11 @@ public class UserProfileConfiguration: IEntityTypeConfiguration<UserProfile>
     {
         builder.ToTable("user_profile");
         builder.HasKey(x => x.Id);
-        builder.Property(profile => profile.Id).HasMaxLength(100).HasColumnName("additional_email");
+        // The identifier was stored in a column named « additional_email », which pushed the real
+        // additional e-mail into « additional_email1 » (fixed 2026-11-10, migration
+        // RenameUserProfileColumns: both columns renamed, no data moved).
+        builder.Property(profile => profile.Id).HasColumnName("id");
+        builder.Property(profile => profile.AdditionalEmail).HasColumnName("additional_email");
         
         builder.HasOne(x => x.User)
             .WithOne(x => x.Profile)
