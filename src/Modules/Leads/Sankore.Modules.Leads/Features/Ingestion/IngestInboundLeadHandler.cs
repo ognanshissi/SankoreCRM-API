@@ -18,7 +18,8 @@ internal sealed class IngestInboundLeadHandler(
     IPhoneBlindIndexer phoneBlindIndexer,
     TimeProvider clock,
     Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
-    Microsoft.Extensions.Logging.ILogger<IngestInboundLeadHandler>? logger = null)
+    Microsoft.Extensions.Logging.ILogger<IngestInboundLeadHandler>? logger = null,
+    Sankore.Modules.Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<IngestInboundLeadCommand, Result<IngestInboundLeadResult>>
 {
     public async Task<Result<IngestInboundLeadResult>> Handle(
@@ -149,11 +150,15 @@ internal sealed class IngestInboundLeadHandler(
         var lead = InboundLeadFactory.Build(
             cmd.TenantId, source, mapped, fullName!, phone!, phoneIndex, cmd.ExternalId, clock);
 
+        // The company the payload describes (key accounts lot 1), before the custom fields: their
+        // visibility conditions read the prospect type.
+        await InboundCompanyProfile.ApplyAsync(lead, mapped, institutionCurrency, logger, ct);
+
         // Mapping rules targeting `custom.<key>` (dynamic forms, lot 6).
         await CustomFields.InboundCustomFields.ApplyAsync(administration, logger, lead, mapped, source.Id, ct);
 
         db.Leads.Add(lead);
-        await QualifyLead.CaptureScore.ApplyAsync(db, lead, ct);
+        await QualifyLead.CaptureScore.ApplyAsync(db, lead, ct, administration);
 
         // ── 7. Create ingestion record ──────────────────────────────────
         var ingestion = LeadIngestion.Create(

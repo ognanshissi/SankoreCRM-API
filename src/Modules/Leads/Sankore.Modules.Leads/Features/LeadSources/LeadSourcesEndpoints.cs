@@ -212,7 +212,8 @@ public static class LeadSourcesEndpoints
             CostCurrency:    req.CostCurrency,
             DefaultAgencyId:          req.DefaultAgencyId,
             DefaultDispatchingRuleId: req.DefaultDispatchingRuleId,
-            ScorePoints:              req.ScorePoints), ct);
+            ScorePoints:              req.ScorePoints,
+            ProductRequestIsHot:      req.ProductRequestIsHot), ct);
 
         return result.IsSuccess
             ? Results.Created($"lead-sources/{result.Value}", result.Value)
@@ -235,7 +236,8 @@ public static class LeadSourcesEndpoints
             CostCurrency:    req.CostCurrency,
             DefaultAgencyId:          req.DefaultAgencyId,
             DefaultDispatchingRuleId: req.DefaultDispatchingRuleId,
-            ScorePoints:              req.ScorePoints), ct);
+            ScorePoints:              req.ScorePoints,
+            ProductRequestIsHot:      req.ProductRequestIsHot), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -350,7 +352,9 @@ public sealed record CreateLeadSourceRequest(
     Guid? DefaultAgencyId = null,
     Guid? DefaultDispatchingRuleId = null,
     /// <summary>0–20 points in the lead score's source dimension; null = the channel's default.</summary>
-    int? ScorePoints = null);
+    int? ScorePoints = null,
+    /// <summary>A request for a precise product makes the lead hot; null = the channel's default.</summary>
+    bool? ProductRequestIsHot = null);
 
 public sealed record UpdateLeadSourceRequest(
     uint Version,
@@ -365,7 +369,9 @@ public sealed record UpdateLeadSourceRequest(
     Guid? DefaultAgencyId = null,
     Guid? DefaultDispatchingRuleId = null,
     /// <summary>Replaced, like the cost: null puts the channel's default back.</summary>
-    int? ScorePoints = null);
+    int? ScorePoints = null,
+    /// <summary>Replaced too: null puts the channel's default back.</summary>
+    bool? ProductRequestIsHot = null);
 
 public sealed record PreviewMappingRequest(string SamplePayloadJson);
 

@@ -170,6 +170,11 @@ internal static class LeadFormPresence
         ["postalCode"]        = l => !string.IsNullOrWhiteSpace(l.PrincipalPostalCode),
         ["city"]              = l => !string.IsNullOrWhiteSpace(l.PrincipalCity),
         ["countryCode"]       = l => !string.IsNullOrWhiteSpace(l.PrincipalCountryCode),
+        // The company profile (key accounts lot 1).
+        ["activitySector"]    = l => l.ActivitySectorCode is not null,
+        ["companySize"]       = l => l.CompanySize.HasValue,
+        ["estimatedAnnualPurchases"] = l => l.EstimatedAnnualPurchases is { Amount: > 0 },
+        ["contactJobTitle"]   = l => !string.IsNullOrWhiteSpace(l.ContactJobTitle),
     };
 
     internal static IReadOnlyCollection<string> NativeKeys => Natives.Keys;

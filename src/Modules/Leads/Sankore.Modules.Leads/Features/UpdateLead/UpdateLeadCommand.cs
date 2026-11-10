@@ -30,7 +30,13 @@ internal sealed record UpdateLeadCommand(
     string? CompanyName = null,
     string? CompanyEmail = null,
     string? CompanyPhone = null,
-    string? Website = null
+    string? Website = null,
+    LeadType? ProspectType = null,
+    string? ActivitySector = null,
+    string? CompanySize = null,
+    decimal? EstimatedAnnualPurchases = null,
+    bool ClearEstimatedAnnualPurchases = false,
+    string? ContactJobTitle = null
 ) : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

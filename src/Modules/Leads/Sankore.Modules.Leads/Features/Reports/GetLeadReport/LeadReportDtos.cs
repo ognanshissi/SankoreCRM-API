@@ -39,9 +39,23 @@ public sealed record LeadReportDto(
     /// Cost per configured source, the « Sources » screen's own figures for the period. Null under an
     /// agency filter: a source's cost is not split by agency.
     /// </param>
-    IReadOnlyList<LeadSources.SourceQuality.SourceQualityDto>? SourceCosts = null);
+    IReadOnlyList<LeadSources.SourceQuality.SourceQualityDto>? SourceCosts = null,
+    /// <param name="ByPotential">
+    /// The COMPANY prospects captured in the period, by where they stand against the key-account
+    /// thresholds (key accounts lot 4): grand compte, bon client, the others. Null while the institution
+    /// set no threshold.
+    /// </param>
+    IReadOnlyList<LeadReportPotential>? ByPotential = null,
+    /// <param name="BySector">The company prospects captured in the period, by activity sector (« Non renseigné » = null).</param>
+    IReadOnlyList<LeadReportSector>? BySector = null);
 
 public sealed record LeadReportTemperature(LeadIntentLevel Level, int Captured, int Converted);
+
+/// <param name="Projects">Captured leads of the tier with at least one project.</param>
+public sealed record LeadReportPotential(LeadPotentialTier Tier, int Captured, int Projects, int Converted, double ConversionRate);
+
+/// <param name="Sector">A sector code of <c>LeadActivitySectors</c>; null for a company with no sector.</param>
+public sealed record LeadReportSector(string? Sector, string Label, int Captured, int Converted, double ConversionRate);
 
 /// <summary>
 /// The figures of <see cref="LeadReportKpis"/> that belong to a period, computed over the period of

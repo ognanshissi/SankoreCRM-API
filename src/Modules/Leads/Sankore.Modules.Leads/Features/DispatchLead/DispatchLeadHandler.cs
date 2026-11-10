@@ -182,6 +182,11 @@ internal sealed class DispatchLeadHandler(
             ? candidates.Where(a => !excluded.Contains(a.Id)).ToList()
             : candidates;
 
+        // A rule may name the agents it dispatches to (key accounts lot 4): the senior sales people
+        // for the key accounts. Empty: every available agent, as before.
+        if (rules.ReservedAgentIds.Count > 0)
+            eligible_candidates = eligible_candidates.Where(a => rules.ReservedAgentIds.Contains(a.Id)).ToList();
+
         if (eligible_candidates.Count == 0)
         {
             await QueueForRetryAsync(cmd, lead, () => publisher.PublishAsync(

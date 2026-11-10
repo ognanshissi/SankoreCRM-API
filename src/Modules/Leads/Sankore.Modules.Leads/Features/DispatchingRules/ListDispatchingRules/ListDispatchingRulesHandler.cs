@@ -39,7 +39,9 @@ internal sealed class ListDispatchingRulesHandler(LeadsDbContext db)
                 r.ExcludedAgentIds,
                 r.FirstContactSlaHot,
                 r.FirstContactSlaWarm,
-                r.FirstContactSlaCold))
+                r.FirstContactSlaCold,
+                r.KeyAccountsOnly,
+                r.ReservedAgentIds))
             .ToListAsync(ct);
 
         return Result.Ok<IReadOnlyList<DispatchingRuleDto>>(rules);

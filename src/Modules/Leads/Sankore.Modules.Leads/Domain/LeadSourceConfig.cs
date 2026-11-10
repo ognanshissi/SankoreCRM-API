@@ -130,6 +130,24 @@ public sealed class LeadSourceConfig : ITenant
         _                                => 8,
     };
 
+    /// <summary>
+    /// Whether a lead from this source asking for a precise product is a HOT lead whatever its score
+    /// (key accounts lot 3, 2026-11-09, product owner: « un lead qui remplit un formulaire pour un
+    /// produit donné est un lead chaud »). Null: the channel's default
+    /// (<see cref="DefaultProductRequestIsHot"/>) — on for the channels that are forms.
+    /// </summary>
+    public bool? ProductRequestIsHot { get; private set; }
+
+    public bool EffectiveProductRequestIsHot => ProductRequestIsHot ?? DefaultProductRequestIsHot(ChannelType);
+
+    /// <summary>
+    /// The channels that are forms a prospect fills in. A webhook may relay a form or a file, so it is
+    /// left off: the administrator says which.
+    /// </summary>
+    public static bool DefaultProductRequestIsHot(LeadChannelType channel) => channel is
+        LeadChannelType.WebForm or LeadChannelType.FacebookLeadAds
+        or LeadChannelType.InstagramLeadAds or LeadChannelType.LinkedInLeadGen;
+
     private static int? CheckedScorePoints(int? points)
         => points is null or (>= 0 and <= MaxScorePoints) ? points : throw new DomainException("LEAD_SOURCE_SCORE_POINTS_OUT_OF_RANGE");
     public DateTimeOffset CreatedAt { get; private set; }
@@ -165,7 +183,8 @@ public sealed class LeadSourceConfig : ITenant
         Guid? defaultDispatchingRuleId = null,
         bool isSystem = false,
         bool testKeys = false,
-        int? scorePoints = null)
+        int? scorePoints = null,
+        bool? productRequestIsHot = null)
     {
         var mode = integrationMode ?? ChannelModeMap.GetDefaultMode(channelType)
             ?? throw new DomainException($"No default mode for channel: {channelType}");
@@ -200,6 +219,7 @@ public sealed class LeadSourceConfig : ITenant
             DefaultDispatchingRuleId = defaultDispatchingRuleId,
             IsSystem                 = isSystem,
             ScorePoints              = CheckedScorePoints(scorePoints),
+            ProductRequestIsHot      = productRequestIsHot,
             DisplayOrder         = displayOrder,
             CreatedAt            = DateTimeOffset.UtcNow,
         };
@@ -251,7 +271,8 @@ public sealed class LeadSourceConfig : ITenant
         Money? costPerLead = null,
         Guid? defaultAgencyId = null,
         Guid? defaultDispatchingRuleId = null,
-        int? scorePoints = null)
+        int? scorePoints = null,
+        bool? productRequestIsHot = null)
     {
         // Active sources: PlatformConnectionId is immutable
         if (Status == LeadSourceStatus.Active && platformConnectionId != PlatformConnectionId)
@@ -269,6 +290,7 @@ public sealed class LeadSourceConfig : ITenant
         if (defaultAgencyId != DefaultAgencyId) changed.Add(nameof(DefaultAgencyId));
         if (defaultDispatchingRuleId != DefaultDispatchingRuleId) changed.Add(nameof(DefaultDispatchingRuleId));
         if (scorePoints != ScorePoints) changed.Add(nameof(ScorePoints));
+        if (productRequestIsHot != ProductRequestIsHot) changed.Add(nameof(ProductRequestIsHot));
 
         Label                    = label.Trim();
         Description              = description?.Trim();
@@ -280,6 +302,7 @@ public sealed class LeadSourceConfig : ITenant
         DefaultDispatchingRuleId = defaultDispatchingRuleId;
         // Replaced like the cost and the defaults: null is « the channel's default », not « no change ».
         ScorePoints              = CheckedScorePoints(scorePoints);
+        ProductRequestIsHot      = productRequestIsHot;
 
         // Only update settings if explicitly provided (null = no change, not "clear")
         if (settings is not null)

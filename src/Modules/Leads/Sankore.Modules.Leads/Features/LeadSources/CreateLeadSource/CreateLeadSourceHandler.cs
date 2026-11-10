@@ -51,7 +51,8 @@ internal sealed class CreateLeadSourceHandler(
             defaultAgencyId:          cmd.DefaultAgencyId,
             defaultDispatchingRuleId: cmd.DefaultDispatchingRuleId,
             testKeys:                 await TestModeKeys.IsTestAsync(tenants, cmd.TenantId, ct),
-            scorePoints:              cmd.ScorePoints);
+            scorePoints:              cmd.ScorePoints,
+            productRequestIsHot:      cmd.ProductRequestIsHot);
 
         db.LeadSourceConfigs.Add(source);
 

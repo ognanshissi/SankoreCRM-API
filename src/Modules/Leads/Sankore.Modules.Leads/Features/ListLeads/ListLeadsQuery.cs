@@ -30,12 +30,16 @@ internal sealed record ListLeadsQuery(
     /// the « Agent » column's reading. <see cref="OwnerId"/> alone missed every lead dispatched to an
     /// agent who is not its owner (« Mes leads », 2026-11-03).
     /// </summary>
-    Guid? AgentId = null
+    Guid? AgentId = null,
+    LeadType? ProspectType = null,
+    string? ActivitySector = null,
+    LeadCompanySize? CompanySize = null,
+    LeadPotentialTier? Potential = null
 ) : IRequest<Result<PagedResult<LeadDto>>>
 {
     public const int MaxIds = 100;
 
     public LeadListFilter Filter => new(
         Status, PipelineStage, Source, OwnerId, AgencyId, Search, Tag, IntentLevel, LeadSourceConfigId,
-        AwaitingDispatch, CustomFilters, AgentId);
+        AwaitingDispatch, CustomFilters, AgentId, ProspectType, ActivitySector, CompanySize, Potential);
 }

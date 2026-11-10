@@ -288,4 +288,60 @@ public sealed class ConvertLeadHandlerTests : IDisposable
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("CUSTOMER_NOT_FOUND");
     }
+
+    // ── a company prospect becomes a legal client (product owner, 2026-11-09) ──
+
+    private async Task<CreateFromLeadRequest> ConvertAsync(LeadType type, string? companyName)
+    {
+        Lead lead;
+        await using (var db = _factory.CreateContext())
+        {
+            lead = LeadTestBuilder.Create().WithTenant(_tenantId).WithAgency(_agencyId).Build();
+            lead.EnrichPrincipalIdentity("Issa", "Traoré", null, new DateOnly(1980, 5, 2), null,
+                null, null, null, null, DateTimeOffset.UtcNow).IsSuccess.Should().BeTrue();
+            lead.ChangeProspectType(type);
+            if (companyName is not null) lead.UpdateCompany(companyName, null, null, null);
+            db.Leads.Add(lead);
+            await db.SaveChangesAsync();
+        }
+        CustomersReturn(new CreateFromLeadResult(Guid.NewGuid(), "N-1", AlreadyExisted: false));
+
+        (await Handler().Handle(new ConvertLeadCommand(lead.Id, Force: true), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+
+        return _customers.ReceivedCalls().Select(c => c.GetArguments()[0]).OfType<CreateFromLeadRequest>().Last();
+    }
+
+    [Fact]
+    public async Task A_company_prospect_with_a_contact_becomes_a_legal_client()
+    {
+        var request = await ConvertAsync(LeadType.Corporate, "Distribution Plateau SARL");
+
+        request.LegalName.Should().Be("Distribution Plateau SARL");
+        request.FirstName.Should().BeNull("a contact's name no longer makes the company an individual client");
+        request.LastName.Should().BeNull();
+        request.DateOfBirth.Should().BeNull("the contact's own data is not the company's");
+        request.IdentityDocumentNumber.Should().BeNull();
+        request.PhoneNumber.Should().NotBeNullOrEmpty("the contact's phone stays the company's way in");
+    }
+
+    [Fact]
+    public async Task A_person_naming_an_employer_stays_an_individual_client()
+    {
+        var request = await ConvertAsync(LeadType.Individual, "Employeur SA");
+
+        request.LegalName.Should().BeNull();
+        request.FirstName.Should().Be("Issa");
+        request.DateOfBirth.Should().Be(new DateOnly(1980, 5, 2));
+    }
+
+    [Fact]
+    public async Task A_company_prospect_without_a_company_name_stays_an_individual_client()
+    {
+        // Nothing to name the legal entity: the identity the lead does have is used.
+        var request = await ConvertAsync(LeadType.Corporate, null);
+
+        request.LegalName.Should().BeNull();
+        request.FirstName.Should().Be("Issa");
+    }
 }

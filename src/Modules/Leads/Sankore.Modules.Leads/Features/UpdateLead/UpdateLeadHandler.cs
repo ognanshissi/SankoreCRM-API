@@ -72,6 +72,28 @@ internal sealed class UpdateLeadHandler(
                 return company;
         }
 
+        if (cmd.ProspectType is { } type && type != lead.ProspectType)
+        {
+            var changed = lead.ChangeProspectType(type);
+            if (changed.IsFailure) return changed;
+        }
+
+        if (cmd.ActivitySector is not null || cmd.CompanySize is not null || cmd.ContactJobTitle is not null)
+        {
+            var profile = lead.DescribeCompany(cmd.ActivitySector, cmd.CompanySize, cmd.ContactJobTitle);
+            if (profile.IsFailure) return profile;
+        }
+
+        if (cmd.ClearEstimatedAnnualPurchases)
+            lead.SetEstimatedAnnualPurchases(null);
+        else if (cmd.EstimatedAnnualPurchases is { } purchases)
+        {
+            var currency = await institutionCurrency.ResolveAsync(
+                lead.TenantId, null, lead.EstimatedAnnualPurchases?.Currency, ct);
+            if (currency.IsFailure) return currency;
+            lead.SetEstimatedAnnualPurchases(new Money(purchases, currency.Value));
+        }
+
         // The e-mail goes through its own setter so the blind index is rewritten with it — see
         // Lead.SetEmail. A null cmd.Email means "not supplied" here, as for every other field of
         // this command, so it leaves the stored address alone rather than clearing it.

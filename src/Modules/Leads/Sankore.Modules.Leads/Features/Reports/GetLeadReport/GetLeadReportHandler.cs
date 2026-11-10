@@ -71,6 +71,9 @@ internal sealed class GetLeadReportHandler(
             {
                 l.CapturedAt, l.Status, l.PipelineStage, l.Source, l.AgencyId, l.IntentLevel,
                 HasProject = db.Opportunities.Any(o => o.LeadId == l.Id),
+                // Key accounts lot 4: what the potential and sector breakdowns read.
+                l.ProspectType, l.ActivitySectorCode,
+                Purchases = l.EstimatedAnnualPurchases == null ? (decimal?)null : l.EstimatedAnnualPurchases.Amount,
             })
             .ToListAsync(ct);
 
@@ -276,6 +279,29 @@ internal sealed class GetLeadReportHandler(
                 cohortRows.Count(r => r.IntentLevel == level && r.Status == LeadStatus.Converted)))
             .ToList();
 
+        // ── Company prospects of the cohort: by potential and by sector (key accounts lot 4) ─
+        var companies = cohortRows.Where(r => r.ProspectType == LeadType.Corporate).ToList();
+        var keyAccounts = await Settings.KeyAccounts.KeyAccountSettings.ReadAsync(db, tenant.CurrentTenantId, ct);
+        List<LeadReportPotential>? byPotential = null;
+        if (keyAccounts.GoodPurchases > 0 || keyAccounts.MajorPurchases > 0)
+            byPotential = new[] { LeadPotentialTier.KeyAccount, LeadPotentialTier.GoodCustomer, LeadPotentialTier.None }
+                .Select(tier =>
+                {
+                    var rows = companies.Where(r => keyAccounts.TierOf(r.ProspectType, r.Purchases) == tier).ToList();
+                    var converted = rows.Count(r => r.Status == LeadStatus.Converted);
+                    return new LeadReportPotential(tier, rows.Count, rows.Count(r => r.HasProject), converted, Rate(converted, rows.Count));
+                })
+                .ToList();
+        var bySector = companies
+            .GroupBy(r => r.ActivitySectorCode)
+            .Select(g =>
+            {
+                var converted = g.Count(r => r.Status == LeadStatus.Converted);
+                return new LeadReportSector(g.Key, LeadActivitySectors.LabelOf(g.Key) ?? "Non renseigné", g.Count(), converted, Rate(converted, g.Count()));
+            })
+            .OrderByDescending(s => s.Captured)
+            .ToList();
+
         // ── Cost per source: the « Sources » screen's own computation, so both agree ───────
         IReadOnlyList<LeadSources.SourceQuality.SourceQualityDto>? sourceCosts = null;
         if (q.AgencyId is null)
@@ -287,7 +313,7 @@ internal sealed class GetLeadReportHandler(
 
         return Result.Ok(new LeadReportDto(
             q.From, q.To, granularity, kpis, series, progression, byStatus, bySource, agents, agencies, projects,
-            forecast, previous, byTemperature, sourceCosts));
+            forecast, previous, byTemperature, sourceCosts, byPotential, bySector));
     }
 
     private sealed record AssignmentRow(

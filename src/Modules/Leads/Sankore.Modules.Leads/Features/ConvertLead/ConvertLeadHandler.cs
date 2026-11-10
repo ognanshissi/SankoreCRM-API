@@ -406,9 +406,15 @@ internal sealed class ConvertLeadHandler(
         if (agencyId is null)
             return Result.Fail<CreateFromLeadResult>("LEAD_HAS_NO_AGENCY");
 
-        var isCompany = string.IsNullOrWhiteSpace(lead.FirstName)
-                        && string.IsNullOrWhiteSpace(lead.LastName)
-                        && !string.IsNullOrWhiteSpace(lead.CompanyName);
+        // A company prospect with a company name becomes a LEGAL client, even when it has a contact
+        // person (product owner, 2026-11-09, key accounts). Before, any first or last name made it an
+        // individual client named after its contact. The contact's own data — birth date, identity
+        // document, situation — is not the company's and is not sent: the document would even make the
+        // new company a « duplicate » of the contact's own client record. The contact's phone and
+        // e-mail remain the company's ways in, as contact points.
+        var isCompany = !string.IsNullOrWhiteSpace(lead.CompanyName)
+                        && (lead.ProspectType == LeadType.Corporate
+                            || (string.IsNullOrWhiteSpace(lead.FirstName) && string.IsNullOrWhiteSpace(lead.LastName)));
 
         var (firstName, lastName) = isCompany ? (null, null) : SplitName(lead);
 
@@ -420,21 +426,21 @@ internal sealed class ConvertLeadHandler(
             FirstName:              firstName,
             LastName:               lastName,
             LegalName:              isCompany ? lead.CompanyName : null,
-            Gender:                 lead.Gender == LeadGender.Unknown ? null : lead.Gender.ToString(),
-            DateOfBirth:            lead.DateOfBirth,
+            Gender:                 isCompany || lead.Gender == LeadGender.Unknown ? null : lead.Gender.ToString(),
+            DateOfBirth:            isCompany ? null : lead.DateOfBirth,
             Nationality:            null,
             PhoneNumber:            lead.PhoneNumber,
             Email:                  lead.Email,
             // A lead only ever carries a national id, never the type of document it came from;
             // M01 infers the type from the number being present.
             IdentityDocumentType:   null,
-            IdentityDocumentNumber: lead.NationalId,
-            Profession:             lead.Profession,
+            IdentityDocumentNumber: isCompany ? null : lead.NationalId,
+            Profession:             isCompany ? null : lead.Profession,
             PreferredLanguage:      lead.PreferredLanguage,
             RequestedClientId:      null,
             CustomFieldsJson:       lead.CustomFieldsJson,
             KycRequired:            kycRequired,
-            MaritalStatus:          lead.MaritalStatus?.ToString(),
+            MaritalStatus:          isCompany ? null : lead.MaritalStatus?.ToString(),
             AddressLine:            lead.PrincipalAddressLine,
             PostalCode:             lead.PrincipalPostalCode,
             City:                   lead.PrincipalCity,

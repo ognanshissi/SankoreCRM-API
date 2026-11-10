@@ -29,6 +29,16 @@ internal sealed class DispatchingRuleConfiguration : IEntityTypeConfiguration<Di
             .HasConversion(
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                 v => (IReadOnlyList<Guid>)(JsonSerializer.Deserialize<List<Guid>>(v, (JsonSerializerOptions?)null) ?? new List<Guid>()));
+        builder.Property(r => r.ReservedAgentIds)
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => (IReadOnlyList<Guid>)(JsonSerializer.Deserialize<List<Guid>>(v, (JsonSerializerOptions?)null) ?? new List<Guid>()))
+            .Metadata.SetValueComparer(new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<IReadOnlyList<Guid>>(
+                (a, b) => (a ?? new List<Guid>()).SequenceEqual(b ?? new List<Guid>()),
+                v => v.Aggregate(0, (h, id) => HashCode.Combine(h, id.GetHashCode())),
+                v => v.ToList()));
         builder.HasIndex(r => new { r.TenantId, r.Strategy, r.IsActive, r.Priority });
     }
 }

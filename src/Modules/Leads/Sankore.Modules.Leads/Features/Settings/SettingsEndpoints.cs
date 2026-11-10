@@ -1,5 +1,7 @@
 namespace Sankore.Modules.Leads.Features.Settings;
 
+using Sankore.Modules.Leads.Features.Settings.KeyAccounts;
+
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -33,6 +35,7 @@ internal static class SettingsEndpoints
         // answers SETTING_UNKNOWN for a setting called "retention".
         group.MapPreviewRetention();
         group.MapIntentThresholds();
+        group.MapKeyAccountSettings();
 
         group.MapGetLeadSetting();
         group.MapUpdateLeadSetting();

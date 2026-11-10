@@ -25,7 +25,8 @@ internal sealed class ReprocessIngestionHandler(
     IPhoneBlindIndexer phoneBlindIndexer,
     TimeProvider clock,
     Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null,
-    Microsoft.Extensions.Logging.ILogger<ReprocessIngestionHandler>? logger = null)
+    Microsoft.Extensions.Logging.ILogger<ReprocessIngestionHandler>? logger = null,
+    Sankore.Modules.Administration.PublicApi.IInstitutionCurrency? institutionCurrency = null)
     : IRequestHandler<ReprocessIngestionCommand, Result<ReprocessIngestionResult>>
 {
     public async Task<Result<ReprocessIngestionResult>> Handle(
@@ -91,8 +92,11 @@ internal sealed class ReprocessIngestionHandler(
         var lead = InboundLeadFactory.Build(
             ingestion.TenantId, source, mapped, fullName!, phone!, phoneIndex,
             ingestion.ExternalId, clock);
+        await InboundCompanyProfile.ApplyAsync(lead, mapped, institutionCurrency, logger, ct);
         await Features.CustomFields.InboundCustomFields.ApplyAsync(administration, logger, lead, mapped, source.Id, ct);
         db.Leads.Add(lead);
+        // Scored like any captured lead — it was not, and a reprocessed form lead never read « Chaud ».
+        await QualifyLead.CaptureScore.ApplyAsync(db, lead, ct, administration);
         ingestion.MarkReprocessed(lead.Id);
 
         await db.SaveChangesAsync(ct);

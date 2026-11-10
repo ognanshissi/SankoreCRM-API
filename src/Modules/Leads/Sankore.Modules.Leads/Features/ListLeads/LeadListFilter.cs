@@ -25,7 +25,14 @@ internal sealed record LeadListFilter(
     /// <summary>Custom-field filters, <c>key:value</c> — see <c>CustomFieldValues.FilterDocuments</c>.</summary>
     IReadOnlyList<string>? CustomFilters = null,
     /// <summary>Assigned to this agent, or theirs as owner while nobody is assigned — the « Agent » column.</summary>
-    Guid? AgentId = null)
+    Guid? AgentId = null,
+    /// <summary>Person or company (key accounts lot 1).</summary>
+    LeadType? ProspectType = null,
+    /// <summary>A sector code of <c>LeadActivitySectors</c>.</summary>
+    string? ActivitySector = null,
+    LeadCompanySize? CompanySize = null,
+    /// <summary>Against the institution's key-account thresholds (key accounts lot 4).</summary>
+    LeadPotentialTier? Potential = null)
 {
     public async Task<Result<IQueryable<Lead>>> ApplyAsync(
         IQueryable<Lead> q, LeadsDbContext db, IAdministrationModule? administration, ITenantContext? tenant, CancellationToken ct)
@@ -67,6 +74,29 @@ internal sealed record LeadListFilter(
 
         if (IntentLevel.HasValue)
             q = q.Where(l => l.IntentLevel == IntentLevel.Value);
+
+        if (ProspectType.HasValue)
+            q = q.Where(l => l.ProspectType == ProspectType.Value);
+
+        // An unknown sector is a 400, never an ignored filter — as a custom field's.
+        if (!string.IsNullOrWhiteSpace(ActivitySector))
+        {
+            var sector = LeadActivitySectors.Normalize(ActivitySector);
+            if (sector is null)
+                return Result.Fail<IQueryable<Lead>>("LEAD_ACTIVITY_SECTOR_INVALID");
+            q = q.Where(l => l.ActivitySectorCode == sector);
+        }
+
+        if (CompanySize.HasValue)
+            q = q.Where(l => l.CompanySize == CompanySize.Value);
+
+        if (Potential is { } tier)
+        {
+            if (tenant is null)
+                return Result.Fail<IQueryable<Lead>>("KEY_ACCOUNTS_UNAVAILABLE");
+            var settings = await Settings.KeyAccounts.KeyAccountSettings.ReadAsync(db, tenant.CurrentTenantId, ct);
+            q = settings.WhereTier(q, tier);
+        }
 
         // Custom-field filters (dynamic forms, lot 6): a jsonb containment per filter, served by the
         // GIN index on custom_fields. The form decides each value's shape — see FilterDocuments.

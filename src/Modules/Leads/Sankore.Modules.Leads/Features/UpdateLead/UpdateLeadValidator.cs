@@ -20,6 +20,17 @@ internal sealed class UpdateLeadValidator : AbstractValidator<UpdateLeadCommand>
         When(x => !string.IsNullOrWhiteSpace(x.CompanyEmail), () =>
             RuleFor(x => x.CompanyEmail).EmailAddress().MaximumLength(200));
 
+        RuleFor(x => x.ContactJobTitle).MaximumLength(150);
+        RuleFor(x => x.ActivitySector)
+            .Must(s => string.IsNullOrWhiteSpace(s) || Domain.LeadActivitySectors.Normalize(s) is not null)
+            .WithMessage("Secteur d'activité inconnu.");
+        RuleFor(x => x.CompanySize)
+            .Must(s => string.IsNullOrWhiteSpace(s) || Domain.LeadCompanySizes.Parse(s) is not null)
+            .WithMessage("Effectif illisible : une tranche (Micro, Small, Medium, Large) ou un nombre de personnes.");
+        RuleFor(x => x.EstimatedAnnualPurchases)
+            .GreaterThan(0).When(x => x.EstimatedAnnualPurchases.HasValue)
+            .WithMessage("Le volume d'achat annuel doit être positif.");
+
         When(x => x.Latitude.HasValue, () =>
             RuleFor(x => x.Latitude).InclusiveBetween(-90, 90));
 

@@ -207,6 +207,26 @@ public sealed class CaptureLeadHandler(
         if (situation.IsFailure)
             return Result.Fail<CaptureLeadResult>(situation.Error!);
 
+        // The company. `Lead.Capture` writes these columns empty and nothing wrote them afterwards:
+        // the company typed on the creation form or read from an import was lost (2026-11-09).
+        if (cmd.CompanyName is not null || cmd.CompanyEmail is not null || cmd.CompanyPhone is not null || cmd.Website is not null)
+        {
+            var company = lead.UpdateCompany(cmd.CompanyName, cmd.CompanyEmail, cmd.CompanyPhone, cmd.Website);
+            if (company.IsFailure)
+                return Result.Fail<CaptureLeadResult>(company.Error!);
+        }
+
+        var profile = lead.DescribeCompany(cmd.ActivitySector, cmd.CompanySize, cmd.ContactJobTitle);
+        if (profile.IsFailure)
+            return Result.Fail<CaptureLeadResult>(profile.Error!);
+
+        if (cmd.EstimatedAnnualPurchases is { } purchases)
+        {
+            var currency = await institutionCurrency.ResolveAsync(cmd.TenantId, null, stored: null, ct);
+            if (currency.IsFailure) return Result.Fail<CaptureLeadResult>(currency.Error!);
+            lead.SetEstimatedAnnualPurchases(new Money(purchases, currency.Value));
+        }
+
         if (cmd.AddressLine is not null || cmd.PostalCode is not null || cmd.City is not null || cmd.CountryCode is not null)
         {
             var address = lead.EnrichPrincipalIdentity(
@@ -238,7 +258,7 @@ public sealed class CaptureLeadHandler(
         }
 
         // Scored now that every capture field is set, before the capture event that dispatches it.
-        await QualifyLead.CaptureScore.ApplyAsync(db, lead, ct);
+        await QualifyLead.CaptureScore.ApplyAsync(db, lead, ct, administration);
 
         // Outbox row written into THIS DbContext so it commits with the lead: a captured lead
         // whose event was lost would never be dispatched, and an event without its lead would
@@ -369,6 +389,10 @@ public sealed class CaptureLeadHandler(
             ["postalCode"]         = cmd.PostalCode,
             ["city"]               = cmd.City,
             ["countryCode"]        = cmd.CountryCode,
+            ["activitySector"]     = LeadActivitySectors.Normalize(cmd.ActivitySector),
+            ["companySize"]        = LeadCompanySizes.Parse(cmd.CompanySize)?.ToString(),
+            ["estimatedAnnualPurchases"] = cmd.EstimatedAnnualPurchases?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["contactJobTitle"]    = cmd.ContactJobTitle,
         };
 
 

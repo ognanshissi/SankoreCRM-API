@@ -108,6 +108,37 @@ public static class NativeFormCatalog
         new("FreeUnion", "Union libre"),
     ];
 
+    /// <summary>The socle's neutral sectors — `LeadActivitySectors` in the Leads domain, same order.</summary>
+    private static readonly FormOption[] ActivitySectors =
+    [
+        new("WholesaleTrade", "Commerce de gros et distribution"),
+        new("RetailTrade", "Commerce de détail"),
+        new("Construction", "BTP et construction"),
+        new("Manufacturing", "Industrie et transformation"),
+        new("Agriculture", "Agriculture, élevage et pêche"),
+        new("EnergyMining", "Énergie, mines et pétrole"),
+        new("TransportLogistics", "Transport et logistique"),
+        new("HospitalityTourism", "Hôtellerie, restauration et tourisme"),
+        new("Health", "Santé et pharmacie"),
+        new("Education", "Éducation et formation"),
+        new("PublicSector", "Administration et collectivités"),
+        new("NonProfit", "ONG, associations et organisations internationales"),
+        new("Technology", "Informatique et télécommunications"),
+        new("BusinessServices", "Services aux entreprises"),
+        new("RealEstate", "Immobilier"),
+        new("FinancialServices", "Banques, assurances et services financiers"),
+        new("MediaEvents", "Médias, communication et événementiel"),
+        new("Other", "Autre"),
+    ];
+
+    private static readonly FormOption[] CompanySizes =
+    [
+        new("Micro", "1 à 9 personnes"),
+        new("Small", "10 à 49 personnes"),
+        new("Medium", "50 à 249 personnes"),
+        new("Large", "250 personnes et plus"),
+    ];
+
     private static readonly FormOption[] IdentityDocumentTypes =
     [
         new("NationalIdCard", "Carte nationale d'identité"),
@@ -173,6 +204,17 @@ public static class NativeFormCatalog
             Native("companyEmail", FormFieldType.Email, "E-mail de l'entreprise", "company", 2),
             Native("companyPhone", FormFieldType.Phone, "Téléphone de l'entreprise", "company", 3),
             Native("website", FormFieldType.Url, "Site web", "company", 4),
+            // What tells a wholesaler from a corner shop (key accounts lot 1, 2026-11-09, product
+            // owner). The options mirror the Leads domain (`LeadActivitySectors`, `LeadCompanySize`),
+            // pinned by a test there.
+            Native("activitySector", FormFieldType.SingleChoice, "Secteur d'activité", "company", 5, quickAdd: true,
+                options: ActivitySectors),
+            Native("companySize", FormFieldType.SingleChoice, "Effectif", "company", 6, quickAdd: true,
+                options: CompanySizes),
+            Native("estimatedAnnualPurchases", FormFieldType.Money, "Volume d'achat annuel estimé", "company", 7,
+                quickAdd: true),
+            Native("contactJobTitle", FormFieldType.Text, "Fonction du contact", "company", 8, quickAdd: true,
+                maxLength: 150),
 
             Native("phoneNumber", FormFieldType.Phone, "Téléphone", "contact", 1, quickAdd: true, locked: true, sensitive: true),
             Native("email", FormFieldType.Email, "E-mail", "contact", 2, quickAdd: true, sensitive: true),

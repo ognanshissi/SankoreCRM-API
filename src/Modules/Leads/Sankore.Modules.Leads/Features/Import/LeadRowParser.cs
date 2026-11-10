@@ -33,7 +33,15 @@ public sealed record ParsedLeadRow(
     string? AddressLine = null,
     string? PostalCode = null,
     string? City = null,
-    string? CountryCode = null);
+    string? CountryCode = null,
+    LeadType ProspectType = LeadType.Individual,
+    string? CompanyEmail = null,
+    string? CompanyPhone = null,
+    string? Website = null,
+    string? ActivitySector = null,
+    string? CompanySize = null,
+    decimal? EstimatedAnnualPurchases = null,
+    string? ContactJobTitle = null);
 
 public sealed record ParsedRowResult(ParsedLeadRow? Row, IReadOnlyList<string> Errors)
 {
@@ -147,6 +155,40 @@ public static class LeadRowParser
         if (countryCode is not null && !IsoCountry.IsKnown(countryCode))
             errors.Add($"CountryCode '{rawCountry}' is not an ISO 3166-1 alpha-2 country code (e.g. CI).");
 
+        // The company (key accounts lot 1). A row naming a company is a company prospect unless its
+        // ProspectType column says otherwise.
+        var companyName = Clean(raw.CompanyName);
+        var prospectType = companyName is null ? LeadType.Individual : LeadType.Corporate;
+        var rawType = Clean(raw.ProspectType);
+        if (rawType is not null)
+        {
+            if (rawType.Equals("Entreprise", StringComparison.OrdinalIgnoreCase)) prospectType = LeadType.Corporate;
+            else if (rawType.Equals("Particulier", StringComparison.OrdinalIgnoreCase)) prospectType = LeadType.Individual;
+            else if (Enum.TryParse<LeadType>(rawType, ignoreCase: true, out var t) && Enum.IsDefined(t) && !int.TryParse(rawType, out _))
+                prospectType = t;
+            else errors.Add($"ProspectType '{rawType}' must be Individual (Particulier) or Corporate (Entreprise).");
+        }
+
+        var rawSector = Clean(raw.ActivitySector);
+        var sector = LeadActivitySectors.Normalize(rawSector);
+        if (rawSector is not null && sector is null)
+            errors.Add($"ActivitySector '{rawSector}' is not a known sector (e.g. WholesaleTrade or « Commerce de gros et distribution »).");
+
+        var rawSize = Clean(raw.CompanySize);
+        var size = LeadCompanySizes.Parse(rawSize);
+        if (rawSize is not null && size is null)
+            errors.Add($"CompanySize '{rawSize}' must be Micro, Small, Medium, Large or a headcount.");
+
+        decimal? purchases = null;
+        var rawPurchases = Clean(raw.EstimatedAnnualPurchases);
+        if (rawPurchases is not null)
+        {
+            if (decimal.TryParse(rawPurchases, NumberStyles.Any, CultureInfo.InvariantCulture, out var p) && p > 0)
+                purchases = p;
+            else
+                errors.Add($"EstimatedAnnualPurchases '{rawPurchases}' is not a positive number.");
+        }
+
         var ownerId  = ParseGuid(raw.OwnerId, "OwnerId", errors);
         var agencyId = ParseGuid(raw.AgencyId, "AgencyId", errors);
 
@@ -174,7 +216,7 @@ public static class LeadRowParser
                 Channel:           channel,
                 Comment:           Clean(raw.Comment),
                 ExternalReference: Clean(raw.ExternalReference),
-                CompanyName:       Clean(raw.CompanyName),
+                CompanyName:       companyName,
                 OwnerId:           ownerId,
                 AgencyId:          agencyId,
                 Profession:        Clean(raw.Profession),
@@ -182,7 +224,15 @@ public static class LeadRowParser
                 AddressLine:       Clean(raw.AddressLine),
                 PostalCode:        Clean(raw.PostalCode),
                 City:              Clean(raw.City),
-                CountryCode:       countryCode),
+                CountryCode:       countryCode,
+                ProspectType:      prospectType,
+                CompanyEmail:      Clean(raw.CompanyEmail),
+                CompanyPhone:      Clean(raw.CompanyPhone),
+                Website:           Clean(raw.Website),
+                ActivitySector:    sector,
+                CompanySize:       size?.ToString(),
+                EstimatedAnnualPurchases: purchases,
+                ContactJobTitle:   Clean(raw.ContactJobTitle)),
             []);
     }
 

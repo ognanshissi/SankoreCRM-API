@@ -35,13 +35,17 @@ public static class ExportLeadsEndpoint
         LeadIntentLevel? intentLevel = null,
         bool? awaitingDispatch = null,
         [Microsoft.AspNetCore.Mvc.FromQuery(Name = "cf")] string[]? customFilters = null,
-        Guid? agentId = null)
+        Guid? agentId = null,
+        LeadType? prospectType = null,
+        string? activitySector = null,
+        LeadCompanySize? companySize = null,
+        LeadPotentialTier? potential = null)
     {
         // Appended last: the query record is positional.
         var result = await sender.Send(
             new ExportLeadsQuery(
                 status, pipelineStage, source, ownerId, agencyId, search, tag, leadSourceConfigId,
-                intentLevel, awaitingDispatch, customFilters, agentId), ct);
+                intentLevel, awaitingDispatch, customFilters, agentId, prospectType, activitySector, companySize, potential), ct);
 
         // A refused filter answers 400, as on the list, rather than a file of unfiltered leads.
         return result.IsSuccess

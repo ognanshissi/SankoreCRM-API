@@ -104,6 +104,13 @@ internal sealed class GetLeadHandler(
             Sla:                      sla,
             CustomerId:               lead.CustomerId,
             Profession:               lead.Profession,
-            MaritalStatus:            lead.MaritalStatus?.ToString()));
+            MaritalStatus:            lead.MaritalStatus?.ToString(),
+            ActivitySector:           lead.ActivitySectorCode,
+            CompanySize:              lead.CompanySize?.ToString(),
+            EstimatedAnnualPurchases: lead.EstimatedAnnualPurchases,
+            ContactJobTitle:          lead.ContactJobTitle,
+            ProductRequestAt:         lead.ProductRequestAt,
+            PotentialTier:            (await Settings.KeyAccounts.KeyAccountSettings.ReadAsync(db, lead.TenantId, ct))
+                                          .TierOf(lead).ToString()));
     }
 }

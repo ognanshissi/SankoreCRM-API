@@ -72,7 +72,8 @@ internal sealed class MergeLeadsHandler(
                 location:          prefs.TakeLocation          && source.Location          is not null ? source.Location          : null,
                 profession:        prefs.TakeProfession        && source.Profession        is not null ? source.Profession        : null,
                 maritalStatus:     prefs.TakeMaritalStatus     ? source.MaritalStatus                  : null,
-                addressOf:         prefs.TakeAddress           ? source                                : null);
+                addressOf:         prefs.TakeAddress           ? source                                : null,
+                companyProfileOf:  prefs.TakeCompanyProfile    ? source                                : null);
 
             overriddenFields.AddRange(prefs.OverriddenFields());
         }

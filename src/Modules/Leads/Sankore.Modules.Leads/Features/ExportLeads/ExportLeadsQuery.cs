@@ -18,5 +18,9 @@ public sealed record ExportLeadsQuery(
     LeadIntentLevel? IntentLevel = null,
     bool? AwaitingDispatch = null,
     IReadOnlyList<string>? CustomFilters = null,
-    Guid? AgentId = null
+    Guid? AgentId = null,
+    LeadType? ProspectType = null,
+    string? ActivitySector = null,
+    LeadCompanySize? CompanySize = null,
+    LeadPotentialTier? Potential = null
 ) : IRequest<Result<byte[]>>;

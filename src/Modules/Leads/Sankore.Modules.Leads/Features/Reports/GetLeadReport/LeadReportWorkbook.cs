@@ -72,6 +72,16 @@ internal static class LeadReportWorkbook
             Table(wb, "Température", ["Température aujourd'hui", "Leads captés", "Convertis à ce jour"],
                 temperatures.Select(t => new object?[] { Temperature(t.Level), t.Captured, t.Converted }));
 
+        if (r.ByPotential is { } potentials)
+            Table(wb, "Potentiel", ["Potentiel", "Entreprises captées", "Avec un projet", "Converties à ce jour", "Taux de conversion"],
+                potentials.Select(p => new object?[] { PotentialLabel(p.Tier), p.Captured, p.Projects, p.Converted, p.ConversionRate / 100 }),
+                percentColumns: [5]);
+
+        if (r.BySector is { Count: > 0 } sectors)
+            Table(wb, "Secteurs", ["Secteur d'activité", "Entreprises captées", "Converties à ce jour", "Taux de conversion"],
+                sectors.Select(s => new object?[] { s.Label, s.Captured, s.Converted, s.ConversionRate / 100 }),
+                percentColumns: [4]);
+
         if (r.SourceCosts is { } costs)
             Table(wb, "Coûts par source",
                 ["Source", "Reçus", "Convertis", "Coût total", "Devise", "Coût par lead converti"],
@@ -286,5 +296,12 @@ internal static class LeadReportWorkbook
         LeadSource.FileImport => "Import",
         LeadSource.Campaign => "Campagne",
         _ => s.ToString(),
+    };
+
+    private static string PotentialLabel(LeadPotentialTier tier) => tier switch
+    {
+        LeadPotentialTier.KeyAccount   => "Grand compte",
+        LeadPotentialTier.GoodCustomer => "Bon client",
+        _                              => "Autres entreprises",
     };
 }

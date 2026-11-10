@@ -23,6 +23,9 @@ internal static partial class FieldMappingEngine
         "dateOfBirth", "gender", "prospectType",
         "latitude", "longitude",
         "desiredAmount", "desiredCurrency",
+        // The company (key accounts lot 1).
+        "companyName", "companyEmail", "companyPhone", "website",
+        "activitySector", "companySize", "estimatedAnnualPurchases", "contactJobTitle",
     };
 
     /// <summary>

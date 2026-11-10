@@ -51,7 +51,10 @@ public sealed record LeadSourceDetailDto(
     string? LastRejectedReason = null,
     // What a lead from it is worth in the score: the admin's value, else the channel's default.
     int? ScorePoints = null,
-    int DefaultScorePoints = 0);
+    int DefaultScorePoints = 0,
+    // Whether a request for a precise product makes the lead hot: the admin's choice, else the channel's.
+    bool? ProductRequestIsHot = null,
+    bool DefaultProductRequestIsHot = false);
 
 /// <summary>Secret metadata exposed without the actual value.</summary>
 public sealed record SecretHintDto(

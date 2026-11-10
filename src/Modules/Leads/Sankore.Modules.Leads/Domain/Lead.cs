@@ -83,6 +83,23 @@ public sealed class Lead : AggregateRoot
     public string? CompanyPhone { get; private set; }
     public string? Website { get; private set; }
 
+    // ── What the company is (key accounts lot 1, 2026-11-09, product owner) ──
+    //
+    // What tells a wholesaler from a corner shop: the score's « Potentiel » (lot 2) reads them.
+
+    /// <summary>A code of <see cref="LeadActivitySectors"/>, the socle's neutral list.</summary>
+    public string? ActivitySectorCode { get; private set; }
+    public LeadCompanySize? CompanySize { get; private set; }
+
+    /// <summary>
+    /// What the company is expected to buy in a year, in the institution's currency. Distinct from
+    /// <see cref="DesiredAmount"/>, which is one request's amount and is hidden by default.
+    /// </summary>
+    public Money? EstimatedAnnualPurchases { get; private set; }
+
+    /// <summary>The contact's position in the company (buyer, manager…), free text.</summary>
+    public string? ContactJobTitle { get; private set; }
+
     // ── Capture context ──────────────────────────────────────────────────────
     public LeadStatus Status { get; private set; }
     public PipelineStage PipelineStage { get; private set; }
@@ -374,6 +391,14 @@ public sealed class Lead : AggregateRoot
     // ── Scoring & intent ─────────────────────────────────────────────────────
     public int Score { get; private set; }
     public LeadIntentLevel IntentLevel { get; private set; } = LeadIntentLevel.Unknown;
+
+    /// <summary>
+    /// When the prospect asked for a precise product through a form (key accounts lot 3, 2026-11-09,
+    /// product owner): such a lead reads at least « Chaud » whatever its score, while the request is
+    /// fresh — see <c>ProductRequestHeat</c>. Null for every other lead. The score is not touched:
+    /// only the temperature is raised, and this column says why.
+    /// </summary>
+    public DateTimeOffset? ProductRequestAt { get; private set; }
 
     // ── Location & preferences ───────────────────────────────────────────────
     public GeoPoint? Location { get; private set; }
@@ -1030,6 +1055,65 @@ public sealed class Lead : AggregateRoot
     }
 
     /// <summary>
+    /// What the company is: sector, headcount bracket, the contact's position. Null leaves a field
+    /// alone and blank clears it, as in <see cref="UpdateCompany"/>. The sector is a code or a label
+    /// of <see cref="LeadActivitySectors"/>; the size a bracket name or label, or a headcount.
+    /// </summary>
+    /// <returns><c>LEAD_ACTIVITY_SECTOR_INVALID</c>, <c>LEAD_COMPANY_SIZE_INVALID</c>, or the closed-lead refusal.</returns>
+    public Result DescribeCompany(string? activitySector, string? companySize, string? contactJobTitle)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+
+        string? sector = null;
+        if (!string.IsNullOrWhiteSpace(activitySector))
+        {
+            sector = LeadActivitySectors.Normalize(activitySector);
+            if (sector is null) return Result.Fail("LEAD_ACTIVITY_SECTOR_INVALID");
+        }
+
+        LeadCompanySize? size = null;
+        if (!string.IsNullOrWhiteSpace(companySize))
+        {
+            size = LeadCompanySizes.Parse(companySize);
+            if (size is null) return Result.Fail("LEAD_COMPANY_SIZE_INVALID");
+        }
+
+        if (activitySector  is not null) ActivitySectorCode = sector;
+        if (companySize     is not null) CompanySize        = size;
+        if (contactJobTitle is not null) ContactJobTitle    = Blank(contactJobTitle);
+
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return Result.Ok();
+    }
+
+    /// <summary>The company's expected yearly purchases; null clears them.</summary>
+    public Result SetEstimatedAnnualPurchases(Money? amount)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+
+        EstimatedAnnualPurchases = amount is { Amount: > 0 } ? amount : null;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return Result.Ok();
+    }
+
+    /// <summary>
+    /// Person or company. A web form or an import used to bring every prospect in as a person, and
+    /// nothing could change it afterwards (key accounts lot 1).
+    /// </summary>
+    public Result ChangeProspectType(LeadType type)
+    {
+        if (Status is LeadStatus.Converted or LeadStatus.Archived)
+            return Result.Fail("Cannot update a closed lead.");
+        if (!Enum.IsDefined(type)) return Result.Fail("LEAD_PROSPECT_TYPE_INVALID");
+
+        ProspectType = type;
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return Result.Ok();
+    }
+
+    /// <summary>
     /// Updates the score in-place without changing lead status.
     /// Used for background auto-recalculations triggered by activity or data changes.
     /// </summary>
@@ -1040,6 +1124,9 @@ public sealed class Lead : AggregateRoot
     }
 
     /// <summary>Updates the intent level (Hot/Warm/Cold/Unknown).</summary>
+    /// <summary>The prospect asked for a precise product through a form — see <see cref="ProductRequestAt"/>.</summary>
+    public void MarkProductRequest(DateTimeOffset at) => ProductRequestAt ??= at;
+
     public void UpdateIntentLevel(LeadIntentLevel level)
     {
         IntentLevel = level;
@@ -1480,6 +1567,7 @@ public sealed class Lead : AggregateRoot
         CompanyEmail = null;
         CompanyPhone = null;
         Website      = null;
+        ContactJobTitle = null;
 
         // Free text an agent typed about a person. A comment field is where an identity ends up
         // when no column fits it, so it goes whether or not it looks like it holds one.
@@ -1851,7 +1939,8 @@ public sealed class Lead : AggregateRoot
         GeoPoint? location        = null,
         string? profession        = null,
         LeadMaritalStatus? maritalStatus = null,
-        Lead? addressOf           = null)
+        Lead? addressOf           = null,
+        Lead? companyProfileOf    = null)
     {
         // The pair moves together, as everywhere else. A merge that took the source's address
         // and left the target's old index behind would make the merged lead match the wrong
@@ -1876,6 +1965,17 @@ public sealed class Lead : AggregateRoot
         if (location          is not null) Location          = location;
         if (profession        is not null) Profession        = profession;
         if (maritalStatus.HasValue)        MaritalStatus     = maritalStatus;
+
+        // The source's company profile as a whole, only when it has one — like the address below.
+        if (companyProfileOf is not null
+            && (companyProfileOf.ActivitySectorCode is not null || companyProfileOf.CompanySize is not null
+                || companyProfileOf.EstimatedAnnualPurchases is not null || companyProfileOf.ContactJobTitle is not null))
+        {
+            ActivitySectorCode       = companyProfileOf.ActivitySectorCode;
+            CompanySize              = companyProfileOf.CompanySize;
+            EstimatedAnnualPurchases = companyProfileOf.EstimatedAnnualPurchases;
+            ContactJobTitle          = companyProfileOf.ContactJobTitle;
+        }
 
         // The source's address as a whole, only when it has one: a street from one lead and a
         // city from the other would locate nobody.

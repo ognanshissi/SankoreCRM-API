@@ -106,7 +106,14 @@ public sealed record CaptureLeadCommand(
     string? PostalCode = null,
     string? City = null,
     /// <summary>ISO 3166-1 alpha-2.</summary>
-    string? CountryCode = null
+    string? CountryCode = null,
+    /// <summary>A code or label of <see cref="LeadActivitySectors"/> (key accounts lot 1).</summary>
+    string? ActivitySector = null,
+    /// <summary>A <see cref="LeadCompanySize"/> name or label, or a headcount.</summary>
+    string? CompanySize = null,
+    /// <summary>Expected yearly purchases, in the institution's currency.</summary>
+    decimal? EstimatedAnnualPurchases = null,
+    string? ContactJobTitle = null
 ) : IRequest<Result<CaptureLeadResult>>, ICommand, IResourceCommand
 {
     public string ResourceType => "Lead";

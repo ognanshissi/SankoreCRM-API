@@ -52,7 +52,13 @@ public static class UpdateLeadEndpoint
             CompanyName:      req.CompanyName,
             CompanyEmail:     req.CompanyEmail,
             CompanyPhone:     req.CompanyPhone,
-            Website:          req.Website), ct);
+            Website:          req.Website,
+            ProspectType:     req.ProspectType,
+            ActivitySector:   req.ActivitySector,
+            CompanySize:      req.CompanySize,
+            EstimatedAnnualPurchases: req.EstimatedAnnualPurchases,
+            ClearEstimatedAnnualPurchases: req.ClearEstimatedAnnualPurchases,
+            ContactJobTitle:  req.ContactJobTitle), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -60,6 +66,8 @@ public static class UpdateLeadEndpoint
             {
                 "LEAD_NOT_FOUND" => Results.NotFound(),
                 "CONFLICT"       => Results.Conflict(new { error = result.Error }),
+                "LEAD_ACTIVITY_SECTOR_INVALID" or "LEAD_COMPANY_SIZE_INVALID" or "LEAD_PROSPECT_TYPE_INVALID"
+                    => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem(title: "Update failed", detail: result.Error, statusCode: 422)
             };
     }
@@ -92,4 +100,16 @@ public sealed record UpdateLeadRequest(
     string? CompanyName = null,
     string? CompanyEmail = null,
     string? CompanyPhone = null,
-    string? Website = null);
+    string? Website = null,
+    /// <summary>Person or company; null leaves it alone.</summary>
+    LeadType? ProspectType = null,
+    /// <summary>A sector code (options of the Lead form's `activitySector` field); null leaves it, "" clears it.</summary>
+    string? ActivitySector = null,
+    /// <summary>"Micro" | "Small" | "Medium" | "Large"; null leaves it, "" clears it.</summary>
+    string? CompanySize = null,
+    /// <summary>Expected yearly purchases, in the institution's currency; null leaves them.</summary>
+    decimal? EstimatedAnnualPurchases = null,
+    /// <summary>True clears the expected yearly purchases.</summary>
+    bool ClearEstimatedAnnualPurchases = false,
+    /// <summary>The contact's position; null leaves it, "" clears it.</summary>
+    string? ContactJobTitle = null);

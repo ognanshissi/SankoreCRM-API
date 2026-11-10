@@ -67,6 +67,17 @@ public static class LeadSettingKeys
     public const string LeadCooldownEnabled = "lead-cooldown-enabled";
 
     /// <summary>
+    /// What makes a company prospect a big one (key accounts lot 2): the yearly purchases from which
+    /// it is a « bon client » and a « grand compte », in the institution's currency (0 = not set),
+    /// and the sectors the institution targets (codes of <c>LeadActivitySectors</c>, comma-separated).
+    /// Read by the score's « Potentiel » dimension, which is worth nothing until one of them is set.
+    /// Set together through <c>PUT lead-settings/key-accounts</c>.
+    /// </summary>
+    public const string KeyAccountGoodPurchases = "key-account-good-purchases";
+    public const string KeyAccountMajorPurchases = "key-account-major-purchases";
+    public const string KeyAccountTargetSectors = "key-account-target-sectors";
+
+    /// <summary>
     /// Whether a WhatsApp message from a number that matches no open lead and no client creates a
     /// lead (WA-BE-09) — source WhatsApp, named from the sender's profile, filed in the receiving
     /// number's agency. Off, the conversation is kept unattached for an agent to file.
@@ -190,6 +201,12 @@ public static class LeadSettingKeys
             "Score from which a lead reads hot. Above intent-warm-threshold, at most 100."),
         new(LeadCooldownEnabled, "true", TypeBool,
             "Whether a lead without activity loses points: -10 at 30 days, -20 at 60, -30 at 90."),
+        new(KeyAccountGoodPurchases, "0", TypeDecimal,
+            "Yearly purchases from which a company prospect is a good customer (6 points of potential). 0 = not set."),
+        new(KeyAccountMajorPurchases, "0", TypeDecimal,
+            "Yearly purchases from which a company prospect is a key account (12 points of potential). 0 = not set."),
+        new(KeyAccountTargetSectors, "", TypeString,
+            "Activity sectors the institution targets, comma-separated codes (4 points of potential)."),
         new(WhatsAppCreateLeadForUnknownNumber, "true", TypeBool,
             "Create a lead when an unknown number writes to the institution's WhatsApp number. "
             + "Off, the conversation stays unattached until an agent files it."),

@@ -86,15 +86,29 @@ internal sealed class SetIntentThresholdsHandler(LeadsDbContext db, ILeadSetting
         // Scored leads only (score > 0): a lead nobody scored keeps « Inconnu ». Closed leads keep
         // the temperature they closed with.
         var open = db.Leads.Where(l => l.TenantId == cmd.TenantId && l.Score > 0 && !l.IsAnonymized && !Closed.Contains(l.Status));
+        int updated;
         if (db.Database.IsRelational())
-            return Result.Ok(await open.ExecuteUpdateAsync(s => s.SetProperty(l => l.IntentLevel, l =>
-                l.Score >= cmd.Hot ? LeadIntentLevel.Hot : l.Score >= cmd.Warm ? LeadIntentLevel.Warm : LeadIntentLevel.Cold), ct));
+            updated = await open.ExecuteUpdateAsync(s => s.SetProperty(l => l.IntentLevel, l =>
+                l.Score >= cmd.Hot ? LeadIntentLevel.Hot : l.Score >= cmd.Warm ? LeadIntentLevel.Warm : LeadIntentLevel.Cold), ct);
+        else
+        {
+            // EF InMemory has no ExecuteUpdate.
+            var leads = await open.AsTracking().ToListAsync(ct);
+            foreach (var lead in leads) lead.UpdateIntentLevel(thresholds.Of(lead.Score));
+            await db.SaveChangesAsync(ct);
+            updated = leads.Count;
+        }
 
-        // EF InMemory has no ExecuteUpdate.
-        var leads = await open.AsTracking().ToListAsync(ct);
-        foreach (var lead in leads) lead.UpdateIntentLevel(thresholds.Of(lead.Score));
-        await db.SaveChangesAsync(ct);
-        return Result.Ok(leads.Count);
+        // A fresh product request stays hot whatever the bands (key accounts lot 3): a second pass
+        // over the few leads that carry one, through the same rule as every rescore.
+        var requests = await open.Where(l => l.ProductRequestAt != null).AsTracking().ToListAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var lead in requests)
+            if (await QualifyLead.ProductRequestHeat.IsActiveAsync(db, lead, now, ct))
+                lead.UpdateIntentLevel(LeadIntentLevel.Hot);
+        if (requests.Count > 0) await db.SaveChangesAsync(ct);
+
+        return Result.Ok(updated);
     }
 }
 

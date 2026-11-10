@@ -225,7 +225,9 @@ public sealed class PullLeadSourceJob(IServiceScopeFactory scopeFactory)
             FullName:          fullName,
             PhoneNumber:       phone,
             Source:             Domain.LeadSource.Partner,
-            InterestedProduct: GetField("interestedProduct") ?? "Unknown",
+            InterestedProduct: GetField("interestedProduct")
+                               ?? (string.IsNullOrWhiteSpace(settings.DefaultProductCode) ? null : settings.DefaultProductCode.Trim())
+                               ?? "Unknown",
             PreferredLanguage: GetField("preferredLanguage") ?? "fr",
             Latitude:          0,
             Longitude:         0,
@@ -234,6 +236,19 @@ public sealed class PullLeadSourceJob(IServiceScopeFactory scopeFactory)
             LastName:          GetField("lastName"),
             Email:             GetField("email"),
             AgencyId:          source.DefaultAgencyId,
-            LeadSourceConfigId: source.Id);
+            LeadSourceConfigId: source.Id,
+            // The company (key accounts lot 1). Best effort like the other inbound paths: a value the
+            // capture would refuse is left out rather than losing the prospect.
+            ProspectType:      GetField("companyName") is { Length: > 0 } ? Domain.LeadType.Corporate : Domain.LeadType.Individual,
+            CompanyName:       Trim(GetField("companyName"), 200),
+            CompanyEmail:      GetField("companyEmail"),
+            CompanyPhone:      Trim(GetField("companyPhone"), 30),
+            Website:           Trim(GetField("website"), 300),
+            ActivitySector:    Domain.LeadActivitySectors.Normalize(GetField("activitySector")),
+            CompanySize:       Domain.LeadCompanySizes.Parse(GetField("companySize"))?.ToString(),
+            ContactJobTitle:   Trim(GetField("contactJobTitle"), 150));
     }
+
+    private static string? Trim(string? value, int max)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim() is var t && t.Length > max ? t[..max] : value.Trim();
 }

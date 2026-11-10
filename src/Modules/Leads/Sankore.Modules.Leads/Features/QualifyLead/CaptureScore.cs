@@ -20,8 +20,16 @@ internal static class CaptureScore
 {
     public const string TriggerEvent = "LEAD_CAPTURED";
 
-    public static async Task ApplyAsync(LeadsDbContext db, Lead lead, CancellationToken ct)
+    /// <param name="administration">
+    /// Given by the paths a source feeds (form, webhook, pull, typed in with a source): it lets a
+    /// request for a precise product mark the lead hot (<see cref="ProductRequestHeat"/>) before its
+    /// first temperature is read.
+    /// </param>
+    public static async Task ApplyAsync(LeadsDbContext db, Lead lead, CancellationToken ct,
+        Sankore.Modules.Administration.PublicApi.IAdministrationModule? administration = null)
     {
+        await ProductRequestHeat.MarkAsync(db, administration, lead, DateTimeOffset.UtcNow, ct);
+
         var calculator = new LeadScoreCalculator(db);
         var (score, factorsJson) = await calculator.CalculateAsync(lead, ct);
         lead.RecordScoreUpdate(score);

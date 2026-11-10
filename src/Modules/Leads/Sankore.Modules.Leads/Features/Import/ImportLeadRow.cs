@@ -33,6 +33,20 @@ public sealed record ImportLeadRow
     public string? Comment { get; init; }
     public string? ExternalReference { get; init; }
     public string? CompanyName { get; init; }
+
+    /// <summary>« Corporate » / « Entreprise » or « Individual » / « Particulier ». Blank: a company when CompanyName is filled.</summary>
+    public string? ProspectType { get; init; }
+    public string? CompanyEmail { get; init; }
+    public string? CompanyPhone { get; init; }
+    public string? Website { get; init; }
+
+    /// <summary>A sector code or its French label (key accounts lot 1).</summary>
+    public string? ActivitySector { get; init; }
+
+    /// <summary>A bracket (Micro, Small, Medium, Large), its French label, or a headcount.</summary>
+    public string? CompanySize { get; init; }
+    public string? EstimatedAnnualPurchases { get; init; }
+    public string? ContactJobTitle { get; init; }
     public string? OwnerId { get; init; }
     public string? AgencyId { get; init; }
     public string? Profession { get; init; }

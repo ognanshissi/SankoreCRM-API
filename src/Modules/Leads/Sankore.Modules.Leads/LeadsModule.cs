@@ -239,6 +239,7 @@ public static class LeadsModule
         // Starting data of a tenant (docs/donnees-demarrage-demo.md): sources, credit template, questionnaires.
         services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.LeadsStartingData>();
         services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.LeadsDemoData>();
+        services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.LeadsCompanyDemoData>();
         // Public contract of M13. Consumed by the Customers module (M01) to import a
         // converted lead's commercial history into the client timeline (F13.29).
         services.AddScoped<PublicApi.ILeadsModule, LeadsModuleFacade>();
@@ -365,6 +366,7 @@ public static class LeadsModule
         // Recycled lead reactivation — Hangfire recurring job (US-M13-160/161)
         services.AddTransient<ReactivateRecycledLeadsJob>();
         services.AddTransient<Features.RecalculateLeadScore.CoolDownLeadsJob>();
+        services.AddTransient<Features.Settings.KeyAccounts.RescoreCompanyLeadsJob>();
         services.AddTransient<Features.ProjectTemplates.ProjectCloseDateOverdueJob>();
         services.AddTransient<Features.Tasks.WorkAlerts.WorkAlertsJob>();
         services.AddTransient<Features.DispatchQueue.DispatchWaitingLeadsJob>();

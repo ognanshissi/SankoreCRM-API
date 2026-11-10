@@ -584,6 +584,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("KeyAccountsOnly")
+                        .HasColumnType("boolean")
+                        .HasColumnName("key_accounts_only");
+
                     b.Property<int>("MaxLeadsPerAgent")
                         .HasColumnType("integer")
                         .HasColumnName("max_leads_per_agent");
@@ -600,6 +604,13 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Property<int>("Priority")
                         .HasColumnType("integer")
                         .HasColumnName("priority");
+
+                    b.Property<string>("ReservedAgentIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("reserved_agent_ids")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<string>("Strategy")
                         .IsRequired()
@@ -769,6 +780,11 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ActivitySectorCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("activity_sector_code");
+
                     b.Property<Guid?>("AgencyId")
                         .HasColumnType("uuid")
                         .HasColumnName("agency_id");
@@ -818,6 +834,16 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("company_phone");
+
+                    b.Property<string>("CompanySize")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("company_size");
+
+                    b.Property<string>("ContactJobTitle")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("contact_job_title");
 
                     b.Property<DateTimeOffset?>("ConvertedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1081,6 +1107,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("principal_usage_name");
+
+                    b.Property<DateTimeOffset?>("ProductRequestAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("product_request_at");
 
                     b.Property<string>("Profession")
                         .HasMaxLength(150)
@@ -2084,6 +2114,10 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("platform_connection_id");
+
+                    b.Property<bool?>("ProductRequestIsHot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("product_request_is_hot");
 
                     b.Property<string>("PublicKey")
                         .HasMaxLength(128)
@@ -4642,6 +4676,32 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                                 .HasConstraintName("fk_leads_leads_id");
                         });
 
+                    b.OwnsOne("Sankore.Shared.Kernel.ValueObject.Money", "EstimatedAnnualPurchases", b1 =>
+                        {
+                            b1.Property<Guid>("LeadId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 4)
+                                .HasColumnType("numeric(18,4)")
+                                .HasColumnName("estimated_annual_purchases");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("character varying(3)")
+                                .HasColumnName("estimated_annual_purchases_currency");
+
+                            b1.HasKey("LeadId");
+
+                            b1.ToTable("leads", "leads");
+
+                            b1.WithOwner()
+                                .HasForeignKey("LeadId")
+                                .HasConstraintName("fk_leads_leads_id");
+                        });
+
                     b.OwnsOne("Sankore.Shared.Kernel.ValueObject.GeoPoint", "Location", b1 =>
                         {
                             b1.Property<Guid>("LeadId")
@@ -4714,6 +4774,8 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.Navigation("AcquisitionCost");
 
                     b.Navigation("DesiredAmount");
+
+                    b.Navigation("EstimatedAnnualPurchases");
 
                     b.Navigation("Location");
 

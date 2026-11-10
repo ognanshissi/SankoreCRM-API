@@ -27,6 +27,9 @@ internal static class InboundLeadFactory
         "comment", "campaign", "externalReference", "externalId",
         "utmSource", "utmMedium", "utmCampaign", "utmContent", "utmTerm",
         "landingPage", "referrer", "latitude", "longitude",
+        // Read by InboundCompanyProfile (key accounts lot 1).
+        "prospectType", "companyName", "companyEmail", "companyPhone", "website",
+        "activitySector", "companySize", "estimatedAnnualPurchases", "contactJobTitle",
     };
 
     /// <summary>
@@ -91,7 +94,10 @@ internal static class InboundLeadFactory
             // reads the real source instead — leadSourceConfigId below, and the points its admin
             // set (LeadSourceConfig.ScorePoints, sources lot 1).
             source:            LeadSource.Web,
-            interestedProduct: Get("interestedProduct") ?? "Unknown",
+            // The source's default product when the payload names none (key accounts lot 3): it was
+            // saved by the source editor and read nowhere, so a « devis pour le produit X » page
+            // brought every lead in on « Unknown ».
+            interestedProduct: Get("interestedProduct") ?? Blank(source.Settings?.DefaultProductCode) ?? "Unknown",
             preferredLanguage: Get("preferredLanguage") ?? "FR",
             location:          new GeoPoint(ParseCoordinate(Get("latitude")), ParseCoordinate(Get("longitude"))),
             preferredAgencyId: null,
@@ -118,6 +124,8 @@ internal static class InboundLeadFactory
             // Safe to trust: the caller loaded and tenant-checked the config.
             leadSourceConfigId: source.Id);
     }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// A coordinate arrives here as JSON or form text, which always uses a decimal POINT —

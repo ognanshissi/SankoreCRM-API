@@ -115,7 +115,11 @@ public static class CaptureLeadEndpoint
             AddressLine:        req.AddressLine,
             PostalCode:         req.PostalCode,
             City:               req.City,
-            CountryCode:        req.CountryCode), ct);
+            CountryCode:        req.CountryCode,
+            ActivitySector:     req.ActivitySector,
+            CompanySize:        req.CompanySize,
+            EstimatedAnnualPurchases: req.EstimatedAnnualPurchases,
+            ContactJobTitle:    req.ContactJobTitle), ct);
 
         if (!result.IsSuccess)
             return Results.Problem(title: "Lead capture failed", detail: result.Error, statusCode: 422);
@@ -250,7 +254,15 @@ public sealed record CaptureLeadRequest(
     string? PostalCode = null,
     string? City = null,
     /// <summary>ISO 3166-1 alpha-2.</summary>
-    string? CountryCode = null);
+    string? CountryCode = null,
+    /// <summary>A corporate prospect's sector: a code among the options of the Lead form's `activitySector` field.</summary>
+    string? ActivitySector = null,
+    /// <summary>"Micro" | "Small" | "Medium" | "Large".</summary>
+    string? CompanySize = null,
+    /// <summary>Expected yearly purchases, in the institution's currency.</summary>
+    decimal? EstimatedAnnualPurchases = null,
+    /// <summary>The contact's position in the company.</summary>
+    string? ContactJobTitle = null);
 
 /// <summary>
 /// One household member on a capture (BNF-B-18) — the same shape the household endpoints take, so

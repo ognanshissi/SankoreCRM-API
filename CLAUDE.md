@@ -414,6 +414,41 @@ the temperature follows, the status never moves, and NO critical-change event is
 recency of interactions alone was worth 8 points, so before this a hot lead left for months stayed hot.
 Measured capture ceilings are unaffected (no penalty at capture).
 
+**A company is scored as a company (key accounts lot 2, 2026-11-09, product owner; plan `docs/prospection-grands-comptes.md`).**
+For a `Corporate` lead the profile counts contact name 4, e-mail 3, company name 4, sector 3, headcount 2, company
+e-mail or website 2, contact's position 2, questionnaire 5 (ceiling 25), and the coherence counts the company phone
+instead of the identity document. A person's score is unchanged. On top, the « Potentiel » dimension (factor
+`potential`, 0–20, companies only): yearly purchases ≥ the « grand compte » threshold 12, else ≥ « bon client » 6,
+headcount 4/3/1/0, targeted sector 4 — read from `KeyAccountSettings` (lead settings `key-account-*`, set together by
+`PUT lead-settings/key-accounts`, `lead:dispatching-rule:manage`), and 0 until one of them is set. Saving them enqueues
+`RescoreCompanyLeadsJob` (open, scored company leads; `ScoreHistory` `KEY_ACCOUNT_SETTINGS_CHANGED`, no critical-change
+event). The company fields themselves (lot 1): `ActivitySectorCode` (the socle's fixed `LeadActivitySectors`),
+`CompanySize`, `EstimatedAnnualPurchases`, `ContactJobTitle`; inbound payloads go through `InboundCompanyProfile`.
+
+**A form asking for a precise product is hot (key accounts lot 3, 2026-11-09, product owner).** A lead whose source has
+`ProductRequestIsHot` (null = `DefaultProductRequestIsHot`: web form and the three Lead Ads channels) and whose product
+resolves to an ACTIVE catalogue line (`ProductLineLookup`, exact) gets `ProductRequestAt` at its capture
+(`CaptureScore.ApplyAsync(…, administration)` marks it through `ProductRequestHeat.MarkAsync`) and reads at least Hot
+whatever its score while `ProductRequestHeat.IsActiveAsync` holds: not closed, no `NotInterested` activity since, and
+fewer than 30 days since its last touch. The score is never raised. `IntentLevelOfAsync` is where it applies, and
+`PUT lead-settings/intent-thresholds` re-applies it after its bulk update; a new place computing a temperature must go
+through `IntentLevelOfAsync`. A source's `DefaultProductCode` (settings bag) is now applied by `InboundLeadFactory` and
+the pull when the payload names no product; reprocessing an ingestion now scores the lead it creates.
+
+**A company prospect converts into a LEGAL client (2026-11-09, product owner).** `ConvertLeadHandler.CreateClientAsync`:
+a lead with a company name becomes a legal client when it is `Corporate`, even with a contact's first/last name (the
+old rule — no name at all — still holds for the others). The contact's personal data (birth date, gender, identity
+document, profession, marital status) is NOT sent: the document would make the company a duplicate of the contact's
+own client. Phone and e-mail stay as contact points; the contact's name is lost until contact roles exist.
+
+**Key accounts are routed and shown (key accounts lot 4, 2026-11-09).** `LeadPotentialTier` (None, GoodCustomer,
+KeyAccount) is READ from `KeyAccountSettings` (`TierOf`, and `WhereTier` as a query predicate), never stored.
+`DispatchingRule.KeyAccountsOnly`: `DispatchingRuleResolver` gives a key account the highest-priority active such rule
+BEFORE a source's pinned rule, and never gives such a rule to another lead (no thresholds = no key account).
+`DispatchingRule.ReservedAgentIds` (jsonb, empty = everyone) narrows the pool in `DispatchLeadHandler` and the
+simulation. List, export and view counts take `potential` (`LeadListFilter.Potential`, `keyAccounts` count);
+`LeadDto.PotentialTier`; the lead report adds `ByPotential` (null without thresholds) and `BySector`.
+
 **Agents' monthly objectives (« Ma journée » redesign lot 1, 2026-10-31, product owner).**
 `AgentObjective` (`leads.agent_objectives`, one row per agent and month): first contacts within 24 h
 (%) and conversions of the month, set by the agent's manager. A month with no row reads the latest

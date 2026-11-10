@@ -123,7 +123,9 @@ public static class DispatchingRulesEndpoints
             ExcludedAgentIds:      req.ExcludedAgentIds,
             FirstContactSlaHot:    req.FirstContactSlaHot,
             FirstContactSlaWarm:   req.FirstContactSlaWarm,
-            FirstContactSlaCold:   req.FirstContactSlaCold), ct);
+            FirstContactSlaCold:   req.FirstContactSlaCold,
+            KeyAccountsOnly:       req.KeyAccountsOnly,
+            ReservedAgentIds:      req.ReservedAgentIds), ct);
 
         return result.IsSuccess
             ? Results.Created($"leads/dispatching-rules/{result.Value}", result.Value)
@@ -148,7 +150,9 @@ public static class DispatchingRulesEndpoints
             ExcludedAgentIds:      req.ExcludedAgentIds,
             FirstContactSlaHot:    req.FirstContactSlaHot,
             FirstContactSlaWarm:   req.FirstContactSlaWarm,
-            FirstContactSlaCold:   req.FirstContactSlaCold), ct);
+            FirstContactSlaCold:   req.FirstContactSlaCold,
+            KeyAccountsOnly:       req.KeyAccountsOnly,
+            ReservedAgentIds:      req.ReservedAgentIds), ct);
 
         return result.IsSuccess
             ? Results.NoContent()
@@ -203,7 +207,11 @@ public sealed record CreateDispatchingRuleRequest(
     /// <summary>First-contact delay for a hot / warm / cold lead; null = <c>FirstContactSla</c>.</summary>
     TimeSpan? FirstContactSlaHot = null,
     TimeSpan? FirstContactSlaWarm = null,
-    TimeSpan? FirstContactSlaCold = null);
+    TimeSpan? FirstContactSlaCold = null,
+    /// <summary>A rule for the key accounts only: the company prospects at the « grand compte » threshold.</summary>
+    bool KeyAccountsOnly = false,
+    /// <summary>The agents the rule dispatches to; empty = every available agent. Replaced on update.</summary>
+    IReadOnlyList<Guid>? ReservedAgentIds = null);
 
 public sealed record UpdateDispatchingRuleRequest(
     string Name,
@@ -217,6 +225,10 @@ public sealed record UpdateDispatchingRuleRequest(
     /// <summary>First-contact delay for a hot / warm / cold lead; null = <c>FirstContactSla</c>.</summary>
     TimeSpan? FirstContactSlaHot = null,
     TimeSpan? FirstContactSlaWarm = null,
-    TimeSpan? FirstContactSlaCold = null);
+    TimeSpan? FirstContactSlaCold = null,
+    /// <summary>A rule for the key accounts only: the company prospects at the « grand compte » threshold.</summary>
+    bool KeyAccountsOnly = false,
+    /// <summary>The agents the rule dispatches to; empty = every available agent. Replaced on update.</summary>
+    IReadOnlyList<Guid>? ReservedAgentIds = null);
 
 public sealed record SimulateDispatchRequest(Guid LeadId);

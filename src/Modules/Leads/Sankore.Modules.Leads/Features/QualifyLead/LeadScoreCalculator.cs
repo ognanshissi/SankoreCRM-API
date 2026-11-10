@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Modules.Leads.Features.Settings.KeyAccounts;
 
 /// <summary>
 /// Computes a 0-100 lead score from six AC-mandated dimensions plus the address.
@@ -16,13 +17,25 @@ using Sankore.Modules.Leads.Infrastructure;
 ///   5. Declarative coherence  0-10 pts  (consistency cross-checks on declared data)
 ///   6. Location               0-10 pts  (geo-point + preferred agency)
 ///   7. Address                0-18 pts  (country 2, city 8, neighbourhood 6, landmark 2)
+///   8. Potential              0-20 pts  (company prospects only, once the institution set what a big
+///                                       one is — key accounts lot 2)
 ///
-/// The dimensions add up to 118 and the score is clamped to [0, 100]. The address dimension was
+/// The dimensions add up to 138 and the score is clamped to [0, 100]. The address dimension was
 /// added on top rather than carved out of the others, deliberately: it is what a self-service
 /// capture (USSD 10 source points, no activity) can still earn before anybody calls, and the
 /// identity screen tells the agent exactly that — « compléter l'adresse rapporte 18 points ».
 /// Taking the points from another dimension would have lowered every existing lead's score.
 /// Each dimension is serialised individually into FactorsJson for explainability.
+///
+/// <para>
+/// <b>A company is scored as a company (key accounts lot 2, 2026-11-09, product owner).</b> The
+/// profile and the coherence counted a date of birth and an identity document — 10 points no company
+/// can earn — and a company's name was worth 3: every company prospect started colder than a person,
+/// whatever its size. For a company they count its name, sector, headcount, contact details and the
+/// contact's position instead, under the same ceilings. A person's score does not change.
+/// The « Potentiel » dimension is added on top, like the address, so that nothing is taken from the
+/// other dimensions; it is 0 until the institution sets its thresholds or sectors.
+/// </para>
 /// </summary>
 internal sealed class LeadScoreCalculator(LeadsDbContext db)
 {
@@ -31,7 +44,13 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
     /// qualification and every rescore (<see cref="Settings.IntentThresholds.IntentThresholds"/>).
     /// </summary>
     public async Task<LeadIntentLevel> IntentLevelOfAsync(Lead lead, int score, CancellationToken ct)
-        => (await Settings.IntentThresholds.IntentThresholds.ReadAsync(db, lead.TenantId, ct)).Of(score);
+    {
+        var level = (await Settings.IntentThresholds.IntentThresholds.ReadAsync(db, lead.TenantId, ct)).Of(score);
+        // A fresh request for a precise product through a form is hot whatever the score (lot 3).
+        return level != LeadIntentLevel.Hot && await ProductRequestHeat.IsActiveAsync(db, lead, DateTimeOffset.UtcNow, ct)
+            ? LeadIntentLevel.Hot
+            : level;
+    }
 
     public async Task<(int Score, string FactorsJson)> CalculateAsync(Lead lead, CancellationToken ct)
     {
@@ -49,12 +68,13 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
         var coherence   = DeclarativeCoherenceScore(lead);
         var location    = LocationScore(lead);
         var address     = AddressScore(lead);
+        var potential   = (await KeyAccountSettings.ReadAsync(db, lead.TenantId, ct)).PotentialOf(lead);
 
         // The cooling (lead temperature, lot 4) comes off the CLAMPED total, so a lead whose
         // dimensions add past 100 still feels it.
         var inactivity  = await InactivityPenaltyAsync(lead, activities, now, ct);
         var total = Math.Clamp(Math.Clamp(
-            profile + source + interaction + behaviour + coherence + location + address, 0, 100) - inactivity, 0, 100);
+            profile + source + interaction + behaviour + coherence + location + address + potential, 0, 100) - inactivity, 0, 100);
 
         var factorsJson = JsonSerializer.Serialize(new
         {
@@ -65,6 +85,7 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
             declarativeCoherence = coherence,
             location             = location,
             address              = address,
+            potential            = potential,
             inactivity           = -inactivity,
             total                = total
         });
@@ -98,8 +119,11 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
     // ── 1. Profile completeness (0-25) ────────────────────────────────────────
     // Rewards rich identity data and how far the qualification form has been filled.
 
-    private static int ProfileCompletenessScore(Lead lead)
+    internal static int ProfileCompletenessScore(Lead lead)
     {
+        if (lead.ProspectType == LeadType.Corporate)
+            return CompanyProfileScore(lead);
+
         int pts = 0;
         if (!string.IsNullOrWhiteSpace(lead.FirstName) && !string.IsNullOrWhiteSpace(lead.LastName)) pts += 4;
         if (!string.IsNullOrWhiteSpace(lead.Email))       pts += 3;
@@ -108,6 +132,24 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
         if (lead.DesiredAmount is { Amount: > 0 })        pts += 3;
         if (!string.IsNullOrWhiteSpace(lead.CompanyName)) pts += 3;
         // Qualification form completeness (0.0–1.0) → up to 5 pts.
+        pts += (int)Math.Round(lead.QualificationCompleteness * 5);
+        return Math.Min(pts, 25);
+    }
+
+    /// <summary>
+    /// A company's profile, under the same 25-point ceiling: contact's name 4, e-mail 3, company name 4,
+    /// sector 3, headcount 2, company e-mail or website 2, contact's position 2, questionnaire 5.
+    /// </summary>
+    private static int CompanyProfileScore(Lead lead)
+    {
+        int pts = 0;
+        if (!string.IsNullOrWhiteSpace(lead.FirstName) || !string.IsNullOrWhiteSpace(lead.LastName)) pts += 4;
+        if (!string.IsNullOrWhiteSpace(lead.Email))             pts += 3;
+        if (!string.IsNullOrWhiteSpace(lead.CompanyName))       pts += 4;
+        if (lead.ActivitySectorCode is not null)                pts += 3;
+        if (lead.CompanySize.HasValue)                          pts += 2;
+        if (!string.IsNullOrWhiteSpace(lead.CompanyEmail) || !string.IsNullOrWhiteSpace(lead.Website)) pts += 2;
+        if (!string.IsNullOrWhiteSpace(lead.ContactJobTitle))   pts += 2;
         pts += (int)Math.Round(lead.QualificationCompleteness * 5);
         return Math.Min(pts, 25);
     }
@@ -230,12 +272,19 @@ internal sealed class LeadScoreCalculator(LeadsDbContext db)
     // ── 5. Declarative coherence (0-10) ──────────────────────────────────────
     // Checks that declared data is internally consistent and plausible.
 
-    private static int DeclarativeCoherenceScore(Lead lead)
+    internal static int DeclarativeCoherenceScore(Lead lead)
     {
         int pts = 0;
 
-        // NationalId present and plausible length (5-20 chars).
-        if (!string.IsNullOrWhiteSpace(lead.NationalId) && lead.NationalId.Length is >= 5 and <= 20)
+        // A person: an identity document of plausible length (5-20 chars). A company has none — it
+        // is reached at its own number instead, 7-15 digits (key accounts lot 2).
+        if (lead.ProspectType == LeadType.Corporate)
+        {
+            var companyDigits = new string((lead.CompanyPhone ?? "").Where(char.IsDigit).ToArray());
+            if (companyDigits.Length is >= 7 and <= 15)
+                pts += 3;
+        }
+        else if (!string.IsNullOrWhiteSpace(lead.NationalId) && lead.NationalId.Length is >= 5 and <= 20)
             pts += 3;
 
         // Phone number: 7-15 digits after stripping non-numeric characters.

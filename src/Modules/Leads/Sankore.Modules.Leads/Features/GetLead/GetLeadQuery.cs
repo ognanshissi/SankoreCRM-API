@@ -117,7 +117,24 @@ public sealed record LeadDto(
     /// <param name="Profession">The principal's profession. Detail read only.</param>
     string? Profession = null,
     /// <param name="MaritalStatus">A <c>LeadMaritalStatus</c> name. Detail read only.</param>
-    string? MaritalStatus = null);
+    string? MaritalStatus = null,
+    /// <param name="ActivitySector">A sector code (options of the Lead form's `activitySector` field).</param>
+    string? ActivitySector = null,
+    /// <param name="CompanySize">A <c>LeadCompanySize</c> name.</param>
+    string? CompanySize = null,
+    /// <param name="EstimatedAnnualPurchases">Expected yearly purchases of the company.</param>
+    Money? EstimatedAnnualPurchases = null,
+    /// <param name="ContactJobTitle">The contact's position in the company.</param>
+    string? ContactJobTitle = null,
+    /// <param name="ProductRequestAt">
+    /// When the prospect asked for a precise product through a form — the reason such a lead reads
+    /// « Chaud » whatever its score while the request is fresh (key accounts lot 3).
+    /// </param>
+    DateTimeOffset? ProductRequestAt = null,
+    /// <param name="PotentialTier">
+    /// A <c>LeadPotentialTier</c> name, read against the institution's key-account thresholds (lot 4).
+    /// </param>
+    string? PotentialTier = null);
 
 /// <summary>The principal's address, as the identity screen edits it.</summary>
 /// <param name="PostalCode">Also the boîte postale — the only postal code most of the network has.</param>

@@ -26,22 +26,37 @@ internal sealed class DispatchingRuleResolver(LeadsDbContext db)
     public async Task<DispatchingRule> ResolveAsync(
         Lead lead, DispatchingStrategy? requestedStrategy, CancellationToken ct)
     {
+        // Key accounts (lot 4): a company prospect at the « grand compte » threshold goes to the
+        // key-account rule before anything else — a source's pinned rule included —, and a
+        // key-account rule never receives another lead.
+        var isKeyAccount = (await Settings.KeyAccounts.KeyAccountSettings.ReadAsync(db, lead.TenantId, ct))
+            .TierOf(lead) == LeadPotentialTier.KeyAccount;
+
         // A caller that names a strategy explicitly still gets the rule tuned for it — the
         // manual dispatch screen must keep working exactly as before.
         if (requestedStrategy is { } strategy)
         {
             return await db.DispatchingRules
-                       .Where(r => r.IsActive && r.Strategy == strategy)
-                       .OrderByDescending(r => r.Priority)
+                       .Where(r => r.IsActive && r.Strategy == strategy && (isKeyAccount || !r.KeyAccountsOnly))
+                       .OrderByDescending(r => r.KeyAccountsOnly).ThenByDescending(r => r.Priority)
                        .FirstOrDefaultAsync(ct)
                    ?? DispatchingRule.Default();
         }
 
+        if (isKeyAccount)
+        {
+            var keyAccountRule = await db.DispatchingRules
+                .Where(r => r.IsActive && r.KeyAccountsOnly)
+                .OrderByDescending(r => r.Priority)
+                .FirstOrDefaultAsync(ct);
+            if (keyAccountRule is not null) return keyAccountRule;
+        }
+
         var pinned = await PinnedBySourceAsync(lead, ct);
-        if (pinned is not null) return pinned;
+        if (pinned is not null && (isKeyAccount || !pinned.KeyAccountsOnly)) return pinned;
 
         return await db.DispatchingRules
-                   .Where(r => r.IsActive)
+                   .Where(r => r.IsActive && !r.KeyAccountsOnly)
                    .OrderByDescending(r => r.Priority)
                    .FirstOrDefaultAsync(ct)
                ?? DispatchingRule.Default();

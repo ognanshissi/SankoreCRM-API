@@ -25,7 +25,9 @@ public sealed record LeadViewCountsDto(
     int Mine,
     int AwaitingDispatch,
     IReadOnlyDictionary<string, int> ByStatus,
-    IReadOnlyDictionary<string, int> ByIntent);
+    IReadOnlyDictionary<string, int> ByIntent,
+    /// <summary>« Grands comptes » (key accounts lot 4): company prospects at the « grand compte » threshold.</summary>
+    int KeyAccounts = 0);
 
 /// <summary>
 /// The filters a view leaves in place — agency, source, search, custom fields — so the counts match
@@ -35,7 +37,10 @@ internal sealed record GetLeadViewCountsQuery(
     Guid? AgencyId = null,
     string? Search = null,
     Guid? LeadSourceConfigId = null,
-    IReadOnlyList<string>? CustomFilters = null) : IRequest<Result<LeadViewCountsDto>>;
+    IReadOnlyList<string>? CustomFilters = null,
+    LeadType? ProspectType = null,
+    string? ActivitySector = null,
+    LeadCompanySize? CompanySize = null) : IRequest<Result<LeadViewCountsDto>>;
 
 internal sealed class GetLeadViewCountsHandler(
     LeadsDbContext db,
@@ -51,7 +56,8 @@ internal sealed class GetLeadViewCountsHandler(
         var visible = visibility?.Apply(db.Leads.AsNoTracking()) ?? db.Leads.AsNoTracking();
         var filtered = await new LeadListFilter(
                 AgencyId: query.AgencyId, Search: query.Search, LeadSourceConfigId: query.LeadSourceConfigId,
-                CustomFilters: query.CustomFilters)
+                CustomFilters: query.CustomFilters, ProspectType: query.ProspectType,
+                ActivitySector: query.ActivitySector, CompanySize: query.CompanySize)
             .ApplyAsync(visible, db, administration, tenant, ct);
         if (filtered.IsFailure)
             return Result.Fail<LeadViewCountsDto>(filtered.Error!);
@@ -67,7 +73,11 @@ internal sealed class GetLeadViewCountsHandler(
             : await q.CountAsync(l => l.CurrentAssignedId == me || (l.CurrentAssignedId == null && l.OwnerId == me), ct);
         var queue = await q.CountAsync(l => l.AwaitingDispatchSince != null && l.CurrentAssignmentId == null, ct);
 
-        return Result.Ok(new LeadViewCountsDto(byStatus.Values.Sum(), mine, queue, byStatus, byIntent));
+        var keyAccounts = tenant is null ? 0
+            : await (await Settings.KeyAccounts.KeyAccountSettings.ReadAsync(db, tenant.CurrentTenantId, ct))
+                .WhereTier(q, LeadPotentialTier.KeyAccount).CountAsync(ct);
+
+        return Result.Ok(new LeadViewCountsDto(byStatus.Values.Sum(), mine, queue, byStatus, byIntent, keyAccounts));
     }
 }
 
@@ -82,9 +92,13 @@ internal static class GetLeadViewCountsEndpoint
                 string? search = null,
                 Guid? leadSourceConfigId = null,
                 // Repeated, as on the list: `cf=segment:Commercant&cf=vip:oui`.
-                [Microsoft.AspNetCore.Mvc.FromQuery(Name = "cf")] string[]? customFilters = null) =>
+                [Microsoft.AspNetCore.Mvc.FromQuery(Name = "cf")] string[]? customFilters = null,
+                LeadType? prospectType = null,
+                string? activitySector = null,
+                LeadCompanySize? companySize = null) =>
             {
-                var result = await sender.Send(new GetLeadViewCountsQuery(agencyId, search, leadSourceConfigId, customFilters), ct);
+                var result = await sender.Send(new GetLeadViewCountsQuery(
+                    agencyId, search, leadSourceConfigId, customFilters, prospectType, activitySector, companySize), ct);
                 return result.IsSuccess
                     ? Results.Ok(result.Value)
                     : Results.Problem(title: "Invalid filter", detail: result.Error, statusCode: StatusCodes.Status400BadRequest);

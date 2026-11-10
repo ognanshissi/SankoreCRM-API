@@ -134,6 +134,20 @@ internal sealed class LeadConfiguration(IFieldEncryptor encryptor) : IEntityType
         builder.Property(l => l.CompanyPhone).HasMaxLength(30);
         builder.Property(l => l.Website).HasMaxLength(300).IsRequired(false);
 
+        // What the company is (key accounts lot 1)
+        builder.Property(l => l.ActivitySectorCode).HasMaxLength(40);
+        builder.Property(l => l.CompanySize).HasConversion<string>().HasMaxLength(20);
+        builder.Property(l => l.ContactJobTitle).HasMaxLength(150);
+        builder.OwnsOne(l => l.EstimatedAnnualPurchases, m =>
+        {
+            m.Property(p => p.Amount)
+                .HasColumnName("estimated_annual_purchases")
+                .HasPrecision(18, 4);
+            m.Property(p => p.Currency)
+                .HasColumnName("estimated_annual_purchases_currency")
+                .HasMaxLength(3);
+        });
+
         // Enums stored as strings
         builder.Property(l => l.ProspectType).HasConversion<string>().HasMaxLength(20);
         builder.Property(l => l.Status).HasConversion<string>().HasMaxLength(30);

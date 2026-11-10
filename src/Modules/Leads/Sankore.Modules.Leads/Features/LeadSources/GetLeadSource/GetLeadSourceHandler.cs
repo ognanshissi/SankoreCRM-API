@@ -59,7 +59,8 @@ internal sealed class GetLeadSourceHandler(LeadsDbContext db, TimeProvider clock
             source.DefaultAgencyId, source.DefaultDispatchingRuleId,
             source.IsSystem, source.DisplayOrder, source.Version, source.CreatedAt,
             secrets, source.LastRejectedAt, source.LastRejectedReason,
-            source.ScorePoints, LeadSourceConfig.DefaultScorePoints(source.ChannelType)));
+            source.ScorePoints, LeadSourceConfig.DefaultScorePoints(source.ChannelType),
+            source.ProductRequestIsHot, LeadSourceConfig.DefaultProductRequestIsHot(source.ChannelType)));
     }
 
     private static IReadOnlyList<SecretHintDto> BuildSecretHints(SourceSettings? settings)

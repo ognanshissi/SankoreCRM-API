@@ -40,11 +40,11 @@ internal sealed class ListLeadsHandler(
         var page   = query.Page < 1 ? 1 : query.Page;
         var size   = query.PageSize < 1 ? 20 : query.PageSize > 100 ? 100 : query.PageSize;
 
-        var items = await q
+        var rows = await q
             .OrderByDescending(l => l.CreatedAt)
             .Skip((page - 1) * size)
             .Take(size)
-            .Select(lead => new LeadDto(
+            .Select(lead => new { Dto = new LeadDto(
                 lead.Id,
                 lead.TenantId,
                 lead.FullName,
@@ -95,8 +95,33 @@ internal sealed class ListLeadsHandler(
                 lead.LeadSourceConfigId,
                 null,
                 null,
-                lead.AwaitingDispatchSince))
+                lead.AwaitingDispatchSince),
+                // The company profile (key accounts lot 1) beside the positional DTO rather than in
+                // it: named arguments are not allowed in an expression tree.
+                lead.ActivitySectorCode,
+                lead.CompanySize,
+                lead.EstimatedAnnualPurchases,
+                lead.ContactJobTitle,
+                lead.ProductRequestAt })
             .ToListAsync(ct);
+
+        // The tier against the institution's thresholds (key accounts lot 4), read once for the page.
+        var keyAccounts = rows.Count == 0 ? Settings.KeyAccounts.KeyAccountSettings.None
+            : await Settings.KeyAccounts.KeyAccountSettings.ReadAsync(db, tenant?.CurrentTenantId ?? rows[0].Dto.TenantId, ct);
+
+        var items = rows
+            .Select(r => r.Dto with
+            {
+                PotentialTier = keyAccounts.TierOf(
+                    Enum.TryParse<LeadType>(r.Dto.ProspectType, out var type) ? type : LeadType.Individual,
+                    r.EstimatedAnnualPurchases?.Amount).ToString(),
+                ActivitySector           = r.ActivitySectorCode,
+                CompanySize              = r.CompanySize?.ToString(),
+                EstimatedAnnualPurchases = r.EstimatedAnnualPurchases,
+                ContactJobTitle          = r.ContactJobTitle,
+                ProductRequestAt         = r.ProductRequestAt,
+            })
+            .ToList();
 
         // Code and label come from a second read rather than a join in the projection above: a
         // correlated subquery would run once per row, and the tenant's source table is small

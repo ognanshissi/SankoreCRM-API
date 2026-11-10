@@ -45,8 +45,9 @@ internal sealed class SimulateDispatchHandler(
             ? allCandidates.Count(a => rule.ExcludedAgentIds.Contains(a.Id))
             : 0;
 
-        var candidates = rule.ExcludedAgentIds.Count > 0
-            ? allCandidates.Where(a => !rule.ExcludedAgentIds.Contains(a.Id)).ToList()
+        var candidates = rule.ExcludedAgentIds.Count > 0 || rule.ReservedAgentIds.Count > 0
+            ? allCandidates.Where(a => !rule.ExcludedAgentIds.Contains(a.Id)
+                                    && (rule.ReservedAgentIds.Count == 0 || rule.ReservedAgentIds.Contains(a.Id))).ToList()
             : allCandidates;
 
         // Score via the configured strategy (read-only — no side effects).

@@ -35,6 +35,21 @@ public sealed class CaptureLeadValidator : AbstractValidator<CaptureLeadCommand>
             .Must(m => string.IsNullOrWhiteSpace(m) || Enum.GetNames<LeadMaritalStatus>().Contains(m.Trim(), StringComparer.OrdinalIgnoreCase))
             .WithMessage("MaritalStatus must be one of: " + string.Join(", ", Enum.GetNames<LeadMaritalStatus>()));
 
+        // The company (key accounts lot 1): same bounds as PUT leads/{id}.
+        RuleFor(x => x.CompanyName).MaximumLength(200);
+        RuleFor(x => x.CompanyPhone).MaximumLength(30);
+        RuleFor(x => x.Website).MaximumLength(300);
+        RuleFor(x => x.ContactJobTitle).MaximumLength(150);
+        RuleFor(x => x.ActivitySector)
+            .Must(s => string.IsNullOrWhiteSpace(s) || LeadActivitySectors.Normalize(s) is not null)
+            .WithMessage("Secteur d'activité inconnu.");
+        RuleFor(x => x.CompanySize)
+            .Must(s => string.IsNullOrWhiteSpace(s) || LeadCompanySizes.Parse(s) is not null)
+            .WithMessage("Effectif illisible : une tranche (Micro, Small, Medium, Large) ou un nombre de personnes.");
+        RuleFor(x => x.EstimatedAnnualPurchases)
+            .GreaterThan(0).When(x => x.EstimatedAnnualPurchases.HasValue)
+            .WithMessage("Le volume d'achat annuel doit être positif.");
+
         RuleFor(x => x.Latitude).InclusiveBetween(-90, 90);
         RuleFor(x => x.Longitude).InclusiveBetween(-180, 180);
     }

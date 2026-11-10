@@ -76,6 +76,19 @@ public sealed class DispatchingRule: ITenant
     /// </summary>
     public IReadOnlyList<Guid> ExcludedAgentIds { get; private set; } = [];
 
+    /// <summary>
+    /// A rule for the key accounts only (key accounts lot 4, 2026-11-09): it receives the company
+    /// prospects whose yearly purchases reach the « grand compte » threshold, before any other rule
+    /// (a source's included), and never another lead.
+    /// </summary>
+    public bool KeyAccountsOnly { get; private set; }
+
+    /// <summary>
+    /// The agents this rule dispatches to; empty means every available agent. What sends the key
+    /// accounts to the senior sales people — a pool narrowed, not a list of exclusions to keep up.
+    /// </summary>
+    public IReadOnlyList<Guid> ReservedAgentIds { get; private set; } = [];
+
     private DispatchingRule() { } // EF Core
 
     public static DispatchingRule Create(
@@ -87,7 +100,9 @@ public sealed class DispatchingRule: ITenant
         TimeSpan? declineExclusionTtl = null,
         TimeSpan? firstContactSlaHot = null,
         TimeSpan? firstContactSlaWarm = null,
-        TimeSpan? firstContactSlaCold = null)
+        TimeSpan? firstContactSlaCold = null,
+        bool keyAccountsOnly = false,
+        IReadOnlyList<Guid>? reservedAgentIds = null)
         => new()
         {
             Id                    = Guid.NewGuid(),
@@ -105,7 +120,9 @@ public sealed class DispatchingRule: ITenant
             FirstContactSlaCold   = firstContactSlaCold,
             IsActive              = true,
             Priority              = priority,
-            ExcludedAgentIds      = excludedAgentIds ?? []
+            ExcludedAgentIds      = excludedAgentIds ?? [],
+            KeyAccountsOnly       = keyAccountsOnly,
+            ReservedAgentIds      = reservedAgentIds ?? []
         };
 
     /// <summary>
@@ -139,7 +156,9 @@ public sealed class DispatchingRule: ITenant
         TimeSpan? declineExclusionTtl = null,
         TimeSpan? firstContactSlaHot = null,
         TimeSpan? firstContactSlaWarm = null,
-        TimeSpan? firstContactSlaCold = null)
+        TimeSpan? firstContactSlaCold = null,
+        bool keyAccountsOnly = false,
+        IReadOnlyList<Guid>? reservedAgentIds = null)
     {
         Name                  = name;
         Weights               = weights;
@@ -154,6 +173,9 @@ public sealed class DispatchingRule: ITenant
         FirstContactSlaCold   = firstContactSlaCold;
         Priority              = priority;
         ExcludedAgentIds      = excludedAgentIds;
+        // Replaced like the rest: the editor sends the whole rule.
+        KeyAccountsOnly       = keyAccountsOnly;
+        ReservedAgentIds      = reservedAgentIds ?? [];
     }
 
     public void Activate()   => IsActive = true;

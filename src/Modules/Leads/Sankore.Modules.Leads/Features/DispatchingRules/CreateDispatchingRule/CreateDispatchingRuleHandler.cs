@@ -38,7 +38,9 @@ internal sealed class CreateDispatchingRuleHandler(LeadsDbContext db)
             maxTasksPerAgent:      cmd.MaxTasksPerAgent,
             firstContactSlaHot:    cmd.FirstContactSlaHot,
             firstContactSlaWarm:   cmd.FirstContactSlaWarm,
-            firstContactSlaCold:   cmd.FirstContactSlaCold);
+            firstContactSlaCold:   cmd.FirstContactSlaCold,
+            keyAccountsOnly:       cmd.KeyAccountsOnly,
+            reservedAgentIds:      cmd.ReservedAgentIds);
 
         db.DispatchingRules.Add(rule);
         await db.SaveChangesAsync(ct);

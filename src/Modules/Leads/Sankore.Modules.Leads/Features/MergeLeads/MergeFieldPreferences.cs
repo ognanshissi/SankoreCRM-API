@@ -25,7 +25,9 @@ public sealed record MergeFieldPreferences(
     bool TakeProfession        = false,
     bool TakeMaritalStatus     = false,
     /// <summary>The address as a block — line, postal code, city and country — never field by field.</summary>
-    bool TakeAddress           = false
+    bool TakeAddress           = false,
+    /// <summary>The company profile as a block — sector, headcount, yearly purchases, contact's position.</summary>
+    bool TakeCompanyProfile    = false
 )
 {
     /// <summary>Returns the names of fields that will be taken from source.</summary>
@@ -49,6 +51,7 @@ public sealed record MergeFieldPreferences(
         if (TakeProfession)        list.Add("profession");
         if (TakeMaritalStatus)     list.Add("maritalStatus");
         if (TakeAddress)           list.Add("address");
+        if (TakeCompanyProfile)    list.Add("companyProfile");
         return list;
     }
 }
