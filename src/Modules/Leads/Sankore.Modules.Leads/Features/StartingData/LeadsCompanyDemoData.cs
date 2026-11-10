@@ -9,6 +9,8 @@ using Sankore.Modules.Leads.Features.DispatchingRules;
 using Sankore.Modules.Leads.Features.DispatchingRules.CreateDispatchingRule;
 using Sankore.Modules.Leads.Features.LeadSources.CreateLeadSource;
 using Sankore.Modules.Leads.Features.Opportunities.CreateOpportunity;
+using Sankore.Modules.Leads.Features.Opportunities.Quote;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Features.Settings.KeyAccounts;
 using Sankore.Modules.Leads.Infrastructure;
 using Sankore.Shared.Infrastructure.BackgroundJobs;
@@ -155,7 +157,80 @@ internal sealed class LeadsCompanyDemoData : ITenantStartingData
         }
         if (leads > 0) created["Prospects entreprise"] = leads;
         if (projects > 0) created["Projets"] = projects;
+
+        await LoadOffersAsync(request, services, db, sender, Account, created, ct);
         return created;
+    }
+
+    /// <summary>A demo offer: whose prospect, the project to open if it has none, the lines, and whether to print the quote.</summary>
+    internal sealed record DemoOffer(
+        string Reference, string ProjectTitle, string Product, string Need,
+        IReadOnlyList<(string Code, decimal Quantity, decimal DiscountPercent)> Lines, bool Issue);
+
+    /// <summary>
+    /// The quotes of the socle demo (devis en lignes, lot 6): BTP Lagune's three sites priced and
+    /// printed (DEV-…-000001), and Ivoire Distribution's volume offer at 15 % — beyond the demo's 10 %
+    /// ceiling, so it waits for the Plateau branch manager. Prices come from the catalogue, set by
+    /// <c>AdministrationDemoData</c> (Order 30) before this step.
+    /// </summary>
+    internal static readonly IReadOnlyList<DemoOffer> Offers =
+    [
+        new("DEMO-E003", "Installation et mise en service — BTP Lagune Construction", "Installation et mise en service",
+            "Équipement de trois chantiers.",
+            [("INSTALLATION", 3, 0), ("OFFRE-PREMIUM", 3, 0), ("CONTRAT-MAINTENANCE", 1, 5)], Issue: true),
+        new("DEMO-E001", "Offre Premium — Ivoire Distribution SA", "Offre Premium",
+            "Équipement des vingt points de vente du réseau.",
+            [("OFFRE-PREMIUM", 20, 15), ("INSTALLATION", 20, 0)], Issue: false),
+    ];
+
+    /// <summary>
+    /// Idempotent on its own: an offer is only priced on a project that has none, so loading the
+    /// demo again over an older one adds the quotes without touching what a presenter changed.
+    /// A missing attachment store only skips the PDF — the offer stays.
+    /// </summary>
+    private static async Task LoadOffersAsync(
+        StartingDataRequest request, IServiceProvider services, LeadsDbContext db, ISender sender,
+        Func<string, Guid> account, Dictionary<string, int> created, CancellationToken ct)
+    {
+        var administration = services.GetRequiredService<IAdministrationModule>();
+        var now = DateTimeOffset.UtcNow;
+        int offers = 0, quotes = 0;
+        foreach (var offer in Offers)
+        {
+            var company = Companies.First(c => c.Reference == offer.Reference);
+            var lead = await db.Leads.Where(l => l.ExternalReference == offer.Reference)
+                .Select(l => new { l.Id, l.OwnerId }).FirstOrDefaultAsync(ct);
+            if (lead is null) continue;
+            var owner = lead.OwnerId ?? account(company.Owner);
+
+            var project = await db.Opportunities
+                .Where(o => o.LeadId == lead.Id && o.Stage != OpportunityStage.ClosedLost && o.Stage != OpportunityStage.ClosedWon)
+                .OrderBy(o => o.CreatedAt).Select(o => o.Id).FirstOrDefaultAsync(ct);
+            if (project == Guid.Empty)
+                using (BackgroundJobContext.SetScope(request.TenantId, owner, "Démo"))
+                    project = Ok(await sender.Send(new CreateOpportunityCommand(request.TenantId, lead.Id,
+                        offer.ProjectTitle, offer.Product, owner, offer.Need, null, null, now.AddDays(30)), ct), offer.Reference);
+            if (await db.ProjectQuotes.AnyAsync(q => q.OpportunityId == project, ct)) continue;
+
+            List<ProjectQuoteLineInput> lines = [];
+            foreach (var (code, quantity, discount) in offer.Lines)
+            {
+                var product = await administration.GetProductAsync(request.TenantId, code, ct);
+                if (product is null) continue;
+                lines.Add(new ProjectQuoteLineInput(null, product.Id, quantity,
+                    DiscountKind: discount > 0 ? QuoteDiscountKind.Percent : QuoteDiscountKind.None, DiscountValue: discount));
+            }
+            if (lines.Count == 0) continue;
+
+            using (BackgroundJobContext.SetScope(request.TenantId, owner, "Démo"))
+            {
+                Ok(await sender.Send(new SetProjectQuoteCommand(project, lines, QuoteDiscountKind.None, 0, null), ct), offer.Reference);
+                offers++;
+                if (offer.Issue && (await sender.Send(new IssueProjectQuoteCommand(project, null, null), ct)).IsSuccess) quotes++;
+            }
+        }
+        if (offers > 0) created["Offres chiffrées"] = offers;
+        if (quotes > 0) created["Devis PDF"] = quotes;
     }
 
     private static string Domain(string company) => new string(company.Normalize(System.Text.NormalizationForm.FormD)

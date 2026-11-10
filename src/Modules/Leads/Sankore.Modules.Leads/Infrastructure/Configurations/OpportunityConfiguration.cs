@@ -68,3 +68,66 @@ internal sealed class ProjectHistoryEntryConfiguration : IEntityTypeConfiguratio
         b.HasOne<Opportunity>().WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+/// <summary>Quote lines, lot 3 (2026-11-10). Amounts in numeric(18,2), quantities (18,3), rates (5,2).</summary>
+internal sealed class ProjectQuoteConfiguration : IEntityTypeConfiguration<ProjectQuote>
+{
+    public void Configure(EntityTypeBuilder<ProjectQuote> b)
+    {
+        b.ToTable("project_quotes");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Id).ValueGeneratedNever();
+        b.HasIndex(x => x.OpportunityId).IsUnique();
+        b.HasOne<Opportunity>().WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
+        b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+        b.Property(x => x.GlobalDiscountKind).HasConversion<string>().HasMaxLength(10);
+        b.Property(x => x.ApprovalStatus).HasConversion<string>().HasMaxLength(15);
+        b.Property(x => x.DecisionComment).HasMaxLength(ProjectQuote.MaxDecisionCommentLength);
+        foreach (var p in new[] { nameof(ProjectQuote.GlobalDiscountValue), nameof(ProjectQuote.SubtotalExclTax),
+                     nameof(ProjectQuote.GlobalDiscountAmount), nameof(ProjectQuote.TotalExclTax),
+                     nameof(ProjectQuote.TotalVat), nameof(ProjectQuote.TotalInclTax) })
+            b.Property(p).HasPrecision(18, 2);
+        b.Property(x => x.EffectiveDiscountPercent).HasPrecision(7, 2);
+        b.Property(x => x.DiscountCeilingPercent).HasPrecision(5, 2);
+
+        b.OwnsMany(x => x.Lines, l =>
+        {
+            l.ToTable("project_quote_lines");
+            l.WithOwner().HasForeignKey("ProjectQuoteId");
+            l.HasKey(x => x.Id);
+            l.Property(x => x.Id).ValueGeneratedNever();
+            l.Property(x => x.ProductCode).HasMaxLength(50).IsRequired();
+            l.Property(x => x.Label).HasMaxLength(ProjectQuoteLine.MaxLabelLength).IsRequired();
+            l.Property(x => x.Unit).HasMaxLength(ProjectQuoteLine.MaxUnitLength);
+            l.Property(x => x.Quantity).HasPrecision(18, 3);
+            l.Property(x => x.DiscountKind).HasConversion<string>().HasMaxLength(10);
+            l.Property(x => x.VatCategory).HasConversion<string>().HasMaxLength(20);
+            l.Property(x => x.VatRate).HasPrecision(5, 2);
+            foreach (var p in new[] { nameof(ProjectQuoteLine.UnitPrice), nameof(ProjectQuoteLine.CatalogueUnitPrice),
+                         nameof(ProjectQuoteLine.DiscountValue), nameof(ProjectQuoteLine.GrossExclTax),
+                         nameof(ProjectQuoteLine.DiscountAmount), nameof(ProjectQuoteLine.NetExclTax),
+                         nameof(ProjectQuoteLine.VatAmount), nameof(ProjectQuoteLine.TotalInclTax) })
+                l.Property(p).HasPrecision(18, 2);
+        });
+        b.Navigation(x => x.Lines).AutoInclude();
+        b.Property(x => x.Number).HasMaxLength(40);
+        b.Ignore(x => x.ChangedSinceIssue);
+    }
+}
+
+/// <summary>Quote lines, lot 5 (2026-11-10).</summary>
+internal sealed class ProjectQuoteIssueConfiguration : IEntityTypeConfiguration<ProjectQuoteIssue>
+{
+    public void Configure(EntityTypeBuilder<ProjectQuoteIssue> b)
+    {
+        b.ToTable("project_quote_issues");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Id).ValueGeneratedNever();
+        b.Property(x => x.Number).HasMaxLength(40).IsRequired();
+        b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+        b.Property(x => x.TotalExclTax).HasPrecision(18, 2);
+        b.Property(x => x.TotalInclTax).HasPrecision(18, 2);
+        b.HasIndex(x => new { x.OpportunityId, x.Version }).IsUnique();
+        b.HasOne<Opportunity>().WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
+    }
+}

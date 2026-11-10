@@ -6,6 +6,9 @@ using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies.AssignAgencyManager;
 using Sankore.Modules.Administration.Features.Agencies.CreateAgency;
+using Sankore.Modules.Administration.Features.CompanyInfo.PricingRules;
+using Sankore.Modules.Administration.Features.CompanyInfo.QuoteIdentity;
+using Sankore.Modules.Administration.Features.Products.SetProductPricing;
 using Sankore.Modules.Administration.Features.Territories.CreateTerritory;
 using Sankore.Modules.Administration.Features.Users.AssignManager;
 using Sankore.Modules.Administration.Features.Users.DemoUsers;
@@ -198,7 +201,70 @@ internal sealed class AdministrationDemoData(IOptions<DemoDataOptions> options) 
         }
         if (territories > 0) created["Territoires"] = territories;
 
+        if (!enabled.Contains(TenantModules.BankingMicrofinance) && !enabled.Contains(TenantModules.Insurance))
+            await LoadQuotingAsync(db, sender, created, ct);
+
         return created;
+    }
+
+    /// <summary>
+    /// The socle demo's prices (quote lines, lot 6). Invented amounts, in the demo's FCFA, for the
+    /// four Standard products of <c>AdministrationStartingData.SocleCatalogue</c>.
+    /// </summary>
+    internal static readonly IReadOnlyList<(string Code, decimal Price, string Unit)> DemoPrices =
+    [
+        ("OFFRE-ESSENTIEL", 450_000m, "forfait"),
+        ("OFFRE-PREMIUM", 1_200_000m, "forfait"),
+        ("INSTALLATION", 150_000m, "intervention"),
+        ("CONTRAT-MAINTENANCE", 360_000m, "an"),
+    ];
+
+    /// <summary>The demo's discount ceiling: beyond it a quote waits for a manager.</summary>
+    internal const decimal DemoMaxDiscount = 10m;
+
+    /// <summary>
+    /// Prices, ceiling and a letterhead for a socle demo, so a quote can be shown end to end. Each
+    /// only where nothing is set: a product already priced, a ceiling already chosen, an identity
+    /// already typed are a presenter's and stay. The letterhead is plainly a demonstration's — no
+    /// registration number is invented, the foot says so.
+    /// </summary>
+    private static async Task LoadQuotingAsync(AdministrationDbContext db, ISender sender, Dictionary<string, int> created, CancellationToken ct)
+    {
+        var codes = DemoPrices.Select(p => p.Code).ToList();
+        var products = await db.ProductSpecialities
+            .Where(p => codes.Contains(p.Code) && p.Category == ProductCategory.Standard && p.UnitPrice == null)
+            .Select(p => new { p.Id, p.Code })
+            .ToListAsync(ct);
+        foreach (var product in products)
+        {
+            var (_, price, unit) = DemoPrices.First(p => p.Code == product.Code);
+            Ok(await sender.Send(new SetProductPricingCommand(product.Id, price, unit, ProductVatCategory.Standard), ct), product.Code);
+        }
+        if (products.Count > 0) created["Prix au catalogue"] = products.Count;
+
+        var info = await db.CompanyInfos.AsNoTracking().FirstOrDefaultAsync(ct);
+        if (info is null) return;
+
+        if (info.MaxDiscountPercent is null)
+        {
+            Ok(await sender.Send(new SetPricingRulesCommand(info.VatStandardRate, info.VatReducedRate, DemoMaxDiscount), ct), "Plafond de remise");
+            created["Plafond de remise"] = 1;
+        }
+
+        if (info.LegalName is null && info.HeadOfficeAddress is null && info.QuoteFooter is null)
+        {
+            Ok(await sender.Send(new SetLegalIdentityCommand(
+                $"{info.Name} (démonstration)", null, "Plateau, avenue de démonstration\nAbidjan, Côte d’Ivoire",
+                null, null, null, null, null, null,
+                "Document de démonstration, sans valeur commerciale. Mentions légales et coordonnées bancaires à compléter dans Paramètres › Institution."), ct),
+                "Identité légale");
+            created["Identité légale"] = 1;
+        }
+    }
+
+    private static void Ok(Result result, string what)
+    {
+        if (result.IsFailure) throw new InvalidOperationException($"{what} : {result.Error}");
     }
 
     private static T Ok<T>(Result<T> result, string what)

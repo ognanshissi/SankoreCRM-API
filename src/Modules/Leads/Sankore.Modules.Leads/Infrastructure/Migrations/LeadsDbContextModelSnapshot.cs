@@ -2756,6 +2756,196 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                     b.ToTable("project_history", "leads");
                 });
 
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectQuote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApprovalStatus")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("approval_status");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<string>("DecisionComment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_comment");
+
+                    b.Property<decimal?>("DiscountCeilingPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("discount_ceiling_percent");
+
+                    b.Property<decimal>("EffectiveDiscountPercent")
+                        .HasPrecision(7, 2)
+                        .HasColumnType("numeric(7,2)")
+                        .HasColumnName("effective_discount_percent");
+
+                    b.Property<decimal>("GlobalDiscountAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("global_discount_amount");
+
+                    b.Property<string>("GlobalDiscountKind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("global_discount_kind");
+
+                    b.Property<decimal>("GlobalDiscountValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("global_discount_value");
+
+                    b.Property<int>("IssuedVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("issued_version");
+
+                    b.Property<DateTimeOffset?>("LastIssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_issued_at");
+
+                    b.Property<string>("Number")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("number");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("opportunity_id");
+
+                    b.Property<decimal>("SubtotalExclTax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("subtotal_excl_tax");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("TotalExclTax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total_excl_tax");
+
+                    b.Property<decimal>("TotalInclTax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total_incl_tax");
+
+                    b.Property<decimal>("TotalVat")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total_vat");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_quotes");
+
+                    b.HasIndex("OpportunityId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_project_quotes_opportunity_id");
+
+                    b.ToTable("project_quotes", "leads");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectQuoteIssue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AttachmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("attachment_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<Guid?>("IssuedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("issued_by");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("number");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("opportunity_id");
+
+                    b.Property<Guid>("QuoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quote_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("TotalExclTax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total_excl_tax");
+
+                    b.Property<decimal>("TotalInclTax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total_incl_tax");
+
+                    b.Property<DateOnly>("ValidUntil")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_until");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_quote_issues");
+
+                    b.HasIndex("OpportunityId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ix_project_quote_issues_opportunity_id_version");
+
+                    b.ToTable("project_quote_issues", "leads");
+                });
+
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5111,6 +5301,138 @@ namespace Sankore.Modules.Leads.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_project_history_opportunities_opportunity_id");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectQuote", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.Opportunity", null)
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_quotes_opportunities_opportunity_id");
+
+                    b.OwnsMany("Sankore.Modules.Leads.Domain.ProjectQuoteLine", "Lines", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<decimal?>("CatalogueUnitPrice")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("catalogue_unit_price");
+
+                            b1.Property<decimal>("DiscountAmount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("discount_amount");
+
+                            b1.Property<string>("DiscountKind")
+                                .IsRequired()
+                                .HasMaxLength(10)
+                                .HasColumnType("character varying(10)")
+                                .HasColumnName("discount_kind");
+
+                            b1.Property<decimal>("DiscountValue")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("discount_value");
+
+                            b1.Property<decimal>("GrossExclTax")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("gross_excl_tax");
+
+                            b1.Property<string>("Label")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("label");
+
+                            b1.Property<decimal>("NetExclTax")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("net_excl_tax");
+
+                            b1.Property<int>("Position")
+                                .HasColumnType("integer")
+                                .HasColumnName("position");
+
+                            b1.Property<string>("ProductCode")
+                                .IsRequired()
+                                .HasMaxLength(50)
+                                .HasColumnType("character varying(50)")
+                                .HasColumnName("product_code");
+
+                            b1.Property<Guid>("ProductId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("product_id");
+
+                            b1.Property<Guid>("ProjectQuoteId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("project_quote_id");
+
+                            b1.Property<decimal>("Quantity")
+                                .HasPrecision(18, 3)
+                                .HasColumnType("numeric(18,3)")
+                                .HasColumnName("quantity");
+
+                            b1.Property<decimal>("TotalInclTax")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("total_incl_tax");
+
+                            b1.Property<string>("Unit")
+                                .HasMaxLength(30)
+                                .HasColumnType("character varying(30)")
+                                .HasColumnName("unit");
+
+                            b1.Property<decimal>("UnitPrice")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("unit_price");
+
+                            b1.Property<decimal>("VatAmount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("vat_amount");
+
+                            b1.Property<string>("VatCategory")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("vat_category");
+
+                            b1.Property<decimal>("VatRate")
+                                .HasPrecision(5, 2)
+                                .HasColumnType("numeric(5,2)")
+                                .HasColumnName("vat_rate");
+
+                            b1.HasKey("Id")
+                                .HasName("pk_project_quote_lines");
+
+                            b1.HasIndex("ProjectQuoteId")
+                                .HasDatabaseName("ix_project_quote_lines_project_quote_id");
+
+                            b1.ToTable("project_quote_lines", "leads");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ProjectQuoteId")
+                                .HasConstraintName("fk_project_quote_lines_project_quotes_project_quote_id");
+                        });
+
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectQuoteIssue", b =>
+                {
+                    b.HasOne("Sankore.Modules.Leads.Domain.Opportunity", null)
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_quote_issues_opportunities_opportunity_id");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Leads.Domain.ProjectTemplate", b =>

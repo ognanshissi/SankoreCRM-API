@@ -449,6 +449,23 @@ BEFORE a source's pinned rule, and never gives such a rule to another lead (no t
 simulation. List, export and view counts take `potential` (`LeadListFilter.Potential`, `keyAccounts` count);
 `LeadDto.PotentialTier`; the lead report adds `ByPotential` (null without thresholds) and `BySector`.
 
+**Quotes with product lines (2026-11-10, product owner; plan `docs/devis-en-lignes.md`, socle).** Standard products carry
+`UnitPrice` (excl. VAT), `PriceUnit`, `VatCategory` (`PUT products/{id}/pricing`); the institution its VAT rates, discount
+ceiling, legal identity and quote settings (`company-info/pricing`, `/legal-identity`, `/quote-settings`), read by Leads
+through `IQuoteIssuer` (Administration.PublicApi), which also takes quote numbers atomically (`quote_number_counters`,
+one upsert, per DATA tenant, gaps allowed). A project's offer is `ProjectQuote` (own aggregate, lines owned): the
+project's amount becomes its total excl. VAT and its product the first line's; a typed amount or product is refused
+while lines exist. A line keeps the rate and catalogue price of its entry. The discount compared with the ceiling is
+measured against the CATALOGUE (a price cut counts). Beyond it the offer is « À valider » until a manager of the owner
+(`lead:team:supervise`, team or all agencies, never the owner nor the author) decides. Credit, savings and insurance
+projects take no lines. `POST …/quote/issue` generates the PDF (`ProjectQuotePdf`, QuestPDF), filed as a project
+attachment under the reserved key `quote`, so the existing e-mail/WhatsApp sending takes it; each generation is a new
+version of the same number. A quote, never an invoice (FNE). Socle demo: `AdministrationDemoData` prices the four
+Standard products, sets a 10 % ceiling and a « (démonstration) » letterhead (no invented registration number), each only
+where nothing is set; `LeadsCompanyDemoData.Offers` prices BTP Lagune (and prints it) and leaves Ivoire Distribution
+waiting for approval, only on projects without an offer. Every cross-module read in these commands runs outside
+the ambient transaction (`Outside.RunAsync`): the second save of lines failed without it.
+
 **Agents' monthly objectives (« Ma journée » redesign lot 1, 2026-10-31, product owner).**
 `AgentObjective` (`leads.agent_objectives`, one row per agent and month): first contacts within 24 h
 (%) and conversions of the month, set by the agent's manager. A month with no row reads the latest

@@ -71,6 +71,24 @@ public sealed class ProductSpeciality
     /// </summary>
     public KycRemotePolicy KycRemotePolicy { get; private set; } = KycRemotePolicy.Disabled;
 
+    // ── Price and VAT (quote lines, lot 1, 2026-11-10, product owner) ──────────
+    //
+    // Standard products only: a credit, a savings account or a policy has no unit price — its
+    // amount follows the core banking or the insurer. Kept as a plain amount in the institution's
+    // single currency, like every amount of the CRM: a change of currency converts nothing.
+
+    /// <summary>Unit price excluding VAT, in the institution's currency; null = not priced.</summary>
+    public decimal? UnitPrice { get; private set; }
+
+    /// <summary>What one unit is — « pièce », « carton », « heure », « mois »… Free text.</summary>
+    public string? PriceUnit { get; private set; }
+
+    /// <summary>Which of the institution's VAT rates applies. Standard by default.</summary>
+    public ProductVatCategory VatCategory { get; private set; } = ProductVatCategory.Standard;
+
+    /// <summary>The longest a <see cref="PriceUnit"/> may be.</summary>
+    public const int MaxPriceUnitLength = 30;
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     private ProductSpeciality() { }
@@ -135,6 +153,28 @@ public sealed class ProductSpeciality
     }
 
     public void SetAllowMultipleHoldings(bool allow) => AllowMultipleHoldings = allow;
+
+    /// <summary>
+    /// Sets the price, the unit and the VAT category of a Standard product. A null price clears it:
+    /// the product can still be sold, its lines then start without a price.
+    /// </summary>
+    /// <returns>
+    /// <c>PRODUCT_PRICING_STANDARD_ONLY</c> for a module's product, <c>PRODUCT_PRICE_INVALID</c> for a
+    /// negative price, <c>PRODUCT_PRICE_UNIT_TOO_LONG</c>, <c>PRODUCT_VAT_CATEGORY_INVALID</c>.
+    /// </returns>
+    public Result SetPricing(decimal? unitPrice, string? priceUnit, ProductVatCategory vatCategory)
+    {
+        if (Category != ProductCategory.Standard) return Result.Fail("PRODUCT_PRICING_STANDARD_ONLY");
+        if (unitPrice is < 0) return Result.Fail("PRODUCT_PRICE_INVALID");
+        var unit = string.IsNullOrWhiteSpace(priceUnit) ? null : priceUnit.Trim();
+        if (unit is { Length: > MaxPriceUnitLength }) return Result.Fail("PRODUCT_PRICE_UNIT_TOO_LONG");
+        if (!Enum.IsDefined(vatCategory)) return Result.Fail("PRODUCT_VAT_CATEGORY_INVALID");
+
+        UnitPrice   = unitPrice;
+        PriceUnit   = unit;
+        VatCategory = vatCategory;
+        return Result.Ok();
+    }
 
     /// <summary>
     /// Replaces the line's remote-KYC policy (KRM-B-01). A full replacement for the same reason

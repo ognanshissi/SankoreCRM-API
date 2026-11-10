@@ -28,6 +28,8 @@ public static class OpportunitiesEndpoints
         var group = app.MapGroup("opportunities");
 
         group.MapProjectQuestionnaireEndpoints();
+        // Lines, discounts and totals of the offer (quote lines, lot 3)
+        Quote.ProjectQuoteEndpoints.MapProjectQuote(group);
         Sankore.Modules.Leads.Features.Opportunities.Sending.ProjectWhatsAppEndpoints.MapProjectWhatsApp(group);
         Sankore.Modules.Leads.Features.Opportunities.CreditSubmission.CreditFiles.MapCreditSubmission(group);
 

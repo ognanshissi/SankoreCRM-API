@@ -651,14 +651,44 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("description");
 
+                    b.Property<string>("HeadOfficeAddress")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("head_office_address");
+
                     b.Property<bool>("IsMaintenance")
                         .HasColumnType("boolean")
                         .HasColumnName("is_maintenance");
+
+                    b.Property<string>("LegalEmail")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("legal_email");
+
+                    b.Property<string>("LegalForm")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("legal_form");
+
+                    b.Property<string>("LegalName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("legal_name");
+
+                    b.Property<string>("LegalPhone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("legal_phone");
 
                     b.Property<string>("LogoUrl")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("logo_url");
+
+                    b.Property<decimal?>("MaxDiscountPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("max_discount_percent");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -672,11 +702,46 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("primary_color");
 
+                    b.Property<string>("QuoteFooter")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("quote_footer");
+
+                    b.Property<string>("QuotePaymentTerms")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("quote_payment_terms");
+
+                    b.Property<string>("QuotePrefix")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("quote_prefix");
+
+                    b.Property<int>("QuoteValidityDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("quote_validity_days");
+
+                    b.Property<string>("Rccm")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("rccm");
+
                     b.Property<string>("SecondaryColor")
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("secondary_color");
+
+                    b.Property<string>("TaxRegime")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("tax_regime");
+
+                    b.Property<string>("TaxpayerNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("taxpayer_number");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -685,6 +750,21 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<decimal>("VatReducedRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("vat_reduced_rate");
+
+                    b.Property<decimal>("VatStandardRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("vat_standard_rate");
+
+                    b.Property<string>("Website")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("website");
 
                     b.HasKey("Id")
                         .HasName("pk_company_info");
@@ -1340,9 +1420,25 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("parameters");
 
+                    b.Property<string>("PriceUnit")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("price_unit");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<string>("VatCategory")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("vat_category");
 
                     b.HasKey("Id")
                         .HasName("pk_product_specialities");
@@ -1355,6 +1451,26 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasDatabaseName("ix_product_specialities_tenant_id_is_active");
 
                     b.ToTable("product_specialities", "administration");
+                });
+
+            modelBuilder.Entity("Sankore.Modules.Administration.Domain.QuoteNumberCounter", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.Property<long>("LastNumber")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_number");
+
+                    b.HasKey("TenantId", "Year")
+                        .HasName("pk_quote_number_counters");
+
+                    b.ToTable("quote_number_counters", "administration");
                 });
 
             modelBuilder.Entity("Sankore.Modules.Administration.Domain.RefreshToken", b =>

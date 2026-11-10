@@ -58,6 +58,14 @@ public class ProductSpecialityConfiguration : IEntityTypeConfiguration<ProductSp
             .HasDefaultValueSql("'{}'::jsonb")
             .Metadata.SetValueComparer(new KycRemotePolicyComparer());
 
+        // Quote lines, lot 1 (2026-11-10). Stored as its name, like Category; existing rows got
+        // « Standard » from the migration (AddPricingAndVat).
+        builder.Property(x => x.UnitPrice).HasPrecision(18, 2);
+        builder.Property(x => x.PriceUnit).HasMaxLength(ProductSpeciality.MaxPriceUnitLength);
+        builder.Property(x => x.VatCategory)
+            .HasConversion<string>()
+            .HasMaxLength(20);
+
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.IsActive });
     }

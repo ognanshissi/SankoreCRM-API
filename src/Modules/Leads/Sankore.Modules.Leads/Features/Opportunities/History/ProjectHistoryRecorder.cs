@@ -55,6 +55,29 @@ internal sealed class ProjectHistoryRecorder(LeadsDbContext db, ICurrentUser me,
             Add(project, ProjectHistoryKind.CloseDateChanged, Day(before.CloseDate), Day(project.ExpectedCloseDate));
     }
 
+    /// <summary>The offer's lines were saved (quote lines, lot 3).</summary>
+    public void QuoteLinesChanged(Opportunity project, ProjectQuote quote)
+    {
+        var count = quote.Lines.Count;
+        var detail = count == 0 ? "Aucune ligne"
+            : $"{count} ligne{(count > 1 ? "s" : "")}"
+              + (quote.EffectiveDiscountPercent > 0
+                  ? $", remise {quote.EffectiveDiscountPercent.ToString("0.##", CultureInfo.GetCultureInfo("fr-FR"))} %"
+                  : "")
+              + (quote.ApprovalStatus == QuoteApprovalStatus.Pending ? ", à valider" : "");
+        Add(project, ProjectHistoryKind.QuoteLinesChanged,
+            to: quote.TotalExclTax.ToString("0.##", CultureInfo.InvariantCulture), detail: detail);
+    }
+
+    /// <summary>A manager's decision on the offer's discount.</summary>
+    public void QuoteDiscountDecided(Opportunity project, bool approved, string? comment)
+        => Add(project, approved ? ProjectHistoryKind.QuoteDiscountApproved : ProjectHistoryKind.QuoteDiscountRejected,
+            detail: comment);
+
+    /// <summary>A quote PDF was generated.</summary>
+    public void QuoteIssued(Opportunity project, string label, Guid attachmentId)
+        => Add(project, ProjectHistoryKind.QuoteIssued, to: label, relatedId: attachmentId);
+
     public void Closed(Opportunity project)
         => Add(project,
             project.Stage == OpportunityStage.ClosedWon ? ProjectHistoryKind.Won : ProjectHistoryKind.Lost,

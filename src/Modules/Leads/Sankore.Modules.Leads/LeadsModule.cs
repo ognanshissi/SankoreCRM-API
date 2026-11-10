@@ -160,6 +160,8 @@ public static class LeadsModule
         services.AddScoped<Features.ProjectTemplates.ProjectWorkflows>();
         services.AddScoped<Features.ProjectTemplates.ProjectStepTransition>();
         services.AddScoped<Features.Opportunities.History.ProjectHistoryRecorder>();
+        // The priced offer of a project (quote lines, lot 3).
+        services.AddScoped<Features.Opportunities.Quote.ProjectQuotes>();
         services.AddScoped<Features.ProjectTemplates.ProjectLeadConversion>();
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(Features.Visibility.LeadVisibilityBehavior<,>));
 

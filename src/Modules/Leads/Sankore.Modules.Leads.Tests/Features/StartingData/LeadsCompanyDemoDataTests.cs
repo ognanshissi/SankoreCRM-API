@@ -9,6 +9,8 @@ using Sankore.Modules.Leads.Features.CaptureLead;
 using Sankore.Modules.Leads.Features.DispatchingRules.CreateDispatchingRule;
 using Sankore.Modules.Leads.Features.LeadSources.CreateLeadSource;
 using Sankore.Modules.Leads.Features.Opportunities.CreateOpportunity;
+using Sankore.Modules.Leads.Features.Opportunities.Quote;
+using Sankore.Modules.Administration.PublicApi;
 using Sankore.Modules.Leads.Features.Settings.KeyAccounts;
 using Sankore.Modules.Leads.Features.StartingData;
 using Sankore.Modules.Leads.Tests.TestSupport;
@@ -28,6 +30,7 @@ public sealed class LeadsCompanyDemoDataTests : IDisposable
     private readonly ISender _sender = Substitute.For<ISender>();
     private readonly ITenantModules _modules = Substitute.For<ITenantModules>();
     private readonly List<object> _sent = [];
+    private readonly IAdministrationModule _admin = Substitute.For<IAdministrationModule>();
 
     public LeadsCompanyDemoDataTests()
     {
@@ -38,6 +41,10 @@ public sealed class LeadsCompanyDemoDataTests : IDisposable
             .Returns(ci => { _sent.Add(ci[0]); return Result.Ok(new CaptureLeadResult(Guid.NewGuid(), "New")); });
         _sender.Send(Arg.Any<IRequest<Result<KeyAccountSettings>>>(), Arg.Any<CancellationToken>())
             .Returns(ci => { _sent.Add(ci[0]); return Result.Ok(KeyAccountSettings.None); });
+        _sender.Send(Arg.Any<IRequest<Result<ProjectQuoteDto>>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => { _sent.Add(ci[0]); return Result.Ok<ProjectQuoteDto>(null!); });
+        _admin.GetProductAsync(_tenantId, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new ProductSummary((string)ci[1], (string)ci[1], "Standard", true, Guid.NewGuid()));
     }
 
     public void Dispose() => _db.Dispose();
@@ -50,6 +57,7 @@ public sealed class LeadsCompanyDemoDataTests : IDisposable
             .AddSingleton(_db.CreateContext())
             .AddSingleton(_sender)
             .AddSingleton(_modules)
+            .AddSingleton(_admin)
             .BuildServiceProvider();
         var request = new StartingDataRequest(_tenantId, "Recette Socle Démo", kind, Guid.NewGuid());
         foreach (var profile in new[] { "agent-commercial-plateau", "agent-commercial-yopougon", "agent-plateau-1" })
@@ -84,6 +92,32 @@ public sealed class LeadsCompanyDemoDataTests : IDisposable
         var prospects = _sent.OfType<CaptureLeadCommand>().ToList();
         prospects.Should().OnlyContain(p => p.ProspectType == LeadType.Corporate && p.CompanyName != null && p.OwnerId != null);
         _sent.OfType<CreateOpportunityCommand>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task The_demo_prices_btp_lagune_and_prints_its_quote_and_leaves_ivoire_distribution_to_validate()
+    {
+        var owner = Guid.NewGuid();
+        await using (var seed = _db.CreateContext())
+        {
+            foreach (var c in LeadsCompanyDemoData.Companies)
+                seed.Leads.Add(LeadTestBuilder.Create().WithTenant(_tenantId).WithName(c.Name).WithExternalReference(c.Reference, owner).Build());
+            await seed.SaveChangesAsync();
+            var btp = seed.Leads.Local.Single(l => l.ExternalReference == "DEMO-E003");
+            seed.Opportunities.Add(Opportunity.CreateFromLead(_tenantId, btp.Id, "Installation et mise en service — BTP Lagune Construction",
+                "Installation et mise en service", owner, TimeProvider.System));
+            await seed.SaveChangesAsync();
+        }
+
+        var created = await LoadAsync();
+
+        created.Should().Contain("Offres chiffrées", 2).And.Contain("Devis PDF", 1);
+        _sent.OfType<CreateOpportunityCommand>().Should().ContainSingle(c => c.Title.Contains("Ivoire Distribution"), "only the prospect without a project gets one");
+        var offers = _sent.OfType<SetProjectQuoteCommand>().ToList();
+        offers.Should().HaveCount(2);
+        offers.Should().Contain(o => o.Lines.Any(l => l.DiscountKind == QuoteDiscountKind.Percent && l.DiscountValue == 15),
+            "the Ivoire Distribution offer goes beyond the demo's 10 % ceiling");
+        _sent.OfType<IssueProjectQuoteCommand>().Should().ContainSingle();
     }
 
     [Fact]

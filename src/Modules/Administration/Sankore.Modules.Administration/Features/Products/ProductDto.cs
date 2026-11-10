@@ -30,4 +30,10 @@ internal sealed record ProductDto(
     /// </summary>
     KycRemotePolicy? KycRemotePolicy = null,
     /// <summary>Values of the tenant's custom product fields, keyed by field key. Filled on the detail read only.</summary>
-    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null);
+    IReadOnlyDictionary<string, System.Text.Json.JsonElement>? CustomFields = null,
+    /// <summary>Unit price excluding VAT, institution currency (Standard products only; quote lines lot 1).</summary>
+    decimal? UnitPrice = null,
+    /// <summary>What one unit is — « pièce », « carton »…</summary>
+    string? PriceUnit = null,
+    /// <summary>Which of the institution's VAT rates applies.</summary>
+    ProductVatCategory VatCategory = ProductVatCategory.Standard);

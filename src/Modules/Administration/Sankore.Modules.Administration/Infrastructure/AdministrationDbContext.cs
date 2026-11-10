@@ -40,6 +40,8 @@ public sealed class AdministrationDbContext(DbContextOptions<AdministrationDbCon
     public DbSet<ComplianceSettings> ComplianceSettings => Set<ComplianceSettings>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<CompanyInfo> CompanyInfos => Set<CompanyInfo>();
+    /// <summary>Last quote number of each year, per DATA tenant (quote lines, lot 2).</summary>
+    public DbSet<QuoteNumberCounter> QuoteNumberCounters => Set<QuoteNumberCounter>();
     public DbSet<CompanyLogo> CompanyLogos => Set<CompanyLogo>();
     public DbSet<UserImportJob> UserImportJobs => Set<UserImportJob>();
 
@@ -141,6 +143,8 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
         modelBuilder.Entity<ComplianceSettings>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<RefreshToken>().HasQueryFilter(s => s.TenantId == tenant.TeamTenantId);
         modelBuilder.Entity<CompanyInfo>().HasQueryFilter(s => s.TenantId == tenant.TeamTenantId);
+        // The data tenant, not the team: a « Mode test » twin numbers its own trial quotes.
+        modelBuilder.Entity<QuoteNumberCounter>().HasQueryFilter(c => c.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<CompanyLogo>().HasQueryFilter(l => l.TenantId == tenant.TeamTenantId);
         modelBuilder.Entity<DistributionCredential>().HasQueryFilter(c => c.TenantId == tenant.TeamTenantId);
         modelBuilder.Entity<InsuranceDistributorProfile>().HasQueryFilter(p => p.TenantId == tenant.TeamTenantId);

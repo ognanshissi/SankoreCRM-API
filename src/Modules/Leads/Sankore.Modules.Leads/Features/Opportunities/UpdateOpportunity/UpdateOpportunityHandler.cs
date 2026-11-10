@@ -29,6 +29,15 @@ internal sealed class UpdateOpportunityHandler(
         if (opportunity.IsStale(cmd.ExpectedUpdatedAt))
             return Result.Fail(LeadConcurrency.ConflictError);
 
+        // Quote lines, lot 3: while the offer has lines, they make the amount (total HT) and the
+        // product (first line's). A typed value would be overwritten at the next save of the lines,
+        // and until then the project would show a figure the offer does not support.
+        // An unchanged value resent by the form is not a change.
+        if (((cmd.EstimatedAmount is { } typed && typed != opportunity.EstimatedAmount?.Amount)
+             || (cmd.Product is not null && cmd.Product.Trim() != opportunity.Product))
+            && await db.ProjectQuotes.AnyAsync(q => q.OpportunityId == opportunity.Id && q.Lines.Any(), ct))
+            return Result.Fail(OpportunityErrors.AmountFromQuoteLines);
+
         // A currency comes only with an amount: alone, it would keep the old amount under a new
         // currency, which is how a figure changes meaning without anybody editing it. The amount is
         // in the institution's currency — or the one it already had, if it predates a change.

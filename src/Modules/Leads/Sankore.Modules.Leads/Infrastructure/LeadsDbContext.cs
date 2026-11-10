@@ -65,6 +65,10 @@ public sealed class LeadsDbContext(
     public DbSet<PipelineStageConfig> PipelineStageConfigs => Set<PipelineStageConfig>();
     public DbSet<SlaConfig> SlaConfigs => Set<SlaConfig>();
     public DbSet<Opportunity> Opportunities => Set<Opportunity>();
+    /// <summary>The priced offer of a project — lines, discounts, totals (quote lines, lot 3).</summary>
+    public DbSet<ProjectQuote> ProjectQuotes => Set<ProjectQuote>();
+    /// <summary>The PDFs generated from an offer (quote lines, lot 5).</summary>
+    public DbSet<ProjectQuoteIssue> ProjectQuoteIssues => Set<ProjectQuoteIssue>();
     public DbSet<ProjectTemplate> ProjectTemplates => Set<ProjectTemplate>();
     public DbSet<ProjectTemplateVersion> ProjectTemplateVersions => Set<ProjectTemplateVersion>();
     public DbSet<NurturingSequence> NurturingSequences => Set<NurturingSequence>();
@@ -271,6 +275,8 @@ public sealed class LeadsDbContext(
         modelBuilder.Entity<NurturingSequence>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<NurturingEnrollment>().HasQueryFilter(e => e.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<Opportunity>().HasQueryFilter(o => o.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ProjectQuote>().HasQueryFilter(q => q.TenantId == tenant.CurrentTenantId);
+        modelBuilder.Entity<ProjectQuoteIssue>().HasQueryFilter(q => q.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ProjectTemplate>().HasQueryFilter(t => t.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<ProjectTemplateVersion>().HasQueryFilter(v => v.TenantId == tenant.CurrentTenantId);
         modelBuilder.Entity<LeadSetting>().HasQueryFilter(s => s.TenantId == tenant.CurrentTenantId);

@@ -8,6 +8,7 @@ using Sankore.Modules.Administration.Features.Products.LinkProductToCbs;
 using Sankore.Modules.Administration.Features.Products.ListProducts;
 using Sankore.Modules.Administration.Features.Products.SetBeneficiaryPolicy;
 using Sankore.Modules.Administration.Features.Products.SetKycRemotePolicy;
+using Sankore.Modules.Administration.Features.Products.SetProductPricing;
 using Sankore.Modules.Administration.Features.Products.UpdateProduct;
 
 namespace Sankore.Modules.Administration.Features.Products;
@@ -29,6 +30,9 @@ internal static class ProductsEndpoints
 
         // Remote KYC collection and validation of the product line (KRM-B-01)
         group.MapSetKycRemotePolicy();
+
+        // Price and VAT of a Standard product (quote lines, lot 1)
+        group.MapSetProductPricing();
 
         // « Copier en production » from the test mode (sandbox lot 4)
         group.MapPromoteProduct();

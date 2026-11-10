@@ -14,6 +14,13 @@ public static class InstitutionCurrencies
     public static readonly IReadOnlyList<string> Supported =
         ["XOF", "XAF", "GNF", "CDF", "MAD", "NGN", "GHS", "KES", "EUR", "USD"];
 
+    /// <summary>
+    /// Digits after the decimal point an amount of <paramref name="code"/> is rounded to (ISO 4217
+    /// minor units): none for the two CFA francs and the Guinean franc, two for the others.
+    /// </summary>
+    public static int MinorDigits(string? code) =>
+        (code ?? Default).Trim().ToUpperInvariant() is "XOF" or "XAF" or "GNF" ? 0 : 2;
+
     public static bool IsSupported(string? code) =>
         code is not null && Supported.Contains(code.Trim().ToUpperInvariant());
 

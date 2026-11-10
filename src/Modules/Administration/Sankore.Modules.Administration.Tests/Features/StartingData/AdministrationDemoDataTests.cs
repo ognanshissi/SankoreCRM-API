@@ -5,6 +5,9 @@ using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Sankore.Modules.Administration.Features.CompanyInfo.PricingRules;
+using Sankore.Modules.Administration.Features.CompanyInfo.QuoteIdentity;
+using Sankore.Modules.Administration.Features.Products.SetProductPricing;
 using Sankore.Modules.Administration.Domain;
 using Sankore.Modules.Administration.Features.Agencies.AssignAgencyManager;
 using Sankore.Modules.Administration.Features.Agencies.CreateAgency;
@@ -97,6 +100,47 @@ public sealed class AdministrationDemoDataTests : IDisposable
         _sent.OfType<ProvisionDemoUserCommand>().Select(a => a.RoleCode).Should()
             .NotContain([Roles.CreditAnalyst.Code, Roles.CreditManager.Code, Roles.Cashier.Code, Roles.AccountManager.Code]);
         _sent.OfType<AssignManagerCommand>().Should().HaveCount(10);
+    }
+
+    [Fact]
+    public async Task A_socle_demo_prices_its_products_and_sets_a_ceiling_and_a_demo_letterhead_where_nothing_is_set()
+    {
+        // Devis en lignes, lot 6. A product already priced keeps its price: it is a presenter's.
+        await using (var seed = _db.CreateContext())
+        {
+            seed.ProductSpecialities.Add(ProductSpeciality.Create(_tenantId, "Offre Essentiel", "OFFRE-ESSENTIEL", ProductCategory.Standard));
+            var premium = ProductSpeciality.Create(_tenantId, "Offre Premium", "OFFRE-PREMIUM", ProductCategory.Standard);
+            premium.SetPricing(45_777m, "carton", ProductVatCategory.Standard);
+            seed.ProductSpecialities.Add(premium);
+            seed.CompanyInfos.Add(Sankore.Modules.Administration.Domain.CompanyInfo.Create(_tenantId, "Démo", "Institution de démonstration"));
+            await seed.SaveChangesAsync();
+        }
+        _sender.Send(Arg.Any<IRequest<Result>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => { _sent.Add(ci[0]); return Result.Ok(); });
+
+        var created = await LoadAsync(StartingDataKind.Demo, modules: FixedTenantModules.None);
+
+        created.Should().Contain("Prix au catalogue", 1).And.Contain("Plafond de remise", 1).And.Contain("Identité légale", 1);
+        _sent.OfType<SetProductPricingCommand>().Should().ContainSingle().Which.UnitPrice.Should().Be(450_000m);
+        _sent.OfType<SetPricingRulesCommand>().Single().MaxDiscountPercent.Should().Be(AdministrationDemoData.DemoMaxDiscount);
+        var identity = _sent.OfType<SetLegalIdentityCommand>().Single();
+        identity.Rccm.Should().BeNull("no registration number is invented");
+        identity.QuoteFooter.Should().Contain("démonstration");
+    }
+
+    [Fact]
+    public async Task A_module_demo_prices_nothing()
+    {
+        await using (var seed = _db.CreateContext())
+        {
+            seed.ProductSpecialities.Add(ProductSpeciality.Create(_tenantId, "Offre Essentiel", "OFFRE-ESSENTIEL", ProductCategory.Standard));
+            seed.CompanyInfos.Add(Sankore.Modules.Administration.Domain.CompanyInfo.Create(_tenantId, "Démo", "Institution de démonstration"));
+            await seed.SaveChangesAsync();
+        }
+
+        var created = await LoadAsync(StartingDataKind.Demo);
+
+        created.Should().NotContainKey("Prix au catalogue").And.NotContainKey("Plafond de remise");
     }
 
     [Theory]

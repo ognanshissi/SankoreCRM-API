@@ -63,5 +63,6 @@ internal static class ProductFormGate
         p.IsActive, p.EffectiveFrom, p.EffectiveTo,
         p.BusinessProductId, p.BusinessPlatformName,
         p.BeneficiaryPolicy, p.AllowMultipleHoldings, p.KycRemotePolicy,
-        CustomFieldValues.Read(p.CustomFieldsJson));
+        CustomFieldValues.Read(p.CustomFieldsJson),
+        p.UnitPrice, p.PriceUnit, p.VatCategory);
 }

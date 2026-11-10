@@ -22,6 +22,18 @@ public enum ProjectHistoryKind
     /// <c>RelatedId</c> = the WhatsApp message when there is one. Written when the provider ACCEPTED.
     /// </summary>
     DocumentSent,
+
+    /// <summary>
+    /// The offer's lines were saved (quote lines, lot 3): <c>To</c> = the total HT, <c>Detail</c> =
+    /// « 3 lignes, remise 12,5 % » as it read. The amount and product changes it causes get their own lines.
+    /// </summary>
+    QuoteLinesChanged,
+    /// <summary>A manager accepted the offer's discount beyond the ceiling; <c>Detail</c> = their comment.</summary>
+    QuoteDiscountApproved,
+    /// <summary>A manager refused it; <c>Detail</c> = the reason.</summary>
+    QuoteDiscountRejected,
+    /// <summary>A quote PDF was generated (lot 5): <c>To</c> = « DEV-2026-000001 v2 », <c>RelatedId</c> = the project file.</summary>
+    QuoteIssued,
 }
 
 /// <summary>

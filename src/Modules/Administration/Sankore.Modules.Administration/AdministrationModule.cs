@@ -95,6 +95,8 @@ public static class AdministrationModule
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
         services.AddScoped<IInstitutionCurrency, InstitutionCurrency>();
+        // Issuer of the institution's quotes and their numbering (quote lines, lot 2).
+        services.AddScoped<IQuoteIssuer, QuoteIssuerReader>();
 
         // Nightly technical purge (TechnicalPurgeJob): sessions, tokens, sign-in traces, import files.
         services.AddScoped<ITechnicalPurge, Infrastructure.Retention.DeadRefreshTokensPurge>();

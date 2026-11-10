@@ -304,6 +304,22 @@ public sealed class Opportunity : AggregateRoot
         return Result.Ok();
     }
 
+    /// <summary>
+    /// The project takes the outcome of its offer (quote lines, lot 3): the estimated amount is the
+    /// total excluding VAT, and the product is the first line's, so the step conditions, forecasts,
+    /// reports and key-account potential keep reading the project as before.
+    /// </summary>
+    public Result PriceFromQuote(Money totalExclTax, string product, Guid productLineId, DateTimeOffset now)
+    {
+        if (Stage == OpportunityStage.ClosedWon || Stage == OpportunityStage.ClosedLost)
+            return Result.Fail("OPPORTUNITY_ALREADY_CLOSED");
+        EstimatedAmount = totalExclTax;
+        Product = product.Trim();
+        ProductLineId = productLineId;
+        UpdatedAt = now;
+        return Result.Ok();
+    }
+
     /// <summary>Attaches the project to a version of its template — see <see cref="TemplateVersionId"/>.</summary>
     public void FollowTemplateVersion(Guid? versionId, DateTimeOffset now)
     {

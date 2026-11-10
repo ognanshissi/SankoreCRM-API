@@ -13,6 +13,9 @@ internal static class OpportunityErrors
     /// <summary>Raised by the aggregate itself. Repeated here so the endpoint can map it.</summary>
     internal const string AlreadyClosed = "OPPORTUNITY_ALREADY_CLOSED";
 
+    /// <summary>The amount and the product come from the offer's lines (quote lines, lot 3).</summary>
+    internal const string AmountFromQuoteLines = "PROJECT_AMOUNT_FROM_QUOTE_LINES";
+
     internal const string InvalidCloseOutcome = "INVALID_CLOSE_OUTCOME";
 
     /// <summary>

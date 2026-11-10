@@ -21,6 +21,15 @@ public sealed class LeadTestBuilder
     private GeoPoint _location = new(14.6928, -17.4467); // Dakar Plateau
     private Guid? _agencyId;
     private Guid? _leadSourceConfigId;
+    private string? _externalReference;
+    private Guid? _ownerId;
+
+    public LeadTestBuilder WithExternalReference(string reference, Guid? ownerId = null)
+    {
+        _externalReference = reference;
+        _ownerId = ownerId;
+        return this;
+    }
 
     public static LeadTestBuilder Create() => new();
 
@@ -93,7 +102,9 @@ public sealed class LeadTestBuilder
             location: _location,
             preferredAgencyId: _agencyId,
             clock: TimeProvider.System,
-            leadSourceConfigId: _leadSourceConfigId);
+            leadSourceConfigId: _leadSourceConfigId,
+            externalReference: _externalReference,
+            ownerId: _ownerId);
 
         if (!_fresh)
             lead.Qualify(75); // moves to Qualified (score ≥ 60) by default for dispatching tests

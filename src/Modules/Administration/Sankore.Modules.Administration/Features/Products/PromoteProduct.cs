@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sankore.Modules.Administration.Features.Products.CreateProduct;
 using Sankore.Modules.Administration.Features.Products.SetBeneficiaryPolicy;
 using Sankore.Modules.Administration.Features.Products.SetKycRemotePolicy;
+using Sankore.Modules.Administration.Features.Products.SetProductPricing;
 using Sankore.Modules.Administration.Features.Products.UpdateProduct;
 using Sankore.Modules.Administration.Infrastructure;
 using Sankore.Shared.Infrastructure.Behaviors;
@@ -106,7 +107,16 @@ internal sealed class ProductCopier(AdministrationDbContext db, IServiceScopeFac
             var remote = await sender.Send(new SetKycRemotePolicyCommand(
                 id, kyc.Enabled, kyc.ValidationMode, kyc.RequiredTier, kyc.MinAutoScore,
                 kyc.RequiredDocuments, kyc.AllowedDocumentTypes, kyc.LinkValidityHours), ct);
-            return remote.IsFailure ? Result.Fail<Guid>(remote.Error!) : Result.Ok(id);
+            if (remote.IsFailure) return Result.Fail<Guid>(remote.Error!);
+
+            // Price and VAT travel with the product (quote lines, lot 1); a module's product has none.
+            if (source.Category == ProductCategory.Standard)
+            {
+                var pricing = await sender.Send(new SetProductPricingCommand(
+                    id, source.UnitPrice, source.PriceUnit, source.VatCategory), ct);
+                if (pricing.IsFailure) return Result.Fail<Guid>(pricing.Error!);
+            }
+            return Result.Ok(id);
         });
 
         return copied.IsFailure
