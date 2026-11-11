@@ -16,6 +16,7 @@ public sealed class AdminDbContext(DbContextOptions<AdminDbContext> options): Db
     public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
     public DbSet<TenantDataWipe> TenantDataWipes => Set<TenantDataWipe>();
     public DbSet<TenantDataLoad> TenantDataLoads => Set<TenantDataLoad>();
+    public DbSet<TenantSignup> TenantSignups => Set<TenantSignup>();
 
     /// <summary>
     /// Every timestamp column stores UTC — Npgsql rejects any other offset outright.

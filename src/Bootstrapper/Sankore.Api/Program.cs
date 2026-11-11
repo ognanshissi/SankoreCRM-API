@@ -1,3 +1,4 @@
+using Sankore.Api.Features.TrialSignups;
 using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Text;
@@ -385,6 +386,31 @@ builder.Services.AddRateLimiter(options =>
     // attack that matters against this surface is guessing a date of birth, and that is bounded by
     // the per-link failed-attempt counter on the invitation, which is durable and per-token rather
     // than per-instance and resettable by a deployment.
+    // Free trial (lot 2). The form: a few requests per visitor and hour — an institution asks once.
+    // Availability as you type and the confirmation link: a burst is normal, a flood is not. Both
+    // partition on the visitor's address as Cloudflare reports it (CF-Connecting-IP): behind
+    // Cloudflare and Traefik the connection's address is Cloudflare's edge, shared by everybody.
+    var trialPerHour = Math.Max(1, builder.Configuration.GetValue(
+        $"{Sankore.Api.Features.TrialSignups.TrialSignupOptions.SectionName}:RequestsPerHourPerIp", 5));
+    options.AddPolicy(Sankore.Api.Features.TrialSignups.TrialSignupEndpoints.SubmitRateLimit, ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"trial-signup:{Sankore.Api.Features.TrialSignups.TrialSignupService.ClientIp(ctx) ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromHours(1),
+                PermitLimit = trialPerHour,
+                QueueLimit = 0,
+            }));
+    options.AddPolicy(Sankore.Api.Features.TrialSignups.TrialSignupEndpoints.LookupRateLimit, ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"trial-lookup:{Sankore.Api.Features.TrialSignups.TrialSignupService.ClientIp(ctx) ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 30,
+                QueueLimit = 0,
+            }));
+
     options.AddPolicy("kyc-public", ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: $"kyc-public:{ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
@@ -747,6 +773,17 @@ builder.Services.AddTransient<Sankore.Api.Features.Retention.TechnicalPurgeJob>(
 // Platform job: empties the TEST institutions a platform administrator asked to wipe (data-purge lot 4).
 builder.Services.AddTransient<Sankore.Api.Features.Retention.TenantDataWipeJob>();
 builder.Services.AddTransient<Sankore.Api.Features.StartingData.TenantDataLoadJob>();
+
+// Free trial, public side (docs/essai-gratuit-socle.md, lot 2): the website's form, its captcha,
+// the confirmation link, and the job that tells requesters the platform's decision.
+builder.Services.Configure<Sankore.Api.Features.TrialSignups.TrialSignupOptions>(
+    builder.Configuration.GetSection(Sankore.Api.Features.TrialSignups.TrialSignupOptions.SectionName));
+builder.Services.AddHttpClient(Sankore.Api.Features.TrialSignups.TurnstileVerifier.HttpClientName,
+    c => c.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<Sankore.Api.Features.TrialSignups.ITurnstileVerifier, Sankore.Api.Features.TrialSignups.TurnstileVerifier>();
+builder.Services.AddScoped<Sankore.Api.Features.TrialSignups.ITrialSignupRegistry, Sankore.Api.Features.TrialSignups.HttpTrialSignupRegistry>();
+builder.Services.AddScoped<Sankore.Api.Features.TrialSignups.TrialSignupService>();
+builder.Services.AddTransient<Sankore.Api.Features.TrialSignups.TrialSignupDecisionsJob>();
 // « Repartir de la production » (sandbox lot 5).
 builder.Services.AddTransient<Sankore.Api.Features.TestMode.RefreshTestTwinJob>();
 
@@ -1015,6 +1052,13 @@ if (emitOpenApiTo is null) {
             job => job.ExecuteAsync(CancellationToken.None),
             "* * * * *");
 
+        // Every minute: the platform's decisions on free-trial requests, mailed to the requesters.
+        // Cheap when there is none — one GET to the registry.
+        AddOrUpdate<Sankore.Api.Features.TrialSignups.TrialSignupDecisionsJob>(
+            Sankore.Api.Features.TrialSignups.TrialSignupDecisionsJob.RecurringJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            "* * * * *");
+
         AddOrUpdate<Sankore.Api.Features.Retention.TechnicalPurgeJob>(
             Sankore.Api.Features.Retention.TechnicalPurgeJob.RecurringJobId,
             job => job.ExecuteAsync(CancellationToken.None),
@@ -1263,6 +1307,11 @@ appVersion1.MapGroup("public")
 // cache the response for a week, so a page view is not a request.
 appVersion1.MapGroup("public")
     .MapAdministrationPublicEndpoints();
+
+// The website's free-trial form (lot 2). Under `public` for the same reason: no institution exists
+// yet. Each route carries its own rate limit (TrialSignupEndpoints).
+appVersion1.MapGroup("public")
+    .MapTrialSignupEndpoints();
 
 appVersion1.MapGroup("audit").MapGetAuditEntries();
 appVersion1.MapGroup("object-storage").MapMigrateObjects();

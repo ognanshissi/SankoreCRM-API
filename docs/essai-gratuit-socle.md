@@ -1,10 +1,10 @@
 # Essai gratuit du CRM socle
 
-**Statut : plan rédigé le 2026-11-10. Domaine choisi : `talisoftcrm.com`. Lot 0 : partie code livrée le 2026-11-10 (non commitée), réglages Cloudflare et Traefik à faire. Décisions D2 à D8 en attente.**
+**Statut : plan rédigé le 2026-11-10. Domaine choisi : `talisoftcrm.com`. Lot 0 : partie code livrée le 2026-11-10 (non commitée), réglages Cloudflare et Traefik à faire. Lots 1, 2, 3 et 4 livrés et vérifiés en local le 2026-11-11 (non commités). D3 et D4 tranchées le 2026-11-11 (D4 à préciser) ; D2, D5 à D8 en attente.**
 
 ## 1. Le besoin
 
-Proposer le CRM socle (aucun module payant) à tout le monde, gratuitement, pendant 3 mois. Un visiteur du site Talisoft remplit un formulaire et reçoit, quelques minutes plus tard, l'adresse de son CRM et un lien pour choisir son mot de passe. Les fonctions plus poussées (Banking - Microfinance, Assurance) restent l'offre payante, sur un autre nom de domaine ou sur le domaine du client.
+Proposer le CRM socle (aucun module payant) à tout le monde, gratuitement, pendant 3 mois. Un visiteur du site Talisoft remplit un formulaire et reçoit, quelques minutes plus tard, l'adresse de son CRM et un lien pour choisir son mot de passe. Les fonctions plus poussées (Banking - Microfinance, Assurance) restent l'offre payante. Une institution passe à l'offre payante en gardant son adresse (décision du 2026-11-11).
 
 ## 2. Le principe retenu
 
@@ -34,10 +34,10 @@ Le domaine ne protège rien côté serveur : la connexion repose sur le jeton si
 | # | Sujet | Recommandation |
 |---|---|---|
 | D1 | Domaine de l'essai | **Décidé le 2026-11-10 : `talisoftcrm.com`**, adresses `https://<nom>.talisoftcrm.com`. Couvert par le certificat Cloudflare gratuit (un seul niveau). |
-| D2 | Domaine de l'offre payante | Le domaine du client quand il en a un. Sinon `*.talisoft.net` (ou un autre suffixe), même mécanique que l'essai. |
-| D3 | Validation des inscriptions | **Par la plateforme au lancement** : un clic « Approuver » dans l'app plateforme, le reste est automatique. On passe à la création automatique (réglage `TrialSignup:AutoApprove`) une fois les garde-fous du lot 6 en place. |
-| D4 | Ce qui arrive à la fin de l'essai | J0 : **lecture seule** (consultation et export possibles, aucune écriture). J+30 : institution suspendue. J+90 : données effacées puis institution supprimée. Un e-mail est envoyé à chaque étape. |
-| D5 | Rappels avant la fin | J-14, J-3, J0. |
+| D2 | Domaine de l'offre payante | **Décidé le 2026-11-11 : on garde le même nom de domaine.** L'institution reste sur `https://<nom>.talisoftcrm.com` quand elle passe à l'offre payante. `talisoftcrm.com` sert donc aux essais comme aux clients payants. Un domaine propre au client reste possible plus tard, sur demande, en adresse supplémentaire. |
+| D3 | Validation des inscriptions | **Décidé le 2026-11-11 : la plateforme valide chaque demande** (« Approuver » dans l'app plateforme, le reste est automatique). |
+| D4 | Durée et fin de l'essai | **Décidé le 2026-11-11.** Essai de **30 jours** depuis l'approbation (`TrialSignup:TrialDays`). Puis, comptés **depuis la fin de l'essai** (J0) : **30 jours en lecture seule** (consultation et export, aucune écriture, aucun envoi), **suspension de J+30 à J+90** (plus aucun accès, page « institution suspendue »), **effacement à J+90**, données puis institution. Des e-mails de relance annoncent l'effacement pendant la suspension (D5). |
+| D5 | E-mails de relance | Proposition, à confirmer : J-7 et J-1 avant la fin de l'essai ; J0 « essai terminé, consultation seule » ; J+23 « accès suspendu dans 7 jours » ; J+30 « accès suspendu, effacement le … » ; relances d'effacement à J+60, J+83 et J+89 ; J+90 « données effacées ». Chaque e-mail propose de passer à l'offre payante. |
 | D6 | Limites de l'essai | 5 utilisateurs ; 500 e-mails par mois par le relais de la plateforme (quota mensuel existant) ; pas de SMS ni de WhatsApp par les comptes de la plateforme (possible avec le compte fournisseur de l'institution, à vérifier au lot 6) ; pas de domaine personnalisé ; pas de demande de module, la page Modules affiche « Disponible avec l'offre complète — nous contacter ». |
 | D7 | Informations demandées dans le formulaire | Nom de l'institution, adresse souhaitée, prénom et nom, e-mail professionnel, téléphone, pays, type d'activité (liste courte), acceptation des conditions de l'essai. |
 | D8 | Qui est prévenu d'une nouvelle demande | Une liste d'adresses de l'équipe en configuration (`TrialSignup:Notifications:PlatformRecipients`), comme pour les modules. |
@@ -61,6 +61,15 @@ Code :
 Contrôle : une institution créée à la main depuis l'app plateforme avec `https://recette.<suffixe>` s'ouvre, se connecte et reçoit ses e-mails avec des liens corrects (activation, mot de passe, KYC à distance), sans aucun redéploiement.
 
 ### Lot 1 — Demandes d'essai dans le registre (2 j)
+
+**Livré le 2026-11-11 (non commité).**
+- Code : `Domain/TenantSignup.cs`, `Features/TenantSignups/` (routes sous `/api/v1/tenant-signups`) et `Tenant.Offer`, exposé dans `TenantResponse.Offer`. `TrialSlug` est dans le Kernel.
+- Création d'institution factorisée : `TenantCreation.AddAsync` ne sauvegarde pas, pour que l'approbation enregistre l'institution et la demande en une seule fois.
+- Migration `AddTenantSignups`.
+- Réglage `TrialSignup:AddressTemplate` au lieu d'un suffixe : `https://{slug}.talisoftcrm.com` en production, `http://{slug}.localhost:4222` en développement.
+- Tests : 22 cas dans `TenantSignupHandlersTests` ; les 103 tests du registre passent.
+- Vérifié sur le registre local avec PostgreSQL. La demande « Recette Essai » a été créée, confirmée, puis approuvée avec un jeton d'administrateur plateforme. La clé seule est refusée (403) sur les routes plateforme. L'institution a été créée en Trial, sans module, avec une fin d'essai à 30 jours. L'API a chargé les données de démarrage en 10 s. L'institution de recette est restée en place (`http://recette-essai.localhost:4222`).
+
 
 Le registre (`Sankore.Admin`) garde les demandes. Il reste fermé au public : seules la clé de service (l'API) et l'administrateur plateforme y accèdent.
 
@@ -86,6 +95,25 @@ Le registre (`Sankore.Admin`) garde les demandes. Il reste fermé au public : se
 
 ### Lot 2 — Inscription publique dans l'API (3 j)
 
+**Livré le 2026-11-11 (non commité).**
+- **Code.** Le dossier `Sankore.Api/Features/TrialSignups/` contient :
+  - les routes `/api/v1/public/trial-signups` : `GET slug-availability`, `POST /`, `POST confirm` ;
+  - le contrôle Turnstile ;
+  - le client du registre ;
+  - la tâche `TrialSignupDecisionsJob`, qui tourne chaque minute.
+- **Lien du mot de passe.** `IRootPasswordSetup` (Administration) fournit un lien d'activation de 7 jours pour le compte racine. La page d'activation existante l'accepte pour ce seul compte, tant qu'il ne s'est jamais connecté.
+- **Modèles d'e-mail** (`NotificationsSeeder.TrialSignups`, fr et en sauf l'alerte à l'équipe) : `trial.signup-confirm`, `trial.signup-existing`, `trial.signup-received`, `trial.signup-rejected`, `trial.ready`.
+- **Registre.** La langue de la demande est enregistrée (migration `AddTenantSignupLocale`), pour que les e-mails suivent la langue de la page du site.
+- **Envoi.** Les e-mails sans institution partent sous l'identifiant `Guid.Empty`, donc par le relais de la plateforme, sans quota.
+- **Limites de débit :** `trial-signup`, 5 demandes par heure et par IP ; `trial-lookup`, 30 par minute. Toutes deux comptent par l'IP que donne `CF-Connecting-IP`.
+- **Vérifié en local :**
+  - « Essai Public » : demande, e-mail de confirmation, et même réponse publique pour une adresse déjà utilisée, qui reçoit l'e-mail « une demande existe déjà ».
+  - Confirmation : une seule alerte à l'équipe malgré deux clics.
+  - Approbation : données de démarrage, puis e-mail « Votre CRM est prêt ».
+  - Mot de passe choisi par le lien ; le lien refuse un second usage. La connexion fonctionne.
+  - « Recette Essai » (lot 1) a reçu son e-mail « prêt » au même passage.
+- **Reste pour mettre en ligne :** la page de confirmation du site (lot 4) et l'écran de validation (lot 3). D'ici là, l'approbation se fait par l'API du registre.
+
 Les routes publiques sont sur `Sankore.Api`, qui a déjà une surface publique (`/api/v1/public`, hors résolution d'institution) et sait envoyer des e-mails (M08). Ce n'est pas le registre : la clé du registre administre toutes les institutions, il ne doit pas être exposé aux anonymes.
 
 - `GET /api/v1/public/trial-signups/slug-availability?slug=` : libre, pris ou réservé. Limite de débit stricte, car la route permet de deviner qui est client.
@@ -105,11 +133,37 @@ Les routes publiques sont sur `Sankore.Api`, qui a déjà une surface publique (
 
 ### Lot 3 — File « Demandes d'essai » dans l'app plateforme (2 j)
 
+**Livré le 2026-11-11 (non commité).**
+- **App plateforme.** Le menu « Demandes d'essai » mène à `/essais` :
+  - une file `tas-table` avec cinq onglets et leurs compteurs (À valider, E-mail à confirmer, Approuvées, Refusées, Expirées), une recherche différée de 300 ms et l'état gardé dans l'URL ;
+  - une fiche `/essais/:id` : le demandeur, la demande (IP, navigateur), les demandes liées par IP et par domaine d'e-mail, l'approbation après confirmation et le refus avec motif dans un tiroir.
+- **Fiche institution.** Elle affiche le badge « Essai gratuit » et l'offre. « Prolonger l'essai » ouvre un tiroir de date, et la route `PUT tenants/{id}/trial-end` est réservée à l'administrateur plateforme (refus pour une institution payante ou une date passée).
+- **Client.** Le client du registre a été régénéré (`swaggers/sankore-crm-admin-api-swagger.json`, puis `npm run openapi-generator-admin`).
+- **Vérifié dans Chrome :**
+  - la file ;
+  - « Coopérative Refus » refusée, avec l'e-mail du motif ;
+  - « Mutuelle Écran » approuvée : l'institution est créée et l'e-mail « Votre CRM est prêt » est parti ;
+  - l'essai prolongé au 31 décembre.
+- **Vu en passant :**
+  - les dates de l'app plateforme sont en anglais (« November »), comme sur tous ses écrans : la langue de l'app n'est pas réglée ;
+  - la section Modules d'une institution en essai propose encore « Activer directement ». Le lot 6 doit le fermer.
+
 - Menu « Demandes d'essai » : liste en `tas-table` (statut, institution, adresse, e-mail, pays, date), filtre par statut, compteur des demandes confirmées en attente.
 - Détail : tous les champs, IP, autres demandes depuis la même IP ou le même domaine d'e-mail, puis « Approuver » ou « Refuser » avec un motif. Un refus envoie un e-mail sobre.
 - Fiche institution : offre (Essai ou Payant) et date de fin d'essai, modifiable par la plateforme (prolonger un essai).
 
 ### Lot 4 — Formulaire du site Talisoft (1 à 1,5 j)
+
+**Livré le 2026-11-11 (non commité), dans `talisoft-landing`.**
+- **Pages** : `/essai-gratuit` et `/en/free-trial` (formulaire, étapes, conditions de l'essai en `#conditions`) ; `/essai/confirmation` et `/en/trial/confirmation` (`noindex`, hors sitemap). Code dans `src/app/trial/`.
+- **Formulaire** (signal forms) : les champs de D7. L'adresse est déduite du nom tant que le visiteur ne la change pas, nettoyée pendant la frappe (« Ma Mutuelle » → `ma-mutuelle`) et vérifiée 400 ms après la dernière frappe (libre, prise, réservée). Les erreurs de l'API s'affichent sous chaque champ ; en anglais, la page met ses propres messages. Après l'envoi, toujours « Vérifiez votre boîte e-mail » (même réponse pour une adresse déjà connue).
+- **Turnstile** : widget chargé sur la seule page d'essai, jeton redemandé après chaque envoi refusé.
+- **Configuration** : le navigateur appelle l'API directement. Son adresse et la clé Turnstile viennent de `GET /api/trial/config`, servi par le serveur du site à partir de `CRM_API_URL`, `TURNSTILE_SITE_KEY` et `TRIAL_ADDRESS_SUFFIX` (`.env.example`, `docker-compose.yml`). Sans `CRM_API_URL` en production, la page affiche « L'essai gratuit ouvre bientôt » et renvoie au contact.
+- **Confirmation** : la page lit `#t=…`, le retire aussitôt de la barre d'adresse, appelle la confirmation ; états confirmé, lien invalide, expiré, déjà traité, indisponible.
+- **Boutons** : « Essai gratuit 30 jours » dans le bandeau d'accueil, bandeau « Envie de voir le CRM d'abord ? » sous l'offre pilote (accueil et page CRM).
+- **Confidentialité** : sections « Votre demande d'essai gratuit » et « Vérification anti-robot (Cloudflare Turnstile) », fr et en. Durée de conservation des demandes sans suite à fixer (`LEGAL_INFO.trialRequestRetention`, entre crochets).
+- **Vérifié en local** (site sur `ng serve`, API https://localhost:5080, maildev) : adresse déduite et libre, `mutuelle-ecran` prise, `admin` réservée, erreurs du formulaire vide ; envoi → un seul e-mail de confirmation ; lien → « Adresse confirmée », jeton retiré de l'adresse, alerte « Demande d'essai : Mutuelle Épargne Site » à l'équipe ; lien abîmé → « Ce lien n'est pas valable ». Tests : 62 (dont `trial-signup.spec.ts`), build et pré-rendu OK.
+- **Reste avant la mise en ligne** : clé Turnstile (site + secret), `CRM_API_URL`, `https://talisoft.net` dans les origines CORS de l'API, relecture juridique des conditions et de la page Confidentialité (et sa contradiction avec AdSense et GTM).
 
 Dans `talisoft-landing` :
 
@@ -131,11 +185,15 @@ Dans `talisoft-landing` :
   - bandeau « Essai gratuit : X jours restants » à partir de J-14 (`TrialExpiresAt` est déjà dans le contexte de l'institution) ;
   - après J0, bandeau « Essai terminé — consultation seule » et lien « Passer à l'offre complète » ;
   - l'intercepteur d'erreurs reconnaît `TENANT_TRIAL_EXPIRED` et l'explique une fois.
-- Tâche quotidienne (API) : rappels de D5. Selon D4, elle suspend l'institution (`IsActive = false`, page « institution suspendue » existante) puis l'efface : vidage existant, puis suppression de l'institution, avec un e-mail 7 jours avant l'effacement.
+- Tâche quotidienne (API), selon D4 et D5 :
+  - envoie les relances de D5 ;
+  - à J+30, suspend l'institution (`IsActive = false`, page « institution suspendue » existante) ;
+  - à J+90, l'efface : vidage existant, puis suppression de l'institution.
+  - Chaque étape est idempotente par institution et par date, pour qu'une tâche relancée n'envoie rien deux fois.
 - **Passer à l'offre payante** (app plateforme) :
   - `Offer = Paid` et `TrialExpiresAt` vidée ;
-  - si le client a un domaine, ajout d'une adresse principale (les adresses multiples existent déjà) ;
-  - l'ancienne adresse d'essai reste reconnue, pour que les liens déjà envoyés fonctionnent ;
+  - **l'adresse ne change pas** (D2) : les liens déjà envoyés, les favoris et les sessions ouvertes continuent de fonctionner ;
+  - un domaine propre au client reste possible plus tard, sur demande, en adresse supplémentaire (les adresses multiples existent déjà) ;
   - les données ne bougent pas ;
   - les modules peuvent alors être demandés et accordés.
 

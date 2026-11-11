@@ -48,5 +48,6 @@ internal static class TenantProjection
                 .ToList(),
             t.IsTest,
             t.ParentTenantId,
-            db.Tenants.Where(c => c.ParentTenantId == t.Id).Select(c => (Guid?)c.Id).FirstOrDefault()));
+            db.Tenants.Where(c => c.ParentTenantId == t.Id).Select(c => (Guid?)c.Id).FirstOrDefault(),
+            t.ParentTenantId == null ? t.Offer : db.Tenants.Where(p => p.Id == t.ParentTenantId).Select(p => p.Offer).First()));
 }

@@ -38,7 +38,12 @@ public record TenantResponse(
     /// </summary>
     Guid? ParentTenantId = null,
     /// <summary>On a live tenant, its test twin once created; read into <c>TenantInfo.TestTenantId</c>.</summary>
-    Guid? TestTenantId = null);
+    Guid? TestTenantId = null,
+    /// <summary>
+    /// Free trial or paying client (<c>docs/essai-gratuit-socle.md</c>), serialised by name. A twin
+    /// answers its parent's: the sandbox of a trial is a trial.
+    /// </summary>
+    Sankore.Admin.Domain.TenantOffer Offer = Sankore.Admin.Domain.TenantOffer.Paid);
 
 internal sealed class GetTenantHandler(AdminDbContext db) : IRequestHandler<GetTenantQuery, TenantResponse?>
 {

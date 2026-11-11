@@ -31,6 +31,14 @@ public class TenantConfiguration: IEntityTypeConfiguration<Tenant>
                 v => v.ToString(),
                 v => Enum.Parse<SubscriptionState>(v));
         
+        // By name, like every enum of the registry. Existing rows take Paid: they were all created
+        // by the platform before the free trial existed.
+        builder.Property(p => p.Offer)
+            .IsRequired()
+            .HasMaxLength(10)
+            .HasConversion(v => v.ToString(), v => Enum.Parse<TenantOffer>(v))
+            .HasDefaultValue(TenantOffer.Paid);
+
         builder.HasIndex(x => x.Fqdn).IsUnique();
         builder.HasIndex(p => p.RootUserEmail).IsUnique();
         builder.HasIndex(p => new { p.RootUserEmail, p.Fqdn }).IsUnique();

@@ -9,6 +9,13 @@ public class Tenant
     public bool IsActive { get; private set; }
 
     public DateTimeOffset? TrialExpiresAt { get; private set; }
+
+    /// <summary>
+    /// Free trial or paying client (<c>docs/essai-gratuit-socle.md</c>). <see cref="TenantOffer.Trial"/>
+    /// is set by the approval of a website request only; every other institution is Paid.
+    /// </summary>
+    public TenantOffer Offer { get; private set; }
+
     public bool IsMaintenance { get; private set; }
 
     /// <summary>
@@ -43,10 +50,12 @@ public class Tenant
 
     private Tenant() { }
 
-    public static Tenant Create(string name, string rootUserEmail, string fqdn,  DateTimeOffset? trialExpiresAt = null)
+    public static Tenant Create(string name, string rootUserEmail, string fqdn, DateTimeOffset? trialExpiresAt = null,
+        TenantOffer offer = TenantOffer.Paid)
     {
         return new Tenant
         {
+            Offer = offer,
             Id = Guid.NewGuid(),
             Name = name,
             RootUserEmail = rootUserEmail,
@@ -99,6 +108,18 @@ public class Tenant
     public void MarkAsTest(bool isTest)
     {
         IsTest = isTest;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Moves the end of a free trial (the platform prolongs one, <c>docs/essai-gratuit-socle.md</c>).
+    /// Only a trial has an end to move; a paying institution has none.
+    /// </summary>
+    public void SetTrialEnd(DateTimeOffset end)
+    {
+        if (Offer != TenantOffer.Trial)
+            throw new InvalidOperationException("Only a free-trial institution has a trial end.");
+        TrialExpiresAt = end;
         UpdatedAt = DateTime.UtcNow;
     }
 

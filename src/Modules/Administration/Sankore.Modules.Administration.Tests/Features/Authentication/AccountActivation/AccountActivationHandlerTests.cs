@@ -93,6 +93,55 @@ public sealed class AccountActivationHandlerTests : IDisposable
             .Status.Should().Be(UserStatus.Active);
     }
 
+    // ── Free trial: the root account's first password (RootPasswordSetup) ──
+
+    private async Task<AppUser> SeedRootAsync(bool signedIn)
+    {
+        await using var seed = _factory.CreateContext();
+        var root = AppUser.CreateRoot(_tenantId, "Administrateur", "Caisse Avenir", "awa@caisse.ci");
+        root.NormalizedEmail = "AWA@CAISSE.CI";
+        typeof(Microsoft.AspNetCore.Identity.IdentityUser<Guid>)
+            .GetProperty(nameof(root.PasswordHash))!
+            .SetValue(root, "random-hash");
+        if (signedIn) root.RecordSuccessfulLogin();
+        seed.Users.Add(root);
+        await seed.SaveChangesAsync();
+        return root;
+    }
+
+    [Fact]
+    public async Task The_root_account_that_never_signed_in_takes_its_first_password_through_the_link()
+    {
+        var root = await SeedRootAsync(signedIn: false);
+        var userManager = IdentityMockFactory.BuildUserManager();
+        StubTokenAccepted(userManager);
+        userManager.ResetPasswordAsync(Arg.Any<AppUser>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns(IdentityResult.Success);
+
+        await using var db = _factory.CreateContext();
+        var result = await new AccountActivationHandler(db, userManager, _context)
+            .Handle(ValidCommand(root.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await userManager.Received(1).ResetPasswordAsync(Arg.Any<AppUser>(), "internal-reset-token", "SecurePass1!");
+    }
+
+    [Fact]
+    public async Task A_root_account_that_already_signed_in_is_refused_like_any_active_one()
+    {
+        var root = await SeedRootAsync(signedIn: true);
+        var userManager = IdentityMockFactory.BuildUserManager();
+        StubTokenAccepted(userManager);
+
+        await using var db = _factory.CreateContext();
+        var result = await new AccountActivationHandler(db, userManager, _context)
+            .Handle(ValidCommand(root.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("already active");
+        await userManager.DidNotReceiveWithAnyArgs().ResetPasswordAsync(default!, default!, default!);
+    }
+
     // ── Guard: invalid GUID ───────────────────────────────────────────────
 
     [Fact]

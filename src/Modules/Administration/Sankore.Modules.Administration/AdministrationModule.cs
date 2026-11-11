@@ -104,6 +104,7 @@ public static class AdministrationModule
         services.AddScoped<Features.ComplianceSettings.SwitchKyc.KycModuleRestorer>();
 
         services.AddScoped<IAdministrationModule, AdministrationModuleFacade>();
+        services.AddScoped<IRootPasswordSetup, Features.Authentication.RootPasswordSetup.RootPasswordSetup>();
         services.AddScoped<IInstitutionCurrency, InstitutionCurrency>();
         // Issuer of the institution's quotes and their numbering (quote lines, lot 2).
         services.AddScoped<IQuoteIssuer, QuoteIssuerReader>();

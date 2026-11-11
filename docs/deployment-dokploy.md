@@ -1352,3 +1352,24 @@ Then create an institution « Recette » with `https://recette.talisoftcrm.com` 
 and confirm the following on the real address: sign-in, an activation e-mail whose link opens that
 address, and no CORS error in the browser console. A name the registry does not know opens the
 « institution inconnue » page. That is expected.
+
+### Free-trial sign-ups (environment)
+
+Lots 1 and 2 of `docs/essai-gratuit-socle.md`. Set these once the address above answers. Without them
+the trial stays closed: the public routes answer 503 and nothing is created.
+
+| Application | Variable | Value |
+|---|---|---|
+| Sankore.Admin (registry) | `TrialSignup__AddressTemplate` | `https://{slug}.talisoftcrm.com` |
+| Sankore.Admin | `TrialSignup__TrialDays` | `30` (the default) |
+| Sankore.Api | `TrialSignup__ConfirmationUrl` | `https://talisoft.net/essai/confirmation` (the website page that reads `#t=`) |
+| Sankore.Api | `TrialSignup__ConfirmationUrlEn` | `https://talisoft.net/en/trial/confirmation` |
+| Sankore.Api | `TrialSignup__Turnstile__SecretKey` | Cloudflare Turnstile secret key; the site key goes into the website. Empty outside Development means every request is refused. |
+| Sankore.Api | `TrialSignup__PlatformRecipients__0` | the team address told of each confirmed request |
+| Sankore.Api | `Cors__AllowedOrigins__<n>` | `https://talisoft.net`: the form calls the API from the visitor's browser |
+
+The rate limits read the visitor's address from `CF-Connecting-IP`. Behind Cloudflare and Traefik, the
+connection's own address is Cloudflare's edge, shared by every visitor. Anyone who reaches the origin
+directly, bypassing Cloudflare, can therefore choose that header. The captcha still applies to them, but
+the per-IP limit does not. Restrict the origin to Cloudflare's address ranges to close that gap.
+

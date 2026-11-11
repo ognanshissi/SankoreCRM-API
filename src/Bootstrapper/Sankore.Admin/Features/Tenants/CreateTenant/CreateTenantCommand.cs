@@ -33,6 +33,23 @@ internal sealed class CreateTenantHandler(AdminDbContext db) : IRequestHandler<C
 {
     public async Task<CreateTenantResponse> Handle(CreateTenantCommand request, CancellationToken ct)
     {
+        var tenant = await TenantCreation.AddAsync(db, request, TenantOffer.Paid, DateTimeOffset.UtcNow, ct);
+        await db.SaveChangesAsync(ct);
+        return new CreateTenantResponse(tenant.Id);
+    }
+}
+
+/// <summary>
+/// Adds an institution, its primary domain row, its starting-data load and its modules to the
+/// context WITHOUT saving: the platform's « Nouveau tenant » saves it alone, the approval of a
+/// free-trial request (<c>ApproveTenantSignupHandler</c>) saves it together with the request's new
+/// status, so a request never reads « approved » without its institution, nor the reverse.
+/// </summary>
+internal static class TenantCreation
+{
+    public static async Task<Tenant> AddAsync(AdminDbContext db, CreateTenantCommand request, TenantOffer offer,
+        DateTimeOffset now, CancellationToken ct)
+    {
         var fqdn = TenantFqdn.Normalize(request.Fqdn);
 
         // A secondary domain of another tenant counts too: the main origin is looked up first and
@@ -48,11 +65,10 @@ internal sealed class CreateTenantHandler(AdminDbContext db) : IRequestHandler<C
         if (unknown.Count > 0)
             throw new ArgumentException($"Unknown module(s): {string.Join(", ", unknown)}.");
 
-        var tenant = Tenant.Create(request.Name, request.RootUserEmail, fqdn, request.TrialExpiresAt);
+        var tenant = Tenant.Create(request.Name, request.RootUserEmail, fqdn, request.TrialExpiresAt, offer);
         db.Tenants.Add(tenant);
         await TenantPrimaryDomain.SyncAsync(db, tenant.Id, fqdn, ct);
 
-        var now = DateTimeOffset.UtcNow;
         if (request.StartingData is { } kind)
         {
             if (kind == TenantDataLoadKind.Demo) tenant.MarkAsTest(true);
@@ -63,7 +79,6 @@ internal sealed class CreateTenantHandler(AdminDbContext db) : IRequestHandler<C
             db.TenantModuleSubscriptions.Add(TenantModuleSubscription.ActivateDirect(
                 tenant.Id, module, request.AdminId, ModuleSubscriptionSource.Direct, now));
 
-        await db.SaveChangesAsync(ct);
-        return new CreateTenantResponse(tenant.Id);
+        return tenant;
     }
 }

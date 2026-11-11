@@ -1,3 +1,4 @@
+using Sankore.Admin.Features.TenantSignups;
 using Sankore.Admin.Features.Tenants.DataWipes;
 using Sankore.Admin.Features.Tenants.DataLoads;
 using MediatR;
@@ -33,6 +34,11 @@ builder.Services.Configure<DefaultTenantOptions>(
     builder.Configuration.GetSection(DefaultTenantOptions.Section));
 builder.Services.Configure<PlatformAdminSeedOptions>(
     builder.Configuration.GetSection(PlatformAdminSeedOptions.Section));
+
+// Free trial (docs/essai-gratuit-socle.md). An empty or malformed TrialSignup:DomainSuffix leaves
+// the registry up and answers 503 TRIAL_SIGNUP_NOT_CONFIGURED on the sign-up routes only.
+builder.Services.Configure<Sankore.Admin.Features.TenantSignups.TenantSignupOptions>(
+    builder.Configuration.GetSection(Sankore.Admin.Features.TenantSignups.TenantSignupOptions.SectionName));
 
 // Hourly closing of the support tickets left Resolved for a week. Not in --emit-openapi mode:
 // the emitter starts the host, and the service would reach for a database that is not there.
@@ -142,6 +148,7 @@ app.MapModuleEndpoints();
 app.MapSupportEndpoints();
 app.MapDataWipeEndpoints();
 app.MapDataLoadEndpoints();
+app.MapTenantSignupEndpoints();
 
 if (emitOpenApiTo is not null)
 {

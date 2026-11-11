@@ -31,8 +31,12 @@ internal sealed class AccountActivationHandler(
         if (user is null)
             return Result.Fail<AccountActivationResult>("Invalid activation link.");
 
-        // 3. Only PendingActivation accounts can be activated
-        if (user.Status != UserStatus.PendingActivation)
+        // 3. Only PendingActivation accounts can be activated — and the one exception: an
+        //    institution's root account that has never signed in, whose random password the
+        //    starting-data load gave it. « Votre CRM est prêt » (free trial) sends it this very
+        //    link (RootPasswordSetup). Any other active account stays refused.
+        if (user.Status != UserStatus.PendingActivation
+            && !RootPasswordSetup.RootPasswordSetup.IsFirstPasswordPending(user))
             return Result.Fail<AccountActivationResult>(
                 user.Status == UserStatus.Active
                     ? "Account is already active."
