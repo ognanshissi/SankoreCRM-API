@@ -175,6 +175,12 @@ services:
       PlatformAdmin__Email: "${PLATFORM_ADMIN_EMAIL:-}"
       PlatformAdmin__FullName: "${PLATFORM_ADMIN_FULL_NAME:-Administrateur plateforme}"
       PlatformAdmin__Password: "${PLATFORM_ADMIN_PASSWORD:-}"
+      # Essai gratuit (docs/essai-gratuit-socle.md) : l'adresse d'une institution d'essai,
+      # {slug} pour le nom qu'elle a choisi — https://{slug}.talisoftcrm.com en production,
+      # d'accord avec Cors__AllowedOriginSuffixes__0 de l'API et le routeur Traefik. Vide =
+      # essai fermé sur cette plateforme (503 sur les routes d'inscription).
+      TrialSignup__AddressTemplate: "${TRIAL_ADDRESS_TEMPLATE:-}"
+      TrialSignup__TrialDays: "${TRIAL_DAYS:-30}"
     # `bash` explicite, et non `CMD-SHELL` : celui-ci passe par dash, qui ne connaît pas
     # `/dev/tcp`, et l'image `aspnet` n'embarque ni curl, ni wget, ni nc.
     #

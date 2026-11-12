@@ -546,8 +546,14 @@ services:
       Leads__Tasks__Attachments__EncryptionKey: "${LEADS_TASK_ATTACHMENTS_ENCRYPTION_KEY}"
       Leads__Tasks__Attachments__BasePath: "/var/sankore/task-attachments"
 
+      # Documents déposés sur la fiche client (onglet « Documents ») : chiffrement d'enveloppe,
+      # sa propre clé. Vide = aucun magasin enregistré, et un dépôt répond 503
+      # CLIENT_DOCUMENTS_UNAVAILABLE. Avec R2, le bucket s'appelle « client-documents ».
+      Customers__Documents__EncryptionKey: "${CUSTOMERS_DOCUMENTS_ENCRYPTION_KEY}"
+      Customers__Documents__BasePath: "/var/sankore/client-documents"
+
       # ── Stockage objet Cloudflare R2 ───────────────────────────────────
-      # Choisit le support des sept magasins ci-dessus : un bucket R2 par préoccupation si
+      # Choisit le support des huit magasins ci-dessus : un bucket R2 par préoccupation si
       # ceci est renseigné, les volumes locaux sinon. Le chiffrement reste le même dans les
       # deux cas — ces clés-ci ne remplacent aucune des clés de chiffrement ci-dessus.
       #
@@ -556,9 +562,10 @@ services:
       # de retomber silencieusement sur un volume qu'un redéploiement jette. Vides, les trois
       # sont lues comme absentes (`Trimmed`) et on garde le comportement actuel.
       #
-      # Les buckets ne sont PAS créés par l'API : les sept doivent exister chez R2, nommés
+      # Les buckets ne sont PAS créés par l'API : ils doivent exister chez R2, nommés
       # exactement comme la préoccupation — kyc-documents, imports, integration-batch-files,
-      # insurance-claim-documents, telephony-recordings, whatsapp-media, task-attachments.
+      # insurance-claim-documents, telephony-recordings, whatsapp-media, task-attachments,
+      # client-documents.
       ObjectStorage__R2__AccountId: "${R2_ACCOUNT_ID}"
       ObjectStorage__R2__AccessKeyId: "${R2_ACCESS_KEY_ID}"
       ObjectStorage__R2__SecretAccessKey: "${R2_SECRET_ACCESS_KEY}"
@@ -604,6 +611,27 @@ services:
       # autorisant les identifiants.
       Cors__AllowedOrigins__0: "${CORS_ALLOWED_ORIGIN_0}"
       Cors__AllowedOrigins__1: "${CORS_ALLOWED_ORIGIN_1}"
+      # Le site vitrine (https://talisoft.net) : son formulaire d'essai gratuit appelle l'API
+      # depuis le navigateur du visiteur. Une entrée vide est ignorée.
+      Cors__AllowedOrigins__2: "${CORS_ALLOWED_ORIGIN_2:-}"
+      # Toutes les institutions en https://<nom>.talisoftcrm.com (essai gratuit) sans les
+      # lister une à une : un point puis un domaine, ici « .talisoftcrm.com ». Vide = aucun.
+      Cors__AllowedOriginSuffixes__0: "${CORS_ALLOWED_ORIGIN_SUFFIX_0:-}"
+
+      # ── Essai gratuit (docs/essai-gratuit-socle.md) ────────────────────
+      # Vides, l'essai reste fermé : le formulaire public répond 503 sans rien créer. La clé
+      # Turnstile est la clé SECRÈTE de Cloudflare (la clé publique va dans le site) ; vide hors
+      # Development, toutes les demandes sont refusées. L'adresse des institutions d'essai et la
+      # durée sont des réglages du registre (TRIAL_ADDRESS_TEMPLATE dans .env.admin).
+      TrialSignup__ConfirmationUrl: "${TRIAL_CONFIRMATION_URL:-}"
+      TrialSignup__ConfirmationUrlEn: "${TRIAL_CONFIRMATION_URL_EN:-}"
+      TrialSignup__Turnstile__SecretKey: "${TRIAL_TURNSTILE_SECRET_KEY:-}"
+      TrialSignup__PlatformRecipients__0: "${TRIAL_PLATFORM_RECIPIENT:-}"
+
+      # ── Données de démonstration ───────────────────────────────────────
+      # Mot de passe commun des comptes créés par « Données de démo » et « Recharger la démo »
+      # (app plateforme). Vide = ces chargements échouent avec un message, le reste marche.
+      DemoData__Password: "${DEMO_DATA_PASSWORD:-}"
 
       # ── Swagger ────────────────────────────────────────────────────────
       # Servi uniquement derrière une authentification Basic hors développement, et répond
@@ -701,6 +729,9 @@ services:
       - type: "volume"
         source: "sankore-task-attachments"
         target: "/var/sankore/task-attachments"
+      - type: "volume"
+        source: "sankore-client-documents"
+        target: "/var/sankore/client-documents"
     depends_on:
       rabbitmq:
         condition: "service_healthy"
@@ -894,7 +925,7 @@ volumes:
     driver: "local"
     name: "${POSTGRES_VOLUME:-sankore-postgres-data}"
 
-  # Un volume par préoccupation chiffrée de l'API. Séparés et non un seul : ce sont sept clés
+  # Un volume par préoccupation chiffrée de l'API. Séparés et non un seul : ce sont huit clés
   # distinctes, et les monter ensemble ferait d'une sauvegarde partielle une sauvegarde dont
   # on ne sait pas ce qu'elle contient.
   sankore-kyc-storage:
@@ -910,4 +941,6 @@ volumes:
   sankore-whatsapp-media:
     driver: "local"
   sankore-task-attachments:
+    driver: "local"
+  sankore-client-documents:
     driver: "local"

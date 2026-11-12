@@ -123,3 +123,5 @@ volumes:
     driver: "local"
   sankore-task-attachments:
     driver: "local"
+  sankore-client-documents:
+    driver: "local"
