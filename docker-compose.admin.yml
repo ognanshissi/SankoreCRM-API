@@ -6,8 +6,21 @@
 # ni à l'observabilité. Ce sont deux cycles de vie différents : le registre change à chaque
 # nouveau client, l'API à chaque livraison fonctionnelle.
 #
-#   docker compose -f docker-compose.admin.yml --env-file .env.admin up -d --build
+#   docker compose -f docker-compose.admin.yml --env-file .env.admin up -d
 #   docker compose -f docker-compose.admin.yml --env-file .env.admin logs -f sankore-admin
+#
+# LES IMAGES VIENNENT DE GHCR, publiées par .github/workflows/docker.yml : ce fichier ne
+# construit rien, et c'est celui que Dokploy déploie (Compose Path = ./docker-compose.admin.yml).
+# Pour construire en local à partir des sources, ajouter le fichier de construction :
+#
+#   docker compose -f docker-compose.admin.yml -f docker-compose.admin.build.yml \
+#     --env-file .env.admin up -d --build
+#
+# Pourquoi dans ce sens et pas l'inverse (un fichier Dokploy qui retire le `build:` par
+# `extends` + `build: !reset null`) : le Docker Compose du serveur Dokploy n'applique pas
+# `!reset` à un service étendu, lit `null` comme le chemin du contexte et échoue sur
+# « unable to prepare context: path …/code/null not found » (2026-11-13). Ajouter un `build:`
+# par un second fichier `-f` est, à l'inverse, la fusion la plus ancienne de Compose.
 #
 # `name:` ci-dessous donne à cette pile son PROPRE projet Compose, et ce n'est pas cosmétique :
 # sans lui, un `up` lancé depuis ce répertoire hérite du nom du dossier — celui de la pile
@@ -27,14 +40,15 @@
 name: "sankore-admin"
 services:
   admin-postgres:
-    image: ${DOCKER_REGISTRY-}admin-postgres
+    # L'image Postgres de la pile API (pgvector + PostGIS, postgres.Dockerfile), publiée par la CI.
+    image: ghcr.io/ognanshissi/sankore-postgres:${POSTGRES_TAG:-latest}
+    # `missing` : ne pas redémarrer la base du registre à chaque livraison. Mettre à jour Postgres
+    # reste un geste délibéré (`docker compose pull admin-postgres`, ou POSTGRES_TAG).
+    pull_policy: missing
     # Pas de `container_name` : c'est un nom GLOBAL sur le démon Docker, pas un nom cadré au
     # projet Compose, et « admin-postgres » entre en collision avec n'importe quelle autre pile
     # de la machine. Compose nomme le conteneur « sankore-admin-admin-postgres-1 » et le nom DNS
     # sur le réseau reste le nom du SERVICE, donc la chaîne de connexion ci-dessous résout.
-    build:
-      context: .
-      dockerfile: postgres.Dockerfile
     environment:
       POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
@@ -83,11 +97,12 @@ services:
     restart: "unless-stopped"
 
   sankore-admin:
-    image: ${DOCKER_REGISTRY-}sankore.admin
+    # `sankore-registry` et non `sankore-admin` : ce nom est celui de l'image du front
+    # d'administration, publiée par le dépôt du front. REGISTRY_TAG=<sha> épingle une version.
+    image: ghcr.io/ognanshissi/sankore-registry:${REGISTRY_TAG:-latest}
+    # Sans ceci, `up` réutilise l'image `latest` déjà présente et un redéploiement ne change rien.
+    pull_policy: always
     container_name: sankore.admin
-    build:
-      context: .
-      dockerfile: src/Bootstrapper/Sankore.Admin/Dockerfile
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"

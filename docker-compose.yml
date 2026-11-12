@@ -76,7 +76,7 @@ services:
   # `docker-compose.admin.yml`, pour qu'ils se déploient et se redémarrent seuls : le registre
   # change à chaque nouveau client, cette pile-ci à chaque livraison fonctionnelle.
   #
-  #   docker compose -f docker-compose.admin.yml --env-file .env.admin up -d --build
+  #   docker compose -f docker-compose.admin.yml --env-file .env.admin up -d
   #
   # Le lien n'est pas rompu pour autant, et rien ici n'a eu besoin d'être réécrit :
   # `TENANTSTORE_BASEURL=http://sankore-admin:8080/` continue de résoudre parce que les deux

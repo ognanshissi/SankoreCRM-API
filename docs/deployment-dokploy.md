@@ -172,8 +172,11 @@ functional release.
 ```bash
 docker network create sankore-shared    # once per host, see "the two stacks talk" below
 cp .env.admin.example .env.admin        # fill it in, see below
-docker compose -f docker-compose.admin.yml --env-file .env.admin up -d --build
+docker compose -f docker-compose.admin.yml --env-file .env.admin up -d     # pulls from GHCR
 docker compose -f docker-compose.admin.yml --env-file .env.admin logs -f sankore-admin
+# from source instead of GHCR (a dev machine):
+docker compose -f docker-compose.admin.yml -f docker-compose.admin.build.yml \
+  --env-file .env.admin up -d --build
 ```
 
 In Dokploy that is a second **Compose** application in the same project, pointed at
@@ -182,12 +185,15 @@ keeps `docker-compose.yml`, which no longer declares either service.
 
 **Built by the CI since 2026-11-12.** `.github/workflows/docker.yml` publishes the registry as
 `ghcr.io/ognanshissi/sankore-registry` (not `sankore-admin`: that name is the Angular admin app's
-image, pushed by the front's repository). To stop building on the server, point the Dokploy
-application at **`docker-compose.admin.dokploy.yml`** instead: it extends
-`docker-compose.admin.yml` service by service, replaces both `build:` with the GHCR images
-(`sankore-registry`, `pull_policy: always`; `sankore-postgres`, `pull_policy: missing`) and changes
-nothing else — same environment, same volume name. Then:
+image, pushed by the front's repository). Since 2026-11-13 `docker-compose.admin.yml` itself pulls
+the GHCR images (`sankore-registry`, `pull_policy: always`; `sankore-postgres`, `pull_policy:
+missing`) and carries no `build:`; building from source is the separate
+`docker-compose.admin.build.yml`, added with a second `-f`. The first attempt went the other way —
+a `docker-compose.admin.dokploy.yml` that `extends` each service and removes its build with
+`build: !reset null` — and Dokploy's Docker Compose read that `null` as the build context
+(« unable to prepare context: path …/code/null not found »). Don't reintroduce `!reset`. So:
 
+- Dokploy's Compose Path is **`./docker-compose.admin.yml`**;
 - turn **Autodeploy off** on that application, and put its deploy webhook in the repository secret
   `DOKPLOY_REGISTRY_WEBHOOK`. The CI's `deploy` job calls it once every image is pushed, **before**
   the main stack's `DOKPLOY_WEBHOOK`, so the API restarts against an already-migrated registry.
@@ -287,11 +293,12 @@ and Compose can no longer address them by service name, while the containers it 
 still running.
 
 ```bash
-# 0. Build the registry image from current source. Do NOT skip this: the image on this host was
+# 0. Get the current registry image. Do NOT skip this: the image on this host was
 #    eight minutes older than the commit that exempts /health from the API-key middleware, so
 #    the new container's probe got 401 and the container never became healthy, while serving
 #    traffic perfectly. A stale image is invisible until a health check disagrees with it.
-docker compose -f docker-compose.admin.yml --env-file .env.admin build sankore-admin
+docker compose -f docker-compose.admin.yml --env-file .env.admin pull sankore-admin
+# (or, from source: add `-f docker-compose.admin.build.yml` and `build sankore-admin`)
 
 # 1. What the running registry was told, so the new stack is told the same.
 docker ps --filter name=admin --format '{{.Names}}'          # find the old pair

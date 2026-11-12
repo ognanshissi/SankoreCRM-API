@@ -7,7 +7,7 @@ name: Docker
 #
 # Le registre de tenants (Sankore.Admin) est construit ici aussi, sous le nom `sankore-registry` :
 # `sankore-admin` est déjà celui de l'image de l'application Angular d'administration, publiée
-# par le dépôt du front. Il garde sa propre pile Dokploy (docker-compose.admin.dokploy.yml) et
+# par le dépôt du front. Il garde sa propre pile Dokploy (docker-compose.admin.yml, qui tire cette image) et
 # son propre webhook de redéploiement.
 
 on:

@@ -1,0 +1,21 @@
+# Construction LOCALE de la pile du registre, à partir des sources. À combiner avec
+# docker-compose.admin.yml, qui déclare tout le reste et, seul, tire les images de GHCR :
+#
+#   docker compose -f docker-compose.admin.yml -f docker-compose.admin.build.yml \
+#     --env-file .env.admin up -d --build
+#
+# Jamais dans Dokploy : le serveur tire les images publiées par la CI.
+
+services:
+  admin-postgres:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    # `build` : construire ici, ne jamais tirer GHCR pour ce service.
+    pull_policy: build
+
+  sankore-admin:
+    build:
+      context: .
+      dockerfile: src/Bootstrapper/Sankore.Admin/Dockerfile
+    pull_policy: build
