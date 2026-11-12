@@ -103,7 +103,7 @@
          provider's webhook, and to nobody else — a screen pop that works for half the agency and
          reads as a flaky browser. Redis is already provisioned for IDistributedCache; the
          backplane opens a SECOND multiplexer on the same connection string. -->
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.15" />
 
     <!-- Pinned FORWARD and listed explicitly although nothing references it directly: the
          backplane pulls MessagePack transitively, and every version it would otherwise resolve

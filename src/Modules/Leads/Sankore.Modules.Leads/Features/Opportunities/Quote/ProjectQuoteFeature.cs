@@ -113,8 +113,8 @@ internal sealed class ProjectQuotes(
         if (template.AmountKind != ProjectAmountKind.Generic)
             return "Un projet de crédit, d’épargne ou d’assurance garde un seul produit.";
         if (quote is { Lines.Count: > 0 } || project.ProductLineId is not { } lineId) return null;
-        var product = (await issuer.GetProductsAsync(project.TenantId, [lineId], ct)).FirstOrDefault();
-        return product is { IsStandard: false }
+        var products = await issuer.GetProductsAsync(project.TenantId, [lineId], ct);
+        return products is [{ IsStandard: false }, ..]
             ? "Le produit de ce projet relève d’un module (crédit, épargne, assurance) : pas de lignes."
             : null;
     }

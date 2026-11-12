@@ -90,7 +90,7 @@ internal sealed class CustomersDemoData : ITenantStartingData
                 [Phone(i + 1)], $"{p.Key}@example.com", new PostalAddressInput(p.District, "Abidjan", null, "CI", null),
                 ConfirmNoDuplicate: true), ct), p.Key);
             var clientId = result.Outcome == CreateClientOutcome.BlockedDuplicateIdentityDocument
-                ? result.Candidates.First().ClientId
+                ? result.Candidates[0].ClientId
                 : result.ClientId!.Value;
             if (result.Outcome != CreateClientOutcome.BlockedDuplicateIdentityDocument) clients++;
             request.Shared[DemoKeys.Client(p.Key)] = clientId;
@@ -104,7 +104,7 @@ internal sealed class CustomersDemoData : ITenantStartingData
                 c.Incorporated, new PostalAddressInput(c.District, "Abidjan", null, "CI", null),
                 [Phone(50 + i)], $"{c.Key}@example.com", "fr"), ct), c.Key);
             var clientId = result.Outcome == CreateLegalClientOutcome.BlockedDuplicateRegistrationNumber
-                ? result.Candidates.First().ClientId
+                ? result.Candidates[0].ClientId
                 : result.ClientId!.Value;
             if (result.Outcome != CreateLegalClientOutcome.BlockedDuplicateRegistrationNumber) clients++;
             request.Shared[DemoKeys.Client(c.Key)] = clientId;
