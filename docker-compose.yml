@@ -618,15 +618,8 @@ services:
       # lister une à une : un point puis un domaine, ici « .talisoftcrm.com ». Vide = aucun.
       Cors__AllowedOriginSuffixes__0: "${CORS_ALLOWED_ORIGIN_SUFFIX_0:-}"
 
-      # ── Essai gratuit (docs/essai-gratuit-socle.md) ────────────────────
-      # Vides, l'essai reste fermé : le formulaire public répond 503 sans rien créer. La clé
-      # Turnstile est la clé SECRÈTE de Cloudflare (la clé publique va dans le site) ; vide hors
-      # Development, toutes les demandes sont refusées. L'adresse des institutions d'essai et la
-      # durée sont des réglages du registre (TRIAL_ADDRESS_TEMPLATE dans .env.admin).
-      TrialSignup__ConfirmationUrl: "${TRIAL_CONFIRMATION_URL:-}"
-      TrialSignup__ConfirmationUrlEn: "${TRIAL_CONFIRMATION_URL_EN:-}"
-      TrialSignup__Turnstile__SecretKey: "${TRIAL_TURNSTILE_SECRET_KEY:-}"
-      TrialSignup__PlatformRecipients__0: "${TRIAL_PLATFORM_RECIPIENT:-}"
+      # Essai gratuit : le formulaire du site est décidé par le registre (réglages TRIAL_* de
+      # .env.admin) ; l'API ne fait que le relayer et envoyer les e-mails qu'il lui désigne.
 
       # ── Données de démonstration ───────────────────────────────────────
       # Mot de passe commun des comptes créés par « Données de démo » et « Recharger la démo »

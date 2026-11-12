@@ -29,6 +29,22 @@ public sealed class TenantSignupOptions
     /// <summary>How long the confirmation link stays usable.</summary>
     public TimeSpan ConfirmationWindow { get; set; } = TimeSpan.FromHours(48);
 
+    /// <summary>
+    /// The website page that reads the token from the fragment and confirms it:
+    /// <c>https://talisoft.net/essai/confirmation</c>. The token is appended as <c>#t=…</c>, so it is
+    /// never sent to a server, logged by a proxy or leaked by a Referer. Empty = the form answers 503:
+    /// a confirmation e-mail without a link would be worse than none.
+    /// </summary>
+    public string ConfirmationUrl { get; set; } = "";
+
+    /// <summary>The same page of the English website (<c>https://talisoft.net/en/trial/confirmation</c>); empty = the French one.</summary>
+    public string ConfirmationUrlEn { get; set; } = "";
+
+    /// <summary>The platform team, told of every confirmed request (D8). Empty = nobody, logged.</summary>
+    public string[] PlatformRecipients { get; set; } = [];
+
+    public TurnstileOptions Turnstile { get; set; } = new();
+
     public const string SlugToken = "{slug}";
 
     /// <summary>

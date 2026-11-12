@@ -114,6 +114,17 @@ Le registre (`Sankore.Admin`) garde les demandes. Il reste fermé au public : se
   - « Recette Essai » (lot 1) a reçu son e-mail « prêt » au même passage.
 - **Reste pour mettre en ligne :** la page de confirmation du site (lot 4) et l'écran de validation (lot 3). D'ici là, l'approbation se fait par l'API du registre.
 
+**Déplacé dans le registre le 2026-11-12 (propriétaire).** Le formulaire est désormais décidé par
+`Sankore.Admin` (`Features/TenantSignups/PublicSide.cs`, routes `tenant-signups/public/slug-availability`,
+`/submit`, `/confirm`, clé de service) : Turnstile, jeton de confirmation, règles de réponse au public et
+choix des e-mails. `Sankore.Api/Features/TrialSignups/` ne garde que la porte publique — les trois routes
+`/api/v1/public/trial-signups`, leurs limites de débit et l'IP du visiteur — et un relais (`TrialSignupRelay`)
+qui renvoie la réponse du registre telle quelle et met en file, sous `Guid.Empty`, les e-mails qu'elle liste
+(le registre n'a pas d'envoi). La tâche `TrialSignupDecisionsJob` reste dans l'API : l'e-mail « prêt » porte
+le lien du compte racine, émis par Administration. Réglages déplacés dans la section `TrialSignup` du
+registre : `ConfirmationUrl`, `ConfirmationUrlEn`, `Turnstile:SecretKey`, `PlatformRecipients` ; l'API ne
+garde que `RequestsPerHourPerIp`. Le registre reste fermé au public.
+
 Les routes publiques sont sur `Sankore.Api`, qui a déjà une surface publique (`/api/v1/public`, hors résolution d'institution) et sait envoyer des e-mails (M08). Ce n'est pas le registre : la clé du registre administre toutes les institutions, il ne doit pas être exposé aux anonymes.
 
 - `GET /api/v1/public/trial-signups/slug-availability?slug=` : libre, pris ou réservé. Limite de débit stricte, car la route permet de deviner qui est client.

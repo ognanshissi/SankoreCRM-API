@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Sankore.Modules.Administration.PublicApi;
@@ -8,7 +9,8 @@ using Sankore.Shared.Kernel;
 namespace Sankore.Api.Features.TrialSignups;
 
 /// <summary>
-/// <c>/api/v1/public/trial-signups</c> — the website's free-trial form (lot 2). Under <c>public</c>
+/// <c>/api/v1/public/trial-signups</c> — the website's free-trial form (lot 2), relayed to the tenant
+/// registry which decides it (<see cref="TrialSignupRelay"/>). Under <c>public</c>
 /// because TenantResolutionMiddleware exempts that prefix: there is no institution yet. Anonymous,
 /// each route with its own rate limit (the "api" policy partitions on a JWT subject the visitor has
 /// not got).
@@ -27,38 +29,31 @@ public static class TrialSignupEndpoints
     {
         var group = publicGroup.MapGroup("trial-signups").WithTags("Free trial").AllowAnonymous();
 
-        group.MapGet("/slug-availability", async ([FromQuery] string? slug, TrialSignupService service, CancellationToken ct) =>
-                ToHttp(await service.CheckSlugAsync(slug, ct)))
+        group.MapGet("/slug-availability", ([FromQuery] string? slug, TrialSignupRelay relay, CancellationToken ct) =>
+                relay.CheckSlugAsync(slug, ct))
             .RequireRateLimiting(LookupRateLimit)
             .WithName("CheckTrialAddress")
             .WithSummary("Whether a free-trial address can be chosen: Available, TRIAL_SLUG_INVALID, TRIAL_SLUG_RESERVED or TRIAL_SLUG_TAKEN")
             .WithOpenApi();
 
-        group.MapPost("/", async (TrialSignupForm form, HttpContext http, TrialSignupService service, CancellationToken ct) =>
-                ToHttp(await service.SubmitAsync(form, TrialSignupService.ClientIp(http),
-                    http.Request.Headers.UserAgent.ToString(), ct)))
+        group.MapPost("/", (JsonElement form, HttpContext http, TrialSignupRelay relay, CancellationToken ct) =>
+                relay.SubmitAsync(form, TrialSignupRelay.ClientIp(http), http.Request.Headers.UserAgent.ToString(), ct))
             .RequireRateLimiting(SubmitRateLimit)
             .WithName("SubmitTrialSignup")
             .WithSummary("Ask for a free trial; a confirmation link is mailed")
-            .WithDescription("202 CONFIRMATION_SENT — also when the address already administers a CRM, which is "
-                + "said by e-mail only. 400 TRIAL_SIGNUP_INVALID (errors by field), TRIAL_CAPTCHA_FAILED, "
-                + "TRIAL_SLUG_INVALID, TRIAL_SLUG_RESERVED; 409 TRIAL_SLUG_TAKEN; 429; 503.")
+            .WithDescription("Decided by the tenant registry, relayed here. 202 CONFIRMATION_SENT — also when the "
+                + "address already administers a CRM, which is said by e-mail only. 400 TRIAL_SIGNUP_INVALID "
+                + "(errors by field), TRIAL_CAPTCHA_FAILED, TRIAL_SLUG_INVALID, TRIAL_SLUG_RESERVED; "
+                + "409 TRIAL_SLUG_TAKEN; 429; 503.")
             .WithOpenApi();
 
-        group.MapPost("/confirm", async (ConfirmRequest body, TrialSignupService service, CancellationToken ct) =>
-                ToHttp(await service.ConfirmAsync(body.Token, ct)))
+        group.MapPost("/confirm", (ConfirmRequest body, TrialSignupRelay relay, CancellationToken ct) =>
+                relay.ConfirmAsync(body.Token, ct))
             .RequireRateLimiting(LookupRateLimit)
             .WithName("ConfirmTrialSignup")
             .WithSummary("Confirm the e-mail address of a free-trial request with the token of its link")
             .WithOpenApi();
     }
-
-    private static IResult ToHttp(TrialPublicResult result) =>
-        Results.Json(
-            result.Error is null
-                ? new { status = result.Status, fqdn = result.Detail }
-                : (object)new { error = result.Error, detail = result.Detail, errors = result.Errors },
-            statusCode: result.StatusCode);
 }
 
 /// <summary>
@@ -114,7 +109,7 @@ public sealed class TrialSignupDecisionsJob(
                 ["institution_name"] = decision.InstitutionName,
                 ["reason"] = decision.RejectionReason ?? "",
             },
-            IdempotencyKey: $"trial.signup-decision:{decision.Id}", TenantId: TrialSignupService.PlatformTenantId), ct);
+            IdempotencyKey: $"trial.signup-decision:{decision.Id}", TenantId: TrialSignupRelay.PlatformTenantId), ct);
         return queued.IsSuccess || queued.Error == "DUPLICATE_IDEMPOTENCY_KEY";
     }
 
@@ -149,7 +144,7 @@ public sealed class TrialSignupDecisionsJob(
                 ["crm_url"] = crmUrl,
                 ["activation_url"] = link.ActivationUrl ?? "",
                 ["email"] = link.Email,
-                ["trial_end"] = TrialSignupService.TrialEnd(tenant?.TrialExpiresAt, locale),
+                ["trial_end"] = TrialSignupRelay.TrialEnd(tenant?.TrialExpiresAt, locale),
                 ["expires_days"] = link.ExpiresAt is { } at ? Math.Max(1, (int)Math.Round((at - DateTimeOffset.UtcNow).TotalDays)) : 7,
             },
             IdempotencyKey: $"trial.signup-decision:{decision.Id}", TenantId: tenantId), ct);

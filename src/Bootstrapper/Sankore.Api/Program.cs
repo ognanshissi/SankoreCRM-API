@@ -394,7 +394,7 @@ builder.Services.AddRateLimiter(options =>
         $"{Sankore.Api.Features.TrialSignups.TrialSignupOptions.SectionName}:RequestsPerHourPerIp", 5));
     options.AddPolicy(Sankore.Api.Features.TrialSignups.TrialSignupEndpoints.SubmitRateLimit, ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"trial-signup:{Sankore.Api.Features.TrialSignups.TrialSignupService.ClientIp(ctx) ?? "unknown"}",
+            partitionKey: $"trial-signup:{Sankore.Api.Features.TrialSignups.TrialSignupRelay.ClientIp(ctx) ?? "unknown"}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 Window = TimeSpan.FromHours(1),
@@ -403,7 +403,7 @@ builder.Services.AddRateLimiter(options =>
             }));
     options.AddPolicy(Sankore.Api.Features.TrialSignups.TrialSignupEndpoints.LookupRateLimit, ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"trial-lookup:{Sankore.Api.Features.TrialSignups.TrialSignupService.ClientIp(ctx) ?? "unknown"}",
+            partitionKey: $"trial-lookup:{Sankore.Api.Features.TrialSignups.TrialSignupRelay.ClientIp(ctx) ?? "unknown"}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 Window = TimeSpan.FromMinutes(1),
@@ -774,15 +774,13 @@ builder.Services.AddTransient<Sankore.Api.Features.Retention.TechnicalPurgeJob>(
 builder.Services.AddTransient<Sankore.Api.Features.Retention.TenantDataWipeJob>();
 builder.Services.AddTransient<Sankore.Api.Features.StartingData.TenantDataLoadJob>();
 
-// Free trial, public side (docs/essai-gratuit-socle.md, lot 2): the website's form, its captcha,
-// the confirmation link, and the job that tells requesters the platform's decision.
+// Free trial, public door (docs/essai-gratuit-socle.md): the website's form is DECIDED by the tenant
+// registry (captcha, token, e-mails) and relayed here, where its e-mails are queued; plus the job
+// that tells requesters the platform's decision.
 builder.Services.Configure<Sankore.Api.Features.TrialSignups.TrialSignupOptions>(
     builder.Configuration.GetSection(Sankore.Api.Features.TrialSignups.TrialSignupOptions.SectionName));
-builder.Services.AddHttpClient(Sankore.Api.Features.TrialSignups.TurnstileVerifier.HttpClientName,
-    c => c.Timeout = TimeSpan.FromSeconds(10));
-builder.Services.AddScoped<Sankore.Api.Features.TrialSignups.ITurnstileVerifier, Sankore.Api.Features.TrialSignups.TurnstileVerifier>();
 builder.Services.AddScoped<Sankore.Api.Features.TrialSignups.ITrialSignupRegistry, Sankore.Api.Features.TrialSignups.HttpTrialSignupRegistry>();
-builder.Services.AddScoped<Sankore.Api.Features.TrialSignups.TrialSignupService>();
+builder.Services.AddScoped<Sankore.Api.Features.TrialSignups.TrialSignupRelay>();
 builder.Services.AddTransient<Sankore.Api.Features.TrialSignups.TrialSignupDecisionsJob>();
 // « Repartir de la production » (sandbox lot 5).
 builder.Services.AddTransient<Sankore.Api.Features.TestMode.RefreshTestTwinJob>();

@@ -4,8 +4,9 @@ namespace Sankore.Admin.Features.TenantSignups;
 /// Free-trial requests from the Talisoft website (<c>docs/essai-gratuit-socle.md</c>, lot 1). One
 /// group, two audiences:
 /// <list type="bullet">
-/// <item>the service key (Sankore.Api's public sign-up route): availability, creation, confirmation,
-/// and the feed of decisions still to mail;</item>
+/// <item>the service key (Sankore.Api, which relays the website): the public routes of
+/// <see cref="TrialPublicEndpoints"/>, the registry's own availability, creation and confirmation, and
+/// the feed of decisions still to mail;</item>
 /// <item>the platform administrators (<c>RequirePlatformAdmin</c>): the queue, a request's detail,
 /// approval and refusal.</item>
 /// </list>
@@ -16,6 +17,7 @@ public static class TenantSignupEndpoints
     {
         var group = app.MapGroup("/api/v1/tenant-signups").WithTags("Tenant signups");
 
+        TrialPublicEndpoints.Map(group);
         TrialSlugAvailabilityEndpoint.Map(group);
         CreateTenantSignupEndpoint.Map(group);
         ConfirmTenantSignupEndpoint.Map(group);

@@ -1362,11 +1362,16 @@ the trial stays closed: the public routes answer 503 and nothing is created.
 |---|---|---|
 | Sankore.Admin (registry) | `TrialSignup__AddressTemplate` | `https://{slug}.talisoftcrm.com` |
 | Sankore.Admin | `TrialSignup__TrialDays` | `30` (the default) |
-| Sankore.Api | `TrialSignup__ConfirmationUrl` | `https://talisoft.net/essai/confirmation` (the website page that reads `#t=`) |
-| Sankore.Api | `TrialSignup__ConfirmationUrlEn` | `https://talisoft.net/en/trial/confirmation` |
-| Sankore.Api | `TrialSignup__Turnstile__SecretKey` | Cloudflare Turnstile secret key; the site key goes into the website. Empty outside Development means every request is refused. |
-| Sankore.Api | `TrialSignup__PlatformRecipients__0` | the team address told of each confirmed request |
+| Sankore.Admin | `TrialSignup__ConfirmationUrl` | `https://talisoft.net/essai/confirmation` (the website page that reads `#t=`) |
+| Sankore.Admin | `TrialSignup__ConfirmationUrlEn` | `https://talisoft.net/en/trial/confirmation` |
+| Sankore.Admin | `TrialSignup__Turnstile__SecretKey` | Cloudflare Turnstile secret key; the site key goes into the website. Empty outside Development means every request is refused. |
+| Sankore.Admin | `TrialSignup__PlatformRecipients__0` | the team address told of each confirmed request |
 | Sankore.Api | `Cors__AllowedOrigins__<n>` | `https://talisoft.net`: the form calls the API from the visitor's browser |
+
+Since 2026-11-12 the form is decided by the registry (`tenant-signups/public/…`, service key): Sankore.Api
+only relays it, limits the rate and queues the e-mails the registry lists. Hence the confirmation page, the
+captcha secret and the team address are registry settings (`.env.admin`), and the registry must reach
+`challenges.cloudflare.com`.
 
 The rate limits read the visitor's address from `CF-Connecting-IP`. Behind Cloudflare and Traefik, the
 connection's own address is Cloudflare's edge, shared by every visitor. Anyone who reaches the origin

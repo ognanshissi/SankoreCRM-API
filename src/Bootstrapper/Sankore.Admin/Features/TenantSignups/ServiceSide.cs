@@ -8,10 +8,10 @@ using Sankore.Shared.Kernel;
 
 namespace Sankore.Admin.Features.TenantSignups;
 
-// What Sankore.Api calls with the service key: its public sign-up route (lot 2) is the only door a
-// visitor has. The registry itself is never exposed to the public — whoever reaches it with the key
-// administers every institution. The API verifies the captcha, limits the rate and mints the
-// confirmation token; the registry checks the request and stores it.
+// The registry's own checks and storage of a free-trial request. The website reaches them through
+// PublicSide.cs (captcha, token, e-mails), itself relayed by Sankore.Api with the service key: the
+// registry is never exposed to the public — whoever reaches it with the key administers every
+// institution.
 
 // ── Availability ────────────────────────────────────────────────────────────────────────────────
 

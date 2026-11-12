@@ -181,6 +181,14 @@ services:
       # essai fermé sur cette plateforme (503 sur les routes d'inscription).
       TrialSignup__AddressTemplate: "${TRIAL_ADDRESS_TEMPLATE:-}"
       TrialSignup__TrialDays: "${TRIAL_DAYS:-30}"
+      # Le formulaire du site est décidé ici, relayé par l'API qui envoie les e-mails. Pages du
+      # site qui confirment la demande ; vides = le formulaire répond 503 sans rien créer. La clé
+      # Turnstile est la clé SECRÈTE de Cloudflare (la publique va dans le site) ; vide hors
+      # Development, toutes les demandes sont refusées. L'équipe est prévenue à chaque confirmation.
+      TrialSignup__ConfirmationUrl: "${TRIAL_CONFIRMATION_URL:-}"
+      TrialSignup__ConfirmationUrlEn: "${TRIAL_CONFIRMATION_URL_EN:-}"
+      TrialSignup__Turnstile__SecretKey: "${TRIAL_TURNSTILE_SECRET_KEY:-}"
+      TrialSignup__PlatformRecipients__0: "${TRIAL_PLATFORM_RECIPIENT:-}"
     # `bash` explicite, et non `CMD-SHELL` : celui-ci passe par dash, qui ne connaît pas
     # `/dev/tcp`, et l'image `aspnet` n'embarque ni curl, ni wget, ni nc.
     #

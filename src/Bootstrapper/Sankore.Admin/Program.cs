@@ -35,10 +35,13 @@ builder.Services.Configure<DefaultTenantOptions>(
 builder.Services.Configure<PlatformAdminSeedOptions>(
     builder.Configuration.GetSection(PlatformAdminSeedOptions.Section));
 
-// Free trial (docs/essai-gratuit-socle.md). An empty or malformed TrialSignup:DomainSuffix leaves
-// the registry up and answers 503 TRIAL_SIGNUP_NOT_CONFIGURED on the sign-up routes only.
-builder.Services.Configure<Sankore.Admin.Features.TenantSignups.TenantSignupOptions>(
-    builder.Configuration.GetSection(Sankore.Admin.Features.TenantSignups.TenantSignupOptions.SectionName));
+// Free trial (docs/essai-gratuit-socle.md). An empty or malformed TrialSignup:AddressTemplate leaves
+// the registry up and answers 503 TRIAL_SIGNUP_NOT_CONFIGURED on the sign-up routes only. The
+// website's form is decided here (captcha, token, e-mails to queue) and relayed by Sankore.Api.
+builder.Services.Configure<TenantSignupOptions>(builder.Configuration.GetSection(TenantSignupOptions.SectionName));
+builder.Services.AddHttpClient(TurnstileVerifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<ITurnstileVerifier, TurnstileVerifier>();
+builder.Services.AddScoped<TrialPublicService>();
 
 // Hourly closing of the support tickets left Resolved for a week. Not in --emit-openapi mode:
 // the emitter starts the host, and the service would reach for a database that is not there.
