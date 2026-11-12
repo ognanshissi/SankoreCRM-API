@@ -5,9 +5,10 @@ name: Docker
 # pendant le build, et une compilation .NET en Release de tout le graphe des modules lui prend la
 # mémoire. Dokploy n'a plus qu'à tirer les images publiées sur GHCR (docker-compose.dokploy.yml).
 #
-# Le registre de tenants (Sankore.Admin, docker-compose.admin.yml) n'est pas dans la matrice :
-# il se déploie seul. S'il y entre, ne pas l'appeler `sankore-admin` — ce nom est déjà celui de
-# l'image de l'application Angular d'administration, publiée par le dépôt du front.
+# Le registre de tenants (Sankore.Admin) est construit ici aussi, sous le nom `sankore-registry` :
+# `sankore-admin` est déjà celui de l'image de l'application Angular d'administration, publiée
+# par le dépôt du front. Il garde sa propre pile Dokploy (docker-compose.admin.dokploy.yml) et
+# son propre webhook de redéploiement.
 
 on:
   push:
@@ -34,6 +35,10 @@ jobs:
             dockerfile: src/Bootstrapper/Sankore.Api/Dockerfile
           - app: hangfire
             dockerfile: src/Bootstrapper/Sankore.Hangfire/Dockerfile
+          # Le registre de tenants. Jamais `admin` ici : l'image deviendrait `sankore-admin` et
+          # écraserait celle du front d'administration sur GHCR.
+          - app: registry
+            dockerfile: src/Bootstrapper/Sankore.Admin/Dockerfile
           # pgvector + PostGIS : l'image officielle ne porte pas les extensions que les
           # migrations créent. Reconstruite à chaque passage, mais Dokploy ne la retire qu'à la
           # demande (`pull_policy: missing`) — voir docker-compose.dokploy.yml.
@@ -73,10 +78,23 @@ jobs:
   # Un seul redéploiement, une fois TOUTES les images poussées : le service Compose de Dokploy
   # les tire ensemble. L'API et Hangfire partagent la base et ses migrations — un redéploiement
   # par image pourrait faire tourner un Hangfire neuf contre un schéma pas encore migré.
+  #
+  # Le registre d'abord : l'API l'interroge dès son démarrage et le réseau `sankore-shared` est
+  # créé par sa pile. Sa migration tourne au démarrage du conteneur, avant que l'API ne redémarre.
   deploy:
     needs: image
     runs-on: ubuntu-latest
     steps:
+      - name: Redéployer le registre sur Dokploy
+        env:
+          WEBHOOK: ${{ secrets.DOKPLOY_REGISTRY_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "Pas de webhook Dokploy pour le registre (secret DOKPLOY_REGISTRY_WEBHOOK), redéploiement manuel."
+            exit 0
+          fi
+          curl -fsS -X POST "$WEBHOOK"
+
       - name: Redéployer sur Dokploy
         env:
           WEBHOOK: ${{ secrets.DOKPLOY_WEBHOOK }}

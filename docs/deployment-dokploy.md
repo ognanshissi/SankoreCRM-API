@@ -180,6 +180,24 @@ In Dokploy that is a second **Compose** application in the same project, pointed
 `docker-compose.admin.yml`, with `.env.admin`'s contents in its Environment tab. The main stack
 keeps `docker-compose.yml`, which no longer declares either service.
 
+**Built by the CI since 2026-11-12.** `.github/workflows/docker.yml` publishes the registry as
+`ghcr.io/ognanshissi/sankore-registry` (not `sankore-admin`: that name is the Angular admin app's
+image, pushed by the front's repository). To stop building on the server, point the Dokploy
+application at **`docker-compose.admin.dokploy.yml`** instead: it extends
+`docker-compose.admin.yml` service by service, replaces both `build:` with the GHCR images
+(`sankore-registry`, `pull_policy: always`; `sankore-postgres`, `pull_policy: missing`) and changes
+nothing else — same environment, same volume name. Then:
+
+- turn **Autodeploy off** on that application, and put its deploy webhook in the repository secret
+  `DOKPLOY_REGISTRY_WEBHOOK`. The CI's `deploy` job calls it once every image is pushed, **before**
+  the main stack's `DOKPLOY_WEBHOOK`, so the API restarts against an already-migrated registry.
+  Without the secret the step says so and the registry is redeployed by hand;
+- the server must be logged in to `ghcr.io` (`read:packages`), as for the API images;
+- `REGISTRY_TAG=<commit sha>` pins a version, as `API_TAG` does for the API.
+
+The image is built in Release with the `Directory.Build.props` gate, as the API's; the previous
+Dockerfile switched `TreatWarningsAsErrors` off, which is no longer needed.
+
 **How the two stacks talk.** `TENANTSTORE_BASEURL=http://sankore-admin:8080/` is unchanged:
 Compose registers each service name as a DNS alias on every network the container joins, so the
 name resolves **across Compose projects** as long as both are on a common network. That network
