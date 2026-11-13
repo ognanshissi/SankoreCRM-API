@@ -4,10 +4,11 @@
 #
 # Chaque service ÉTEND son homologue de docker-compose.yml au lieu d'en être une copie : la
 # liste des variables de l'API (une cinquantaine, et elle grandit à chaque lot) ne vit qu'à un
-# endroit. Ce fichier ne dit que ce qui change en production — l'image tirée de GHCR à la place
-# du `build:`, que `!reset` retire. Il ne suffisait pas de pointer Dokploy sur
-# docker-compose.yml avec `DOCKER_REGISTRY=ghcr.io/…/` : Dokploy lance `up --build`, qui
-# reconstruit tout service portant un `build:`.
+# endroit. Ce fichier ne dit que ce qui change en production : l'image tirée de GHCR. Dokploy
+# lance `up --build`, qui reconstruirait tout service portant un `build:` — c'est pourquoi les
+# `build:` vivent dans docker-compose.override.yml, que `extends` ne lit pas. Ne pas les remettre
+# dans docker-compose.yml : `build: !reset null` ne les retire pas avec la version de Compose du
+# serveur, qui cherche alors un dossier « null » (2026-11-13).
 #
 # Dans Dokploy (service Compose) : Compose Path = ./docker-compose.dokploy.yml, Autodeploy
 # désactivé — c'est la CI qui redéploie, une fois les images poussées (sinon Dokploy
@@ -26,7 +27,6 @@ services:
       file: docker-compose.yml
       service: postgres
     image: ghcr.io/ognanshissi/sankore-postgres:${POSTGRES_TAG:-latest}
-    build: !reset null
     # `missing` et non `always`, à l'inverse de l'API : l'image de base (pgvector:pg16) suit
     # les correctifs, donc chaque passage de la CI produit une nouvelle empreinte, et `always`
     # redémarrerait la base de données à CHAQUE livraison applicative. Mettre à jour Postgres est
@@ -78,7 +78,6 @@ services:
       file: docker-compose.yml
       service: sankore-api
     image: ghcr.io/ognanshissi/sankore-api:${API_TAG:-latest}
-    build: !reset null
     # Sans ceci, `docker compose up` réutilise l'image `latest` déjà présente sur le serveur et
     # un redéploiement ne change rien.
     pull_policy: always
@@ -88,7 +87,6 @@ services:
       file: docker-compose.yml
       service: sankore-hangfire
     image: ghcr.io/ognanshissi/sankore-hangfire:${HANGFIRE_TAG:-latest}
-    build: !reset null
     pull_policy: always
 
 # `extends` ne reprend que les services : réseaux et volumes de haut niveau sont redéclarés à

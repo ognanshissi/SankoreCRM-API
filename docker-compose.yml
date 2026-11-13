@@ -95,9 +95,7 @@ services:
     # « The container name "/postgres" is already in use ». Sans cette clé, Compose nomme le
     # conteneur « <projet>-<service>-1 » et le nom DNS sur le réseau reste le nom du SERVICE,
     # donc les chaînes de connexion ci-dessous (Host=postgres) continuent de résoudre.
-    build:
-      context: .
-      dockerfile: postgres.Dockerfile
+    # Construction : docker-compose.override.yml (lu d'office par `docker compose up`).
     environment:
       POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
@@ -447,9 +445,7 @@ services:
   sankore-api:
     image: ${DOCKER_REGISTRY-}sankore.api
     container_name: sankore.api
-    build:
-      context: .
-      dockerfile: src/Bootstrapper/Sankore.Api/Dockerfile
+    # Construction : docker-compose.override.yml (lu d'office par `docker compose up`).
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
@@ -779,9 +775,7 @@ services:
   sankore-hangfire:
     image: ${DOCKER_REGISTRY-}sankore.hangfire
     container_name: sankore.hangfire
-    build:
-      context: .
-      dockerfile: src/Bootstrapper/Sankore.Hangfire/Dockerfile
+    # Construction : docker-compose.override.yml (lu d'office par `docker compose up`).
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"

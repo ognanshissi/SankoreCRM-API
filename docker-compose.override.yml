@@ -1,0 +1,27 @@
+# Construction LOCALE des images du CRM, à partir des sources. `docker compose up` lit ce fichier
+# d'office avec docker-compose.yml : sur le poste de développement, rien ne change.
+#
+# Les `build:` vivaient dans docker-compose.yml. docker-compose.dokploy.yml étend ces services et
+# les retirait avec `build: !reset null`, mais la version de Docker Compose du serveur Dokploy
+# lisait ce `null` comme un dossier : « unable to prepare context: path ".../code/null" not found »
+# (2026-11-13). Hors du fichier de base, il n'y a plus rien à retirer. Même découpage que
+# docker-compose.admin.yml / docker-compose.admin.build.yml.
+#
+# Jamais dans Dokploy : le serveur tire les images publiées par la CI. Un `-f docker-compose.yml`
+# explicite ignore ce fichier — ajouter alors `-f docker-compose.override.yml` pour construire.
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+
+  sankore-api:
+    build:
+      context: .
+      dockerfile: src/Bootstrapper/Sankore.Api/Dockerfile
+
+  sankore-hangfire:
+    build:
+      context: .
+      dockerfile: src/Bootstrapper/Sankore.Hangfire/Dockerfile
