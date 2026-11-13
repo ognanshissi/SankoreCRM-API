@@ -435,11 +435,23 @@ public static class LeadsModule
         var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Infrastructure.LeadsDbContext>>();
 
         var sdkFiles = sp.GetRequiredService<Features.LeadSources.Sdk.ISdkFileStore>();
-        // The builds shipped in the image reach the bucket before they are registered.
-        await Features.LeadSources.Sdk.ShippedSdkFiles.CopyMissingAsync(
-            Features.LeadSources.Sdk.SdkFileStorage.ShippedRoot(sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>()),
-            sdkFiles, logger);
-        await Features.LeadSources.Sdk.SdkVersionSeeder.SeedAsync(db, sdkFiles, logger);
+        // The builds shipped in the image reach the bucket before they are registered. Never fatal:
+        // a bucket missing or out of the key's reach (R2 answers « Access Denied » for both) used to
+        // stop the whole API at boot (2026-11-13) — for the snippet's script alone. The SDK routes
+        // then answer 404 until the bucket is fixed and the API restarted; everything else runs.
+        try
+        {
+            await Features.LeadSources.Sdk.ShippedSdkFiles.CopyMissingAsync(
+                Features.LeadSources.Sdk.SdkFileStorage.ShippedRoot(sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>()),
+                sdkFiles, logger);
+            await Features.LeadSources.Sdk.SdkVersionSeeder.SeedAsync(db, sdkFiles, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "SDK files could not be copied to or read from the '{Bucket}' object store; the form SDK is unavailable until it is reachable (bucket created, key allowed on it) and the API restarted.",
+                Features.LeadSources.Sdk.SdkFileStorage.Concern);
+        }
 
         // Makes the implicit default rule visible and tunable per tenant. Same values, so
         // dispatching behaves exactly as before.
