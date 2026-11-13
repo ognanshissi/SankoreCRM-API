@@ -552,8 +552,16 @@ services:
       Customers__Documents__EncryptionKey: "${CUSTOMERS_DOCUMENTS_ENCRYPTION_KEY}"
       Customers__Documents__BasePath: "/var/sankore/client-documents"
 
+      # Logo de l'institution (bucket « company-logos », en clair : il est public) et photos de
+      # profil (bucket « user-avatars », chiffrement d'enveloppe, sa propre clé). Vide = aucun
+      # magasin de photos : un dépôt répond 503 AVATARS_UNAVAILABLE. Ce qui était en base avant
+      # le 2026-11-13 est déplacé par l'API au démarrage.
+      Administration__Logos__BasePath: "/var/sankore/company-logos"
+      Administration__Avatars__EncryptionKey: "${ADMINISTRATION_AVATARS_ENCRYPTION_KEY}"
+      Administration__Avatars__BasePath: "/var/sankore/user-avatars"
+
       # ── Stockage objet Cloudflare R2 ───────────────────────────────────
-      # Choisit le support des huit magasins ci-dessus : un bucket R2 par préoccupation si
+      # Choisit le support de tous les magasins ci-dessus, scripts du SDK compris : un bucket R2 par préoccupation si
       # ceci est renseigné, les volumes locaux sinon. Le chiffrement reste le même dans les
       # deux cas — ces clés-ci ne remplacent aucune des clés de chiffrement ci-dessus.
       #
@@ -565,7 +573,7 @@ services:
       # Les buckets ne sont PAS créés par l'API : ils doivent exister chez R2, nommés
       # exactement comme la préoccupation — kyc-documents, imports, integration-batch-files,
       # insurance-claim-documents, telephony-recordings, whatsapp-media, task-attachments,
-      # client-documents.
+      # client-documents, company-logos, user-avatars, sdk-files.
       ObjectStorage__R2__AccountId: "${R2_ACCOUNT_ID}"
       ObjectStorage__R2__AccessKeyId: "${R2_ACCESS_KEY_ID}"
       ObjectStorage__R2__SecretAccessKey: "${R2_SECRET_ACCESS_KEY}"

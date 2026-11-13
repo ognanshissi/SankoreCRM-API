@@ -94,6 +94,12 @@ dotnet user-secrets set "Leads:WhatsApp:Media:EncryptionKey" "$(openssl rand -ba
 # which a redeploy destroys.
 dotnet user-secrets set "Customers:Documents:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
 
+# Profile photos (2026-11-13) — master key of their ENVELOPE-encrypted store (bucket user-avatars).
+# A dev value sits in appsettings.Development.json. Unset = no store: a photo upload answers 503
+# AVATARS_UNAVAILABLE. Logos (bucket company-logos) are stored IN CLEAR and need no key. Both used
+# to be bytea columns; BrandingObjectMigration moves the old rows at start-up.
+dotnet user-secrets set "Administration:Avatars:EncryptionKey" "$(openssl rand -base64 32)" --project src/Bootstrapper/Sankore.Api
+
 # Antivirus for claim pieces — host:port of a clamd. UNSET by default and that is the fail-closed
 # default: with no scanner, every piece is recorded ScanFailed and NOTHING is transmitted to an
 # insurer. A deployment that distributes insurance must set it.

@@ -12,7 +12,8 @@ namespace Sankore.Modules.Administration.Features.Users.MyProfile;
 
 public sealed record GetMyProfileQuery : IRequest<Result<MyProfileDto>>;
 
-internal sealed class GetMyProfileHandler(AdministrationDbContext db, ICurrentUser currentUser)
+internal sealed class GetMyProfileHandler(
+    AdministrationDbContext db, ICurrentUser currentUser, Infrastructure.Branding.IUserAvatarStore? avatars = null)
     : IRequestHandler<GetMyProfileQuery, Result<MyProfileDto>>
 {
     public async Task<Result<MyProfileDto>> Handle(GetMyProfileQuery request, CancellationToken ct)
@@ -49,7 +50,7 @@ internal sealed class GetMyProfileHandler(AdministrationDbContext db, ICurrentUs
             user.PreferredLanguage ?? profile?.DefaultLanguage ?? LanguageCode.Default,
             profile?.TimeZone ?? UserProfile.DefaultTimeZone,
             (profile?.AmountFormat ?? AmountFormat.SpaceGrouped).ToString(),
-            avatar?.ToDataUrl(),
+            await Infrastructure.Branding.BrandingContent.AvatarDataUrlAsync(avatars, avatar, ct),
             string.IsNullOrWhiteSpace(roleLabel) ? null : roleLabel,
             user.Agency?.Name,
             managerName,

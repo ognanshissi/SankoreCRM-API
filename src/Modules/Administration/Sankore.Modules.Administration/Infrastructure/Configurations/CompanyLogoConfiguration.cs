@@ -12,7 +12,9 @@ internal sealed class CompanyLogoConfiguration : IEntityTypeConfiguration<Compan
         // Un logo par tenant : la clé EST le tenant.
         b.HasKey(l => l.TenantId);
         b.Property(l => l.TenantId).ValueGeneratedNever();
-        b.Property(l => l.Content).IsRequired();
+        // Ancien stockage en base : null une fois l'image dans le stockage objet (2026-11-13).
+        b.Property(l => l.Content);
+        b.Property(l => l.StorageRef).HasMaxLength(60);
         b.Property(l => l.ContentType).HasMaxLength(30).IsRequired();
     }
 }

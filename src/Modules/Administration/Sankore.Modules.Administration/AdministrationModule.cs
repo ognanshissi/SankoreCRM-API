@@ -127,6 +127,32 @@ public static class AdministrationModule
         // Starting data of a tenant (docs/donnees-demarrage-demo.md): agencies and products.
         services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.AdministrationStartingData>();
         services.Configure<Features.StartingData.DemoDataOptions>(config.GetSection(Features.StartingData.DemoDataOptions.Section));
+        // Logos et photos de profil dans le stockage objet (2026-11-13). Le host enregistre d'abord
+        // les deux concerns (R2 quand un bucket est configuré) ; ces replis locaux ne servent qu'aux
+        // hôtes qui ne le font pas, comme les tests.
+        services.Configure<Infrastructure.Branding.CompanyLogoStorageOptions>(
+            config.GetSection(Infrastructure.Branding.CompanyLogoStorageOptions.SectionName));
+        services.Configure<Infrastructure.Branding.UserAvatarStorageOptions>(
+            config.GetSection(Infrastructure.Branding.UserAvatarStorageOptions.SectionName));
+        services.TryAddKeyedSingleton<Sankore.Shared.ObjectStorage.IObjectBackend>(
+            Infrastructure.Branding.CompanyLogoStorage.Concern, (sp, _) => new Sankore.Shared.ObjectStorage.LocalObjectBackend(
+                Infrastructure.Branding.CompanyLogoStorage.ResolveBasePath(config, sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>()),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>>()));
+        services.TryAddKeyedSingleton<Sankore.Shared.ObjectStorage.IObjectBackend>(
+            Infrastructure.Branding.UserAvatarStorage.Concern, (sp, _) => new Sankore.Shared.ObjectStorage.LocalObjectBackend(
+                Infrastructure.Branding.UserAvatarStorage.ResolveBasePath(config, sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>()),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>>()));
+        services.TryAddSingleton<Infrastructure.Branding.ICompanyLogoStore>(sp => new Infrastructure.Branding.CompanyLogoStore(
+            sp.GetRequiredKeyedService<Sankore.Shared.ObjectStorage.IObjectBackend>(Infrastructure.Branding.CompanyLogoStorage.Concern)));
+        // Sans clé, pas de magasin : un dépôt de photo répond « indisponible », et les photos encore
+        // en base restent lisibles.
+        if (!string.IsNullOrWhiteSpace(config[$"{Infrastructure.Branding.UserAvatarStorageOptions.SectionName}:EncryptionKey"]))
+        {
+            services.TryAddSingleton<Infrastructure.Branding.IUserAvatarStore>(sp => new Infrastructure.Branding.EncryptedUserAvatarStore(
+                sp.GetRequiredKeyedService<Sankore.Shared.ObjectStorage.IObjectBackend>(Infrastructure.Branding.UserAvatarStorage.Concern),
+                sp.GetRequiredService<IOptions<Infrastructure.Branding.UserAvatarStorageOptions>>()));
+        }
+        services.AddHostedService<Infrastructure.Branding.BrandingObjectMigration>();
         services.AddScoped<Sankore.Shared.Infrastructure.Tenants.ITenantStartingData, Features.StartingData.AdministrationDemoData>();
         // Copying configuration between production and its test mode (sandbox lots 4-5).
         services.AddScoped<Features.Products.ProductCopier>();

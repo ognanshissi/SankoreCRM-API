@@ -10,7 +10,8 @@ namespace Sankore.Modules.Administration.Features.Users.GetUser;
 
 internal sealed class GetUserHandler(
     AdministrationDbContext db,
-    IOptions<IdentityTokenOptions>? tokenOptions = null
+    IOptions<IdentityTokenOptions>? tokenOptions = null,
+    Infrastructure.Branding.IUserAvatarStore? avatars = null
 ) : IRequestHandler<GetUserQuery, Result<UserDto>>
 {
     public async Task<Result<UserDto>> Handle(GetUserQuery request, CancellationToken ct)
@@ -91,7 +92,7 @@ internal sealed class GetUserHandler(
             LastName: user.LastName,
             WorkPhone: string.IsNullOrWhiteSpace(profile?.Phone) ? null : profile!.Phone,
             AdditionalEmail: string.IsNullOrWhiteSpace(profile?.AdditionalEmail) ? null : profile!.AdditionalEmail,
-            AvatarDataUrl: avatar?.ToDataUrl(),
+            AvatarDataUrl: await Infrastructure.Branding.BrandingContent.AvatarDataUrlAsync(avatars, avatar, ct),
             CreatedAt: user.CreatedAt,
             CreatedByName: createdByName,
             InvitationSentAt: invitationSentAt,

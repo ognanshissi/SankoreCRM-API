@@ -39,7 +39,7 @@ public sealed class SdkPinningTests : IDisposable
     {
         _factory = new TestDbContextFactory(_tenantId);
         _tempDir = Path.Combine(Path.GetTempPath(), $"sdk-pin-{Guid.NewGuid()}");
-        _fileStore = new LocalSdkFileStore(_tempDir);
+        _fileStore = new ObjectSdkFileStore(new Sankore.Shared.ObjectStorage.LocalObjectBackend(_tempDir, NullLogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>.Instance));
     }
 
     public void Dispose()

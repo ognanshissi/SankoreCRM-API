@@ -401,10 +401,16 @@ public static class LeadsModule
         // carries crossorigin="anonymous". See SdkEndpoints.PublicCorsPolicy.
         services.AddSdkServeCors();
 
-        // SDK file store — local filesystem, rooted at Leads:SdkStoragePath or <content root>/wwwroot/sdk
-        services.AddSingleton<ISdkFileStore>(sp => new LocalSdkFileStore(
-            LocalSdkFileStore.ResolveBasePath(
-                config, sp.GetRequiredService<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>())));
+        // SDK file store — the object storage's « sdk-files » concern (2026-11-13). The host registers
+        // it first (a bucket when configured); this local fallback, rooted at Leads:SdkStoragePath or
+        // <web root>/sdk as the store always was, only serves hosts that do not.
+        services.TryAddKeyedSingleton<Sankore.Shared.ObjectStorage.IObjectBackend>(
+            Features.LeadSources.Sdk.SdkFileStorage.Concern, (sp, _) => new Sankore.Shared.ObjectStorage.LocalObjectBackend(
+                Features.LeadSources.Sdk.SdkFileStorage.ResolveBasePath(
+                    config, sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>()),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>>()));
+        services.AddSingleton<ISdkFileStore>(sp => new ObjectSdkFileStore(
+            sp.GetRequiredKeyedService<Sankore.Shared.ObjectStorage.IObjectBackend>(Features.LeadSources.Sdk.SdkFileStorage.Concern)));
 
         // Import — multi-source (CSV, Excel, Google Sheets, Google Contacts)
         services.AddLocalFileStore();
@@ -428,10 +434,12 @@ public static class LeadsModule
 
         var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Infrastructure.LeadsDbContext>>();
 
-        await Features.LeadSources.Sdk.SdkVersionSeeder.SeedAsync(
-            db,
-            sp.GetRequiredService<Features.LeadSources.Sdk.ISdkFileStore>(),
-            logger);
+        var sdkFiles = sp.GetRequiredService<Features.LeadSources.Sdk.ISdkFileStore>();
+        // The builds shipped in the image reach the bucket before they are registered.
+        await Features.LeadSources.Sdk.ShippedSdkFiles.CopyMissingAsync(
+            Features.LeadSources.Sdk.SdkFileStorage.ShippedRoot(sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>()),
+            sdkFiles, logger);
+        await Features.LeadSources.Sdk.SdkVersionSeeder.SeedAsync(db, sdkFiles, logger);
 
         // Makes the implicit default rule visible and tunable per tenant. Same values, so
         // dispatching behaves exactly as before.

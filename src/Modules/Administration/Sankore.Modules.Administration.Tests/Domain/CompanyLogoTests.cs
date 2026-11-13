@@ -15,7 +15,7 @@ public sealed class CompanyLogoTests
     [MemberData(nameof(Images))]
     public void The_type_is_read_from_the_bytes(byte[] content, string expected)
     {
-        CompanyLogo.Create(Guid.NewGuid(), content).ContentType.Should().Be(expected);
+        CompanyLogo.ContentTypeOf(content).Should().Be(expected);
     }
 
     public static TheoryData<byte[], string> Images() => new()
@@ -32,7 +32,7 @@ public sealed class CompanyLogoTests
         // depuis l'origine de l'API.
         var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"u8.ToArray();
 
-        var act = () => CompanyLogo.Create(Guid.NewGuid(), svg);
+        var act = () => CompanyLogo.ContentTypeOf(svg);
 
         act.Should().Throw<DomainException>().WithMessage("*PNG, JPG ou WebP*");
     }
@@ -43,7 +43,7 @@ public sealed class CompanyLogoTests
         var big = new byte[CompanyLogo.MaxSizeBytes + 1];
         Png.CopyTo(big, 0);
 
-        var act = () => CompanyLogo.Create(Guid.NewGuid(), big);
+        var act = () => CompanyLogo.ContentTypeOf(big);
 
         act.Should().Throw<DomainException>().WithMessage("*1 Mo*");
     }
@@ -51,13 +51,27 @@ public sealed class CompanyLogoTests
     [Fact]
     public void Replacing_moves_the_date_so_the_public_url_changes()
     {
-        var logo = CompanyLogo.Create(Guid.NewGuid(), Png);
+        var logo = CompanyLogo.Create(Guid.NewGuid(), "l1.first", "image/png");
         var first = logo.UpdatedAt;
 
         Thread.Sleep(5);
-        logo.Replace(Jpeg);
+        logo.Replace("l1.second", "image/jpeg");
 
         logo.ContentType.Should().Be("image/jpeg");
+        logo.StorageRef.Should().Be("l1.second");
         logo.UpdatedAt.Should().BeAfter(first);
+    }
+
+    [Fact]
+    public void Moving_to_object_storage_keeps_the_date_so_the_published_url_still_works()
+    {
+        var logo = CompanyLogo.Create(Guid.NewGuid(), "l1.first", "image/png");
+        var date = logo.UpdatedAt;
+
+        logo.MoveToStorage("l1.moved");
+
+        logo.StorageRef.Should().Be("l1.moved");
+        logo.Content.Should().BeNull();
+        logo.UpdatedAt.Should().Be(date);
     }
 }

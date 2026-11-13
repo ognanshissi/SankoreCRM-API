@@ -24,7 +24,7 @@ public sealed class SdkVersionTests : IDisposable
     {
         _factory = new TestDbContextFactory(_tenantId);
         _tempDir = Path.Combine(Path.GetTempPath(), $"sdk-test-{Guid.NewGuid()}");
-        _fileStore = new LocalSdkFileStore(_tempDir);
+        _fileStore = new ObjectSdkFileStore(new Sankore.Shared.ObjectStorage.LocalObjectBackend(_tempDir, NullLogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>.Instance));
     }
 
     public void Dispose()
@@ -69,7 +69,7 @@ public sealed class SdkVersionTests : IDisposable
         env.WebRootPath.Returns("/srv/app/wwwroot");
         env.ContentRootPath.Returns("/srv/app");
 
-        var path = LocalSdkFileStore.ResolveBasePath(EmptyConfig(), env);
+        var path = SdkFileStorage.ResolveBasePath(EmptyConfig(), env);
 
         path.Should().Be(Path.Combine("/srv/app/wwwroot", "sdk"));
         path.Should().NotStartWith(AppContext.BaseDirectory);
@@ -82,7 +82,7 @@ public sealed class SdkVersionTests : IDisposable
         env.WebRootPath.Returns((string?)null!);
         env.ContentRootPath.Returns("/srv/app");
 
-        LocalSdkFileStore.ResolveBasePath(EmptyConfig(), env)
+        SdkFileStorage.ResolveBasePath(EmptyConfig(), env)
             .Should().Be(Path.Combine("/srv/app", "wwwroot", "sdk"));
     }
 
@@ -99,10 +99,35 @@ public sealed class SdkVersionTests : IDisposable
             })
             .Build();
 
-        LocalSdkFileStore.ResolveBasePath(config, env).Should().Be(Path.GetFullPath("/mnt/sdk"));
+        SdkFileStorage.ResolveBasePath(config, env).Should().Be(Path.GetFullPath("/mnt/sdk"));
     }
 
     private static IConfiguration EmptyConfig() => new ConfigurationBuilder().Build();
+
+    [Fact]
+    public async Task Shipped_builds_are_copied_into_the_store_and_never_overwrite_a_file_there()
+    {
+        var shipped = Path.Combine(_tempDir, "shipped");
+        Directory.CreateDirectory(Path.Combine(shipped, "1.2.1"));
+        Directory.CreateDirectory(Path.Combine(shipped, "1.0.0"));
+        await File.WriteAllTextAsync(Path.Combine(shipped, "1.2.1", "forms.min.js"), "shipped-1.2.1");
+        await File.WriteAllTextAsync(Path.Combine(shipped, "1.0.0", "forms.min.js"), "shipped-1.0.0");
+
+        var store = new ObjectSdkFileStore(new Sankore.Shared.ObjectStorage.LocalObjectBackend(
+            Path.Combine(_tempDir, "bucket"), NullLogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>.Instance));
+        // Already in the store: an exact version is immutable, its SRI hash is on customers' sites.
+        await store.WriteAsync("1.0.0", "forms.min.js", "already-there"u8.ToArray(), CancellationToken.None);
+
+        await ShippedSdkFiles.CopyMissingAsync(shipped, store, NullLogger.Instance);
+
+        Encoding.UTF8.GetString((await store.ReadAsync("1.2.1", "forms.min.js", CancellationToken.None))!).Should().Be("shipped-1.2.1");
+        Encoding.UTF8.GetString((await store.ReadAsync("1.0.0", "forms.min.js", CancellationToken.None))!).Should().Be("already-there");
+        (await store.ListVersionsAsync(CancellationToken.None)).Should().BeEquivalentTo(["1.0.0", "1.2.1"]);
+    }
+
+    [Fact]
+    public async Task A_version_that_cannot_be_a_key_is_not_found_rather_than_an_error()
+        => (await _fileStore.ReadAsync("..", "forms.min.js", CancellationToken.None)).Should().BeNull();
 
     // ── Seeder ──────────────────────────────────────────────────────────
 
@@ -156,7 +181,7 @@ public sealed class SdkVersionTests : IDisposable
         version, "forms.min.js", Encoding.UTF8.GetBytes(body), CancellationToken.None);
 
     [Fact]
-    public async Task LocalSdkFileStore_write_and_read_round_trips()
+    public async Task SdkFileStore_write_and_read_round_trips()
     {
         var content = Encoding.UTF8.GetBytes("console.log('hello');");
         await _fileStore.WriteAsync("1.0.0", "forms.min.js", content, CancellationToken.None);
@@ -166,7 +191,7 @@ public sealed class SdkVersionTests : IDisposable
     }
 
     [Fact]
-    public async Task LocalSdkFileStore_read_returns_null_for_missing()
+    public async Task SdkFileStore_read_returns_null_for_missing()
     {
         var read = await _fileStore.ReadAsync("9.9.9", "forms.min.js", CancellationToken.None);
         read.Should().BeNull();
@@ -193,7 +218,7 @@ public sealed class SdkVersionTests : IDisposable
         version.IsCurrent.Should().BeTrue();
 
         // File was written
-        _fileStore.Exists("1.0.0", "forms.min.js").Should().BeTrue();
+        (await _fileStore.ReadAsync("1.0.0", "forms.min.js", CancellationToken.None)).Should().NotBeNull();
     }
 
     [Fact]
@@ -233,7 +258,7 @@ public sealed class SdkVersionTests : IDisposable
             new PublishSdkVersionCommand("1.1.0", 1, "new-content"u8.ToArray()), CancellationToken.None);
 
         // Old file still accessible
-        _fileStore.Exists("1.0.0", "forms.min.js").Should().BeTrue();
+        (await _fileStore.ReadAsync("1.0.0", "forms.min.js", CancellationToken.None)).Should().NotBeNull();
         var oldContent = await _fileStore.ReadAsync("1.0.0", "forms.min.js", CancellationToken.None);
         Encoding.UTF8.GetString(oldContent!).Should().Be("old-content");
     }

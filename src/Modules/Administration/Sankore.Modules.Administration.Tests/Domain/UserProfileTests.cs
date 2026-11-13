@@ -45,15 +45,15 @@ public sealed class UserAvatarTests
     [Fact]
     public void The_type_is_read_from_the_bytes()
     {
-        UserAvatar.Create(Guid.NewGuid(), Guid.NewGuid(), Png).ContentType.Should().Be("image/png");
-        UserAvatar.Create(Guid.NewGuid(), Guid.NewGuid(), Jpeg).ContentType.Should().Be("image/jpeg");
+        UserAvatar.ContentTypeOf(Png).Should().Be("image/png");
+        UserAvatar.ContentTypeOf(Jpeg).Should().Be("image/jpeg");
     }
 
     [Fact]
     public void Anything_but_jpg_or_png_is_refused()
     {
         var gif = "GIF89a"u8.ToArray();
-        var act = () => UserAvatar.Create(Guid.NewGuid(), Guid.NewGuid(), gif);
+        var act = () => UserAvatar.ContentTypeOf(gif);
         act.Should().Throw<DomainException>();
     }
 
@@ -62,11 +62,11 @@ public sealed class UserAvatarTests
     {
         var big = new byte[UserAvatar.MaxSizeBytes + 1];
         Jpeg.CopyTo(big, 0);
-        var act = () => UserAvatar.Create(Guid.NewGuid(), Guid.NewGuid(), big);
+        var act = () => UserAvatar.ContentTypeOf(big);
         act.Should().Throw<DomainException>();
     }
 
     [Fact]
     public void Renders_as_a_data_url()
-        => UserAvatar.Create(Guid.NewGuid(), Guid.NewGuid(), Png).ToDataUrl().Should().StartWith("data:image/png;base64,");
+        => UserAvatar.ToDataUrl("image/png", Png).Should().StartWith("data:image/png;base64,");
 }

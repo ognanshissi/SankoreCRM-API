@@ -11,7 +11,8 @@ using Sankore.Shared.Kernel;
 /// reason <see cref="InstitutionCurrency"/> gives; the number is moreover committed on its own on
 /// purpose, so two quotes generated at the same instant never share one.
 /// </summary>
-internal sealed class QuoteIssuerReader(AdministrationDbContext db, ITenantStore? tenants = null) : IQuoteIssuer
+internal sealed class QuoteIssuerReader(
+    AdministrationDbContext db, ITenantStore? tenants = null, Branding.ICompanyLogoStore? logos = null) : IQuoteIssuer
 {
     public async Task<QuoteIssuer> GetAsync(Guid tenantId, CancellationToken ct)
     {
@@ -83,10 +84,15 @@ internal sealed class QuoteIssuerReader(AdministrationDbContext db, ITenantStore
         using var suppressed = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
         var logo = await db.CompanyLogos.IgnoreQueryFilters().AsNoTracking()
             .Where(l => l.TenantId == team)
-            .Select(l => new QuoteLogo(l.Content, l.ContentType))
+            .Select(l => new { l.Content, l.StorageRef, l.ContentType })
             .FirstOrDefaultAsync(ct);
         suppressed.Complete();
-        return logo;
+        if (logo is null) return null;
+
+        var content = logo.StorageRef is null
+            ? logo.Content
+            : logos is null ? null : await logos.OpenAsync(team, logo.StorageRef, ct);
+        return content is null ? null : new QuoteLogo(content, logo.ContentType);
     }
 
     /// <summary>The number the next quote of <paramref name="year"/> would take, without taking it.</summary>

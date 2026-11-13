@@ -13,6 +13,12 @@ namespace Sankore.Modules.Administration.Domain;
 /// <see cref="CompanyInfo.LogoUrl"/> est aussi l'image des e-mails, et Gmail comme Outlook
 /// bloquent les images <c>data:</c>.
 /// </para>
+///
+/// <para>
+/// Les octets sont dans le stockage objet (bucket <c>company-logos</c>, 2026-11-13) : la ligne ne
+/// garde que la référence. <see cref="Content"/> ne sert plus qu'aux logos déposés avant, jusqu'à ce
+/// que <c>BrandingObjectMigration</c> les ait déplacés.
+/// </para>
 /// </summary>
 public sealed class CompanyLogo
 {
@@ -20,17 +26,41 @@ public sealed class CompanyLogo
     public const int MaxSizeBytes = 1024 * 1024;
 
     public Guid TenantId { get; private set; }
-    public byte[] Content { get; private set; } = [];
+
+    /// <summary>Ancien stockage en base. Null une fois le logo dans le stockage objet.</summary>
+    public byte[]? Content { get; private set; }
+
+    /// <summary>Référence dans le stockage objet. Null pour un logo pas encore déplacé.</summary>
+    public string? StorageRef { get; private set; }
+
     public string ContentType { get; private set; } = null!;
     public DateTimeOffset UpdatedAt { get; private set; }
 
     private CompanyLogo() { }
 
-    public static CompanyLogo Create(Guid tenantId, byte[] content)
+    public static CompanyLogo Create(Guid tenantId, string storageRef, string contentType)
     {
         var logo = new CompanyLogo { TenantId = tenantId };
-        logo.Replace(content);
+        logo.Replace(storageRef, contentType);
         return logo;
+    }
+
+    public void Replace(string storageRef, string contentType)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageRef);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
+        StorageRef = storageRef;
+        ContentType = contentType;
+        Content = null;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Le même logo, déplacé de la base vers le stockage objet : la date ne change pas, l'URL publiée non plus.</summary>
+    public void MoveToStorage(string storageRef)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageRef);
+        StorageRef = storageRef;
+        Content = null;
     }
 
     /// <summary>
@@ -38,17 +68,15 @@ public sealed class CompanyLogo
     /// renvoie tel quel à des navigateurs tiers, et un en-tête se falsifie. Pas de SVG, pour la
     /// même raison — c'est un document qui peut porter du script, servi depuis l'origine de l'API.
     /// </summary>
-    public void Replace(byte[] content)
+    public static string ContentTypeOf(byte[] content)
     {
         if (content.Length == 0)
             throw new DomainException("Le fichier est vide.", "CompanyLogo.Empty");
         if (content.Length > MaxSizeBytes)
             throw new DomainException("Le logo ne peut pas dépasser 1 Mo.", "CompanyLogo.TooLarge");
 
-        ContentType = DetectContentType(content)
+        return DetectContentType(content)
             ?? throw new DomainException("Le logo doit être au format PNG, JPG ou WebP.", "CompanyLogo.UnsupportedType");
-        Content = content;
-        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     private static string? DetectContentType(byte[] c)

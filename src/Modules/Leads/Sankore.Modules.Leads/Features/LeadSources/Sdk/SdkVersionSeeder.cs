@@ -25,7 +25,7 @@ internal static class SdkVersionSeeder
     public static async Task SeedAsync(
         LeadsDbContext db, ISdkFileStore fileStore, ILogger logger, CancellationToken ct = default)
     {
-        var onDisk = fileStore.ListVersions()
+        var onDisk = (await fileStore.ListVersionsAsync(ct))
             .Select(v => (Version: v, Parsed: System.Version.TryParse(v, out var p) ? p : null))
             .Where(v => v.Parsed is not null)
             // Highest first: within a major, the newest shipped build claims IsCurrent.

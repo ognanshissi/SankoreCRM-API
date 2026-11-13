@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Sankore.Modules.Administration.Infrastructure;
+using Sankore.Modules.Administration.Infrastructure.Branding;
 using Sankore.Shared.Kernel;
 
 namespace Sankore.Modules.Administration.Features.CompanyInfo.CompanyLogo;
@@ -63,7 +65,8 @@ internal static class CompanyLogoEndpoints
     }
 
     private static async Task<IResult> UploadAsync(
-        IFormFile file, HttpRequest request, AdministrationDbContext db, ITenantContext tenant, CancellationToken ct)
+        IFormFile file, HttpRequest request, AdministrationDbContext db, ITenantContext tenant,
+        ICompanyLogoStore store, ILoggerFactory loggers, CancellationToken ct)
     {
         // Refusé avant lecture : inutile de charger un fichier de 50 Mo pour dire qu'il en fallait 1.
         if (file.Length > Domain.CompanyLogo.MaxSizeBytes)
@@ -75,36 +78,58 @@ internal static class CompanyLogoEndpoints
 
         using var buffer = new MemoryStream();
         await file.CopyToAsync(buffer, ct);
+        var content = buffer.ToArray();
 
-        var logo = await db.CompanyLogos.AsTracking().FirstOrDefaultAsync(ct);
+        string contentType;
         try
         {
-            if (logo is null)
-            {
-                logo = Domain.CompanyLogo.Create(tenant.TeamTenantId, buffer.ToArray());
-                db.CompanyLogos.Add(logo);
-            }
-            else
-            {
-                logo.Replace(buffer.ToArray());
-            }
+            contentType = Domain.CompanyLogo.ContentTypeOf(content);
         }
         catch (DomainException ex)
         {
             return Results.Problem(ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
 
+        var storageRef = await store.StoreAsync(tenant.TeamTenantId, content, ct);
+
+        var logo = await db.CompanyLogos.AsTracking().FirstOrDefaultAsync(ct);
+        var previousRef = logo?.StorageRef;
+        if (logo is null)
+        {
+            logo = Domain.CompanyLogo.Create(tenant.TeamTenantId, storageRef, contentType);
+            db.CompanyLogos.Add(logo);
+        }
+        else
+        {
+            logo.Replace(storageRef, contentType);
+        }
+
         var url = $"{ExternalOrigin(request)}{string.Format(PublicPathTemplate, tenant.TeamTenantId)}"
                   + $"?v={logo.UpdatedAt.ToUnixTimeMilliseconds()}";
         info.SetLogoUrl(url);
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            await DeleteQuietlyAsync(store, tenant.TeamTenantId, storageRef, loggers);
+            throw;
+        }
+
+        // Après l'enregistrement seulement : jusque-là, l'ancien logo est encore celui qui est servi.
+        if (previousRef is not null)
+            await DeleteQuietlyAsync(store, tenant.TeamTenantId, previousRef, loggers);
+
         return Results.Ok(new CompanyLogoResponse(url));
     }
 
-    private static async Task<IResult> DeleteAsync(AdministrationDbContext db, ITenantContext tenant, CancellationToken ct)
+    private static async Task<IResult> DeleteAsync(
+        AdministrationDbContext db, ITenantContext tenant, ICompanyLogoStore store, ILoggerFactory loggers, CancellationToken ct)
     {
         var logo = await db.CompanyLogos.AsTracking().FirstOrDefaultAsync(ct);
+        var storageRef = logo?.StorageRef;
         if (logo is not null)
             db.CompanyLogos.Remove(logo);
 
@@ -115,19 +140,41 @@ internal static class CompanyLogoEndpoints
             info.SetLogoUrl(string.Empty);
 
         await db.SaveChangesAsync(ct);
+
+        if (storageRef is not null)
+            await DeleteQuietlyAsync(store, tenant.TeamTenantId, storageRef, loggers);
+
         return Results.NoContent();
     }
 
-    private static async Task<IResult> ServeAsync(Guid tenantId, HttpResponse response, AdministrationDbContext db, CancellationToken ct)
+    /// <summary>Un objet qui reste n'est qu'un orphelin dans le bucket ; il ne doit pas faire échouer la réponse.</summary>
+    private static async Task DeleteQuietlyAsync(ICompanyLogoStore store, Guid tenantId, string storageRef, ILoggerFactory loggers)
+    {
+        try
+        {
+            await store.DeleteAsync(tenantId, storageRef, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            loggers.CreateLogger(typeof(CompanyLogoEndpoints)).LogWarning(ex, "Could not delete company logo object {StorageRef}", storageRef);
+        }
+    }
+
+    private static async Task<IResult> ServeAsync(
+        Guid tenantId, HttpResponse response, AdministrationDbContext db, ICompanyLogoStore store, CancellationToken ct)
     {
         var logo = await db.CompanyLogos
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(l => l.TenantId == tenantId)
-            .Select(l => new { l.Content, l.ContentType, l.UpdatedAt })
+            .Select(l => new { l.Content, l.StorageRef, l.ContentType, l.UpdatedAt })
             .FirstOrDefaultAsync(ct);
 
         if (logo is null)
+            return Results.NotFound();
+
+        var content = await BrandingContent.LogoAsync(store, tenantId, logo.StorageRef, logo.Content, ct);
+        if (content is null)
             return Results.NotFound();
 
         // Une semaine : l'URL change à chaque dépôt (`v`), donc une réponse en cache n'est jamais
@@ -135,7 +182,7 @@ internal static class CompanyLogoEndpoints
         // navigateur ne doit pas en deviner un autre.
         response.Headers.CacheControl = "public, max-age=604800";
         response.Headers.XContentTypeOptions = "nosniff";
-        return Results.File(logo.Content, logo.ContentType, lastModified: logo.UpdatedAt);
+        return Results.File(content, logo.ContentType, lastModified: logo.UpdatedAt);
     }
 
     /// <summary>

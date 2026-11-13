@@ -786,7 +786,6 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnName("tenant_id");
 
                     b.Property<byte[]>("Content")
-                        .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("content");
 
@@ -795,6 +794,11 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("content_type");
+
+                    b.Property<string>("StorageRef")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("storage_ref");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1826,7 +1830,6 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasColumnName("user_id");
 
                     b.Property<byte[]>("Content")
-                        .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("content");
 
@@ -1835,6 +1838,11 @@ namespace Sankore.Modules.Administration.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("content_type");
+
+                    b.Property<string>("StorageRef")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("storage_ref");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")

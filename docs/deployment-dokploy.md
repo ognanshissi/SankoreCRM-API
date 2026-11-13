@@ -77,6 +77,7 @@ openssl rand -base64 32   # → Kyc__BlindIndexKey            (M02 duplicate-doc
 openssl rand -base64 32   # → Kyc__Storage__EncryptionKey   (M02 identity-document IMAGES)
 openssl rand -base64 32   # → Administration__FieldEncryptionKey (M12 professional-card numbers)
 openssl rand -base64 32   # → Administration__BlindIndexKey      (M12 lookups on those numbers)
+openssl rand -base64 32   # → Administration__Avatars__EncryptionKey (users' profile PHOTOS)
 openssl rand -base64 32   # → Integration__FieldEncryptionKey    (integration command payloads)
 openssl rand -base64 32   # → Integration__BlindIndexKey
 openssl rand -base64 32   # → Integration__Batch__Storage__EncryptionKey          (outbound CBS batch files)
@@ -428,6 +429,11 @@ Kyc__Biometry__BaseUrl=
 # credential write, not the start-up.
 Administration__FieldEncryptionKey=<base64 32 bytes>
 Administration__BlindIndexKey=<base64 32 bytes>
+# Profile photos (bucket user-avatars), envelope-encrypted before upload. Unset =
+# no photo store: an upload answers 503 AVATARS_UNAVAILABLE, and photos stored
+# before 2026-11-13 (in the database) stay readable until it is set. Losing it
+# makes every stored photo unreadable — users would just upload a new one.
+Administration__Avatars__EncryptionKey=<base64 32 bytes>
 
 # ── Integration — CBS commands, batch files, insurance ──────────────────
 Integration__FieldEncryptionKey=<base64 32 bytes>
@@ -483,10 +489,11 @@ Integration__Insurance__ClaimStorage__BasePath=/data/insurance-claim-documents
 Integration__Batch__Storage__BasePath=/data/integration-batch-files
 
 # ── object storage: Cloudflare R2 instead of the volumes above (optional) ─
-# Leave the whole block out and the three paths above are used — which is a
-# supported deployment, not a degraded one. Fill it in and KYC evidence and
-# import/export files move to buckets; the SDK files do NOT (they are public-read
-# and stay on /data/sdk).
+# Leave the whole block out and the paths above are used — which is a
+# supported deployment, not a degraded one. Fill it in and EVERY file the
+# application stores moves to buckets, the SDK scripts included (since
+# 2026-11-13: /data/sdk is no longer needed; the builds shipped in the image are
+# copied into the bucket at start-up).
 #
 # One account for the whole installation: these are platform credentials, not
 # per-tenant ones, so they live here and not in the secrets vault.
@@ -495,14 +502,27 @@ Integration__Batch__Storage__BasePath=/data/integration-batch-files
 # because a secret failed to inject would write evidence to a container volume a
 # redeploy discards, and nothing would report it.
 #
-# Create ONE BUCKET PER CONCERN, named exactly:
+# Create ONE BUCKET PER CONCERN, named exactly (the list is
+# src/Bootstrapper/Sankore.Api/Features/ObjectStorage/ObjectStorageConcerns.cs):
 #   kyc-documents              identity-document scans and selfies (already AES-256-GCM
 #                              encrypted by the application BEFORE upload — R2 never sees
 #                              an image, and server-side encryption does not replace that)
-#   imports                    import spreadsheets and generated client exports
+#   imports                    import spreadsheets, generated client exports, insurance
+#                              information sheets and distributor documents
 #   insurance-claim-documents  insurance claim pieces (encrypted before upload, like KYC)
 #   integration-batch-files    outbound core-banking batch files (encrypted before upload)
-# Both must be PRIVATE. The API streams every KYC document through an authenticated,
+#   telephony-recordings       call recordings (encrypted; only used when recording is on)
+#   whatsapp-media             WhatsApp photos, documents and voice notes (encrypted)
+#   task-attachments           files attached to tasks AND to projects, generated quotes
+#                              included (encrypted)
+#   client-documents           files filed on a client record (encrypted)
+#   company-logos              each institution's logo, IN CLEAR (it is public: served to
+#                              anyone and shown in e-mails)
+#   user-avatars               users' profile photos (encrypted)
+#   sdk-files                  the web-form SDK scripts (public, served by the API)
+# A bucket that is missing fails the first write to it, not the boot.
+# Every bucket must be PRIVATE, the two public kinds included: the API serves them
+# itself. The API streams every KYC document through an authenticated,
 # audited endpoint; there are no public or presigned URLs, deliberately, because a
 # signed link would audit only its issuance and not the read.
 # ObjectStorage__R2__AccountId=<cloudflare account id>
@@ -524,20 +544,25 @@ service-to-service and does not need to leave the overlay network.
 | Mount path | Holds | Consequence of skipping it |
 |---|---|---|
 | `/data/imports` | uploaded client/user/lead import files, read later by the Hangfire job | an import queued before a redeploy fails with `Stored file not found` |
-| `/data/sdk` | lead-capture SDK versions published through the API | published SDK versions vanish on redeploy; `/sdk/v1/forms.min.js` 404s for every embedded form in the wild |
+| `/data/sdk` | lead-capture SDK versions published through the API (only without R2) | published SDK versions vanish on redeploy; `/sdk/v1/forms.min.js` 404s for every embedded form in the wild |
 | `/data/kyc-documents` | KYC evidence — identity-document scans and selfies, each AES-256-GCM encrypted | **a redeploy destroys evidence a regulator can demand.** This is the one mount whose absence is not recoverable by re-running something |
 | `/data/insurance-claim-documents` | insurance claim pieces, encrypted | same as above for claims: the default is a folder under the content root, which a redeploy destroys (a warning is logged at start-up) |
 | `/data/integration-batch-files` | outbound batch files deposited for a core banking system | a batch generated before a redeploy is lost before it is collected; only needed for a CBS that works in batches |
 
 `LocalFileStore` defaults to the container's `/tmp`, so without the first mount an import that
-outlives one container is lost. `LocalSdkFileStore` defaults to the image's own
-`wwwroot/sdk` — `1.0.0/forms.min.js` ships inside the image and keeps working, but anything
-published afterwards does not survive.
+outlives one container is lost. The SDK store defaults to the image's own
+`wwwroot/sdk` — the builds shipped inside the image keep working, but anything published
+afterwards does not survive.
 
-With the `ObjectStorage__R2__*` block filled in, every row except `/data/sdk` becomes
-unnecessary — those files live in buckets and the mounts hold nothing. `/data/sdk` is still
-required either way: the SDK files are public-read and are served from the filesystem on purpose.
-Moving an existing installation is covered in §8.
+With the `ObjectStorage__R2__*` block filled in, **every row becomes unnecessary** — those files
+live in buckets and the mounts hold nothing. That includes `/data/sdk` since 2026-11-13: the SDK
+scripts are in the `sdk-files` bucket, still served by the API at the same address with the same
+SRI hash, and the builds shipped in the image are copied there at start-up. Task attachments,
+client documents, logos and profile photos have no mount of their own: without a bucket they land
+under the content root, which a redeploy destroys — one more reason to configure R2. Logos and
+photos stored in the database before 2026-11-13 are moved to their bucket by the API at start-up
+(`Moved … company logo(s) and … profile photo(s)` in the log). Moving an existing installation is
+covered in §8.
 
 The KYC store falls back to a folder under the content root and **logs a warning saying the
 evidence will be written somewhere a redeploy destroys**. It is a warning rather than a refusal so
@@ -837,6 +862,7 @@ the other, so a half-finished move still serves every document from whichever si
 # One bucket per concern, same names as the volumes' contents.
 rclone copy /data/kyc-documents r2:kyc-documents --exclude "*.tmp" --checksum --progress
 rclone copy /data/imports       r2:imports       --exclude "*.tmp" --checksum --progress
+rclone copy /data/sdk           r2:sdk-files     --exclude "*.tmp" --checksum --progress
 ```
 
 `--exclude "*.tmp"` matters: a `.tmp` file is an interrupted write, never an object, and copying
@@ -856,7 +882,7 @@ curl -X POST https://api.example.com/api/v1/object-storage/kyc-documents/migrati
 #        "destination":"R2ObjectBackend"}
 ```
 
-Repeat with `imports`. The concerns are the only accepted values; there is no path parameter, so
+Repeat with `imports`, `sdk-files` and every other concern that had a volume. The concerns are the only accepted values; there is no path parameter, so
 the endpoint cannot be pointed at an arbitrary folder.
 
 This runs `ObjectStoreMigrator` as a Hangfire job, which adds what `rclone` cannot: it re-reads

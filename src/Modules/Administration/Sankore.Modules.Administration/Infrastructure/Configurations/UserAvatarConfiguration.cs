@@ -12,7 +12,9 @@ internal sealed class UserAvatarConfiguration : IEntityTypeConfiguration<UserAva
         b.HasKey(a => a.UserId);
         b.Property(a => a.UserId).ValueGeneratedNever();
         b.HasIndex(a => a.TenantId);
-        b.Property(a => a.Content).IsRequired();
+        // Ancien stockage en base : null une fois l'image dans le stockage objet (2026-11-13).
+        b.Property(a => a.Content);
+        b.Property(a => a.StorageRef).HasMaxLength(60);
         b.Property(a => a.ContentType).HasMaxLength(30).IsRequired();
     }
 }

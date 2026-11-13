@@ -98,10 +98,10 @@ public static class CustomersModule
         services.TryAddKeyedSingleton<Sankore.Shared.ObjectStorage.IObjectBackend>(
             Infrastructure.Documents.ClientDocumentStorage.Concern, (sp, _) =>
             {
-                var options = sp.GetRequiredService<IOptions<Infrastructure.Documents.ClientDocumentStorageOptions>>().Value;
-                var root = string.IsNullOrWhiteSpace(options.BasePath)
-                    ? Path.Combine(AppContext.BaseDirectory, Infrastructure.Documents.ClientDocumentStorage.Concern)
-                    : Path.GetFullPath(options.BasePath);
+                // The host's AddObjectBackend registers this concern first (R2 when a bucket is
+                // configured); this local fallback only serves hosts that do not, such as tests.
+                var root = Infrastructure.Documents.ClientDocumentStorage.ResolveBasePath(
+                    config, sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>());
                 return new Sankore.Shared.ObjectStorage.LocalObjectBackend(
                     root, sp.GetRequiredService<ILogger<Sankore.Shared.ObjectStorage.LocalObjectBackend>>());
             });
