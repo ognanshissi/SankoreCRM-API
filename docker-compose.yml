@@ -772,6 +772,12 @@ services:
       - "sankore-internal"
       - "dokploy-network"
       - "sankore-shared"
+    # Sur TROIS réseaux, Traefik prend l'adresse de l'un d'eux au hasard ; sur `sankore-internal`
+    # ou `sankore-shared`, qu'il ne voit pas, il répond 502 alors que l'API est « healthy »
+    # (constaté le 2026-11-13). Même étiquette que les autres services publics. Dokploy ajoute ses
+    # propres étiquettes de domaine à côté de celle-ci.
+    labels:
+      traefik.docker.network: "dokploy-network"
   sankore-hangfire:
     image: ${DOCKER_REGISTRY-}sankore.hangfire
     container_name: sankore.hangfire
