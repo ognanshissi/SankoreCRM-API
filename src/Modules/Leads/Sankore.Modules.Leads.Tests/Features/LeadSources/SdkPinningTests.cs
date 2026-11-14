@@ -151,7 +151,7 @@ public sealed class SdkPinningTests : IDisposable
 
         // The exact version, never the alias: the hash in the attribute is only meaningful
         // against bytes that cannot change.
-        snippet.SdkUrl.Should().Be("/sdk/1.1.0/forms.min.js");
+        snippet.SdkUrl.Should().EndWith("/sdk/1.1.0/forms.min.js");
         snippet.Html.Should().Contain("/sdk/1.1.0/forms.min.js").And.NotContain("/sdk/v1/");
 
         var current = (await Registered()).Single(v => v.IsCurrent);
@@ -172,12 +172,12 @@ public sealed class SdkPinningTests : IDisposable
         // The site keeps requesting 1.0.0 with 1.0.0's hash, and that URL still serves exactly
         // the bytes that hash describes. This is the whole point of pinning: the promotion above
         // used to break this form.
-        pasted.SdkUrl.Should().Be("/sdk/1.0.0/forms.min.js");
+        pasted.SdkUrl.Should().EndWith("/sdk/1.0.0/forms.min.js");
         var served = await _fileStore.ReadAsync("1.0.0", "forms.min.js", default);
         Encoding.UTF8.GetString(served!).Should().Be("v1");
 
         var fresh = await GetSnippet();
-        fresh.SdkUrl.Should().Be("/sdk/1.1.0/forms.min.js");
+        fresh.SdkUrl.Should().EndWith("/sdk/1.1.0/forms.min.js");
         fresh.SriHash.Should().NotBe(pasted.SriHash);
     }
 
@@ -200,7 +200,7 @@ public sealed class SdkPinningTests : IDisposable
     // ── Harness ─────────────────────────────────────────────────────────
 
     private static readonly IOptions<SnippetOptions> FallbackOptions =
-        Options.Create(new SnippetOptions());
+        Options.Create(new SnippetOptions { PublicBaseUrl = "https://api.example.com" });
 
     private async Task<LeadSourceConfig> SeedSource()
     {

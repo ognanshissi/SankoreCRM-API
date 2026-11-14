@@ -1,6 +1,6 @@
 # Offres Essentiel, Pro et Entreprise dans le CRM
 
-**Statut : plan rédigé le 2026-11-12. Rien n'est démarré. D1, D3, D4 et D5 tranchées le 2026-11-12 (recommandations retenues) ; D2 et D6 à D14 en attente.**
+**Statut : plan rédigé le 2026-11-12. Rien n'est démarré. D1, D3, D4 et D5 tranchées le 2026-11-12 (recommandations retenues) ; D2 et D6 à D15 en attente. D15 (quota du bot WhatsApp) ajoutée le 2026-11-14.**
 
 ## 1. Le besoin
 
@@ -29,7 +29,13 @@ Le comparatif du site liste une soixantaine de fonctions, dont une trentaine dif
 - **Quelques limites existent déjà, réglées par l'institution elle-même et non par la plateforme :**
   - quota mensuel d'e-mails et de SMS : `TenantNotificationSettings.MonthlyQuotaLimit` et `TenantSmsSettings`, appliqué par `EmailOutboxProcessor` / `SmsOutboxProcessor` ; vide = illimité ;
   - 20 webhooks sortants au plus par institution (`WebhookSubscriptionsFeature.MaxPerTenant`) ;
+  - aucune limite sur le bot WhatsApp de qualification.
   - un seul circuit actif par (entité, circuit).
+- **Le bot WhatsApp de qualification coûte à la plateforme, pas au client.**
+  - Le bot appelle Claude avec la clé du déploiement (`Leads:WhatsAppBot:ApiKey`). Chaque réponse est donc payée par Talisoft.
+  - Les frais Meta des messages WhatsApp restent payés par l'institution, sur son propre compte 360dialog. C'est ce que dit le site (« messages à la charge du client »).
+  - Chaque tour du bot est déjà enregistré (`WhatsAppBotTurn` : modèle, résultat, jetons d'entrée et de sortie). Le compteur existe, mais rien ne le lit pour limiter.
+  - Le parcours réclamation du bot (`WhatsAppComplaintDesk`) n'appelle aucun modèle : ses questions sont fixes et ses réponses lues par des règles.
 - **Pas de comptage des utilisateurs facturables.** Le seul compte est `GET users/stats/status`, par statut. Le mode test partage les utilisateurs de la production (`TeamTenantId`). Il ne faut donc jamais compter deux fois.
 
 ## 3. Le principe proposé
@@ -37,12 +43,12 @@ Le comparatif du site liste une soixantaine de fonctions, dont une trentaine dif
 **Une offre par institution, tenue par le registre et choisie par la plateforme, lue par l'API comme les modules.**
 
 1. **Registre.**
-   - `Tenant.Plan` (`Essentiel`, `Pro`, `Entreprise`) et `Tenant.PlanOptions` (pour l'instant : `BiometricKyc`, l'option vendue avec Pro, et un quota d'e-mails sur mesure).
+   - `Tenant.Plan` (`Essentiel`, `Pro`, `Entreprise`) et `Tenant.PlanOptions` (pour l'instant : `BiometricKyc`, l'option vendue avec Pro, un quota d'e-mails sur mesure et un quota de messages du bot WhatsApp sur mesure).
    - Chaque changement est historisé (qui, quand, d'où vers où).
    - `TenantProjection` les sert dans `TenantResponse`. Le jumeau du mode test prend l'offre de sa production, comme pour les modules.
 2. **Un seul catalogue, dans le Kernel : `PlanFeatures`.**
    - Pour chaque fonction : un code stable et l'offre minimale qui l'ouvre.
-   - Pour chaque limite : sa valeur par offre (sources connectées, agences, circuits actifs, durée d'audit lisible, quota d'e-mails).
+   - Pour chaque limite : sa valeur par offre (sources connectées, agences, circuits actifs, durée d'audit lisible, quota d'e-mails, quota de messages du bot WhatsApp).
    - Le § 5 de ce document est sa transcription. Un test épingle le catalogue contre ce tableau. Le site et le CRM ne peuvent pas partager un fichier (deux dépôts), d'où ce test plutôt qu'un fichier commun.
 3. **Lecture : `ITenantPlan`** (sur `ITenantStore` avec cache, comme `ITenantModules`).
    - `AllowsAsync(feature)` et `LimitAsync(limit)`.
@@ -81,6 +87,7 @@ Ce qui ne change pas : les modules restent un second axe (« Entreprise » ne le
 | D12 | Utilisateur facturable et facturation | **Utilisateur facturable** : compte Actif ou en attente d'activation. Ne comptent pas : le compte système, les comptes désactivés et ceux de l'équipe Talisoft (support). **Relevé mensuel** : le CRM relève chaque jour le nombre, le registre garde le maximum du mois par institution. L'app admin l'affiche avec le montant estimé (prix de l'offre × max(utilisateurs, minimum)). **Facturation** : la facture elle-même reste hors du CRM dans ce plan. |
 | D13 | Option « KYC biométrique » en Pro | Une option posée par la plateforme sur la fiche de l'institution (`PlanOptions.BiometricKyc`). Elle est incluse d'office en Entreprise. Son prix est à fixer, et le site ne l'affiche pas encore. |
 | D14 | Qui change l'offre | **La plateforme seule**, comme l'autorisation d'un module. L'institution voit son offre sur une page « Mon offre » et peut demander à monter en gamme (e-mail aux `PlatformRecipients`). |
+| D15 | Quota de messages du bot WhatsApp de qualification | **Ajoutée le 2026-11-14, valeurs à fixer.** **Ce qui est limité** : les réponses du bot, pas les messages WhatsApp. Les frais Meta sont déjà payés par le client ; le coût du modèle est payé par la plateforme. **Unité** : un message du client traité par le modèle, soit un `WhatsAppBotTurn` dont le modèle n'est pas `rules`. Un échec ou une réponse abandonnée compte aussi, car les jetons sont dépensés. **Ne comptent pas** : les messages des agents, les modèles envoyés, les messages d'accueil et d'attente, le parcours réclamation (sans modèle) et les passations décidées par les règles. **Valeurs proposées** : Essentiel 0 (bot fermé, ligne « Canal WhatsApp »). Pro : 2 000 par mois, soit environ 200 conversations de qualification de 10 messages. Entreprise : au contrat, 10 000 par défaut. **Période** : le mois civil. **Quota atteint** : le bot se tait et passe la main. Une conversation en cours est confiée à un agent avec le motif « Quota du bot atteint ». Une nouvelle conversation va directement à un agent, comme quand le bot est désactivé. Le client a toujours une réponse. **Alertes** : aux administrateurs de l'institution à 80 % et à 100 % (cloche et e-mail), et à la plateforme à 100 %. **Au-delà** : la plateforme relève le quota du mois ou du contrat (`PlanOptions`). Rien n'est facturé automatiquement. **Mode test** : ses tours comptent dans le quota de la production, car le coût est le même. À confirmer : les valeurs, après mesure du coût moyen d'un tour sur les jetons enregistrés en recette. |
 
 ## 5. Le catalogue : chaque ligne du comparatif et son verrou
 
@@ -128,6 +135,7 @@ Légende : E = Essentiel, P = Pro, X = Entreprise. « Toutes » = rien à verrou
 | Téléphonie, agendas, messagerie connectée | Toutes | — | — |
 | E-mails et modèles (quota) | selon D8 | Plafond lu par `TryConsumeEmailQuotaAsync` : min(offre, réglage de l'institution), relais de la plateforme seulement | `notification-parametrage` affiche le plafond de l'offre |
 | Canal WhatsApp, consentement, bot de qualification | P | `integration/messaging/channels` (création et activation), écritures de `leads/whatsapp/*`, `leads/whatsapp/clients/*`, `leads/whatsapp/bot` ; le bot se tait (D3) | `/leads/whatsapp`, `settings/whatsapp*` |
+| Messages du bot de qualification (quota) | E 0 · P 2 000 / mois · X au contrat (D15) | `WhatsAppBotEngine` compte les tours du mois avant d'appeler le modèle. Quota atteint : passation, motif `BOT_QUOTA_REACHED`. Alertes à 80 % et à 100 % | compteur « Messages du bot ce mois » sur `whatsapp-bot-page` et sur la page « Mon offre » |
 | Bot : création du lead et réclamations | P | Réglages `whatsapp-create-lead-*` et `whatsapp-bot-complaints-enabled` | `whatsapp-bot-page` |
 
 ### Conformité KYC (selon D7)
@@ -226,7 +234,7 @@ Une ligne de test par verrou : Essentiel refusé, Pro accepté, lecture permise.
 
 Verrous des autres tableaux, dont :
 
-- WhatsApp et le silence du bot ;
+- WhatsApp et le silence du bot (le quota du bot est au lot 6) ;
 - le KYC selon D7 et D13 ;
 - le comptage des circuits (D10) ;
 - les agences (D9) ;
@@ -236,9 +244,15 @@ Verrous des autres tableaux, dont :
 - le journal d'audit borné (D11) ;
 - la fermeture des événements de partenaires.
 
-### Lot 6 — Quota d'e-mails et relevé des utilisateurs (2 j)
+### Lot 6 — Quotas et relevé des utilisateurs (3 j)
 
-- **Quota** : plafond d'offre (D8) dans `TryConsumeEmailQuotaAsync`, réglage de l'institution borné par lui, relais de la plateforme seulement.
+- **Quota d'e-mails** : plafond d'offre (D8) dans `TryConsumeEmailQuotaAsync`, réglage de l'institution borné par lui, relais de la plateforme seulement.
+- **Quota du bot WhatsApp** (D15) :
+  - compte des tours du mois sur `WhatsAppBotTurn`, lu par `WhatsAppBotEngine` avant l'appel au modèle ;
+  - au-delà, passation avec le motif `BOT_QUOTA_REACHED`, et conversations nouvelles directement chez un agent ;
+  - alertes à 80 % et à 100 %, compteur sur l'écran du bot et sur la page « Mon offre » ;
+  - quota sur mesure lu dans `PlanOptions` ;
+  - un dépassement de quelques tours, quand deux conversations répondent en même temps, est accepté : pas de verrou.
 - **Relevé quotidien des utilisateurs facturables** (D12), envoyé au registre par une tâche de l'API, sur le modèle de `TenantDataLoadJob`, avec la clé de service :
   - le registre garde le maximum du mois ;
   - l'app admin affiche « Utilisateurs facturés ce mois » et le montant estimé, minimum de 5 en Entreprise compris.
@@ -253,7 +267,7 @@ Verrous des autres tableaux, dont :
 - Recette sur trois institutions de test, une par offre, avec la démo chargée. Le jeu de démo est vérifié dans les limites de chaque offre (agences, sources, circuits). Sinon le démarrage d'une démo Essentiel échoue sur ses propres limites.
 - Mise à jour de `CLAUDE.md` (règle : toute nouvelle fonction porte son code d'offre dès le départ, comme sa garde de module), de `deployment-dokploy.md` et de `essai-gratuit-socle.md` (D6 de l'essai).
 
-**Total : 15 à 17 jours.**
+**Total : 16 à 18 jours.**
 
 ## 7. Points d'attention relevés en préparant ce plan
 
@@ -263,3 +277,4 @@ Verrous des autres tableaux, dont :
 - **Fin d'essai jamais appliquée** (`TrialExpiresAt` n'est lu par aucun contrôle) : c'est le lot 6 du plan d'essai, indépendant de celui-ci, mais à faire avant d'ouvrir les inscriptions.
 - **Le site dit « facturation au 31e jour »** pour l'essai, alors que le parcours d'essai prévoit consultation seule, suspension puis effacement : à aligner (déjà signalé).
 - **Option biométrique** : vendue en Pro mais absente des prix du site (D13).
+- **Quota du bot WhatsApp absent du site** : la ligne « Canal WhatsApp, consentement et bot de qualification » ne parle que des frais Meta. Il faut ajouter au comparatif de `pricing.data.ts` une ligne « Messages du bot de qualification inclus par mois », une fois les valeurs de D15 fixées.

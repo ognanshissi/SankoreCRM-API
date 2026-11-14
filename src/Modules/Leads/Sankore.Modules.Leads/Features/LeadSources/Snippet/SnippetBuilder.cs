@@ -31,6 +31,9 @@ internal static class SnippetBuilder
 {
     internal const string DefaultContainerId = "sankore-form";
 
+    /// <summary>No public API address: the snippet would not work on a customer's site.</summary>
+    internal const string PublicUrlNotConfigured = "SNIPPET_PUBLIC_URL_NOT_CONFIGURED";
+
     internal sealed record Snippet(string Html, string SdkUrl, string SriHash, string ContainerId);
 
     /// <summary>
@@ -53,22 +56,102 @@ internal static class SnippetBuilder
             : (options.SdkUrl, options.SriHash);
     }
 
-    internal static Snippet Build(LeadSourceConfig source, string sdkUrl, string sriHash)
+    /// <summary>
+    /// Where the snippet reaches the API from a CUSTOMER's site: <c>Leads:Snippet:PublicBaseUrl</c>
+    /// when set, else — the endpoints pass it IN DEVELOPMENT ONLY — the host the CRM screen called,
+    /// in https. Empty means not configured, and the handlers refuse rather than build a snippet.
+    ///
+    /// <para>
+    /// Never the request host outside Development: <c>AllowedHosts</c> is <c>*</c>, so the Host
+    /// header is whatever the caller sends, and « Envoyer au webmaster » would have the
+    /// institution's own mailer send a customer a snippet loading a script from any domain.
+    /// </para>
+    ///
+    /// <para>
+    /// The snippet used to carry RELATIVE paths and no API address: pasted on a customer's site,
+    /// the browser fetched <c>/sdk/…</c> from that site (404) and the SDK posted leads to that
+    /// site too. It also emitted <c>data-key</c> / <c>data-container</c>, which the SDK never
+    /// read (it reads <c>data-sankore-*</c>) — so no snippet ever ran outside the API's origin.
+    /// </para>
+    /// </summary>
+    internal static string ApiBaseUrl(SnippetOptions options, string? requestHost)
     {
-        var containerId = (source.Settings as EmbeddedScriptSettings)?.FormContainerId
-                          ?? DefaultContainerId;
-
-        var html = $"""
-            <!-- Sankore CRM Lead Capture — {source.Label} -->
-            <div id="{containerId}"></div>
-            <script src="{sdkUrl}"
-                    integrity="{sriHash}"
-                    crossorigin="anonymous"
-                    data-key="{source.PublicKey}"
-                    data-container="#{containerId}"
-                    defer></script>
-            """;
-
-        return new Snippet(html, sdkUrl, sriHash, containerId);
+        if (!string.IsNullOrWhiteSpace(options.PublicBaseUrl))
+            return Uri.TryCreate(options.PublicBaseUrl.Trim(), UriKind.Absolute, out var configured)
+                   && configured.Scheme is "https" or "http"
+                ? configured.GetLeftPart(UriPartial.Authority)
+                : string.Empty;
+        return string.IsNullOrWhiteSpace(requestHost) ? string.Empty : $"https://{requestHost.Trim().TrimEnd('/')}";
     }
+
+    internal static Snippet Build(LeadSourceConfig source, string sdkUrl, string sriHash, string apiBaseUrl = "")
+    {
+        var script = (source.Settings as EmbeddedScriptSettings)?.Script;
+        var hosted = script?.FormMode == ScriptFormMode.Hosted;
+        var absoluteSdk = Uri.IsWellFormedUriString(sdkUrl, UriKind.Absolute) ? sdkUrl : apiBaseUrl + sdkUrl;
+
+        var attributes = new List<string>
+        {
+            $"src=\"{Attr(absoluteSdk)}\"",
+            $"integrity=\"{Attr(sriHash)}\"",
+            "crossorigin=\"anonymous\"",
+            $"data-sankore-key=\"{Attr(source.PublicKey ?? string.Empty)}\"",
+        };
+        if (apiBaseUrl.Length > 0)
+            attributes.Add($"data-sankore-api=\"{Attr(apiBaseUrl)}\"");
+
+        string containerId;
+        string? container = null;
+        if (hosted)
+        {
+            containerId = BareId(script?.FormSelector) ?? DefaultContainerId;
+            container = $"<div id=\"{Attr(containerId)}\"></div>";
+            attributes.Add("data-sankore-render=\"true\"");
+            attributes.Add($"data-sankore-container=\"#{Attr(containerId)}\"");
+        }
+        else
+        {
+            var selector = string.IsNullOrWhiteSpace(script?.FormSelector)
+                ? "#" + DefaultContainerId
+                : AsSelector(script.FormSelector);
+            containerId = script?.FormSelector?.Trim() is { Length: > 0 } typed ? typed : DefaultContainerId;
+            attributes.Add($"data-sankore-form=\"{Attr(selector)}\"");
+            if (script is { PreventDefaultSubmit: false })
+                attributes.Add("data-sankore-prevent=\"false\"");
+        }
+
+        if (script?.AfterSubmit == ScriptAfterSubmit.Redirect && !string.IsNullOrWhiteSpace(script.RedirectUrl))
+            attributes.Add($"data-sankore-redirect=\"{Attr(script.RedirectUrl)}\"");
+        else if (!string.IsNullOrWhiteSpace(script?.SuccessMessage))
+            attributes.Add($"data-sankore-success=\"{Attr(script.SuccessMessage)}\"");
+
+        attributes.Add("defer");
+
+        var lines = new List<string> { $"<!-- Sankore CRM Lead Capture — {Comment(source.Label)} -->" };
+        if (container is not null) lines.Add(container);
+        lines.Add("<script " + string.Join("\n        ", attributes) + "></script>");
+
+        return new Snippet(string.Join("\n", lines), absoluteSdk, sriHash, containerId);
+    }
+
+    /// <summary>A bare id (« contact-form ») becomes « #contact-form »; a selector is kept.</summary>
+    private static string AsSelector(string typed)
+    {
+        var value = typed.Trim();
+        return BareId(value) is { } id ? "#" + id : value;
+    }
+
+    private static string? BareId(string? typed)
+    {
+        var value = typed?.Trim();
+        if (string.IsNullOrEmpty(value)) return null;
+        if (value.StartsWith('#') && value.Length > 1 && value[1..].All(IsIdChar)) return value[1..];
+        return value.All(IsIdChar) ? value : null;
+    }
+
+    private static bool IsIdChar(char c) => char.IsLetterOrDigit(c) || c is '-' or '_';
+
+    private static string Attr(string value) => System.Net.WebUtility.HtmlEncode(value);
+
+    private static string Comment(string value) => value.Replace("--", "—").Replace(">", "›");
 }

@@ -33,7 +33,10 @@ internal sealed class SendSnippetHandler(
         // "sha384-placeholder": the snippet we mailed to integrators was refused by every
         // browser it was pasted into.
         var (sdkUrl, sriHash) = await SnippetBuilder.ResolveSdkAsync(db, options.Value, ct);
-        var snippet = SnippetBuilder.Build(source, sdkUrl, sriHash);
+        var apiBaseUrl = SnippetBuilder.ApiBaseUrl(options.Value, cmd.RequestHost);
+        if (apiBaseUrl.Length == 0)
+            return Result.Fail(SnippetBuilder.PublicUrlNotConfigured);
+        var snippet = SnippetBuilder.Build(source, sdkUrl, sriHash, apiBaseUrl);
         var html = snippet.Html;
         var containerId = snippet.ContainerId;
 
@@ -47,7 +50,7 @@ internal sealed class SendSnippetHandler(
             {
                 ["sourceLabel"] = source.Label,
                 ["snippet"]     = html,
-                ["sdkUrl"]      = sdkUrl,
+                ["sdkUrl"]      = snippet.SdkUrl,
                 ["sriHash"]     = sriHash,
                 ["publicKey"]   = source.PublicKey,
                 ["containerId"] = containerId

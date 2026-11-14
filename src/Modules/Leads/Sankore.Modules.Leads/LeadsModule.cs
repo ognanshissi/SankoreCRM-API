@@ -394,8 +394,10 @@ public static class LeadsModule
         services.AddTransient<Features.Ingestion.Pull.LeadSourcePullOrchestratorJob>();
         services.AddTransient<Features.Ingestion.Pull.PullLeadSourceJob>();
 
-        // Web ingest — captcha validator (stub MVP)
-        services.AddSingleton<ICaptchaValidator, StubCaptchaValidator>();
+        // Web ingest — captcha check with the source's provider (Turnstile, hCaptcha, reCAPTCHA).
+        // Fixed public hosts, not a tenant-typed URL: a plain client, not the egress-guarded one.
+        services.AddHttpClient(SiteVerifyCaptchaValidator.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
+        services.AddSingleton<ICaptchaValidator, SiteVerifyCaptchaValidator>();
 
         // SDK serve CORS — any origin, because the snippet is pasted on third-party sites and
         // carries crossorigin="anonymous". See SdkEndpoints.PublicCorsPolicy.

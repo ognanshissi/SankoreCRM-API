@@ -83,10 +83,19 @@ internal sealed class LeadSourceCopier(LeadsDbContext db, IServiceScopeFactory s
         if (target is null)
             notes.Add($"La source est créée en brouillon, avec sa propre clé : activez-la {where}.");
 
+        // « Mode test » accepts http://localhost at any status (2026-11-14); production never gets it.
+        var sourceSettings = source.Settings;
+        if (copy.ToProduction)
+        {
+            sourceSettings = WithoutLoopbackOrigins(sourceSettings, out var dropped);
+            if (dropped.Count > 0)
+                notes.Add($"Origines locales non copiées en production : {string.Join(", ", dropped)}.");
+        }
+
         var action = target is null ? PromotionActions.Created : PromotionActions.Updated;
         if (copy.DryRun) return Result.Ok(new PromotionResult(action, target?.Id, [], notes));
 
-        var settings = WithSecretsOf(source.Settings, target?.Mode == source.Mode ? target.Settings : null);
+        var settings = WithSecretsOf(sourceSettings, target?.Mode == source.Mode ? target.Settings : null);
 
         var copied = await TenantReplay.RunAsync<Result<Guid>>(scopes, copy.TargetTenantId, copy.UserId, copy.UserName, async (sender, _) =>
         {
@@ -106,6 +115,26 @@ internal sealed class LeadSourceCopier(LeadsDbContext db, IServiceScopeFactory s
             ? Result.Fail<PromotionResult>(copied.Error!)
             : Result.Ok(new PromotionResult(action, copied.Value, [], notes));
     }
+
+    /// <summary>
+    /// The script's allowed origins minus the loopback ones (localhost, 127.0.0.0/8, ::1). A live
+    /// source carrying them would take leads from any page served on that port, on any machine.
+    /// </summary>
+    internal static SourceSettings? WithoutLoopbackOrigins(SourceSettings? settings, out IReadOnlyList<string> dropped)
+    {
+        dropped = [];
+        if (settings is not EmbeddedScriptSettings { Script: { } script } embedded) return settings;
+
+        var removed = script.AllowedOrigins.Where(IsLoopback).ToList();
+        if (removed.Count == 0) return settings;
+
+        dropped = removed;
+        return embedded with { Script = script with { AllowedOrigins = script.AllowedOrigins.Except(removed).ToList() } };
+    }
+
+    private static bool IsLoopback(string origin)
+        => Uri.TryCreate(origin.Trim(), UriKind.Absolute, out var uri)
+           && (uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase));
 
     private static bool HasSecrets(SourceSettings? settings) => settings is
         ServerWebhookSettings { SignatureCredentialVaultRef: not null }

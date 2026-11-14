@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Hosting;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Features.LeadSources.ActivateLeadSource;
 using Sankore.Modules.Leads.Features.LeadSources.CreateLeadSource;
@@ -249,11 +250,23 @@ public static class LeadSourcesEndpoints
             };
     }
 
-    private static async Task<IResult> GetSnippet(Guid id, ISender sender, CancellationToken ct)
+    /// <summary>The request host, only where it may stand in for the public address (see <c>SnippetBuilder.ApiBaseUrl</c>).</summary>
+    private static string? DevelopmentHost(HttpContext http, IHostEnvironment env)
+        => env.IsDevelopment() ? http.Request.Host.Value : null;
+
+    private static IResult SnippetUrlNotConfigured() => Results.Problem(
+        title: SnippetBuilder.PublicUrlNotConfigured,
+        detail: "L'adresse publique de l'API n'est pas configurée (Leads:Snippet:PublicBaseUrl) : le script ne fonctionnerait pas sur le site.",
+        statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    private static async Task<IResult> GetSnippet(
+        Guid id, HttpContext http, IHostEnvironment env, ISender sender, CancellationToken ct)
     {
-        var result = await sender.Send(new GetSnippetQuery(id), ct);
+        var result = await sender.Send(new GetSnippetQuery(id, DevelopmentHost(http, env)), ct);
         return result.IsSuccess
             ? Results.Ok(result.Value)
+            : result.Error == SnippetBuilder.PublicUrlNotConfigured
+                ? SnippetUrlNotConfigured()
             : result.Error == "NOT_EMBEDDED_SCRIPT_MODE"
                 ? Results.NotFound()
                 : result.Error == "SOURCE_NOT_FOUND"
@@ -262,11 +275,13 @@ public static class LeadSourcesEndpoints
     }
 
     private static async Task<IResult> SendSnippetEmail(
-        Guid id, SendSnippetRequest req, ISender sender, CancellationToken ct)
+        Guid id, SendSnippetRequest req, HttpContext http, IHostEnvironment env, ISender sender, CancellationToken ct)
     {
-        var result = await sender.Send(new SendSnippetCommand(id, req.Email), ct);
+        var result = await sender.Send(new SendSnippetCommand(id, req.Email, DevelopmentHost(http, env)), ct);
         return result.IsSuccess
             ? Results.Accepted()
+            : result.Error == SnippetBuilder.PublicUrlNotConfigured
+                ? SnippetUrlNotConfigured()
             : result.Error is "SOURCE_NOT_FOUND" or "NOT_EMBEDDED_SCRIPT_MODE"
                 ? Results.NotFound()
                 : Results.Problem(detail: result.Error, statusCode: 422);

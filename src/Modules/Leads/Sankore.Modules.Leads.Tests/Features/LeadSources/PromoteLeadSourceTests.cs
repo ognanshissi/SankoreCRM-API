@@ -125,4 +125,40 @@ public sealed class PromoteLeadSourceTests : IDisposable
         (await PromoteAsync(test.Id)).IsSuccess.Should().BeTrue();
         (await LiveAsync()).ScorePoints.Should().Be(6);
     }
+
+    [Fact]
+    public async Task Local_origins_of_a_sandbox_script_never_reach_production()
+    {
+        // « Mode test » accepts http://localhost at any status (2026-11-14): production must not.
+        Guid id;
+        await using (var scope = _services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LeadsDbContext>();
+            var source = LeadSourceConfig.Create(_twin, "SITE", "Site web", LeadChannelType.WebForm, 0,
+                IntegrationMode.EmbeddedScript, testKeys: true, settings: new EmbeddedScriptSettings
+                {
+                    Script = new ScriptConfig
+                    {
+                        AllowedOrigins = ["https://talisoft.net", "http://localhost:4200", "http://127.0.0.1:8080", "http://[::1]:3000"],
+                        FormSelector = "#contact",
+                    },
+                });
+            db.LeadSourceConfigs.Add(source);
+            await db.SaveChangesAsync();
+            id = source.Id;
+        }
+
+        var result = await PromoteAsync(id);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Notes.Should().Contain(n => n.Contains("http://localhost:4200") && n.Contains("http://127.0.0.1:8080"));
+        (await LiveAsync()).Settings.Should().BeOfType<EmbeddedScriptSettings>()
+            .Which.AllowedOrigins.Should().Equal("https://talisoft.net");
+
+        // The sandbox keeps them: only the copy is filtered.
+        await using var check = _services.CreateAsyncScope();
+        var twin = await check.ServiceProvider.GetRequiredService<LeadsDbContext>().LeadSourceConfigs
+            .IgnoreQueryFilters().SingleAsync(s => s.Id == id);
+        ((EmbeddedScriptSettings)twin.Settings!).AllowedOrigins.Should().HaveCount(4);
+    }
 }

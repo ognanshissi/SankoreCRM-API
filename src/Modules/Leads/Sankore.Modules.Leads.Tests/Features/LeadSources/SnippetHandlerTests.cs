@@ -22,7 +22,8 @@ public sealed class SnippetHandlerTests : IDisposable
         _options = Options.Create(new SnippetOptions
         {
             SdkUrl = "https://cdn.sankore.io/sdk/v1/sankore-forms.min.js",
-            SriHash = "sha384-testHash123"
+            SriHash = "sha384-testHash123",
+            PublicBaseUrl = "https://api.example.com",
         });
     }
 

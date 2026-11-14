@@ -19,13 +19,11 @@ public sealed class WebIngestEndpointTests : IDisposable
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly TestDbContextFactory _factory;
     private readonly ISender _sender;
-    private readonly ICaptchaValidator _captcha;
 
     public WebIngestEndpointTests()
     {
         _factory = new TestDbContextFactory(_tenantId);
         _sender = Substitute.For<ISender>();
-        _captcha = new StubCaptchaValidator();
     }
 
     public void Dispose() => _factory.Dispose();
@@ -201,11 +199,4 @@ public sealed class WebIngestEndpointTests : IDisposable
         req.Consent.Should().BeFalse();
     }
 
-    [Fact]
-    public void StubCaptchaValidator_always_returns_true()
-    {
-        var validator = new StubCaptchaValidator();
-        var result = validator.ValidateAsync("recaptcha", "token", "127.0.0.1", CancellationToken.None).Result;
-        result.Should().BeTrue();
-    }
 }

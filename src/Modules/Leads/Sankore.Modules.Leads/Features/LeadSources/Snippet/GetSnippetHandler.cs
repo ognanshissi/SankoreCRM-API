@@ -27,10 +27,13 @@ internal sealed class GetSnippetHandler(
             return Result.Fail<SnippetResult>("PUBLIC_KEY_NOT_GENERATED");
 
         var (sdkUrl, sriHash) = await SnippetBuilder.ResolveSdkAsync(db, options.Value, ct);
-        var snippet = SnippetBuilder.Build(source, sdkUrl, sriHash);
+        var apiBaseUrl = SnippetBuilder.ApiBaseUrl(options.Value, query.RequestHost);
+        if (apiBaseUrl.Length == 0)
+            return Result.Fail<SnippetResult>(SnippetBuilder.PublicUrlNotConfigured);
+        var snippet = SnippetBuilder.Build(source, sdkUrl, sriHash, apiBaseUrl);
 
         return Result.Ok(new SnippetResult(
-            snippet.Html, snippet.SdkUrl, snippet.SriHash, source.PublicKey, snippet.ContainerId));
+            snippet.Html, snippet.SdkUrl, snippet.SriHash, source.PublicKey, snippet.ContainerId, apiBaseUrl));
     }
 }
 
@@ -46,4 +49,11 @@ public sealed class SnippetOptions
 
     /// <summary>Fallback SRI hash when no SDK version is published.</summary>
     public string SriHash { get; set; } = "sha384-placeholder";
+
+    /// <summary>
+    /// Public address of this API as a customer's site reaches it (« https://api.example.com »),
+    /// written into the snippet and the Angular/React code. Unset: the host the CRM screen
+    /// called, in https — in Development only. Required everywhere else.
+    /// </summary>
+    public string? PublicBaseUrl { get; set; }
 }

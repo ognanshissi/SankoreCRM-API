@@ -4,7 +4,7 @@ using MediatR;
 using Sankore.Shared.Infrastructure.Behaviors;
 using Sankore.Shared.Kernel;
 
-internal sealed record SendSnippetCommand(Guid SourceId, string RecipientEmail)
+internal sealed record SendSnippetCommand(Guid SourceId, string RecipientEmail, string? RequestHost = null)
     : IRequest<Result>, ICommand, IResourceCommand
 {
     public string ResourceType => "LeadSourceConfig";

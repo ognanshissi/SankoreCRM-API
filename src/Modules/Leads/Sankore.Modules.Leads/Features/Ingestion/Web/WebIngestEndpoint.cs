@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sankore.Modules.Leads.Domain;
 using Sankore.Modules.Leads.Infrastructure;
+using Sankore.Shared.Kernel;
 
 /// <summary>
 /// Public endpoint for embedded script form submissions (US-F13.37-BE-12).
@@ -42,6 +43,7 @@ public static class WebIngestEndpoint
         LeadsDbContext db,
         ISender sender,
         ICaptchaValidator captchaValidator,
+        ISecretsModule secrets,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
@@ -145,10 +147,14 @@ public static class WebIngestEndpoint
             if (string.IsNullOrEmpty(request.CaptchaToken))
                 return Results.UnprocessableEntity(new { error = "CaptchaFailed" });
 
-            var captchaValid = await captchaValidator.ValidateAsync(
-                settings.CaptchaProviderName, request.CaptchaToken, GetIp(httpContext), ct);
+            var secret = await secrets.GetValueAsync(
+                new SecretKey(source.TenantId, "LeadSource", source.Id, CaptchaSecrets.Name), ct);
+            var captcha = await captchaValidator.ValidateAsync(
+                settings.CaptchaProviderName, secret, request.CaptchaToken, GetIp(httpContext), ct);
 
-            if (!captchaValid)
+            if (captcha == CaptchaOutcome.NotConfigured)
+                return Results.UnprocessableEntity(new { error = "CaptchaNotConfigured" });
+            if (captcha != CaptchaOutcome.Passed)
                 return Results.UnprocessableEntity(new { error = "CaptchaFailed" });
         }
 

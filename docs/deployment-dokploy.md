@@ -481,6 +481,12 @@ Notifications__Smtp__FromName=Sankore
 # tenant of this deployment. false = managers dispatch by hand; nothing else warns that leads wait.
 # Leads__AutoDispatchOnCapture=false
 
+# Public address of THIS API as a customer's website reaches it: written into the lead-source
+# snippet and the Angular/React code (« Script » tab). REQUIRED outside Development: without it the
+# tab answers 503 SNIPPET_PUBLIC_URL_NOT_CONFIGURED — the request's Host header is never used there,
+# since AllowedHosts is * and a forged Host would have our mailer send a script from any domain.
+Leads__Snippet__PublicBaseUrl=https://api-sankore-crm.talisoft.net
+
 # ── file storage (must be on the volumes from the next step) ────────────
 FileStore__BasePath=/data/imports
 Leads__SdkStoragePath=/data/sdk
