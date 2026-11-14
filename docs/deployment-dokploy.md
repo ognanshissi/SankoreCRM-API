@@ -485,6 +485,8 @@ Notifications__Smtp__FromName=Sankore
 # snippet and the Angular/React code (« Script » tab). REQUIRED outside Development: without it the
 # tab answers 503 SNIPPET_PUBLIC_URL_NOT_CONFIGURED — the request's Host header is never used there,
 # since AllowedHosts is * and a forged Host would have our mailer send a script from any domain.
+# Compose deployment (docker-compose.yml): set API_PUBLIC_BASE_URL instead — the compose file maps
+# it to Leads__Snippet__PublicBaseUrl (and to the WhatsApp webhook / OAuth callback bases).
 Leads__Snippet__PublicBaseUrl=https://api-sankore-crm.talisoft.net
 
 # ── file storage (must be on the volumes from the next step) ────────────

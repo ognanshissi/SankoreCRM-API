@@ -654,6 +654,11 @@ services:
       # arrivée, ce qui est faux derrière un proxy qui réécrit l'hôte.
       Integration__Messaging__PublicBaseUrl: "${API_PUBLIC_BASE_URL}"
       Integration__ConnectedAccounts__PublicBaseUrl: "${API_PUBLIC_BASE_URL}"
+      # Adresse écrite dans le script des sources de leads et dans le code Angular/React : c'est
+      # elle que le site du client appelle. OBLIGATOIRE hors Development : vide, l'onglet
+      # « Script » répond 503 SNIPPET_PUBLIC_URL_NOT_CONFIGURED (l'en-tête Host n'est jamais
+      # utilisé, un Host forgé ferait envoyer un script pointant vers n'importe quel domaine).
+      Leads__Snippet__PublicBaseUrl: "${API_PUBLIC_BASE_URL}"
 
       # ── Agendas connectés (OAuth Microsoft et Google) ──────────────────
       # Une application OAuth par fournisseur pour toute la plateforme. L'URI de redirection à
