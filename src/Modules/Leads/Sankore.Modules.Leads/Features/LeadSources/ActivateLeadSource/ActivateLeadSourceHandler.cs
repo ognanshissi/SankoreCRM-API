@@ -22,7 +22,12 @@ internal sealed class ActivateLeadSourceHandler(LeadsDbContext db, ISecretsModul
         var secretStored = source.Mode != IntegrationMode.ServerWebhook
                            || await WebhookSigning.HasSecretAsync(secrets, source.TenantId, source.Id, ct);
 
-        var missing = source.Activate(secretStored);
+        // Read only when the script carries a captcha: without its secret every lead is refused.
+        var captchaStored = source.Settings is not EmbeddedScriptSettings { CaptchaProviderName: not null }
+                            || await secrets.GetHintAsync(new SecretKey(source.TenantId, "LeadSource", source.Id,
+                                   Features.Ingestion.Web.CaptchaSecrets.Name), ct) is not null;
+
+        var missing = source.Activate(secretStored, captchaStored);
         if (missing.Count > 0)
             return Result.Fail($"ACTIVATION_PREREQUISITES_NOT_MET:{string.Join(",", missing)}");
 

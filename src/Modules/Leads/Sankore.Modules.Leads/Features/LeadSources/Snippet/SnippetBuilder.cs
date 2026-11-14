@@ -151,7 +151,15 @@ internal static class SnippetBuilder
 
     private static bool IsIdChar(char c) => char.IsLetterOrDigit(c) || c is '-' or '_';
 
-    private static string Attr(string value) => System.Net.WebUtility.HtmlEncode(value);
+    // Seuls les caractères qui ferment ou cassent un attribut sont échappés. `WebUtility.HtmlEncode`
+    // codait aussi les accents (« é » → « &#233; ») : valide, mais illisible pour le webmestre qui
+    // copie le snippet et veut relire ou retoucher son message.
+    private static string Attr(string value) => value
+        .Replace("&", "&amp;")
+        .Replace("\"", "&quot;")
+        .Replace("'", "&#39;")
+        .Replace("<", "&lt;")
+        .Replace(">", "&gt;");
 
     private static string Comment(string value) => value.Replace("--", "—").Replace(">", "›");
 }

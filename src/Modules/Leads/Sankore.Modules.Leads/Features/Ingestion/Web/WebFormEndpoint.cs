@@ -84,7 +84,10 @@ public static class WebFormEndpoint
             SubmitLabel:    settings.SubmitButtonLabel ?? "Submit",
             CaptchaProvider: settings.CaptchaProviderName,
             AccentColor:    settings.AccentColor,
-            FontFamily:     settings.FontFamily);
+            FontFamily:     settings.FontFamily,
+            CaptchaSiteKey: settings.CaptchaProviderName is null ? null : Blank(settings.Script?.CaptchaSiteKey),
+            SuccessMessage: settings.RedirectUrl is null ? Blank(settings.Script?.SuccessMessage) : null,
+            RedirectUrl:    Blank(settings.RedirectUrl));
 
         var etag = ComputeETag(source.Code, response);
 
@@ -108,6 +111,8 @@ public static class WebFormEndpoint
     /// response makes the tag change exactly when the form does.
     /// </para>
     /// </summary>
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private static string ComputeETag(string code, WebFormResponse response)
     {
         var input = $"{code}:{JsonSerializer.Serialize(response, EtagJsonOptions)}";
@@ -141,7 +146,16 @@ public sealed record WebFormResponse(
     /// </summary>
     string? AccentColor = null,
     /// <summary>Font stack, fallback of <c>--sankore-font</c>. Same contract as the colour.</summary>
-    string? FontFamily = null);
+    string? FontFamily = null,
+    /// <summary>
+    /// The captcha's PUBLIC site key (SDK ≥ 1.4.0 renders the widget). Before, only the provider
+    /// was served, the hosted form sent no token, and a source with a captcha refused every lead.
+    /// </summary>
+    string? CaptchaSiteKey = null,
+    /// <summary>What the source says after a submit (SDK ≥ 1.4.0); older builds show their own text.</summary>
+    string? SuccessMessage = null,
+    /// <summary>Page to open after a submit instead of the message (SDK ≥ 1.4.0).</summary>
+    string? RedirectUrl = null);
 
 public sealed record WebFormFieldDto(
     string Name,

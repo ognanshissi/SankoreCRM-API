@@ -331,12 +331,12 @@ public sealed class LeadSourceConfig : ITenant
     /// Whether the source's HMAC secret is in the vault — which only the caller can read. Only the
     /// activation handler answers it for real; it decides whether a server webhook may go live.
     /// </param>
-    public IReadOnlyList<string> Activate(bool signingSecretStored = true)
+    public IReadOnlyList<string> Activate(bool signingSecretStored = true, bool captchaSecretStored = true)
     {
         EnsureTransition(LeadSourceStatus.Active,
             LeadSourceStatus.Testing, LeadSourceStatus.Paused, LeadSourceStatus.Error);
 
-        var missing = CheckActivationPrerequisites(signingSecretStored);
+        var missing = CheckActivationPrerequisites(signingSecretStored, captchaSecretStored);
         if (missing.Count > 0) return missing;
 
         Status = LeadSourceStatus.Active;
@@ -449,7 +449,7 @@ public sealed class LeadSourceConfig : ITenant
 
     // ── Activation prerequisites ────────────────────────────────────────
 
-    private IReadOnlyList<string> CheckActivationPrerequisites(bool signingSecretStored)
+    private IReadOnlyList<string> CheckActivationPrerequisites(bool signingSecretStored, bool captchaSecretStored = true)
     {
         var missing = new List<string>();
 
@@ -491,6 +491,16 @@ public sealed class LeadSourceConfig : ITenant
 
             case PlatformSettings { OAuthCredentialVaultRef: null }:
                 missing.Add("SecretMissing");
+                break;
+
+            // docs/formulaire-heberge.md lot 2. A hosted form without consent text shows no box,
+            // and the ingest refuses a submission without consent: every lead would be lost. A
+            // captcha without its secret key refuses every lead too (outside Development).
+            case EmbeddedScriptSettings embedded:
+                if (embedded.Script?.FormMode == ScriptFormMode.Hosted && string.IsNullOrWhiteSpace(embedded.HostedForm?.ConsentText))
+                    missing.Add("HostedConsentTextMissing");
+                if (embedded.CaptchaProviderName is not null && !captchaSecretStored)
+                    missing.Add("CaptchaSecretMissing");
                 break;
         }
 

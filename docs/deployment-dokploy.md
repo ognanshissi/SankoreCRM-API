@@ -625,9 +625,11 @@ property: do not log request bodies or `Referer` on that prefix.
 ### SDK versions on the `/data/sdk` volume
 
 `SdkVersionSeeder` registers, at every boot, the SDK builds it finds under `Leads__SdkStoragePath`
-and promotes the highest one per major (`/sdk/v1/` now resolves to **1.2.1**). The image ships
-`wwwroot/sdk/1.0.0` to `1.2.1`, but with the volume mounted the seeder reads the **volume**:
-copy any version directory missing from it, otherwise that version is never registered.
+and promotes the highest one per major (`/sdk/v1/` now resolves to **1.4.0**). The image ships
+`wwwroot/sdk/1.0.0` to `1.4.0`, but with the volume mounted the seeder reads the **volume**:
+copy any version directory missing from it, otherwise that version is never registered and new
+snippets keep pinning the older build. 1.4.0 (2026-11-14) is the one the hosted form's captcha,
+the source's success message and the Angular/React integration need (docs/formulaire-heberge.md).
 
 ---
 

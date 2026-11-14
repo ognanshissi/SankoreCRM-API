@@ -83,6 +83,7 @@ internal sealed class IngestInboundLeadHandler(
             {
                 var obj = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string?>>(cmd.RawPayloadJson);
                 mapped = new Dictionary<string, string?>(obj ?? [], StringComparer.OrdinalIgnoreCase);
+                LegacyFormFieldNames.Apply(mapped);
             }
             catch
             {
